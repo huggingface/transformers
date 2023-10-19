@@ -234,33 +234,6 @@ def _get_unpad_data(attention_mask):
     )
 
 
-def _make_sliding_window_causal_mask(
-    input_ids_shape: torch.Size,
-    dtype: torch.dtype,
-    device: torch.device,
-    past_key_values_length: int = 0,
-    sliding_window: int = 4096,
-):
-    """
-    Make causal mask used for sliding window attention
-    """
-    bsz, tgt_len = input_ids_shape
-
-    tensor = torch.full(
-        (tgt_len, tgt_len),
-        fill_value=1,
-        device=device,
-    )
-    mask = torch.tril(tensor, diagonal=0)
-    # make the mask banded to account for sliding window
-    mask = torch.triu(mask, diagonal=-sliding_window)
-    mask = torch.log(mask).to(dtype)
-
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
-
-
 # Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -676,7 +649,7 @@ class MistralFlashAttention2(MistralAttention):
                     max_seqlen_k=max_seqlen_in_batch_k,
                     dropout_p=dropout,
                     softmax_scale=softmax_scale,
-                    causal=True,
+                    causal=self.attention_mask_cache.is_causal,
                 )
             else:
                 attn_output_unpad = flash_attn_varlen_func(
@@ -951,7 +924,7 @@ class MistralModel(MistralPreTrainedModel):
 
         # create attention mask cache that trickles down to each attention layer
         # so that the attention_mask cache can be shared among layers
-        attention_mask_cache = AttentionMaskCache(is_causal=True)
+        attention_mask_cache = AttentionMaskCache(is_causal=True, sliding_window=config.sliding_window)
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
@@ -968,32 +941,6 @@ class MistralModel(MistralPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
-
-    def _prepare_decoder_attention_mask(
-        self, attention_mask, input_shape, inputs_embeds, past_key_values_length, sliding_window
-    ):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_sliding_window_causal_mask(
-                input_shape,
-                inputs_embeds.dtype,
-                device=inputs_embeds.device,
-                past_key_values_length=past_key_values_length,
-                sliding_window=sliding_window,
-            )
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
-                inputs_embeds.device
-            )
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
 
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
     def forward(
@@ -1057,14 +1004,6 @@ class MistralModel(MistralPreTrainedModel):
                     " this may lead to unexpected behaviour for Flash Attention version of Mistral. Make sure to "
                     " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                 )
-
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask,
-            (batch_size, seq_length),
-            inputs_embeds,
-            past_key_values_length,
-            sliding_window=self.config.sliding_window,
-        )
 
         hidden_states = inputs_embeds
 
