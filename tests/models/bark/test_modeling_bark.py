@@ -1052,9 +1052,10 @@ class BarkModelIntegrationTests(unittest.TestCase):
         input_ids = self.inputs
 
         with torch.no_grad():
-            # self.model.generate(
-            #     **input_ids, do_sample=False, temperature=1.0, coarse_do_sample=True, coarse_temperature=0.7
-            # )
+            torch.manual_seed(0)
+            self.model.generate(
+                **input_ids, do_sample=False, temperature=1.0, coarse_do_sample=True, coarse_temperature=0.7
+            )
             output_ids_without_min_eos_p = self.model.generate(
                 **input_ids,
                 do_sample=True,
