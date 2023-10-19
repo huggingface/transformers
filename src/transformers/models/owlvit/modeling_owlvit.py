@@ -582,11 +582,16 @@ class OwlViTPreTrainedModel(PreTrainedModel):
 
 
 OWLVIT_START_DOCSTRING = r"""
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
     Parameters:
-    This model is a PyTorch [torch.nn.Module](https:
-        //pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
         config ([`OwlViTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -1250,14 +1255,14 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
 
 class OwlViTBoxPredictionHead(nn.Module):
-    def __init__(self, config: OwlViTConfig):
+    def __init__(self, config: OwlViTConfig, out_dim: int = 4):
         super().__init__()
 
         width = config.vision_config.hidden_size
         self.dense0 = nn.Linear(width, width)
         self.dense1 = nn.Linear(width, width)
         self.gelu = nn.GELU()
-        self.dense2 = nn.Linear(width, 4)
+        self.dense2 = nn.Linear(width, out_dim)
 
     def forward(self, image_features: torch.Tensor) -> torch.FloatTensor:
         output = self.dense0(image_features)
