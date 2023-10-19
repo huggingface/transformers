@@ -159,6 +159,41 @@ class DetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
         self.assertEqual(image_processor.do_pad, False)
 
+    def test_valid_coco_detection_annotations(self):
+        # prepare image and target
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+            target = json.loads(f.read())
+
+        params = {"image_id": 39769, "annotations": target}
+
+        # encode them
+        image_processing = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
+
+        # legal encodings (single image)
+        _ = image_processing(images=image, annotations=params, return_tensors="pt")
+        _ = image_processing(images=image, annotations=[params], return_tensors="pt")
+
+        # legal encodings (batch of one image)
+        _ = image_processing(images=[image], annotations=params, return_tensors="pt")
+        _ = image_processing(images=[image], annotations=[params], return_tensors="pt")
+
+        # legal encoding (batch of more than one image)
+        n = 5
+        _ = image_processing(images=[image] * n, annotations=[params] * n, return_tensors="pt")
+
+        # example of an illegal encoding (missing the 'image_id' key)
+        with self.assertRaises(ValueError) as e:
+            image_processing(images=image, annotations={"annotations": target}, return_tensors="pt")
+
+        self.assertTrue(str(e.exception).startswith('Invalid COCO detection annotations'))
+
+        # example of an illegal encoding (unequal lengths of images and annotations)
+        with self.assertRaises(ValueError) as e:
+            image_processing(images=[image] * n, annotations=[params] * (n - 1), return_tensors="pt")
+
+        self.assertTrue(str(e.exception) == 'The number of images (5) and annotations (4) do not match.')
+
     @slow
     def test_call_pytorch_with_coco_detection_annotations(self):
         # prepare image and target
