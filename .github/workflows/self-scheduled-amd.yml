@@ -49,6 +49,10 @@ jobs:
       - name: ROCM-SMI
         run: |
           rocm-smi
+      - name: Show HIP environment
+        run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
   setup:
     name: Setup
@@ -88,10 +92,15 @@ jobs:
       - name: ROCM-SMI
         run: |
           rocm-smi
+      - name: Show HIP environment
+        run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
   run_tests_single_gpu:
-    name: Model tests
+    name: Single GPU tests
     strategy:
+      max-parallel: 1  # We do not want to parallelize over several runners, in order to leave room for the push CI.
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
@@ -124,6 +133,10 @@ jobs:
       - name: ROCM-SMI
         run: |
           rocm-smi
+      - name: Show HIP environment
+        run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
         working-directory: /transformers
@@ -151,8 +164,9 @@ jobs:
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
 
   run_tests_multi_gpu:
-    name: Model tests
+    name: Multi GPU tests
     strategy:
+      max-parallel: 1  # We do not want to parallelize over several runners, in order to leave room for the push CI.
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
@@ -185,6 +199,10 @@ jobs:
       - name: ROCM-SMI
         run: |
           rocm-smi
+      - name: Show HIP environment
+        run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
         working-directory: /transformers
@@ -212,7 +230,7 @@ jobs:
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
 
   run_examples_gpu:
-    name: Examples directory
+    name: Examples tests
     strategy:
       fail-fast: false
       matrix:
@@ -234,6 +252,10 @@ jobs:
       - name: ROCM-SMI
         run: |
           rocm-smi
+      - name: Show HIP environment
+        run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
         working-directory: /transformers
@@ -263,7 +285,7 @@ jobs:
           path: /transformers/reports/${{ matrix.machine_type }}_examples_gpu
 
   run_pipelines_torch_gpu:
-    name: PyTorch pipelines
+    name: PyTorch pipelines tests
     strategy:
       fail-fast: false
       matrix:
@@ -285,6 +307,10 @@ jobs:
       - name: ROCM-SMI
         run: |
           rocm-smi
+      - name: Show HIP environment
+        run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
         working-directory: /transformers
