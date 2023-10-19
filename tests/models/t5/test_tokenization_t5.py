@@ -145,10 +145,10 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return T5TokenizerFast.from_pretrained("t5-base")
 
     def get_tokenizer(self, **kwargs) -> T5Tokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, pad_token=None, **kwargs)
+        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs) -> T5TokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, pad_token=None, **kwargs)
+        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
