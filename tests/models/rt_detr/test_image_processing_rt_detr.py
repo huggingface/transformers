@@ -90,12 +90,10 @@ class RtDetrImageProcessingTester(unittest.TestCase):
             torchify=torchify,
         )
 
-
 @require_torch
 @require_vision
 class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = RtDetrImageProcessor if is_vision_available() else None
-
     def setUp(self):
         self.image_processor_tester = RtDetrImageProcessingTester()
 
@@ -112,7 +110,6 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "do_rescale"))
         self.assertTrue(hasattr(image_processing, "rescale_factor"))
         self.assertTrue(hasattr(image_processing, "return_tensors"))
-
     def test_image_processor_outputs(self):
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
 

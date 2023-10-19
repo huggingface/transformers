@@ -278,7 +278,6 @@ def prepare_coco_detection_annotation(
 
     return new_target
 
-
 # TODO copy from image_processing_detr.py
 def score_labels_from_class_probabilities(logits: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     probs = scipy.special.softmax(logits, axis=-1)

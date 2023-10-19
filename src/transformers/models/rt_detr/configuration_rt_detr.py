@@ -192,7 +192,7 @@ class RTDetrConfig(PretrainedConfig):
         self.variant = variant
         self.num_stages = num_stages
         self.return_idx = return_idx
-        self.act_presnet = (act_presnet
+        self.act_presnet = act_presnet
         self.freeze_at = freeze_at
         self.freeze_norm = freeze_norm
         self.pretrained = pretrained
@@ -230,5 +230,4 @@ class RTDetrConfig(PretrainedConfig):
         self.eval_idx = eval_idx
         self.eps = eps
         self.aux_loss = aux_loss
-
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

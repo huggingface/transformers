@@ -25,7 +25,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import DetrImageProcessor, RT_DETRForSegmentation, RTDetrConfig, RTDetrForObjectDetection
+from transformers import DetrImageProcessor, RTDetrConfig
 from transformers.utils import logging
 
 

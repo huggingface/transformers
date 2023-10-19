@@ -32,7 +32,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import RT_DETRForSegmentation, RTDetrForObjectDetection, RTDetrModel
+    from transformers import RTDetrForObjectDetection, RTDetrModel
 
 
 if is_vision_available():
@@ -173,7 +173,6 @@ class RTDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         (
             RTDetrModel,
             RTDetrForObjectDetection,
-            RT_DETRForSegmentation,
         )
         if is_torch_available()
         else ()
@@ -552,62 +551,6 @@ class RTDetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
-
-    def test_inference_panoptic_segmentation_head(self):
-        model = RT_DETRForSegmentation.from_pretrained("checkpoing/todo-panoptic").to(torch_device)
-
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
-        pixel_values = encoding["pixel_values"].to(torch_device)
-        pixel_mask = encoding["pixel_mask"].to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(pixel_values, pixel_mask)
-
-        # verify outputs
-        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels + 1))
-        self.assertEqual(outputs.logits.shape, expected_shape_logits)
-        expected_slice_logits = torch.tensor(
-            [[-18.1565, -1.7568, -13.5029], [-16.8888, -1.4138, -14.1028], [-17.5709, -2.5080, -11.8654]]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
-
-        expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
-        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        expected_slice_boxes = torch.tensor(
-            [[0.5344, 0.1789, 0.9285], [0.4420, 0.0572, 0.0875], [0.6630, 0.6887, 0.1017]]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
-
-        expected_shape_masks = torch.Size((1, model.config.num_queries, 200, 267))
-        self.assertEqual(outputs.pred_masks.shape, expected_shape_masks)
-        expected_slice_masks = torch.tensor(
-            [[-7.7558, -10.8788, -11.9797], [-11.8881, -16.4329, -17.7451], [-14.7316, -19.7383, -20.3004]]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.pred_masks[0, 0, :3, :3], expected_slice_masks, atol=1e-3))
-
-        # verify postprocessing
-        results = image_processor.post_process_panoptic_segmentation(
-            outputs, threshold=0.3, target_sizes=[image.size[::-1]]
-        )[0]
-
-        expected_shape = torch.Size([480, 640])
-        expected_slice_segmentation = torch.tensor([[4, 4, 4], [4, 4, 4], [4, 4, 4]], dtype=torch.int32).to(
-            torch_device
-        )
-        expected_number_of_segments = 5
-        expected_first_segment = {"id": 1, "label_id": 17, "was_fused": False, "score": 0.994096}
-
-        number_of_unique_segments = len(torch.unique(results["segmentation"]))
-        self.assertTrue(
-            number_of_unique_segments, expected_number_of_segments + 1
-        )  # we add 1 for the background class
-        self.assertTrue(results["segmentation"].shape, expected_shape)
-        self.assertTrue(torch.allclose(results["segmentation"][:3, :3], expected_slice_segmentation, atol=1e-4))
-        self.assertTrue(len(results["segments_info"]), expected_number_of_segments)
-        self.assertDictEqual(results["segments_info"][0], expected_first_segment)
-
 
 @require_vision
 @require_torch

@@ -39,11 +39,9 @@ from transformers import RTDetrConfig, RtDetrImageProcessor, RTDetrModel
 # Weights downloaded from: https://github.com/lyuwenyu/RT-DETR/issues/42
 #########################
 
-
 def get_sample_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     return Image.open(requests.get(url, stream=True).raw)
-
 
 def update_config_values(config, checkpoint_name):
     # Real values for rtdetr_r50vd_6x_coco_from_paddle.pth
@@ -138,7 +136,6 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
 
     print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
-
     if push_to_hub:
         model.push_to_hub(repo_id=repo_id, organization="DepuMeng", commit_message="Add model")
 

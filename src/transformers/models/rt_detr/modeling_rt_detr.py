@@ -882,7 +882,6 @@ class BasicBlock(nn.Module):
             short = x
         else:
             short = self.short(x)
-
         out = out + short
         out = self.activation(out)
 
@@ -916,7 +915,7 @@ class Blocks(nn.Module):
         return out
 
 
-# TODO: Rafael! Importante: Use Resnet-d from timm library instead of the PResNet (config.userfromtimm=True) -> see how deformable detr does
+# TODO: Rafael! Important: Use Resnet-d from timm library instead of the PResNet (config.userfromtimm=True) -> see how deformable detr does
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->RtDetr
@@ -957,7 +956,6 @@ class RtDetrFrozenBatchNorm2d(nn.Module):
         scale = weight * (running_var + epsilon).rsqrt()
         bias = bias - running_mean * scale
         return x * scale + bias
-
 
 # TODO: Rafael tirar isso daqui
 # class FrozenBatchNorm2d(nn.Module):
@@ -1008,7 +1006,7 @@ def bias_init_with_prob(prior_prob=0.01):
     return bias_init
 
 
-def inverse_sigmoid(input: torch.Tensor, eps: float = 1e-5) -> torch.Tensor:
+def inverse_sigmoid(x: torch.Tensor, eps: float = 1e-5) -> torch.Tensor:
     x = x.clip(min=0.0, max=1.0)
     return torch.log(x.clip(min=eps) / (1 - x).clip(min=eps))
 
@@ -1054,7 +1052,6 @@ class PResNet(nn.Module):
         freeze_at = config.freeze_at
         freeze_norm = config.freeze_norm
         pretrained = config.pretrained
-
         channels_in = 64
         if variant in ["c", "d"]:
             conv_def = [
@@ -1108,12 +1105,11 @@ class PResNet(nn.Module):
         if freeze_norm:
             self._freeze_norm(self)
 
-        # TODO Rafael: How/Where to load weights?
+        # TODO Rafael: 
         # if pretrained:
         #     state = torch.hub.load_state_dict_from_url(donwload_url[depth])
         #     self.load_state_dict(state)
         #     print(f"Load PResNet{depth} state_dict")
-
     def _freeze_parameters(self, m: nn.Module):
         for p in m.parameters():
             p.requires_grad = False
@@ -1229,7 +1225,6 @@ class RepVggBlock(nn.Module):
     def get_equivalent_kernel_bias(self):
         kernel3x3, bias3x3 = self._fuse_bn_tensor(self.conv1)
         kernel1x1, bias1x1 = self._fuse_bn_tensor(self.conv2)
-
         return kernel3x3 + self._pad_1x1_to_3x3_tensor(kernel1x1), bias3x3 + bias1x1
 
     def _pad_1x1_to_3x3_tensor(self, kernel1x1):
@@ -1276,7 +1271,6 @@ class CSPRepLayer(nn.Module):
 class HybridEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
-
         self.in_channels = config.in_channels
         self.feat_strides = config.feat_strides
         self.hidden_dim = config.hidden_dim
@@ -1293,7 +1287,6 @@ class HybridEncoder(nn.Module):
         expansion = config.expansion
         depth_mult = config.depth_mult
         act_encoder = config.act_encoder
-
         # channel projection
         self.input_proj = nn.ModuleList()
         for in_channel in self.in_channels:
@@ -1375,7 +1368,6 @@ class HybridEncoder(nn.Module):
     def forward(self, feats):
         assert len(feats) == len(self.in_channels)
         proj_feats = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
-
         # encoder
         if self.num_encoder_layers > 0:
             for i, enc_ind in enumerate(self.use_encoder_idx):
@@ -1741,7 +1733,6 @@ class RTDetrTransformer(nn.Module):
             nn.init.constant_(cls_.bias, bias)
             nn.init.constant_(reg_.layers[-1].weight, 0)
             nn.init.constant_(reg_.layers[-1].bias, 0)
-
         # linear_init_(self.enc_output[0])
         nn.init.xavier_uniform_(self.enc_output[0].weight)
         if self.learnt_init_query:
@@ -1957,7 +1948,6 @@ class RTDetrPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, RT_DETRDecoder):
             module.gradient_checkpointing = value

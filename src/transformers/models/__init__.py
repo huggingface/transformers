@@ -65,6 +65,7 @@ from . import (
     deprecated,
     deta,
     detr,
+    rt_detr,
     dialogpt,
     dinat,
     dinov2,
