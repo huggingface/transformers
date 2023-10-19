@@ -191,11 +191,11 @@ def flax_rotate_half(x):
 
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.apply_rotary_pos_emb
-def flax_apply_rotary_pos_emb(q, k, cos, sin, position_ids):
-    cos = jnp.expand_dims(cos[position_ids], 1)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
-    sin = jnp.expand_dims(sin[position_ids], 1)
-    q_embed = (q * cos) + (flax_rotate_half(q) * sin)
-    k_embed = (k * cos) + (flax_rotate_half(k) * sin)
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
+    cos = cos[position_ids].unsqueeze(1)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
+    sin = sin[position_ids].unsqueeze(1)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
 
@@ -539,7 +539,7 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
         init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=True, init_cache=True
+            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
         )
         return unfreeze(init_variables["cache"])
 
