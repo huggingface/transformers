@@ -770,7 +770,7 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
         self.post_init()
 
     def forward(
-        self, past_values: torch.Tensor, output_hidden_states: Optional[bool] = None
+        self, past_values: torch.Tensor, output_hidden_states: Optional[bool] = False
     ) -> BaseModelOutputWithNoAttention:
         """
         Parameters:
@@ -783,9 +783,6 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
         """
         _, num_input_channels, _, _ = past_values.shape
 
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         # Input encoding
         if not self.shared_embedding:
             x_out = []
@@ -1286,12 +1283,10 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         past_values: torch.Tensor,
         past_observed_mask: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PatchTSTModelOutputWithNoAttention]:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if past_observed_mask is None:
@@ -1370,7 +1365,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_observed_mask: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PatchTSTForPretrainingOutput]:
         """
@@ -1391,9 +1386,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
             `config.return_dict`=False)
 
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # past_values: [bs x num_channels x num_patches x d_model] or
@@ -1436,7 +1429,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         past_values: torch.Tensor,
         labels: torch.Tensor = None,
         past_observed_mask: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, PatchTSTForClassificationOutput]:
         """
@@ -1458,9 +1451,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
             `config.return_dict`=False)
 
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         model_output = self.model(
@@ -1601,8 +1592,8 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         past_values: torch.Tensor,
         past_observed_mask: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = True,
     ) -> Union[Tuple, PatchTSTForPredictionOutput]:
         """
         Parameters:
@@ -1624,9 +1615,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             `config.return_dict`=False)
 
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # get model output
@@ -1684,7 +1673,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             past_values=past_values,
             future_values=None,
             past_observed_mask=past_observed_mask,
-            output_hidden_states=None,
+            output_hidden_states=False,
         )
 
         # get distribution
@@ -1810,7 +1799,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         past_values: torch.Tensor,
         past_observed_mask: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PatchTSTForForecastingOutput]:
         """
@@ -1833,9 +1822,6 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
             `config.return_dict`=False)
 
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # get model output
@@ -1909,7 +1895,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
             past_values=past_values,
             future_values=None,
             past_observed_mask=past_observed_mask,
-            output_hidden_states=None,
+            output_hidden_states=False,
         )
 
         # get distribution
@@ -2007,7 +1993,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         past_values: torch.Tensor,
         labels: Optional[torch.Tensor],
         past_observed_mask: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, PatchTSTForRegressionOutput]:
         """
@@ -2030,9 +2016,6 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             `config.return_dict`=False)
 
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         model_output = self.model(
@@ -2086,7 +2069,10 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
 
         # get model output
         outputs = self(
-            past_values=past_values, labels=None, past_observed_mask=past_observed_mask, output_hidden_states=None
+            past_values=past_values,
+            labels=None,
+            past_observed_mask=past_observed_mask,
+            output_hidden_states=False
         )
 
         # get distribution
