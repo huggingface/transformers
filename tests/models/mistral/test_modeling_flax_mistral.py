@@ -17,17 +17,19 @@ import unittest
 
 import numpy as np
 
-from transformers import MistralConfig, is_flax_available, is_tokenizers_available
+from transformers import (MistralConfig, is_flax_available,
+                          is_tokenizers_available)
 from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
-
 if is_flax_available():
     import jax.numpy as jnp
 
-    from transformers.models.mistral.modeling_flax_mistral import FlaxMistralForCausalLM, FlaxMistralModel
+    from transformers.models.mistral.modeling_flax_mistral import (
+        FlaxMistralForCausalLM, FlaxMistralForSequenceClassification,
+        FlaxMistralModel)
 
 
 if is_tokenizers_available():
@@ -102,7 +104,9 @@ class FlaxMistralModelTester:
             use_cache=True,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            sliding_window=self.window_size,
         )
+        config.pad_token_id = config.eos_token_id
 
         return (config, input_ids, input_mask)
 
@@ -113,7 +117,7 @@ class FlaxMistralModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
-    # Copied from tests.models.gpt_neo.test_modeling_flax_gpt_neo.FlaxGPTNeoModelTester.check_use_cache_forward
+    # Modifed from tests.models.gpt_neo.test_modeling_flax_gpt_neo.FlaxGPTNeoModelTester.check_use_cache_forward
     def check_use_cache_forward(self, model_class_name, config, input_ids, attention_mask):
         max_decoder_length = 20
         model = model_class_name(config)
@@ -140,11 +144,15 @@ class FlaxMistralModelTester:
         )
 
         outputs = model(input_ids)
-
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        
+        # To take in to acount sequence_classification_head
+        if len(outputs_cache_next[0].shape) <= 2:
+            diff = np.max(np.abs((outputs_cache_next[0] - outputs[0])))
+        else:
+            diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
-    # Copied from tests.models.gpt_neo.test_modeling_flax_gpt_neo.FlaxGPTNeoModelTester.check_use_cache_forward_with_attn_mask
+    # Modifed from tests.models.gpt_neo.test_modeling_flax_gpt_neo.FlaxGPTNeoModelTester.check_use_cache_forward_with_attn_mask
     def check_use_cache_forward_with_attn_mask(self, model_class_name, config, input_ids, attention_mask):
         max_decoder_length = 20
         model = model_class_name(config)
@@ -175,13 +183,17 @@ class FlaxMistralModelTester:
 
         outputs = model(input_ids, attention_mask=attention_mask)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        # To take in to acount sequence_classification_head
+        if len(outputs_cache_next[0].shape) <= 2:
+            diff = np.max(np.abs((outputs_cache_next[0] - outputs[0])))
+        else:
+            diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
 @require_flax
 class FlaxMistralModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxMistralModel, FlaxMistralForCausalLM) if is_flax_available() else ()
+    all_model_classes = (FlaxMistralModel, FlaxMistralForCausalLM, FlaxMistralForSequenceClassification) if is_flax_available() else ()
     all_generative_model_classes = (FlaxMistralForCausalLM,) if is_flax_available() else ()
 
     def setUp(self):
@@ -249,19 +261,9 @@ class FlaxMistralIntegrationTest(unittest.TestCase):
     def test_generated_text(self):
         tokenizer = LlamaTokenizerFast.from_pretrained(self.model_id)
         tokenizer.pad_token_id = 2
-        test_batch = ["Aloha, World! ", "2 + 2 = ", "Paris is the capital of ", "我很高興認識"]
-
-        inputs = tokenizer(test_batch, return_tensors="np", truncation=True, padding=True)
-        generated_ids = self.model.generate(**inputs, max_length=15).sequences
-        generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-
-        # fmt: off
-        EXPECTED_GENERATION = [
-            "Aloha, World! 201",
-            "2 + 2 = 4\n2",
-            "Paris is the capital of Île-",
-            "我很高興認識你，我"
-        ]
-        # fmt: on
-
-        self.assertListEqual(generated_text, EXPECTED_GENERATION)
+        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
+        prompt = "My favourite condiment is "
+        inputs = tokenizer(prompt, return_tensors="np", truncation=True, padding=True)
+        generated_ids = self.model.generate(**inputs, max_new_tokens=20, temperature=0).sequences
+        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(generated_text, EXPECTED_TEXT_COMPLETION)
