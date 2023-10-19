@@ -63,7 +63,7 @@ if TYPE_CHECKING:
             MistralModel,
             MistralPreTrainedModel,
         )
-        
+
     try:
         if not is_flax_available():
             raise OptionalDependencyNotAvailable()

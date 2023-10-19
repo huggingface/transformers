@@ -875,24 +875,28 @@ class FlaxMBartPreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
-        
+
+
 class FlaxMistralPreTrainedModel(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
-        
+
+
 class FlaxMistralModel(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
-        
+
+
 class FlaxMistralForCausalLM(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
+
 
 class FlaxMistralForSequenceClassification(metaclass=DummyObject):
     _backends = ["flax"]

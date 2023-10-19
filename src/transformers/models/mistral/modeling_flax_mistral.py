@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Flax Mistral model."""
-import math
 from typing import Any, List, Optional, Tuple, Union
 
 import flax.linen as nn
@@ -39,7 +38,7 @@ from ...modeling_flax_outputs import (
     FlaxSequenceClassifierOutput,
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, logging
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
+from ...utils import add_start_docstrings
 from .configuration_mistral import MistralConfig
 
 
@@ -181,6 +180,7 @@ class FlaxMistralRMSNorm(nn.Module):
 #     def __call__(self, x: jnp.ndarray, seq_len: int) -> Tuple[jnp.ndarray, jnp.ndarray]:
 #         return (self.cos_cached[:seq_len], self.sin_cached[:seq_len])
 
+
 class FlaxMistralRotaryEmbedding(nn.Module):
     config: MistralConfig
     dtype: jnp.dtype = jnp.float32
@@ -201,8 +201,8 @@ class FlaxMistralRotaryEmbedding(nn.Module):
 
         return key, query
 
-class FlaxMistralMLP(nn.Module):
 
+class FlaxMistralMLP(nn.Module):
     config: MistralConfig
     dtype: jnp.dtype = jnp.float32
 
@@ -234,6 +234,7 @@ def flax_apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     k_embed = (k * cos) + (flax_rotate_half(k) * sin)
     return q_embed, k_embed
 
+
 def create_sinusoidal_positions(num_pos, dim):
     inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) / dim))
     freqs = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq).astype("float32")
@@ -255,7 +256,6 @@ def apply_rotary_pos_emb(tensor, sin_pos, cos_pos):
     return (tensor * cos_pos) + (rotate_half(tensor) * sin_pos)
 
 
-
 def flax_repeat_kv(hidden_states: jnp.ndarray, n_rep: int) -> jnp.ndarray:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -265,8 +265,9 @@ def flax_repeat_kv(hidden_states: jnp.ndarray, n_rep: int) -> jnp.ndarray:
     if n_rep == 1:
         return hidden_states
     hidden_states = jnp.repeat(hidden_states[:, :, None, :, :], n_rep, axis=3)
-    new_size = (batch, slen, num_key_value_heads * n_rep,  head_dim)
+    new_size = (batch, slen, num_key_value_heads * n_rep, head_dim)
     return jax.lax.reshape(hidden_states, new_size)
+
 
 def _flax_make_sliding_window_causal_mask(
     input_ids_shape: torch.Size,
@@ -290,6 +291,7 @@ def _flax_make_sliding_window_causal_mask(
     if past_key_values_length > 0:
         mask = jnp.concatenate([jnp.zeros((tgt_len, past_key_values_length), dtype=dtype), mask], axis=-1)
     return jnp.repeat(mask[None, None], bsz, axis=0)
+
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _flax_make_causal_mask(input_ids_shape: Tuple[int], dtype: jnp.dtype, past_key_values_length: int = 0):
@@ -325,9 +327,9 @@ def _flax_expand_mask(mask: jnp.ndarray, dtype: jnp.dtype, tgt_len: Optional[int
     return inverted_mask
 
 
-
-def _prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length, sliding_window
-    ):
+def _prepare_decoder_attention_mask(
+    attention_mask, input_shape, inputs_embeds, past_key_values_length, sliding_window
+):
     # create causal mask
     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
     combined_attention_mask = None
@@ -369,23 +371,21 @@ class FlaxMistralAttention(nn.Module):
                 f" and `num_heads`: {self.num_heads})."
             )
         self.q_proj = nn.Dense(self.num_heads * self.head_dim, use_bias=False, dtype=self.dtype)
-        self.k_proj = nn.Dense(
-            self.num_key_value_heads * self.head_dim, use_bias=False, dtype=self.dtype
-        )
-        self.v_proj = nn.Dense(
-            self.num_key_value_heads * self.head_dim, use_bias=False, dtype=self.dtype
-        )
+        self.k_proj = nn.Dense(self.num_key_value_heads * self.head_dim, use_bias=False, dtype=self.dtype)
+        self.v_proj = nn.Dense(self.num_key_value_heads * self.head_dim, use_bias=False, dtype=self.dtype)
         self.o_proj = nn.Dense(self.hidden_size, use_bias=False, dtype=self.dtype)
-        self.causal_mask =jnp.triu(make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool"),
-                                    k=-config.sliding_window)
+        self.causal_mask = jnp.triu(
+            make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool"),
+            k=-config.sliding_window,
+        )
         self.rotary_emb = FlaxMistralRotaryEmbedding(config, dtype=self.dtype)
-        
+
     def _split_heads(self, hidden_states, num_heads):
         return hidden_states.reshape(hidden_states.shape[:2] + (num_heads, self.head_dim))
 
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.hidden_size,))
-        
+
     @nn.compact
     # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoSelfAttention._concatenate_to_cache
     def _concatenate_to_cache(self, key, value, query, attention_mask):
@@ -430,17 +430,17 @@ class FlaxMistralAttention(nn.Module):
         padding_mask: Optional[jnp.ndarray] = None,
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         bsz, q_len, _ = hidden_states.shape
-        
+
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-        
+
         # query_shape = (bsz, q_len, self.num_heads, self.head_dim)
         # kv_shape = (bsz, q_len, self.num_key_value_heads, self.head_dim)
         query_states = self._split_heads(query_states, self.num_heads)
         key_states = self._split_heads(key_states, self.num_key_value_heads)
         value_states = self._split_heads(value_states, self.num_key_value_heads)
-        
+
         key_states, query_states = self.rotary_emb(key_states, query_states, position_ids)
         # query_states = jax.lax.reshape(query_states, query_shape).transpose(0, 2, 1, 3)
         # key_states = jax.lax.reshape(key_states, kv_shape).transpose(0, 2, 1, 3)
@@ -460,19 +460,19 @@ class FlaxMistralAttention(nn.Module):
         else:
             causal_mask = self.causal_mask[:, :, :query_length, :key_length]
 
-
-
         batch_size = hidden_states.shape[0]
         causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
         attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
         attention_mask = combine_masks(attention_mask, causal_mask)
-        
+
         if self.has_variable("cache", "cached_key") or init_cache:
-            key_states, value_states, attention_mask = self._concatenate_to_cache(key_states, value_states, query_states, attention_mask)
-            
+            key_states, value_states, attention_mask = self._concatenate_to_cache(
+                key_states, value_states, query_states, attention_mask
+            )
+
         key_states = flax_repeat_kv(key_states, self.num_key_value_groups)
         value_states = flax_repeat_kv(value_states, self.num_key_value_groups)
-            
+
         attention_bias = lax.select(
             attention_mask > 0,
             jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
@@ -504,7 +504,7 @@ class FlaxMistralAttention(nn.Module):
         #         raise ValueError(
         #             f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.shape}"
         #         )
-        
+
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
         attn_output = self._merge_heads(attn_output)
         attn_output = self.o_proj(attn_output)
@@ -514,7 +514,6 @@ class FlaxMistralAttention(nn.Module):
 
 
 class FlaxMistralDecoderLayer(nn.Module):
-
     config: MistralConfig
     dtype: jnp.dtype = jnp.float32
 
@@ -523,9 +522,7 @@ class FlaxMistralDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.self_attn = FlaxMistralAttention(config=config, dtype=self.dtype)
         self.mlp = FlaxMistralMLP(config, dtype=self.dtype)
-        self.input_layernorm = FlaxMistralRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps, dtype=self.dtype
-        )
+        self.input_layernorm = FlaxMistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps, dtype=self.dtype)
         self.post_attention_layernorm = FlaxMistralRMSNorm(
             config.hidden_size, eps=config.rms_norm_eps, dtype=self.dtype
         )
@@ -577,7 +574,6 @@ class FlaxMistralDecoderLayer(nn.Module):
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-
 
         return (hidden_states,) + outputs[1:]
 
@@ -679,13 +675,12 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         # Handle any PRNG if needed
         rngs = {}
         inputs = {"params": params or self.params}
-        
+
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
         else:
             mutable = False
-
 
         outputs = self.module.apply(
             inputs,
@@ -700,7 +695,7 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
             rngs=rngs,
             mutable=mutable,
         )
-        
+
         if past_key_values is not None and return_dict:
             outputs, past_key_values = outputs
             outputs["past_key_values"] = unfreeze(past_key_values["cache"])
@@ -710,7 +705,7 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
             outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
 
         return outputs
-    
+
 
 class FlaxMistralLayerCollection(nn.Module):
     """
@@ -719,25 +714,27 @@ class FlaxMistralLayerCollection(nn.Module):
     Args:
         config: MistralConfig
     """
-    
+
     config: MistralConfig
     dtype: jnp.dtype = jnp.float32
-    
+
     def setup(self):
         self.blocks = [
-            FlaxMistralDecoderLayer(self.config, dtype=self.dtype, name=str(i)) for i in range(self.config.num_hidden_layers)
+            FlaxMistralDecoderLayer(self.config, dtype=self.dtype, name=str(i))
+            for i in range(self.config.num_hidden_layers)
         ]
-        
-    def __call__(self,
-                 hidden_states: jnp.ndarray = None,
-                 attention_mask: Optional[jnp.ndarray] = None,
-                 position_ids: Optional[jnp.ndarray] = None,
-                 past_key_values: Optional[List[jnp.ndarray]] = None,
-                 init_cache: Optional[bool] = None,
-                 output_attentions: Optional[bool] = None,
-                 output_hidden_states: Optional[bool] = None,
-                 return_dict: Optional[bool] = None,) -> Any:
-        
+
+    def __call__(
+        self,
+        hidden_states: jnp.ndarray = None,
+        attention_mask: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        past_key_values: Optional[List[jnp.ndarray]] = None,
+        init_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Any:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         next_decoder_cache = () if init_cache else None
@@ -756,14 +753,12 @@ class FlaxMistralLayerCollection(nn.Module):
 
             hidden_states = layer_outputs[0]
 
-
             if output_attentions:
                 all_attentions += (layer_outputs[1],)
-                
+
         outputs = (hidden_states, all_hidden_states, all_attentions)
 
-        return outputs 
-
+        return outputs
 
 
 class FlaxMistralModule(nn.Module):
@@ -815,7 +810,6 @@ class FlaxMistralModule(nn.Module):
 
         seq_length_with_past = seq_length
 
-
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
         # # embed positions
@@ -839,7 +833,7 @@ class FlaxMistralModule(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if init_cache else None
-        
+
         outputs = self.layers(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -850,7 +844,7 @@ class FlaxMistralModule(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        
+
         hidden_states = outputs[0]
         hidden_states = self.norm(hidden_states)
 
@@ -864,7 +858,7 @@ class FlaxMistralModule(nn.Module):
         next_cache = outputs[1] if init_cache else None
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
-        
+
         return FlaxBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -872,13 +866,17 @@ class FlaxMistralModule(nn.Module):
             attentions=outputs[-1] if output_attentions else None,
         )
 
+
 @add_start_docstrings(
     "The bare Mistral Model transformer outputting raw hidden-states without any specific head on top.",
     MISTRAL_START_DOCSTRING,
 )
 class FlaxMistralModel(FlaxMistralPreTrainedModel):
     module_class = FlaxMistralModule
+
+
 append_call_sample_docstring(FlaxMistralModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPast, _CONFIG_FOR_DOC)
+
 
 class FlaxMistralForCausalLMModule(nn.Module):
     config: MistralConfig
@@ -901,8 +899,6 @@ class FlaxMistralForCausalLMModule(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, FlaxCausalLMOutputWithCrossAttentions]:
-        
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -925,17 +921,18 @@ class FlaxMistralForCausalLMModule(nn.Module):
         hidden_states = outputs[0]
 
         logits = self.lm_head(hidden_states)
-        
+
         if not return_dict:
             output = (logits,) + outputs[1:]
             return output
-        
+
         return FlaxCausalLMOutputWithCrossAttentions(
             logits=logits,
             past_key_values=outputs.past_key_values if return_dict else outputs[1],
             hidden_states=outputs.hidden_states if return_dict else outputs[2],
             attentions=outputs.attentions if return_dict else outputs[3],
         )
+
 
 @add_start_docstrings(
     """
@@ -974,10 +971,13 @@ class FlaxMistralForCausalLM(FlaxMistralPreTrainedModel):
         model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
         return model_kwargs
 
-append_call_sample_docstring(FlaxMistralForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutputWithCrossAttentions, _CONFIG_FOR_DOC)
+
+append_call_sample_docstring(
+    FlaxMistralForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutputWithCrossAttentions, _CONFIG_FOR_DOC
+)
+
 
 class FlaxMistralForSequenceClassificationModule(nn.Module):
-
     config: MistralConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -1000,7 +1000,6 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, FlaxSequenceClassifierOutput]:
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.model(
@@ -1044,6 +1043,7 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
             attentions=transformer_outputs.attentions,
         )
 
+
 @add_start_docstrings(
     """
     The Mistral Model transformer with a sequence classification  head (linear layer) on top.
@@ -1053,4 +1053,7 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
 class FlaxMistralForSequenceClassification(FlaxMistralPreTrainedModel):
     module_class = FlaxMistralForSequenceClassificationModule
 
-append_call_sample_docstring(FlaxMistralForSequenceClassification, _CHECKPOINT_FOR_DOC, FlaxSequenceClassifierOutput, _CONFIG_FOR_DOC)
+
+append_call_sample_docstring(
+    FlaxMistralForSequenceClassification, _CHECKPOINT_FOR_DOC, FlaxSequenceClassifierOutput, _CONFIG_FOR_DOC
+)

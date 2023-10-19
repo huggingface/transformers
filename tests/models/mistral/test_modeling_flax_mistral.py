@@ -17,18 +17,17 @@ import unittest
 
 import numpy as np
 
-from transformers import (MistralConfig, is_flax_available,
-                          is_tokenizers_available)
+from transformers import MistralConfig, is_flax_available, is_tokenizers_available
 from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
+
 if is_flax_available():
     import jax.numpy as jnp
 
-    from transformers.models.mistral.modeling_flax_mistral import (
-        FlaxMistralForCausalLM, FlaxMistralModel)
+    from transformers.models.mistral.modeling_flax_mistral import FlaxMistralForCausalLM, FlaxMistralModel
 
 
 if is_tokenizers_available():
@@ -94,7 +93,7 @@ class FlaxMistralModelTester:
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            num_key_value_heads = self.num_key_value_heads,
+            num_key_value_heads=self.num_key_value_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
