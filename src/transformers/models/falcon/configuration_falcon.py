@@ -92,7 +92,7 @@ class FalconConfig(PretrainedConfig):
 
     Example:
 
-    ```pytho
+    ```python
     >>> from transformers import FalconModel, FalconConfig
 
     >>> # Initializing a small (2-layer) Falcon configuration
@@ -188,4 +188,4 @@ class FalconConfig(PretrainedConfig):
                 f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")
+            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
