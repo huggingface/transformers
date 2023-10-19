@@ -32,13 +32,15 @@ from flax.linen.initializers import ones
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
-from ...modeling_flax_outputs import (FlaxBaseModelOutputWithPast,
-                                      FlaxCausalLMOutputWithCrossAttentions,
-                                      FlaxSequenceClassifierOutput)
-from ...modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
-                                    append_call_sample_docstring, logging)
+from ...modeling_flax_outputs import (
+    FlaxBaseModelOutputWithPast,
+    FlaxCausalLMOutputWithCrossAttentions,
+    FlaxSequenceClassifierOutput,
+)
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, logging
 from ...utils import add_start_docstrings
 from .configuration_mistral import MistralConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -129,7 +131,6 @@ MISTRAL_INPUTS_DOCSTRING = r"""
 """
 
 
-
 class FlaxMistralRMSNorm(nn.Module):
     hidden_size: int
     eps: float = 1e-6
@@ -142,7 +143,6 @@ class FlaxMistralRMSNorm(nn.Module):
         variance = (hidden_states**2).mean(-1, keepdims=True)
         hidden_states = hidden_states * 1 / jnp.sqrt(variance + self.eps)
         return weight * hidden_states
-
 
 
 class FlaxMistralRotaryEmbedding(nn.Module):
@@ -351,11 +351,10 @@ class FlaxMistralAttention(nn.Module):
         init_cache: bool = False,
         padding_mask: Optional[jnp.ndarray] = None,
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-        
+
         query_states = self._split_heads(query_states, self.num_heads)
         key_states = self._split_heads(key_states, self.num_key_value_heads)
         value_states = self._split_heads(value_states, self.num_key_value_heads)
