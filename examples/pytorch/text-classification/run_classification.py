@@ -655,7 +655,7 @@ def main():
             preds = np.squeeze(preds)
             result = metric.compute(predictions=preds, references=p.label_ids)
         elif is_multi_label:
-            preds = np.array([np.where(p > 0.5, 1, 0) for p in preds])
+            preds = np.array([np.where(p > 0, 1, 0) for p in preds])  # convert logits to multi-hot encoding
             # Micro F1 is commonly used in multi-label classification
             result = metric.compute(predictions=preds, references=p.label_ids, average="micro")
         else:
@@ -721,7 +721,9 @@ def main():
         if is_regression:
             predictions = np.squeeze(predictions)
         elif is_multi_label:
-            predictions = np.array([np.where(p > 0.5, 1, 0) for p in predictions])
+            predictions = np.array(
+                [np.where(p > 0, 1, 0) for p in predictions]
+            )  # convert logits to multi-hot encoding
         else:
             predictions = np.argmax(predictions, axis=1)
         output_predict_file = os.path.join(training_args.output_dir, "predict_results.txt")
