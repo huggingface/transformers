@@ -24,22 +24,23 @@ from typing import Any, List, Optional, Tuple, Union
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 import torch
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
+from flax.linen.attention import dot_product_attention_weights
 from flax.linen.initializers import ones
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
-from ...modeling_flax_outputs import (
-    FlaxBaseModelOutputWithPast,
-    FlaxCausalLMOutputWithCrossAttentions,
-    FlaxSequenceClassifierOutput,
-)
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, logging
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
+from ...modeling_flax_outputs import (FlaxBaseModelOutputWithPast,
+                                      FlaxCausalLMOutputWithCrossAttentions,
+                                      FlaxSequenceClassifierOutput)
+from ...modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
+                                    append_call_sample_docstring, logging)
+from ...utils import (add_start_docstrings,
+                      add_start_docstrings_to_model_forward)
 from .configuration_mistral import MistralConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -160,25 +161,44 @@ class FlaxMistralRMSNorm(nn.Module):
         return weight * hidden_states
 
 
+# class FlaxMistralRotaryEmbedding(nn.Module):
+#     dim: int
+#     max_position_embeddings: int = 2048
+#     base: int = 10000
+#     max_seq_len: int = 4096
+#     dtype: jnp.dtype = jnp.float32
+
+#     def setup(self):
+#         self.inv_freq = 1 / (10000 ** (jnp.arange(0, self.dim, 2) / self.dim))
+#         t = jnp.arange(0, self.max_seq_len, dtype=self.dtype)
+#         freqs = jnp.einsum("i,j->ij", t, self.inv_freq)
+#         emb = jnp.concatenate((freqs, freqs), axis=1)
+#         self.cos_cached = jnp.cos(emb)
+#         self.sin_cached = jnp.sin(emb)
+
+#     @nn.compact
+#     def __call__(self, x: jnp.ndarray, seq_len: int) -> Tuple[jnp.ndarray, jnp.ndarray]:
+#         return (self.cos_cached[:seq_len], self.sin_cached[:seq_len])
+
 class FlaxMistralRotaryEmbedding(nn.Module):
-    dim: int
-    max_position_embeddings: int = 2048
-    base: int = 10000
-    max_seq_len: int = 4096
+    config: MistralConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.inv_freq = 1 / (10000 ** (jnp.arange(0, self.dim, 2) / self.dim))
-        t = jnp.arange(0, self.max_seq_len, dtype=self.dtype)
-        freqs = jnp.einsum("i,j->ij", t, self.inv_freq)
-        emb = jnp.concatenate((freqs, freqs), axis=1)
-        self.cos_cached = jnp.cos(emb)
-        self.sin_cached = jnp.sin(emb)
+        head_dim = self.config.hidden_size // self.config.num_attention_heads
+        self.sincos = create_sinusoidal_positions(self.config.max_position_embeddings, head_dim)
 
-    @nn.compact
-    def __call__(self, x: jnp.ndarray, seq_len: int) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        return (self.cos_cached[:seq_len], self.sin_cached[:seq_len])
+    def __call__(self, key, query, position_ids):
+        sincos = self.sincos[position_ids]
+        sin_pos, cos_pos = jnp.split(sincos, 2, axis=-1)
 
+        key = apply_rotary_pos_emb(key, sin_pos, cos_pos)
+        query = apply_rotary_pos_emb(query, sin_pos, cos_pos)
+
+        key = jnp.asarray(key, dtype=self.dtype)
+        query = jnp.asarray(query, dtype=self.dtype)
+
+        return key, query
 
 class FlaxMistralMLP(nn.Module):
 
@@ -213,17 +233,38 @@ def flax_apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     k_embed = (k * cos) + (flax_rotate_half(k) * sin)
     return q_embed, k_embed
 
+def create_sinusoidal_positions(num_pos, dim):
+    inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) / dim))
+    freqs = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq).astype("float32")
+
+    emb = np.concatenate((freqs, freqs), axis=-1)
+    out = np.concatenate((np.sin(emb)[:, None, :], np.cos(emb)[:, None, :]), axis=-1)
+    return jnp.array(out[:, :, :num_pos])
+
+
+def rotate_half(tensor):
+    """Rotates half the hidden dims of the input."""
+    rotate_half_tensor = jnp.concatenate(
+        (-tensor[..., tensor.shape[-1] // 2 :], tensor[..., : tensor.shape[-1] // 2]), axis=-1
+    )
+    return rotate_half_tensor
+
+
+def apply_rotary_pos_emb(tensor, sin_pos, cos_pos):
+    return (tensor * cos_pos) + (rotate_half(tensor) * sin_pos)
+
+
 
 def flax_repeat_kv(hidden_states: jnp.ndarray, n_rep: int) -> jnp.ndarray:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
     num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
     """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    batch, slen, num_key_value_heads, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = jnp.repeat(hidden_states[:, :, None, :, :], n_rep, axis=2)
-    new_size = (batch, num_key_value_heads * n_rep, slen, head_dim)
+    hidden_states = jnp.repeat(hidden_states[:, :, None, :, :], n_rep, axis=3)
+    new_size = (batch, slen, num_key_value_heads * n_rep,  head_dim)
     return jax.lax.reshape(hidden_states, new_size)
 
 def _flax_make_sliding_window_causal_mask(
@@ -319,6 +360,7 @@ class FlaxMistralAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
+        self.attention_softmax_in_fp32 = self.dtype is not jnp.float32
         self.rope_theta = config.rope_theta
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -335,9 +377,13 @@ class FlaxMistralAttention(nn.Module):
         self.o_proj = nn.Dense(self.hidden_size, use_bias=False, dtype=self.dtype)
         self.causal_mask =jnp.triu(make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool"),
                                     k=-config.sliding_window)
-        self.rotary_emb = FlaxMistralRotaryEmbedding(
-            self.head_dim, self.max_position_embeddings, base=self.rope_theta, dtype=self.dtype
-        )
+        self.rotary_emb = FlaxMistralRotaryEmbedding(config, dtype=self.dtype)
+        
+    def _split_heads(self, hidden_states, num_heads):
+        return hidden_states.reshape(hidden_states.shape[:2] + (num_heads, self.head_dim))
+
+    def _merge_heads(self, hidden_states):
+        return hidden_states.reshape(hidden_states.shape[:2] + (self.hidden_size,))
         
     @nn.compact
     # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoSelfAttention._concatenate_to_cache
@@ -388,75 +434,82 @@ class FlaxMistralAttention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
         
-        query_shape = (bsz, q_len, self.num_heads, self.head_dim)
-        kv_shape = (bsz, q_len, self.num_key_value_heads, self.head_dim)
-        query_states = jax.lax.reshape(query_states, query_shape).transpose(0, 2, 1, 3)
-        key_states = jax.lax.reshape(key_states, kv_shape).transpose(0, 2, 1, 3)
-        value_states = jax.lax.reshape(value_states, kv_shape).transpose(0, 2, 1, 3)
+        # query_shape = (bsz, q_len, self.num_heads, self.head_dim)
+        # kv_shape = (bsz, q_len, self.num_key_value_heads, self.head_dim)
+        query_states = self._split_heads(query_states, self.num_heads)
+        key_states = self._split_heads(key_states, self.num_key_value_heads)
+        value_states = self._split_heads(value_states, self.num_key_value_heads)
+        
+        key_states, query_states = self.rotary_emb(key_states, query_states, position_ids)
+        # query_states = jax.lax.reshape(query_states, query_shape).transpose(0, 2, 1, 3)
+        # key_states = jax.lax.reshape(key_states, kv_shape).transpose(0, 2, 1, 3)
+        # value_states = jax.lax.reshape(value_states, kv_shape).transpose(0, 2, 1, 3)
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
+        # kv_seq_len = key_states.shape[1]
 
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = flax_apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        # cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        # query_states, key_states = flax_apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_length, key_length = query_states.shape[1], key_states.shape[1]
         if self.has_variable("cache", "cached_key"):
             mask_shift = self.variables["cache"]["cache_index"]
             max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
             causal_mask = lax.dynamic_slice(
-                self.causal_mask, (0, 0, mask_shift, 0), (1, 1, q_len, max_decoder_length)
+                self.causal_mask, (0, 0, mask_shift, 0), (1, 1, query_length, max_decoder_length)
             )
         else:
-            causal_mask = self.causal_mask[:, :, :q_len, :kv_seq_len]
+            causal_mask = self.causal_mask[:, :, :query_length, :key_length]
 
-        if past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = jnp.concatenate([past_key_value[0], key_states], axis=2)
-            value_states = jnp.concatenate([past_key_value[1], value_states], axis=2)
 
-        past_key_value = (key_states, value_states) if init_cache else None
 
-        key_states = flax_repeat_kv(key_states, self.num_key_value_groups)
-        value_states = flax_repeat_kv(value_states, self.num_key_value_groups)
         batch_size = hidden_states.shape[0]
         causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
         attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
-        attention_mask = jnp.log(combine_masks(attention_mask, causal_mask))
+        attention_mask = combine_masks(attention_mask, causal_mask)
         
         if self.has_variable("cache", "cached_key") or init_cache:
             key_states, value_states, attention_mask = self._concatenate_to_cache(key_states, value_states, query_states, attention_mask)
+            
+        key_states = flax_repeat_kv(key_states, self.num_key_value_groups)
+        value_states = flax_repeat_kv(value_states, self.num_key_value_groups)
+            
+        attention_bias = lax.select(
+            attention_mask > 0,
+            jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
+            jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
+        )
 
-        attn_weights = query_states @ key_states.transpose(0, 1, 3, 2) / math.sqrt(self.head_dim)
+        # usual dot product attention
+        attention_dtype = jnp.float32 if self.attention_softmax_in_fp32 else self.dtype
+        attn_weights = dot_product_attention_weights(
+            query_states,
+            key_states,
+            bias=attention_bias,
+            deterministic=True,
+            dtype=attention_dtype,
+        )
 
-        if attn_weights.shape != (bsz, self.num_heads, q_len, kv_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-        if attention_mask is not None:
-            if attention_mask.shape != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.shape}"
-                )
-            attn_weights = attn_weights + attention_mask
+        if self.attention_softmax_in_fp32:
+            attn_weights = attn_weights.astype(self.dtype)
 
-        attn_weights = jax.nn.softmax(attn_weights, axis=-1)
-        attn_output = attn_weights @ value_states
+        # attn_weights = query_states @ key_states.transpose(0, 1, 3, 2) / math.sqrt(self.head_dim)
 
-        if attn_output.shape != (bsz, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(0, 2, 1, 3)
-        attn_output = jax.lax.reshape(attn_output, (bsz, q_len, self.hidden_size))
+        # if attn_weights.shape != (bsz, self.num_heads, q_len, kv_seq_len):
+        #     raise ValueError(
+        #         f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
+        #         f" {attn_weights.size()}"
+        #     )
+        # if attention_mask is not None:
+        #     if attention_mask.shape != (bsz, 1, q_len, kv_seq_len):
+        #         raise ValueError(
+        #             f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.shape}"
+        #         )
+        
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
+        attn_output = self._merge_heads(attn_output)
         attn_output = self.o_proj(attn_output)
 
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_value
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
+        return outputs
 
 
 class FlaxMistralDecoderLayer(nn.Module):
@@ -505,7 +558,7 @@ class FlaxMistralDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        outputs = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -514,7 +567,9 @@ class FlaxMistralDecoderLayer(nn.Module):
             init_cache=init_cache,
             padding_mask=padding_mask,
         )
-        hidden_states = residual + hidden_states
+        # residual connection
+        attn_output = outputs[0]
+        hidden_states = residual + attn_output
 
         # Fully Connected
         residual = hidden_states
@@ -522,15 +577,8 @@ class FlaxMistralDecoderLayer(nn.Module):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
 
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if init_cache:
-            outputs += (present_key_value,)
-
-        return outputs
+        return (hidden_states,) + outputs[1:]
 
 
 class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
@@ -563,11 +611,11 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_ids)
-
+        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        module_init_outputs = self.module.init(rngs, input_ids, attention_mask, return_dict=True)
+        module_init_outputs = self.module.init(rngs, input_ids, attention_mask, position_ids, return_dict=False)
 
         random_params = module_init_outputs["params"]
 
@@ -651,6 +699,14 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
             rngs=rngs,
             mutable=mutable,
         )
+        
+        if past_key_values is not None and return_dict:
+            outputs, past_key_values = outputs
+            outputs["past_key_values"] = unfreeze(past_key_values["cache"])
+            return outputs
+        elif past_key_values is not None and not return_dict:
+            outputs, past_key_values = outputs
+            outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
 
         return outputs
     
@@ -699,13 +755,11 @@ class FlaxMistralLayerCollection(nn.Module):
 
             hidden_states = layer_outputs[0]
 
-            if init_cache:
-                next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
 
             if output_attentions:
                 all_attentions += (layer_outputs[1],)
                 
-        outputs = (hidden_states, next_decoder_cache, all_hidden_states, all_attentions)
+        outputs = (hidden_states, all_hidden_states, all_attentions)
 
         return outputs 
 
@@ -801,12 +855,14 @@ class FlaxMistralModule(nn.Module):
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
-            all_hidden_states = outputs[2] + (hidden_states,)
+            all_hidden_states = outputs[1] + (hidden_states,)
             outputs = (hidden_states, all_hidden_states) + outputs[2:]
+        else:
+            outputs = (hidden_states,) + outputs[1:]
 
         next_cache = outputs[1] if init_cache else None
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, outputs[-1]] if v is not None)
+            return tuple(v for v in outputs if v is not None)
         
         return FlaxBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
