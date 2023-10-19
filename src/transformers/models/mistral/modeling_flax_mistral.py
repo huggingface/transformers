@@ -24,7 +24,6 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as np
-import torch
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
@@ -32,15 +31,13 @@ from flax.linen.initializers import ones
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
-from ...modeling_flax_outputs import (
-    FlaxBaseModelOutputWithPast,
-    FlaxCausalLMOutputWithCrossAttentions,
-    FlaxSequenceClassifierOutput,
-)
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, logging
+from ...modeling_flax_outputs import (FlaxBaseModelOutputWithPast,
+                                      FlaxCausalLMOutputWithCrossAttentions,
+                                      FlaxSequenceClassifierOutput)
+from ...modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
+                                    append_call_sample_docstring, logging)
 from ...utils import add_start_docstrings
 from .configuration_mistral import MistralConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -231,46 +228,6 @@ def flax_repeat_kv(hidden_states: jnp.ndarray, n_rep: int) -> jnp.ndarray:
     hidden_states = jnp.repeat(hidden_states[:, :, None, :, :], n_rep, axis=3)
     new_size = (batch, slen, num_key_value_heads * n_rep, head_dim)
     return jax.lax.reshape(hidden_states, new_size)
-
-
-def _flax_make_sliding_window_causal_mask(
-    input_ids_shape: torch.Size,
-    dtype: jnp.dtype,
-    past_key_values_length: int = 0,
-    sliding_window: int = 4096,
-):
-    """
-    Make causal mask used for sliding window attention
-    """
-    bsz, tgt_len = input_ids_shape
-
-    tensor = jnp.full(
-        (tgt_len, tgt_len),
-        fill_value=1,
-    )
-    mask = jnp.tril(tensor, k=0)
-    # make the mask banded to account for sliding window
-    mask = jnp.triu(mask, k=-sliding_window)
-    mask = jnp.log(mask)
-    if past_key_values_length > 0:
-        mask = jnp.concatenate([jnp.zeros((tgt_len, past_key_values_length), dtype=dtype), mask], axis=-1)
-    return jnp.repeat(mask[None, None], bsz, axis=0)
-
-
-def _flax_expand_mask(mask: jnp.ndarray, dtype: jnp.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.shape
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :]
-    expanded_mask = jnp.repeat(expanded_mask, tgt_len, axis=2)
-
-    inverted_mask = 1.0 - expanded_mask
-    inverted_mask = inverted_mask * jnp.full(inverted_mask.shape, jnp.finfo(dtype).min)
-
-    return inverted_mask
 
 
 class FlaxMistralAttention(nn.Module):
@@ -767,11 +724,11 @@ class FlaxMistralForCausalLMModule(nn.Module):
 
     def __call__(
         self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_ids: jnp.ndarray = None,
+        attention_mask: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        past_key_values: Optional[List[jnp.ndarray]] = None,
+        inputs_embeds: Optional[jnp.ndarray] = None,
         init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -868,11 +825,11 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
 
     def __call__(
         self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_ids: jnp.ndarray = None,
+        attention_mask: Optional[jnp.ndarray] = None,
+        position_ids: Optional[jnp.ndarray] = None,
+        past_key_values: Optional[List[jnp.ndarray]] = None,
+        inputs_embeds: Optional[jnp.ndarray] = None,
         init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -899,8 +856,6 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
         else:
             batch_size = inputs_embeds.shape[0]
 
-        if self.config.pad_token_id is None and batch_size != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
         if self.config.pad_token_id is None:
             sequence_lengths = -1
         else:
