@@ -134,3 +134,24 @@
   - local: model_memory_anatomy
     title: モデルトレーニングの解剖学
   title: コンセプチュアルガイド
+- sections:
+  - local: internal/modeling_utils
+    title: カスタムレイヤーとユーティリティ
+  - local: internal/pipelines_utils
+    title: パイプライン用のユーティリティ
+  - local: internal/tokenization_utils
+    title: ト=ークナイザー用のユーティリティ
+  - local: internal/trainer_utils
+    title: トレーナー用ユーティリティ
+  - local: internal/generation_utils
+    title: 発電用ユーティリティ
+  - local: internal/image_processing_utils
+    title: 画像プロセッサ用ユーティリティ
+  - local: internal/audio_utils
+    title: オーディオ処理用のユーティリティ
+  - local: internal/file_utils
+    title: 一般公共事業
+  - local: internal/time_series_utils
+    title: 時系列用のユーティリティ
+  title: 内部ヘルパー
+  title: API
