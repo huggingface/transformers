@@ -141,8 +141,7 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
         pad_token (`str`, *optional*):
-            A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
-            attention mechanisms or loss computation
+            The token used for padding, for example when batching sequences of different lengths.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (CodeGen tokenizer detect beginning of words by the preceding space).

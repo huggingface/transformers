@@ -97,7 +97,8 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         merges_file (`str`, *optional*):
             Path to the merges file.
         tokenizer_file (`str`, *optional*):
-            The path to a tokenizer file to use instead of the vocab file.
+            Path to [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
+            contains everything needed to load the tokenizer.
         unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
