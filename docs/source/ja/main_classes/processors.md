@@ -48,7 +48,7 @@ Transformers ライブラリでは、プロセッサは 2 つの異なる意味�
 ## GLUE
 
 [一般言語理解評価 (GLUE)](https://gluebenchmark.com/) は、
-既存の NLU タスクの多様なセットにわたるモデルのパフォーマンス。紙と同時発売された【GLUE:A】
+既存の NLU タスクの多様なセットにわたるモデルのパフォーマンス。紙と同時発売された [GLUE: A
 自然言語理解のためのマルチタスクベンチマークおよび分析プラットフォーム](https://openreview.net/pdf?id=rJ4km2R5t7)
 
 このライブラリは、MRPC、MNLI、MNLI (不一致)、CoLA、SST2、STSB、
