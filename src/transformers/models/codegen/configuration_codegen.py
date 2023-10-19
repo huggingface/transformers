@@ -58,7 +58,7 @@ class CodeGenConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         n_ctx (`int`, *optional*, defaults to 2048):
-            Number of tokens provided in a single pass.
+            This attribute is used in `CodeGenModel.__init__` without any real effect.
         n_embd (`int`, *optional*, defaults to 4096):
             Dimensionality of the embeddings and hidden states.
         n_layer (`int`, *optional*, defaults to 28):
