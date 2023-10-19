@@ -82,8 +82,9 @@ class PatchTSTConfig(PretrainedConfig):
             Consider bias in the feed-forward networks.
         activation_function (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (string) in the encoder.`"gelu"` and `"relu"` are supported.
-        pre_norm (`bool`, *optional*, defaults to `False`):
-            TODO
+        pre_norm (`bool`, *optional*, defaults to `True`):
+            Normalization is applied before self-attention if pre_norm is set to True. Otherwise, normalization is
+            applied after residual block.
         positional_encoding (`str`, *optional*, defaults to `"sincos"`):
             Positional encodings. `"zeros"`, `"normal"`, `"uniform"' and `"sincos"` are supported.
         learn_pe (`bool`, *optional*, defaults to `False`):
@@ -173,7 +174,7 @@ class PatchTSTConfig(PretrainedConfig):
         ff_dropout: float = 0.0,
         bias: bool = True,
         activation_function: str = "gelu",
-        pre_norm: bool = False,
+        pre_norm: bool = True,
         positional_encoding: str = "sincos",
         learn_pe: bool = False,
         use_cls_token: bool = False,
