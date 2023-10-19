@@ -32,15 +32,13 @@ from flax.linen.initializers import ones
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
-from ...modeling_flax_outputs import (
-    FlaxBaseModelOutputWithPast,
-    FlaxCausalLMOutputWithCrossAttentions,
-    FlaxSequenceClassifierOutput,
-)
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, logging
+from ...modeling_flax_outputs import (FlaxBaseModelOutputWithPast,
+                                      FlaxCausalLMOutputWithCrossAttentions,
+                                      FlaxSequenceClassifierOutput)
+from ...modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
+                                    append_call_sample_docstring, logging)
 from ...utils import add_start_docstrings
 from .configuration_mistral import MistralConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -131,21 +129,6 @@ MISTRAL_INPUTS_DOCSTRING = r"""
 """
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return jnp.concatenate((-x2, x1), dim=-1)
-
-
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
-    cos = cos[position_ids].unsqueeze(1)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
-    sin = sin[position_ids].unsqueeze(1)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
 
 class FlaxMistralRMSNorm(nn.Module):
     hidden_size: int
@@ -160,25 +143,6 @@ class FlaxMistralRMSNorm(nn.Module):
         hidden_states = hidden_states * 1 / jnp.sqrt(variance + self.eps)
         return weight * hidden_states
 
-
-# class FlaxMistralRotaryEmbedding(nn.Module):
-#     dim: int
-#     max_position_embeddings: int = 2048
-#     base: int = 10000
-#     max_seq_len: int = 4096
-#     dtype: jnp.dtype = jnp.float32
-
-#     def setup(self):
-#         self.inv_freq = 1 / (10000 ** (jnp.arange(0, self.dim, 2) / self.dim))
-#         t = jnp.arange(0, self.max_seq_len, dtype=self.dtype)
-#         freqs = jnp.einsum("i,j->ij", t, self.inv_freq)
-#         emb = jnp.concatenate((freqs, freqs), axis=1)
-#         self.cos_cached = jnp.cos(emb)
-#         self.sin_cached = jnp.sin(emb)
-
-#     @nn.compact
-#     def __call__(self, x: jnp.ndarray, seq_len: int) -> Tuple[jnp.ndarray, jnp.ndarray]:
-#         return (self.cos_cached[:seq_len], self.sin_cached[:seq_len])
 
 
 class FlaxMistralRotaryEmbedding(nn.Module):
@@ -293,24 +257,6 @@ def _flax_make_sliding_window_causal_mask(
     return jnp.repeat(mask[None, None], bsz, axis=0)
 
 
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _flax_make_causal_mask(input_ids_shape: Tuple[int], dtype: jnp.dtype, past_key_values_length: int = 0):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = jnp.full((tgt_len, tgt_len), jnp.finfo(dtype).min)
-    causal_mask = jnp.triu(jnp.ones((tgt_len, tgt_len)), k=1)
-    mask = mask * causal_mask
-    mask = mask[None, None, :, :]
-    mask = jnp.repeat(mask, bsz, axis=0)
-
-    if past_key_values_length > 0:  # TODO: Update when past_key_values_length is not 0
-        mask = jnp.concatenate([jnp.zeros((tgt_len, past_key_values_length), dtype=dtype), mask], axis=-1)
-        mask = jnp.repeat(mask, tgt_len + past_key_values_length, axis=1)
-    return mask
-
-
 def _flax_expand_mask(mask: jnp.ndarray, dtype: jnp.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -325,30 +271,6 @@ def _flax_expand_mask(mask: jnp.ndarray, dtype: jnp.dtype, tgt_len: Optional[int
     inverted_mask = inverted_mask * jnp.full(inverted_mask.shape, jnp.finfo(dtype).min)
 
     return inverted_mask
-
-
-def _prepare_decoder_attention_mask(
-    attention_mask, input_shape, inputs_embeds, past_key_values_length, sliding_window
-):
-    # create causal mask
-    # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-    combined_attention_mask = None
-    if input_shape[-1] > 1:
-        combined_attention_mask = _flax_make_sliding_window_causal_mask(
-            input_shape,
-            inputs_embeds.dtype,
-            past_key_values_length=past_key_values_length,
-            sliding_window=sliding_window,
-        )
-
-    if attention_mask is not None:
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        expanded_attn_mask = _flax_expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
-        combined_attention_mask = (
-            expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-        )
-
-    return combined_attention_mask
 
 
 class FlaxMistralAttention(nn.Module):
@@ -429,27 +351,16 @@ class FlaxMistralAttention(nn.Module):
         init_cache: bool = False,
         padding_mask: Optional[jnp.ndarray] = None,
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        bsz, q_len, _ = hidden_states.shape
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-
-        # query_shape = (bsz, q_len, self.num_heads, self.head_dim)
-        # kv_shape = (bsz, q_len, self.num_key_value_heads, self.head_dim)
+        
         query_states = self._split_heads(query_states, self.num_heads)
         key_states = self._split_heads(key_states, self.num_key_value_heads)
         value_states = self._split_heads(value_states, self.num_key_value_heads)
 
         key_states, query_states = self.rotary_emb(key_states, query_states, position_ids)
-        # query_states = jax.lax.reshape(query_states, query_shape).transpose(0, 2, 1, 3)
-        # key_states = jax.lax.reshape(key_states, kv_shape).transpose(0, 2, 1, 3)
-        # value_states = jax.lax.reshape(value_states, kv_shape).transpose(0, 2, 1, 3)
-
-        # kv_seq_len = key_states.shape[1]
-
-        # cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        # query_states, key_states = flax_apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
         query_length, key_length = query_states.shape[1], key_states.shape[1]
         if self.has_variable("cache", "cached_key"):
             mask_shift = self.variables["cache"]["cache_index"]
@@ -491,19 +402,6 @@ class FlaxMistralAttention(nn.Module):
 
         if self.attention_softmax_in_fp32:
             attn_weights = attn_weights.astype(self.dtype)
-
-        # attn_weights = query_states @ key_states.transpose(0, 1, 3, 2) / math.sqrt(self.head_dim)
-
-        # if attn_weights.shape != (bsz, self.num_heads, q_len, kv_seq_len):
-        #     raise ValueError(
-        #         f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-        #         f" {attn_weights.size()}"
-        #     )
-        # if attention_mask is not None:
-        #     if attention_mask.shape != (bsz, 1, q_len, kv_seq_len):
-        #         raise ValueError(
-        #             f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.shape}"
-        #         )
 
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
         attn_output = self._merge_heads(attn_output)
@@ -737,7 +635,6 @@ class FlaxMistralLayerCollection(nn.Module):
     ) -> Any:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        next_decoder_cache = () if init_cache else None
 
         for idx, decoder_layer in enumerate(self.blocks):
             if output_hidden_states:
@@ -808,31 +705,13 @@ class FlaxMistralModule(nn.Module):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        seq_length_with_past = seq_length
-
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        # # embed positions
-        # padding_mask = None
-        # if attention_mask is None:
-        #     attention_mask = jnp.ones((batch_size, seq_length_with_past), dtype=jnp.bool_)
-        # #     padding_mask = None
-        # # else:
-        # #     if (0 == attention_mask).any():
-        # #         padding_mask = attention_mask
-        # #     else:
-        # #         padding_mask = None
-
-        # attention_mask = _prepare_decoder_attention_mask(
-        #     attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length, sliding_window=self.config.sliding_window,
-        # )
 
         hidden_states = inputs_embeds
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        next_decoder_cache = () if init_cache else None
 
         outputs = self.layers(
             hidden_states=hidden_states,
@@ -1046,7 +925,7 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
 
 @add_start_docstrings(
     """
-    The Mistral Model transformer with a sequence classification  head (linear layer) on top.
+    The Mistral Model transformer with a sequence classification head (linear layer) on top.
     """,
     MISTRAL_START_DOCSTRING,
 )
