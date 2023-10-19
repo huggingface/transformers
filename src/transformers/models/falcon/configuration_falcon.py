@@ -79,8 +79,8 @@ class FalconConfig(PretrainedConfig):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format
-            is `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
+            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
+            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
