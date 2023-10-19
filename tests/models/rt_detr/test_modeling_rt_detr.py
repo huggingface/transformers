@@ -552,6 +552,7 @@ class RTDetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
 
+
 @require_vision
 @require_torch
 @slow

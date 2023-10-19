@@ -21,7 +21,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import RTDetrConfig, RtDetrImageProcessor, RTDetrModel
+from transformers import RTDetrConfig, RtDetrImageProcessor, RTDetrModel, RTDetrForObjectDetection
 
 
 # TODO: Rafael Convert all these weights (?)
@@ -39,6 +39,22 @@ from transformers import RTDetrConfig, RtDetrImageProcessor, RTDetrModel
 # Weights downloaded from: https://github.com/lyuwenyu/RT-DETR/issues/42
 #########################
 
+expected_logits = {
+    "rtdetr_r50vd_6x_coco_from_paddle.pth": torch.tensor([-4.159348487854004, -4.703853607177734, -5.946484565734863, -5.562824249267578, -4.7707929611206055]),
+}
+
+expected_logits_shape = {
+    "rtdetr_r50vd_6x_coco_from_paddle.pth": torch.Size([1, 300, 80]),
+}
+
+# TODO
+expected_boxes = {"rtdetr_r50vd_6x_coco_from_paddle.pth": torch.tensor([[0.1688060760498047, 0.19992263615131378, 0.21225441992282867, 0.09384090453386307],
+[0.768376350402832, 0.41226309537887573, 0.4636859893798828, 0.7233726978302002],
+[0.25953856110572815, 0.5483334064483643, 0.4777486026287079, 0.8709195256233215]])
+}
+
+expected_boxes_shape= {"rtdetr_r50vd_6x_coco_from_paddle.pth": torch.Size([1, 300, 4]),
+                  }
 
 def get_sample_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -72,12 +88,13 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     update_config_values(config, checkpoint_name)
 
     # Load model with the updated config
-    model = RTDetrModel(config)
+    model = RTDetrForObjectDetection(config)
 
     # Load checkpoints from url
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["ema"]["module"]
+    state_dict_for_object_detection = {f"model.{k}": v for k, v in state_dict.items()}
     # Load model with checkpoints
-    model.load_state_dict(state_dict)
+    model.load_state_dict(state_dict_for_object_detection)
     model.eval()
 
     # Prepare image
@@ -86,17 +103,21 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     encoding = image_processor(images=img, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
-    # TODO: Not needed
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     pixel_values = pixel_values.to(device)
-    ####
 
     # Pass image by the model
     outputs = model(pixel_values)
-
-    d = {name: param for name, param in model.named_parameters() if name.startswith("backbone")}
-    ds = {name: param.shape for name, param in model.named_parameters() if name.startswith("backbone")}
+    
+    # Verify boxes
+    output_boxes = outputs.pred_boxes
+    assert output_boxes.shape == expected_boxes_shape[checkpoint_name], f"Shapes of output boxes do not match {checkpoint_name} {version}"
+    expected = expected_boxes[checkpoint_name].to(device)
+    assert torch.allclose(output_boxes[0, :3, :], expected, atol=1e-5), f"Output boxes do not match for {checkpoint_name} {version}"
+    
+    # Verify logits
+    # TODO
 
     # PResNet
     # "{'depth': 50, 'variant': 'd', 'freeze_at': 0, 'return_idx': [1, 2, 3], 'num_stages': 4, 'freeze_norm': True, 'pretrained': True}"
@@ -109,43 +130,13 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
 
     # new_state_dict = convert_state_dict(state_dict, config)
 
-    model.load_state_dict(new_state_dict)
-    model.eval()
+    # print(f"Saving model to {pytorch_dump_folder_path}")
+    # model.save_pretrained(pytorch_dump_folder_path)
 
-    url = "https://user-images.githubusercontent.com/11435359/147738734-196fd92f-9260-48d5-ba7e-bf103d29364d.jpg"
-
-    image = Image.open(requests.get(url, stream=True).raw)
-    image_processor = ViTMAEImageProcessor(size=config.image_size)
-    inputs = image_processor(images=image, return_tensors="pt")
-
-    # # forward pass
-    # torch.manual_seed(2)
-    # outputs = model(**inputs)
-    # logits = outputs.logits
-
-    # if "large" in checkpoint_url:
-    #     expected_slice = torch.tensor(
-    #         [[-0.7309, -0.7128, -1.0169], [-1.0161, -0.9058, -1.1878], [-1.0478, -0.9411, -1.1911]]
-    #     )
-    # elif "huge" in checkpoint_url:
-    #     expected_slice = torch.tensor(
-    #         [[-1.1599, -0.9199, -1.2221], [-1.1952, -0.9269, -1.2307], [-1.2143, -0.9337, -1.2262]]
-    #     )
-    # else:
-    #     expected_slice = torch.tensor(
-    #         [[-0.9192, -0.8481, -1.1259], [-1.1349, -1.0034, -1.2599], [-1.1757, -1.0429, -1.2726]]
-    #     )
-
-    # verify logits
-    assert torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4)
-
-    print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-
-    print(f"Saving image processor to {pytorch_dump_folder_path}")
-    image_processor.save_pretrained(pytorch_dump_folder_path)
-    if push_to_hub:
-        model.push_to_hub(repo_id=repo_id, organization="DepuMeng", commit_message="Add model")
+    # print(f"Saving image processor to {pytorch_dump_folder_path}")
+    # image_processor.save_pretrained(pytorch_dump_folder_path)
+    # if push_to_hub:
+    #     model.push_to_hub(repo_id=repo_id, organization="DepuMeng", commit_message="Add model")
 
 
 if __name__ == "__main__":
