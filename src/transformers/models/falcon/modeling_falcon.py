@@ -88,6 +88,129 @@ def _get_unpad_data(attention_mask):
     )
 
 
+# Copied from transformers.models.llama.modeling_llama.AttentionMaskCache
+class AttentionMaskCache:
+    """
+    A utility attention mask class that allows:
+        - Create a causal mask 4d mask
+        - Convert a 2D attention mask (batch_size, query_length) to a 4D attention mask (batch_size, 1, query_length,
+          key_value_length) that can be multiplied with attention scores
+        - Check whether 2D attention mask has any padding tokens or not
+
+    To avoid unnecessary memory allocation, attention masks are cached and can be easily reused.
+    """
+
+    def __init__(self, is_causal: bool):
+        self.is_causal = is_causal
+
+        self.cache_4d_mask = {}
+        self.cache_4d_mask_only_causal = {}
+        self.cache_has_mask = {}
+
+    def has_mask(self, attention_mask_2d: torch.Tensor) -> bool:
+        """
+        Checks whether the attention_mask actually has a padding token or whether it has only non-padding tokens.
+        """
+        if attention_mask_2d not in self.cache_has_mask and len(self.cache_has_mask) > 0:
+            self.cache_has_mask = {}
+
+        if attention_mask_2d not in self.cache_has_mask:
+            self.cache_has_mask[attention_mask_2d] = 0 in attention_mask_2d
+
+        return self.cache_has_mask[attention_mask_2d]
+
+    def to_causal_4d(
+        self, batch_size: int, query_length: int, key_value_length: int, dtype: torch.dtype, device: torch.device
+    ) -> torch.Tensor:
+        """
+        Creates a causal 4D mask of (bsz, head_dim=1, query_length, key_value_length) shape and adds large negative
+        bias to upper right hand triangular matrix (causal mask). If cached 4D attention mask can be reused, no new
+        memory will be allocated.
+        """
+        expected_shape = (batch_size, 1, query_length, key_value_length)
+
+        # If the attention_mask shape does not match, but there is still a tensor in the cache, empty the cache
+        if expected_shape not in self.cache_4d_mask_only_causal and len(self.cache_4d_mask_only_causal) > 0:
+            self.cache_4d_mask_only_causal = {}
+
+        # If shape is not cached, create a new causal mask and cache it
+        if expected_shape not in self.cache_4d_mask_only_causal:
+            input_shape = (batch_size, query_length)
+            past_key_values_length = key_value_length - query_length
+
+            # create causal mask
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            causal_4d_mask = None
+            if input_shape[-1] > 1 and self.is_causal:
+                past_key_values_length = key_value_length - query_length
+                causal_4d_mask = self._make_causal_mask(
+                    input_shape,
+                    dtype,
+                    device=device,
+                    past_key_values_length=past_key_values_length,
+                )
+
+            self.cache_4d_mask_only_causal[expected_shape] = causal_4d_mask
+
+        return self.cache_4d_mask_only_causal[expected_shape]
+
+    def to_4d(
+        self, attention_mask_2d: torch.Tensor, query_length: int, key_value_length: int, dtype: torch.dtype
+    ) -> torch.Tensor:
+        """
+        Converts 2D attention mask to 4D attention mask by expanding mask to (bsz, head_dim=1, query_length,
+        key_value_length) shape and by adding a large negative bias to not-attended positions. If attention_mask is
+        causal, a causal mask will be added. If cached 4D attention mask can be reused, no new memory will be
+        allocated.
+        """
+        # If the attention_mask does not match, but there is still a tensor in the cache, empty the cache
+        if attention_mask_2d not in self.cache_4d_mask and len(self.cache_4d_mask) > 0:
+            self.cache_4d_mask = {}
+
+        # If attention_mask is not cached, create a new one and cache it
+        if attention_mask_2d not in self.cache_4d_mask:
+            input_shape = (attention_mask_2d.shape[0], query_length)
+            past_key_values_length = key_value_length - query_length
+
+            # create causal mask
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            causal_4d_mask = None
+            if input_shape[-1] > 1 and self.is_causal:
+                past_key_values_length = key_value_length - query_length
+                causal_4d_mask = self._make_causal_mask(
+                    input_shape,
+                    dtype,
+                    device=attention_mask_2d.device,
+                    past_key_values_length=past_key_values_length,
+                )
+
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            expanded_attn_mask = self._expand_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
+                attention_mask_2d.device
+            )
+            cached_4d_mask = expanded_attn_mask if causal_4d_mask is None else expanded_attn_mask + causal_4d_mask
+
+            self.cache_4d_mask[attention_mask_2d] = cached_4d_mask
+
+        return self.cache_4d_mask[attention_mask_2d]
+
+    def _make_causal_mask(
+        self, input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
+    ):
+        """
+        Make causal mask used for bi-directional self-attention.
+        """
+        bsz, tgt_len = input_ids_shape
+        mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
+        mask_cond = torch.arange(mask.size(-1), device=device)
+        mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+        mask = mask.to(dtype)
+
+        if past_key_values_length > 0:
+            mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
+        return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
+
 # TODO (joao): Is this the same implementation as in Llama? If so, let's make them the same and add the copy facilities
 class FalconRotaryEmbedding(nn.Module):
     """Implementation of RotaryEmbedding from GPT-NeoX.
@@ -254,6 +377,7 @@ def _expand_mask(mask: torch.Tensor, past_key_values_length: int) -> torch.BoolT
 
 
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
+    attention_mask = attention_mask if attention_mask is not None
     batch_size, seq_length = attention_mask.shape
     closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
     base = torch.tensor(
@@ -431,7 +555,6 @@ class FalconAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        padding_mask: Optional[torch.LongTensor] = None,
     ):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
@@ -563,7 +686,6 @@ class FalconFlashAttention2(FalconAttention):
         head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        padding_mask: Optional[torch.LongTensor] = None,
     ):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
@@ -630,7 +752,7 @@ class FalconFlashAttention2(FalconAttention):
             value_layer = value_layer.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query_layer, key_layer, value_layer, padding_mask, query_length, dropout=attn_dropout
+            query_layer, key_layer, value_layer, attention_mask, query_length, dropout=attn_dropout
         )
 
         attn_weights = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
@@ -786,7 +908,6 @@ class FalconDecoderLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        padding_mask: Optional[torch.LongTensor] = None,
     ):
         residual = hidden_states
 
@@ -806,7 +927,6 @@ class FalconDecoderLayer(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            padding_mask=padding_mask,
         )
 
         attention_output = attn_outputs[0]
@@ -1114,19 +1234,10 @@ class FalconModel(FalconPreTrainedModel):
         past_key_values_length = 0
         if past_key_values[0] is not None:
             past_key_values_length = past_key_values[0][0].shape[1]  # 1 because RW-cache, not standard format
-        if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_length + past_key_values_length), device=hidden_states.device)
-            padding_mask = None
-        else:
-            attention_mask = attention_mask.to(hidden_states.device)
-
-            if 0 in attention_mask:
-                padding_mask = attention_mask
-            else:
-                padding_mask = None
 
         if self.use_alibi:
-            alibi = build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
+            mask = torch.ones(input_ids, shape=(batch_size, seq_length + past_key_values_length), device=inputs_embeds.device, dtype=torch.long) if attention_mask is None else attention_mask
+            alibi = build_alibi_tensor(mask, self.num_heads, dtype=hidden_states.dtype)
         else:
             alibi = None
             if position_ids is None:
@@ -1162,7 +1273,6 @@ class FalconModel(FalconPreTrainedModel):
                     causal_mask,
                     position_ids,
                     head_mask[i],
-                    padding_mask,
                 )
             else:
                 outputs = block(
@@ -1174,7 +1284,6 @@ class FalconModel(FalconPreTrainedModel):
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                     alibi=alibi,
-                    padding_mask=padding_mask,
                 )
 
             hidden_states = outputs[0]

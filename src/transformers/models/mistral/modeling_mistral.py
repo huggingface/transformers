@@ -53,6 +53,130 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MistralConfig"
 
 
+# Copied from transformers.models.llama.modeling_llama.AttentionMaskCache
+class AttentionMaskCache:
+    """
+    A utility attention mask class that allows:
+        - Create a causal mask 4d mask
+        - Convert a 2D attention mask (batch_size, query_length) to a 4D attention mask (batch_size, 1, query_length,
+          key_value_length) that can be multiplied with attention scores
+        - Check whether 2D attention mask has any padding tokens or not
+
+    To avoid unnecessary memory allocation, attention masks are cached and can be easily reused.
+    """
+
+    def __init__(self, is_causal: bool):
+        self.is_causal = is_causal
+
+        self.cache_4d_mask = {}
+        self.cache_4d_mask_only_causal = {}
+        self.cache_has_mask = {}
+
+    def has_mask(self, attention_mask_2d: torch.Tensor) -> bool:
+        """
+        Checks whether the attention_mask actually has a padding token or whether it has only non-padding tokens.
+        """
+        if attention_mask_2d not in self.cache_has_mask and len(self.cache_has_mask) > 0:
+            self.cache_has_mask = {}
+
+        if attention_mask_2d not in self.cache_has_mask:
+            self.cache_has_mask[attention_mask_2d] = 0 in attention_mask_2d
+
+        return self.cache_has_mask[attention_mask_2d]
+
+    def to_causal_4d(
+        self, batch_size: int, query_length: int, key_value_length: int, dtype: torch.dtype, device: torch.device
+    ) -> torch.Tensor:
+        """
+        Creates a causal 4D mask of (bsz, head_dim=1, query_length, key_value_length) shape and adds large negative
+        bias to upper right hand triangular matrix (causal mask). If cached 4D attention mask can be reused, no new
+        memory will be allocated.
+        """
+        expected_shape = (batch_size, 1, query_length, key_value_length)
+
+        # If the attention_mask shape does not match, but there is still a tensor in the cache, empty the cache
+        if expected_shape not in self.cache_4d_mask_only_causal and len(self.cache_4d_mask_only_causal) > 0:
+            self.cache_4d_mask_only_causal = {}
+
+        # If shape is not cached, create a new causal mask and cache it
+        if expected_shape not in self.cache_4d_mask_only_causal:
+            input_shape = (batch_size, query_length)
+            past_key_values_length = key_value_length - query_length
+
+            # create causal mask
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            causal_4d_mask = None
+            if input_shape[-1] > 1 and self.is_causal:
+                past_key_values_length = key_value_length - query_length
+                causal_4d_mask = self._make_causal_mask(
+                    input_shape,
+                    dtype,
+                    device=device,
+                    past_key_values_length=past_key_values_length,
+                )
+
+            self.cache_4d_mask_only_causal[expected_shape] = causal_4d_mask
+
+        return self.cache_4d_mask_only_causal[expected_shape]
+
+    def to_4d(
+        self, attention_mask_2d: torch.Tensor, query_length: int, key_value_length: int, dtype: torch.dtype
+    ) -> torch.Tensor:
+        """
+        Converts 2D attention mask to 4D attention mask by expanding mask to (bsz, head_dim=1, query_length,
+        key_value_length) shape and by adding a large negative bias to not-attended positions. If attention_mask is
+        causal, a causal mask will be added. If cached 4D attention mask can be reused, no new memory will be
+        allocated.
+        """
+        # If the attention_mask does not match, but there is still a tensor in the cache, empty the cache
+        if attention_mask_2d not in self.cache_4d_mask and len(self.cache_4d_mask) > 0:
+            self.cache_4d_mask = {}
+
+        # If attention_mask is not cached, create a new one and cache it
+        if attention_mask_2d not in self.cache_4d_mask:
+            input_shape = (attention_mask_2d.shape[0], query_length)
+            past_key_values_length = key_value_length - query_length
+
+            # create causal mask
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            causal_4d_mask = None
+            if input_shape[-1] > 1 and self.is_causal:
+                past_key_values_length = key_value_length - query_length
+                causal_4d_mask = self._make_causal_mask(
+                    input_shape,
+                    dtype,
+                    device=attention_mask_2d.device,
+                    past_key_values_length=past_key_values_length,
+                )
+
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            expanded_attn_mask = self._expand_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
+                attention_mask_2d.device
+            )
+            cached_4d_mask = expanded_attn_mask if causal_4d_mask is None else expanded_attn_mask + causal_4d_mask
+
+            self.cache_4d_mask[attention_mask_2d] = cached_4d_mask
+
+        return self.cache_4d_mask[attention_mask_2d]
+
+
+    def _make_causal_mask(
+        self, input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
+    ):
+        """
+        Make causal mask used for bi-directional self-attention.
+        """
+        bsz, tgt_len = input_ids_shape
+        mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
+        mask_cond = torch.arange(mask.size(-1), device=device)
+        mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+        mask = mask.to(dtype)
+
+        if past_key_values_length > 0:
+            mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
+        return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
+
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
@@ -251,7 +375,6 @@ class MistralAttention(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
-        padding_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -332,7 +455,6 @@ class MistralFlashAttention2(MistralAttention):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
-        padding_mask: Optional[torch.LongTensor] = None,
     ):
         bsz, q_len, _ = hidden_states.size()
 
@@ -385,9 +507,9 @@ class MistralFlashAttention2(MistralAttention):
 
                 past_key_value = (past_key, past_value)
 
-                if padding_mask is not None:
-                    padding_mask = padding_mask[:, slicing_tokens:]
-                    padding_mask = torch.cat([padding_mask, torch.ones_like(padding_mask[:, -1:])], dim=-1)
+                if attention_mask is not None:
+                    attention_mask = attention_mask[:, slicing_tokens:]
+                    attention_mask = torch.cat([attention_mask, torch.ones_like(attention_mask[:, -1:])], dim=-1)
 
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
@@ -433,7 +555,7 @@ class MistralFlashAttention2(MistralAttention):
             query_states,
             key_states,
             value_states,
-            padding_mask,
+            attention_mask,
             q_len,
             dropout=dropout_rate,
             use_sliding_windows=use_sliding_windows,
@@ -452,7 +574,7 @@ class MistralFlashAttention2(MistralAttention):
         query_states,
         key_states,
         value_states,
-        padding_mask,
+        attention_mask,
         query_length,
         dropout=0.0,
         softmax_scale=None,
@@ -469,7 +591,7 @@ class MistralFlashAttention2(MistralAttention):
                 Input key states to be passed to Flash Attention API
             value_states (`torch.Tensor`):
                 Input value states to be passed to Flash Attention API
-            padding_mask (`torch.Tensor`):
+            attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
             dropout (`int`, *optional*):
@@ -480,10 +602,10 @@ class MistralFlashAttention2(MistralAttention):
                 Whether to activate sliding window attention.
         """
         # Contains at least one padding token in the sequence
-        if padding_mask is not None:
+        if attention_mask is not None:
             batch_size = query_states.shape[0]
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, padding_mask, query_length
+                query_states, key_states, value_states, attention_mask, query_length
             )
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
@@ -513,7 +635,7 @@ class MistralFlashAttention2(MistralAttention):
                     max_seqlen_k=max_seqlen_in_batch_k,
                     dropout_p=dropout,
                     softmax_scale=softmax_scale,
-                    causal=True,
+                    causal=self.attention_mask_cache.is_causal,
                     window_size=(self.config.sliding_window, self.config.sliding_window),
                 )
 
@@ -536,16 +658,16 @@ class MistralFlashAttention2(MistralAttention):
 
         return attn_output
 
-    def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length):
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
         batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
 
         # On the first iteration we need to properly re-create the padding mask
         # by slicing it on the proper place
-        if kv_seq_len != padding_mask.shape[-1]:
-            padding_mask_num_tokens = padding_mask.shape[-1]
-            padding_mask = padding_mask[:, padding_mask_num_tokens - kv_seq_len :]
+        if kv_seq_len != attention_mask.shape[-1]:
+            attention_mask_num_tokens = attention_mask.shape[-1]
+            attention_mask = attention_mask[:, attention_mask_num_tokens - kv_seq_len :]
 
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
 
         key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
         value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
@@ -566,8 +688,8 @@ class MistralFlashAttention2(MistralAttention):
             query_layer = query_layer.squeeze(1)
         else:
             # The -q_len: slice assumes left padding.
-            padding_mask = padding_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, padding_mask)
+            attention_mask = attention_mask[:, -query_length:]
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
 
         return (
             query_layer,
@@ -600,7 +722,6 @@ class MistralDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-        padding_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -628,7 +749,6 @@ class MistralDecoderLayer(nn.Module):
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            padding_mask=padding_mask,
         )
         hidden_states = residual + hidden_states
 
@@ -865,22 +985,12 @@ class MistralModel(MistralPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        padding_mask = None
-
-        # embed positions
-        if attention_mask is None:
-            attention_mask = torch.ones(
-                (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
-            )
-        elif 0 in attention_mask:
-            padding_mask = attention_mask
-
         if (
-            padding_mask is not None
+            attention_mask is not None
             and hasattr(self.config, "_flash_attn_2_enabled")
             and self.config._flash_attn_2_enabled
         ):
-            is_padding_right = padding_mask[:, -1].sum().item() != batch_size
+            is_padding_right = attention_mask[:, -1].sum().item() != batch_size
             if is_padding_right:
                 raise ValueError(
                     "You are attempting to perform batched generation with padding_side='right'"
@@ -921,7 +1031,7 @@ class MistralModel(MistralPreTrainedModel):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
-                        return module(*inputs, past_key_value, output_attentions, padding_mask=padding_mask)
+                        return module(*inputs, past_key_value, output_attentions)
 
                     return custom_forward
 
@@ -939,7 +1049,6 @@ class MistralModel(MistralPreTrainedModel):
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
-                    padding_mask=padding_mask,
                 )
 
             hidden_states = layer_outputs[0]
