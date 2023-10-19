@@ -550,7 +550,7 @@ class PatchTSTEncoderBlock(nn.Module):
 
         self.layers = nn.ModuleList([PatchTSTEncoderLayer(config) for i in range(config.encoder_layers)])
 
-    def forward(self, hidden_state: torch.Tensor, output_hidden_states: Optional[bool] = None):
+    def forward(self, hidden_state: torch.Tensor, output_hidden_states: bool = False):
         """
         Parameters:
             hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`, *required*):
