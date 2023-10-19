@@ -35,20 +35,12 @@ class Cache(ABC):
         )
 
     @classmethod
-    def from_past_key_values(cls, past_key_values: Optional[List[torch.FloatTensor]]) -> "DynamicCache":
+    def from_legacy_cache(cls, past_key_values: Optional[List[torch.FloatTensor]]) -> "DynamicCache":
         if past_key_values is None:
             return cls()
         cache = cls()
         for layer_idx, (key_states, value_states) in enumerate(zip(*past_key_values)):
             cache.update(key_states, value_states, layer_idx)
-        return cache
-
-    @classmethod
-    def from_past_key_value(cls, past_key_value: Optional[torch.FloatTensor]) -> "DynamicCache":
-        if past_key_value is None:
-            return cls()
-        cache = cls()
-        cache.update(past_key_value[0], past_key_value[1], 0)
         return cache
 
 
