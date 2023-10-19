@@ -470,7 +470,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    >>> dataset = dataset.map(tokenize_dataset, batched=True)
    ```
 
-7. మీ డేటాసెట్ నుండి ఉదాహరణల సమూహాన్ని సృష్టించడానికి [`DataCollatorWithPadding`]:
+6. మీ డేటాసెట్ నుండి ఉదాహరణల సమూహాన్ని సృష్టించడానికి [`DataCollatorWithPadding`]:
 
    ```py
    >>> from transformers import DataCollatorWithPadding
