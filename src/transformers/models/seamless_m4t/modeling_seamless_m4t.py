@@ -99,7 +99,7 @@ SEAMLESS_M4T_START_DOCSTRING = r"""
 
 SEAMLESS_M4T_INPUTS_DOCSTRING_FIRST_PART = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
@@ -113,7 +113,7 @@ SEAMLESS_M4T_INPUTS_DOCSTRING_FIRST_PART = r"""
 
 SEAMLESS_M4T_INPUTS_DOCSTRING_TEXT_PART = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
@@ -4138,6 +4138,10 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
 @add_start_docstrings(
     "The original SeamlessM4T Model transformer which can be used for every tasks available (S2ST, S2TT, T2TT, T2ST).",
     SEAMLESS_M4T_START_DOCSTRING,
+    """
+        current_modality (`str`, *optional*, defaults to `"text"`):
+            Default modality. Used to initialize the model.
+    """,
 )
 class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
     _tied_weights_keys = [
@@ -4375,14 +4379,14 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
 
         Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Indices of input sequence tokens in the vocabulary.
 
                 Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
                 [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
-            input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
+            input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`, *optional*):
                 Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
                 [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
             return_intermediate_token_ids (`bool`, *optional*):
