@@ -181,25 +181,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         language="en",
         **kwargs,
     ):
-        super().__init__(
-            special=special,
-            min_freq=min_freq,
-            max_size=max_size,
-            lower_case=lower_case,
-            delimiter=delimiter,
-            vocab_file=vocab_file,
-            pretrained_vocab_file=pretrained_vocab_file,
-            never_split=never_split,
-            unk_token=unk_token,
-            eos_token=eos_token,
-            additional_special_tokens=additional_special_tokens,
-            language=language,
-            **kwargs,
-        )
         requires_backends(self, "sacremoses")
-
-        if never_split is None:
-            never_split = self.all_special_tokens
         if special is None:
             special = []
         self.counter = Counter()
@@ -209,7 +191,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.lower_case = lower_case
         self.delimiter = delimiter
         self.vocab_file = vocab_file
-        self.never_split = never_split
         self.punctuation_symbols = '!"#$%&()*+,-./\\:;<=>?@[\\]^_`{|}~'
         self.punction_without_space_before_pattern = re.compile(rf"[^\s][{self.punctuation_symbols}]")
         self.punctuation_with_space_around_pattern = self._compile_space_around_punctuation_pattern()
@@ -217,7 +198,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.moses_punct_normalizer = sm.MosesPunctNormalizer(language)
         self.moses_tokenizer = sm.MosesTokenizer(language)
         self.moses_detokenizer = sm.MosesDetokenizer(language)
-
+        self.idx2sym = []
+        self.sym2idx = OrderedDict()
         # This try... catch... is not beautiful but honestly this tokenizer was not made to be used
         # in a library like ours, at all.
         try:
@@ -241,7 +223,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
             if vocab_dict is not None:
                 for key, value in vocab_dict.items():
-                    if key not in self.__dict__:
+                    if key not in self.__dict__ or key == "sym2idx":
                         self.__dict__[key] = value
             elif vocab_file is not None:
                 self.build_vocab()
@@ -255,6 +237,27 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
         if vocab_file is not None:
             self.build_vocab()
+
+        super().__init__(
+            special=special,
+            min_freq=min_freq,
+            max_size=max_size,
+            lower_case=lower_case,
+            delimiter=delimiter,
+            vocab_file=vocab_file,
+            pretrained_vocab_file=pretrained_vocab_file,
+            never_split=never_split,
+            unk_token=unk_token,
+            eos_token=eos_token,
+            additional_special_tokens=additional_special_tokens,
+            language=language,
+            **kwargs,
+        )
+
+        # these are not required to initialize the parent class as only used when tokenizing.
+        if never_split is None:
+            never_split = self.all_special_tokens
+        self.never_split = never_split
 
     @property
     def do_lower_case(self):
@@ -305,7 +308,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         elif "<unk>" in self.sym2idx:
             self.unk_idx = self.sym2idx["<unk>"]
         else:
-            raise ValueError("No <unknown> token in vocabulary")
+            raise ValueError("Token not in vocabulary and no <unk> token in vocabulary for replacement.")
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if os.path.isdir(save_directory):
@@ -323,7 +326,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         if self.vocab_file:
             logger.info(f"building vocab from {self.vocab_file}")
             self._build_from_file(self.vocab_file)
-            logger.info(f"final vocab size {len(self)}")
+            logger.info(f"Final vocab size {len(self.sym2idx)}")
         else:
             logger.info(f"building vocab with min_freq={self.min_freq}, max_size={self.max_size}")
             self.idx2sym = []
@@ -337,7 +340,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                     break
                 self.add_symbol(sym)
 
-            logger.info(f"final vocab size {len(self)} from {len(self.counter)} unique tokens")
+            logger.info(f"Final vocab size {len(self.sym2idx)} from {len(self.counter)} unique tokens")
 
     @torch_only_method
     def encode_file(self, path, ordered=False, verbose=False, add_eos=True, add_double_eos=False):
@@ -406,9 +409,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             self.sym2idx[current_sym] = idx
 
         # Delete token from added_tokens
-        old_index = self.added_tokens_encoder[token]
-        del self.added_tokens_decoder[old_index]
-        del self.added_tokens_encoder[token]
+        old_index = self._added_tokens_encoder.pop(token)
+        self._added_tokens_decoder.pop(old_index)
 
     def moses_punct_norm(self, text):
         return self.moses_punct_normalizer.normalize(text)
@@ -463,7 +465,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             elif "<UNK>" in self.sym2idx:
                 return self.sym2idx["<UNK>"]
             else:
-                raise ValueError("Token not in vocabulary and no <unk> token in vocabulary for replacement")
+                raise ValueError("Token not in vocabulary and no <unk> token in vocabulary for replacement.")
 
     def convert_tokens_to_string(self, tokens):
         """
@@ -482,7 +484,9 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         return len(self.idx2sym)
 
     def get_vocab(self):
-        return dict(self.sym2idx, **self.added_tokens_encoder)
+        vocab = self.sym2idx.copy()
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     def _tokenize(self, line, add_eos=False, add_double_eos=False):
         line = line.strip()

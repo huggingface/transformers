@@ -50,6 +50,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("blip-2", "Blip2Config"),
         ("bloom", "BloomConfig"),
         ("bridgetower", "BridgeTowerConfig"),
+        ("bros", "BrosConfig"),
         ("camembert", "CamembertConfig"),
         ("canine", "CanineConfig"),
         ("chinese_clip", "ChineseCLIPConfig"),
@@ -160,6 +161,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("pegasus", "PegasusConfig"),
         ("pegasus_x", "PegasusXConfig"),
         ("perceiver", "PerceiverConfig"),
+        ("persimmon", "PersimmonConfig"),
         ("pix2struct", "Pix2StructConfig"),
         ("plbart", "PLBartConfig"),
         ("poolformer", "PoolFormerConfig"),
@@ -219,6 +221,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vit_mae", "ViTMAEConfig"),
         ("vit_msn", "ViTMSNConfig"),
         ("vitdet", "VitDetConfig"),
+        ("vitmatte", "VitMatteConfig"),
         ("vits", "VitsConfig"),
         ("vivit", "VivitConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
@@ -260,6 +263,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("blip-2", "BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bloom", "BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bridgetower", "BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("bros", "BROS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("camembert", "CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("canine", "CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("chinese_clip", "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -362,6 +366,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("pegasus", "PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pegasus_x", "PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("perceiver", "PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("persimmon", "PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pix2struct", "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("plbart", "PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("poolformer", "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -411,6 +416,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("vit_mae", "VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit_msn", "VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vitdet", "VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("vitmatte", "VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vits", "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vivit", "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2", "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -456,6 +462,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("bloom", "BLOOM"),
         ("bort", "BORT"),
         ("bridgetower", "BridgeTower"),
+        ("bros", "BROS"),
         ("byt5", "ByT5"),
         ("camembert", "CamemBERT"),
         ("canine", "CANINE"),
@@ -582,6 +589,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("pegasus", "Pegasus"),
         ("pegasus_x", "PEGASUS-X"),
         ("perceiver", "Perceiver"),
+        ("persimmon", "Persimmon"),
         ("phobert", "PhoBERT"),
         ("pix2struct", "Pix2Struct"),
         ("plbart", "PLBart"),
@@ -645,6 +653,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("vit_mae", "ViTMAE"),
         ("vit_msn", "ViTMSN"),
         ("vitdet", "VitDet"),
+        ("vitmatte", "ViTMatte"),
         ("vits", "VITS"),
         ("vivit", "ViViT"),
         ("wav2vec2", "Wav2Vec2"),
@@ -1017,6 +1026,9 @@ class AutoConfig:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         code_revision = kwargs.pop("code_revision", None)
 
+        revision = kwargs.pop("revision", None)
+        kwargs["revision"] = sanitize_code_revision(pretrained_model_name_or_path, revision, trust_remote_code)
+
         config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
@@ -1064,3 +1076,24 @@ class AutoConfig:
                 "match!"
             )
         CONFIG_MAPPING.register(model_type, config, exist_ok=exist_ok)
+
+
+def sanitize_code_revision(pretrained_model_name_or_path, revision, trust_remote_code):
+    if revision in ["main", None] and not trust_remote_code:
+        revision_dict = {
+            "tiiuae/falcon-7b": "4e2d06f0a7c6370ebabbc30c6f59377ae8f73d76",
+            "tiiuae/falcon-7b-instruct": "f8dac3fff96d5debd43edf56fb4e1abcfffbef28",
+            "tiiuae/falcon-40b": "f1ba7d328c06aa6fbb4a8afd3c756f46d7e6b232",
+            "tiiuae/falcon-40b-instruct": "7475ff8cfc36ed9a962b658ae3c33391566a85a5",
+        }
+
+        if isinstance(pretrained_model_name_or_path, str) and pretrained_model_name_or_path.lower() in revision_dict:
+            revision = revision_dict.get(pretrained_model_name_or_path.lower())
+            logger.warning(
+                "The Falcon model was initialized without `trust_remote_code=True`, and will therefore leverage the "
+                f"transformers library implementation. {pretrained_model_name_or_path}'s revision is set to a version that doesn't "
+                f"leverage remote code ({revision}).\n\nIn order to override this, please set a revision manually or set "
+                "`trust_remote_code=True`."
+            )
+
+    return revision

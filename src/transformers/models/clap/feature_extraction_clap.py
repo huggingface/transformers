@@ -51,7 +51,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             Length of the overlaping windows for the STFT used to obtain the Mel Spectrogram. The audio will be split
             in smaller `frames` with a step of `hop_length` between each frame.
         max_length_s (`int`, defaults to 10):
-            The maximum input lenght of the model in seconds. This is used to pad the audio.
+            The maximum input length of the model in seconds. This is used to pad the audio.
         fft_window_size (`int`, defaults to 1024):
             Size of the window (in samples) on which the Fourier transform is applied. This controls the frequency
             resolution of the spectrogram. 400 means that the fourrier transform is computed on windows of 400 samples.

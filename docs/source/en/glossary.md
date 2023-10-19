@@ -187,7 +187,7 @@ The model head refers to the last layer of a neural network that accepts the raw
 
 ### image patch
 
-Vision-based Transformers models split an image into smaller patches which are linearly embedded, and then passed as a sequence to the model. You can find the `patch_size` - or resolution - of the model in it's configuration.
+Vision-based Transformers models split an image into smaller patches which are linearly embedded, and then passed as a sequence to the model. You can find the `patch_size` - or resolution - of the model in its configuration.
 
 ### inference
 

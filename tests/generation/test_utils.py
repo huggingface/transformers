@@ -15,13 +15,14 @@
 
 
 import inspect
+import tempfile
 import unittest
 import warnings
 
 import numpy as np
 
 from transformers import is_torch_available, pipeline
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_accelerate, require_torch, require_torch_multi_gpu, slow, torch_device
 
 from ..test_modeling_common import floats_tensor, ids_tensor
 from .test_framework_agnostic import GenerationIntegrationTestsMixin
@@ -1015,6 +1016,27 @@ class GenerationTesterMixin:
             for output in (output_beam, output_generate):
                 self._check_outputs(
                     output, input_ids, model.config, use_cache=True, num_return_sequences=beam_scorer.num_beams
+                )
+
+    @require_accelerate
+    @require_torch_multi_gpu
+    def test_model_parallel_beam_search(self):
+        for model_class in self.all_generative_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+
+            model = model_class(config).eval()
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+                new_model = model_class.from_pretrained(tmp_dir, device_map="auto")
+
+                new_model.generate(
+                    input_ids,
+                    attention_mask=attention_mask,
+                    max_length=max_length,
+                    num_beams=2,
                 )
 
     def test_beam_sample_generate(self):
@@ -2880,7 +2902,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         # Generation config max_length != 20 -> no warning
         with warnings.catch_warnings(record=True) as warning_list:
+            # generation_config is modified -> legacy mode is disabled = generation_config takes precedence
             model.generation_config.max_length = 10
-            model.generation_config._from_model_config = False  # otherwise model.config.max_length=20 takes precedence
             model.generate(input_ids)
             self.assertEqual(len(warning_list), 0)

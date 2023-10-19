@@ -258,19 +258,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
 
         self.do_lowercase = do_lowercase
 
-        super().__init__(
-            unk_token=unk_token,
-            bos_token=bos_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            additional_special_tokens=additional_special_tokens,
-            lang2id=lang2id,
-            id2lang=id2lang,
-            **kwargs,
-        )
-
         try:
             import sacremoses
         except ImportError:
@@ -302,6 +289,19 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()[:2]) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+
+        super().__init__(
+            unk_token=unk_token,
+            bos_token=bos_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            additional_special_tokens=additional_special_tokens,
+            lang2id=lang2id,
+            id2lang=id2lang,
+            **kwargs,
+        )
 
     @property
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.do_lower_case

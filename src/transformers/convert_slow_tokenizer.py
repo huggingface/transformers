@@ -1153,7 +1153,13 @@ class LlamaConverter(SpmConverter):
         model_type = proto.trainer_spec.model_type
         vocab_scores = self.vocab(proto)
         if model_type == 1:
-            raise RuntimeError("Llama is supposed to be a BPE model!")
+            import tokenizers
+
+            if version.parse(tokenizers.__version__) < version.parse("0.14.0"):
+                tokenizer = Tokenizer(Unigram(vocab_scores, 0))
+            else:
+                tokenizer = Tokenizer(Unigram(vocab_scores, 0, byte_fallback=True))
+
         elif model_type == 2:
             _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
             bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
@@ -1200,8 +1206,8 @@ class LlamaConverter(SpmConverter):
             eos = self.original_tokenizer.eos_token
             eos_token_id = self.original_tokenizer.eos_token_id
 
-            single = f"{(bos+':0 ') * add_bos}$A:0{(' '+eos+':0') * add_eos}"
-            pair = f"{single}{(' '+bos+':1') * add_bos} $B:1{(' '+eos+':1') * add_eos}"
+            single = f"{(bos+':0 ') * add_bos}$A:0{(' '+eos+':0') if add_eos else ''}"
+            pair = f"{single}{(' '+bos+':1') * add_bos} $B:1{(' '+eos+':1') if add_eos else ''}"
 
             special_tokens = []
             if add_bos:

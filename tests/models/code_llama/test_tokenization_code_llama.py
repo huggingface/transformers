@@ -65,6 +65,10 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(self.tmpdirname)
 
+    def get_tokenizers(self, **kwargs):
+        kwargs.update({"pad_token": "<PAD>"})
+        return super().get_tokenizers(**kwargs)
+
     def test_no_infilling_init(self):
         tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, prefix_token=None, keep_accents=True)
         with self.assertRaises(ValueError):
@@ -518,7 +522,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
         tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", legacy=False)
-        tokenizer.add_tokens(["<REPR_END>"], special_tokens=True)
+        tokenizer.add_tokens(["<REPR_END>"], special_tokens=False)
         out1 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
         )
@@ -526,7 +530,8 @@ class LlamaIntegrationTest(unittest.TestCase):
         out2 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=True
         )
-        self.assertEqual(out2, " <REPR_END> inform")
+        # the added prefix token should not be decoded
+        self.assertEqual(out2, "<REPR_END> inform")
         input_ids = tokenizer.encode("<REPR_END>inform", add_special_tokens=False)
         self.assertEqual(input_ids, [29871, 32016, 262, 689])  # 29871 is the spiece underline, '▁'
 
@@ -553,6 +558,18 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(tokens, ["▁▁", "<s>", "▁Hello", "<s>", "▁how"])
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
+
+    def test_spm_edge_cases(self):
+        # the word inform should be split as ['in', 'form']
+        tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", legacy=False)
+        tokens = tokenizer.tokenize("[INST] How are you doing?<s>[/INST]")
+        self.assertEqual(
+            tokens, ["▁[", "INST", "]", "▁How", "▁are", "▁you", "▁doing", "?", "<s>", "[", "/", "INST", "]"]
+        )
+        inputs_ids = tokenizer.encode("[INST] How are you doing?<s>[/INST]")
+        self.assertEqual(
+            inputs_ids, [1, 518, 25580, 29962, 1128, 526, 366, 2599, 29973, 1, 29961, 29914, 25580, 29962]
+        )
 
     def test_infilling_tokenization(self):
         PROMPTS = [

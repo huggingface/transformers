@@ -20,7 +20,9 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP = {"ctrl": "https://huggingface.co/ctrl/resolve/main/config.json"}
+CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "Salesforce/ctrl": "https://huggingface.co/Salesforce/ctrl/resolve/main/config.json"
+}
 
 
 class CTRLConfig(PretrainedConfig):
@@ -28,7 +30,7 @@ class CTRLConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`CTRLModel`] or a [`TFCTRLModel`]. It is used to
     instantiate a CTRL model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
-    [ctrl](https://huggingface.co/ctrl) architecture from SalesForce.
+    [Salesforce/ctrl](https://huggingface.co/Salesforce/ctrl) architecture from SalesForce.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

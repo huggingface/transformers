@@ -145,18 +145,6 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            sep_token=sep_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
-
         try:
             import sentencepiece as spm
         except ImportError:
@@ -186,8 +174,20 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         # The first "real" token "," has position 15 in the embedding vocab and position 3 in the spm vocab
         self.fairseq_offset = 12
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-        for k in self.fairseq_tokens_to_ids.keys():
-            self.unique_no_split_tokens.append(k)
+
+        # TODO ArthurZ fairseq_ids_to_tokens should be removed
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            sp_model_kwargs=self.sp_model_kwargs,
+            **kwargs,
+        )
 
     @property
     def can_save_slow_tokenizer(self) -> bool:

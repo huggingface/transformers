@@ -47,6 +47,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 SPIECE_UNDERLINE = "▁"
 
+# TODO this class is useless. This is the most standard sentencpiece model. Let's find which one is closest and nuke this.
+
 
 class BarthezTokenizer(PreTrainedTokenizer):
     """
@@ -141,6 +143,9 @@ class BarthezTokenizer(PreTrainedTokenizer):
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
+        self.vocab_file = vocab_file
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(str(vocab_file))
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -152,15 +157,6 @@ class BarthezTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-
-        self.vocab_file = vocab_file
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(str(vocab_file))
-
-        self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
-
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) - 1
-        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -251,16 +247,10 @@ class BarthezTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        if token in self.fairseq_tokens_to_ids:
-            return self.fairseq_tokens_to_ids[token]
-        spm_id = self.sp_model.PieceToId(token)
-
-        return spm_id if spm_id else self.unk_token_id
+        return self.sp_model.PieceToId(token)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.fairseq_ids_to_tokens:
-            return self.fairseq_ids_to_tokens[index]
         return self.sp_model.IdToPiece(index)
 
     def convert_tokens_to_string(self, tokens):

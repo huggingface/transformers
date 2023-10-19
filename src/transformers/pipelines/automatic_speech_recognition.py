@@ -523,10 +523,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if generate_kwargs is None:
             generate_kwargs = {}
 
-        if return_timestamps and self.type == "seq2seq_whisper":
-            generate_kwargs["return_timestamps"] = return_timestamps
-            if return_timestamps == "word":
-                generate_kwargs["return_token_timestamps"] = True
+        attention_mask = model_inputs.pop("attention_mask", None)
+        stride = model_inputs.pop("stride", None)
         is_last = model_inputs.pop("is_last")
 
         if self.type in {"seq2seq", "seq2seq_whisper"}:
@@ -543,11 +541,15 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     f"`input_features` or `input_values` key, but only has {model_inputs.keys()}"
                 )
 
-            # we need to pass `processed.get("attention_mask")` here since audio encoder
-            # attention mask  length is different from expected text decoder `encoder_attention_mask` length
-            # `generate` magic to create the mask automatically won't work, we basically need to help
-            # it here.
-            attention_mask = model_inputs.pop("attention_mask", None)
+            # custom processing for Whisper timestamps and word-level timestamps
+            if return_timestamps and self.type == "seq2seq_whisper":
+                generate_kwargs["return_timestamps"] = return_timestamps
+                if return_timestamps == "word":
+                    generate_kwargs["return_token_timestamps"] = True
+
+                    if stride is not None:
+                        generate_kwargs["num_frames"] = stride[0] // self.feature_extractor.hop_length
+
             tokens = self.model.generate(
                 encoder_outputs=encoder(inputs, attention_mask=attention_mask),
                 attention_mask=attention_mask,
@@ -558,14 +560,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             else:
                 out = {"tokens": tokens}
             if self.type == "seq2seq_whisper":
-                stride = model_inputs.pop("stride", None)
                 if stride is not None:
                     out["stride"] = stride
 
         else:
-            stride = model_inputs.pop("stride", None)
             input_values = model_inputs.pop("input_values")
-            attention_mask = model_inputs.pop("attention_mask", None)
             outputs = self.model(input_values=input_values, attention_mask=attention_mask)
             logits = outputs.logits
 

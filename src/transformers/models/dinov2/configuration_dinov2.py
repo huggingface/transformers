@@ -32,7 +32,7 @@ DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class Dinov2Config(PretrainedConfig, BackboneConfigMixin):
+class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Dinov2Model`]. It is used to instantiate an
     Dinov2 model according to the specified arguments, defining the model architecture. Instantiating a configuration

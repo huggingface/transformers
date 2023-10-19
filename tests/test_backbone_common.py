@@ -15,6 +15,7 @@
 
 import copy
 import inspect
+import tempfile
 
 from transformers.testing_utils import require_torch, torch_device
 from transformers.utils.backbone_utils import BackboneType
@@ -71,6 +72,16 @@ class BackboneTesterMixin:
             arg_names = [*signature.parameters.keys()]
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_config_save_pretrained(self):
+        config_class = self.config_class
+        config_first = config_class(out_indices=[0, 1, 2, 3])
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config_first.save_pretrained(tmpdirname)
+            config_second = self.config_class.from_pretrained(tmpdirname)
+
+        self.assertEqual(config_second.to_dict(), config_first.to_dict())
 
     def test_channels(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

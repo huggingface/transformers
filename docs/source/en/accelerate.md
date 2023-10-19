@@ -133,4 +133,4 @@ accelerate launch train.py
 >>> notebook_launcher(training_function)
 ```
 
-For more information about 🤗 Accelerate and it's rich features, refer to the [documentation](https://huggingface.co/docs/accelerate).
+For more information about 🤗 Accelerate and its rich features, refer to the [documentation](https://huggingface.co/docs/accelerate).

@@ -361,7 +361,7 @@ We expect that every model added to 🤗 Transformers passes a couple of integra
 model and the reimplemented version in 🤗 Transformers have to give the exact same output up to a precision of 0.001!
 Since it is normal that the exact same model written in different libraries can give a slightly different output
 depending on the library framework, we accept an error tolerance of 1e-3 (0.001). It is not enough if the model gives
-nearly the same output, they have to be the almost identical. Therefore, you will certainly compare the intermediate
+nearly the same output, they have to be almost identical. Therefore, you will certainly compare the intermediate
 outputs of the 🤗 Transformers version multiple times against the intermediate outputs of the original implementation of
 *brand_new_bert* in which case an **efficient** debugging environment of the original repository is absolutely
 important. Here is some advice is to make your debugging environment as efficient as possible.

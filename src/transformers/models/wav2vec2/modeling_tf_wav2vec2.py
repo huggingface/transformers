@@ -1619,12 +1619,12 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
         self,
         input_values: tf.Tensor,
         attention_mask: tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: tf.Tensor | None = None,
         training: bool = False,
-    ):
+    ) -> TFSequenceClassifierOutput | Tuple[tf.Tensor]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 

@@ -158,6 +158,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BlipVisionModel",
     "BlipTextLMHeadModel",
     "BlipTextModel",
+    "BrosSpadeEEForTokenClassification",
+    "BrosSpadeELForTokenClassification",
     "TFBlipForConditionalGeneration",
     "TFBlipForImageTextRetrieval",
     "TFBlipForQuestionAnswering",
@@ -275,6 +277,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SpeechT5ForSpeechToSpeech",
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
+    "VitMatteForImageMatting",
 ]
 
 # DO NOT edit this list!
@@ -936,12 +939,6 @@ UNDOCUMENTED_OBJECTS = [
     "logging",  # External module
     "requires_backends",  # Internal function
     "AltRobertaModel",  # Internal module
-    "FalconConfig",  # TODO Matt Remove this and re-add the docs once TGI is ready
-    "FalconForCausalLM",
-    "FalconForQuestionAnswering",
-    "FalconForSequenceClassification",
-    "FalconForTokenClassification",
-    "FalconModel",
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
