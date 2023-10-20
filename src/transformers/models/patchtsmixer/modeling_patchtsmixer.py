@@ -403,7 +403,6 @@ class FeatureMixerBlock(nn.Module):
             Configuration.
 
     """
-
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
         num_features = config.num_features
@@ -422,24 +421,23 @@ class FeatureMixerBlock(nn.Module):
         if self.gated_attn:
             self.gab = PatchTSMixerGatedAttention(in_size=num_features, out_size=num_features)
 
-    def forward(self, data):
+    def forward(self, hidden: torch.Tensor):
         """
         Args:
-            data (`torch.Tensor`): Input tensor.
+            hidden (`torch.Tensor` of shape `(batch_size, num_patches, num_features)`):
+                Input tensor to the layer.
 
         Returns:
             `torch.Tensor`: Transformed tensor.
         """
-        residual = data
-
-        data = self.norm(data)
-
-        data = self.mlp(data)
+        residual = hidden
+        hidden = self.norm(hidden)
+        hidden = self.mlp(hidden)
 
         if self.gated_attn:
-            data = self.gab(data)
+            hidden = self.gab(hidden)
 
-        out = data + residual
+        out = hidden + residual
         return out
 
 
@@ -464,30 +462,27 @@ class PatchTSMixerLayer(nn.Module):
             config=config,
         )
         # define a cross series mixer
-
         self.mode = mode
         if mode == "mix_channel":
             self.channel_feature_mixer = PatchTSMixerChannelFeatureMixerBlock(
                 config=config,
             )
 
-    def forward(self, data):
+    def forward(self, hidden: torch.Tensor):
         """
         Args:
-            data (`torch.Tensor`): Input tensor.
+            hidden (`torch.Tensor` of shape `(batch_size, num_patches, num_features)`):
+                Input tensor to the layer.
 
         Returns:
             `torch.Tensor`: Transformed tensor.
         """
-        # data.shape == (batch_size, num_patches, num_features)
         if self.mode == "mix_channel":
-            data = self.channel_feature_mixer(data)
+            hidden = self.channel_feature_mixer(hidden)
 
-        data = self.patch_mixer(data)
-        data = self.feature_mixer(data)
-
-        # data.shape == (batch_size, num_patches, num_features)
-        return data
+        hidden = self.patch_mixer(hidden)
+        hidden = self.feature_mixer(hidden)   # hidden: (batch_size, num_patches, num_features)
+        return hidden
 
 
 class PatchTSMixerBlock(nn.Module):
@@ -513,8 +508,7 @@ class PatchTSMixerBlock(nn.Module):
         )
 
     def forward(self, data, output_hidden_states: bool = False):
-        r"""
-
+        """
         Args:
             data (`torch.Tensor`): The input tensor.
             output_hidden_states (`bool`, *optional*, defaults to False.):
@@ -540,7 +534,8 @@ class PatchTSMixerBlock(nn.Module):
 
 
 class PatchTSMixer(nn.Module):
-    """The entire network. It does the patching operation and
+    """
+    The entire network. It does the patching operation and
     then applies the necessary `PatchTSMixerBlock`s.
 
     Args:
@@ -584,7 +579,17 @@ class PatchTSMixer(nn.Module):
             )
 
     def forward(self, input_ts, output_hidden_states: bool = False):
-        # input_ts: [bs  x n_vars x num_patch x patch_len]
+        """
+        Args:
+            input_ts (`torch.Tensor` of shape `(batch_size, num_vars, num_patch, patch_len)`):
+                The patch input.
+            output_hidden_states (`bool`, *optional*, defaults to False.):
+                Whether to output the hidden states as well.
+
+        Returns:
+            `torch.Tensor`: The embedding. `list`: List of all hidden states if `output_hidden_states` is set to
+            `True`.
+        """
         batch_size = input_ts.shape[0]
 
         if self.mode == "flatten":
@@ -673,12 +678,12 @@ class ForecastHead(nn.Module):
         """
 
         Args:
-            hidden_features (`torch.Tensor` of shape `(batch_size x num_patch x num_features)` in `flatten` mode
-                or `(batch_size x n_vars x num_patch x num_features)` in `common_channel`/`mix_channel` mode.): Input
-                hidden features.
+            hidden_features (`torch.Tensor` of shape `(batch_size, num_patch, num_features)` in `flatten` mode
+                or `(batch_size, n_vars, num_patch, num_features)` in `common_channel`/`mix_channel` mode.):
+                Input hidden features.
 
         Returns:
-            `torch.Tensor` of shape `(batch_size x forecast_len x nvars)`.
+            `torch.Tensor` of shape `(batch_size, forecast_len, nvars)`.
 
         """
         if self.mode in ["common_channel", "mix_channel"]:
@@ -692,7 +697,7 @@ class ForecastHead(nn.Module):
 
         else:
             hidden_features = self.flatten(hidden_features)  # hidden_features: [batch_size x num_patches*num_features]
-            forecast = self.base_forecast_block(hidden_features)  # [batch_size x forecast_len * self.nvars]
+            forecast = self.base_forecast_block(hidden_features)  # [batch_size x forecast_len * nvars]
 
             if isinstance(forecast, tuple):
                 forecast = tuple(z.reshape(-1, self.forecast_len, self.nvars) for z in forecast)
