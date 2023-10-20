@@ -51,7 +51,7 @@ class PatchTSMixerConfig(PretrainedConfig):
             The context/history length for the input sequence.
         patch_len (`int`, *optional*, defaults to 8):
             The patch length for the `PatchTSMixer` model. Try to set it as a divisor of `seq_len`.
-        input_size (`int`, *optional*, defaults to 1):
+        num_input_channels (`int`, *optional*, defaults to 1):
             Number of input variates. For Univariate, set it to 1.
         stride (`int`, *optional*, defaults to 8):
             Determines the overlap between two consecutive patches. Set it to patch_len (or greater), if we want
@@ -165,7 +165,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         self,
         seq_len: int = 32,
         patch_len: int = 8,
-        input_size: int = 1,
+        num_input_channels: int = 1,
         stride: int = 8,
         num_features: int = 8,
         expansion_factor: int = 2,
@@ -202,7 +202,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.input_size = input_size
+        self.num_input_channels = num_input_channels
         self.seq_len = seq_len
         self.patch_len = patch_len
         self.stride = stride
