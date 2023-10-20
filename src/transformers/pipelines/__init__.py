@@ -995,7 +995,12 @@ def pipeline(
                 tokenizer_kwargs.pop("torch_dtype", None)
 
             qformer_tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer_identifier, subfolder="qformer_tokenizer", use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
+                tokenizer_identifier,
+                subfolder="qformer_tokenizer",
+                use_fast=use_fast,
+                _from_pipeline=task,
+                **hub_kwargs,
+                **tokenizer_kwargs,
             )
 
     if load_image_processor:
