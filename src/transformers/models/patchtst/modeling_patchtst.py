@@ -1286,7 +1286,6 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PatchTSTModelOutputWithNoAttention]:
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if past_observed_mask is None:
@@ -1378,7 +1377,8 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
 
                 - 1 for values that are **observed**,
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            output_hidden_states (`bool`, *optional*, default to False): Whether or not to return the hidden states of all layers
+            output_hidden_states (`bool`, *optional*, default to False):
+                Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
@@ -1443,7 +1443,8 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
 
                 - 1 for values that are **observed**,
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            output_hidden_states (`bool`, *optional*, default to False): Whether or not to return the hidden states of all layers
+            output_hidden_states (`bool`, *optional*, default to False):
+                Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
@@ -1607,7 +1608,8 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             future_values (`torch.Tensor` of shape `(bs, pred_len, num_output_channels)`, *optional*):
                 future target values associates with the `past_values`
-            output_hidden_states (`bool`, *optional*, default to False): Whether or not to return the hidden states of all layers
+            output_hidden_states (`bool`, *optional*, default to False):
+                Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
@@ -1814,7 +1816,8 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             future_values (`torch.Tensor` of shape `(bs, forecast_len, num_input_channels)`, *optional*):
                 future target values associates with the `past_values`
-            output_hidden_states (`bool`, *optional*, default to False): Whether or not to return the hidden states of all layers
+            output_hidden_states (`bool`, *optional*, default to False):
+                Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
@@ -2008,7 +2011,8 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             labels (`torch.Tensor` of shape `(bs, num_input_channels)`, *optional*):
                 target labels associates with the `past_values`
-            output_hidden_states (`bool`, *optional*, default to False): Whether or not to return the hidden states of all layers
+            output_hidden_states (`bool`, *optional*, default to False):
+                Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
@@ -2069,10 +2073,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
 
         # get model output
         outputs = self(
-            past_values=past_values,
-            labels=None,
-            past_observed_mask=past_observed_mask,
-            output_hidden_states=False
+            past_values=past_values, labels=None, past_observed_mask=past_observed_mask, output_hidden_states=False
         )
 
         # get distribution
