@@ -279,10 +279,8 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             return
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ == "Beit3ForImageTextRetrieval":
+            if model_class.__name__ in ["Beit3ForImageTextRetrieval", "Beit3ForCaptioning"]:
                 continue
-
-            print("Model class:", model_class)
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
@@ -422,7 +420,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
             language_masked_pos=language_masked_pos,
         )
         assert output.logits.shape == torch.Size([1, 64010])
-        torch.testing.assert_allclose(output.logits.detach()[0, :3], torch.tensor([-2.697914, -2.697912, -2.645459]))
+        assert torch.allclose(output.logits.detach()[0, :3], torch.tensor([-2.697914, -2.697912, -2.645459]))
 
     @slow
     def test_inference_beit3_for_image_text_retrieval(self):

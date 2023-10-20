@@ -1135,18 +1135,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
 
         loss = None
         if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            eps = self.config.label_smoothing
-            n_class = logits.size(1)
-            one_hot = torch.zeros_like(logits).scatter(1, labels.view(-1, 1), 1)
-            one_hot = one_hot * (1 - eps) + (1 - one_hot) * eps / (n_class - 1)
-
-            log_softmax = nn.LogSoftmax(dim=1)
-            kl_loss = nn.KLDivLoss(reduction="none")
-
-            log_prb = log_softmax(logits)
-            loss = kl_loss(log_prb, one_hot).sum(1)
-            loss = loss.mean()
+            raise NotImplementedError("Training is not yet supported for Beit3ForCaptioning.")
 
         if not return_dict:
             output = (logits,)
