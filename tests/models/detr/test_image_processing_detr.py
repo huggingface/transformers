@@ -186,13 +186,13 @@ class DetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         with self.assertRaises(ValueError) as e:
             image_processing(images=image, annotations={"annotations": target}, return_tensors="pt")
 
-        self.assertTrue(str(e.exception).startswith('Invalid COCO detection annotations'))
+        self.assertTrue(str(e.exception).startswith("Invalid COCO detection annotations"))
 
         # example of an illegal encoding (unequal lengths of images and annotations)
         with self.assertRaises(ValueError) as e:
             image_processing(images=[image] * n, annotations=[params] * (n - 1), return_tensors="pt")
 
-        self.assertTrue(str(e.exception) == 'The number of images (5) and annotations (4) do not match.')
+        self.assertTrue(str(e.exception) == "The number of images (5) and annotations (4) do not match.")
 
     @slow
     def test_call_pytorch_with_coco_detection_annotations(self):
