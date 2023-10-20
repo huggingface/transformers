@@ -1043,7 +1043,7 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
         )
         input_ids = torch.cat([input_ids, dummy_token], dim=1)
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
+        return {"input_ids": input_ids, "attention_mask": attention_mask, **model_kwargs}
 
 
 @add_start_docstrings(
@@ -1191,7 +1191,7 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel):
 
             input_ids = input_ids[:, remove_prefix_length:]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values, **model_kwargs}
 
     def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
