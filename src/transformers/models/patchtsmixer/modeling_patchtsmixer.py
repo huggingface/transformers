@@ -611,7 +611,7 @@ class PatchTSMixer(nn.Module):
         return embedding, all_hidden_states
 
 
-class ForecastHead(nn.Module):
+class PatchTSMixerForecastHead(nn.Module):
     """Forecasting Head.
 
     Args:
@@ -713,7 +713,7 @@ class ForecastHead(nn.Module):
         return forecast
 
 
-class LinearHead(nn.Module):
+class PatchTSMixerLinearHead(nn.Module):
     """Linear head for Classification and Regression.
 
     Args:
@@ -835,7 +835,7 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-class PretrainHead(nn.Module):
+class PatchTSMixerPretrainHead(nn.Module):
     """Pretraining head.
 
     Args:
@@ -1588,7 +1588,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
         self.model = PatchTSMixerModel(config, mask_input=True)
-        self.head = PretrainHead(
+        self.head = PatchTSMixerPretrainHead(
             config=config,
         )
         self.masked_loss = config.masked_loss
@@ -1779,7 +1779,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
         self.model = PatchTSMixerModel(config)
-        self.head = ForecastHead(
+        self.head = PatchTSMixerForecastHead(
             config=config,
             distribution_output=self.distribution_output,
         )
@@ -1957,7 +1957,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         super().__init__(config)
 
         self.model = PatchTSMixerModel(config)
-        self.head = LinearHead(
+        self.head = PatchTSMixerLinearHead(
             config=config,
         )
         self.loss = torch.nn.CrossEntropyLoss()
@@ -2080,7 +2080,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         else:
             self.inject_scale = None
 
-        self.head = LinearHead(
+        self.head = PatchTSMixerLinearHead(
             config=config,
             distribution_output=self.distribution_output,
         )
