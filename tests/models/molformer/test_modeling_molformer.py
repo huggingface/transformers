@@ -15,14 +15,18 @@
 """ Testing suite for the PyTorch Molformer model. """
 
 
+import os
+import random
+import tempfile
 import unittest
+from itertools import chain
 
 from transformers import MolformerConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, _mock_all_init_weights, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -30,6 +34,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MODEL_MAPPING,
         MolformerForMaskedLM,
         MolformerForSequenceClassification,
         MolformerModel,
@@ -37,6 +42,14 @@ if is_torch_available():
     from transformers.models.molformer.modeling_molformer import (
         MOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
+
+
+def _mock_init_weights(self, module):
+    # init buffers too
+    for name, param in chain(module.named_parameters(recurse=False), module.named_buffers(recurse=False)):
+        # Use the first letter of the name to get a value and go from a <> -13 to z <> 12
+        value = ord(name[0].lower()) - 110
+        param.data.fill_(value)
 
 
 class MolformerModelTester:
@@ -225,6 +238,59 @@ class MolformerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         for model_name in MOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = MolformerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    # Copied from tests.test_modeling_common.ModelTesterMixin.test_save_load_fast_init_from_base
+    def test_save_load_fast_init_from_base(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if config.__class__ not in MODEL_MAPPING:
+            return
+        base_class = MODEL_MAPPING[config.__class__]
+
+        if isinstance(base_class, tuple):
+            base_class = base_class[0]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            # make a copy of model class to not break future tests
+            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
+            class CopyClass(model_class):
+                pass
+
+            model_class_copy = CopyClass
+
+            # make sure that all keys are expected for test
+            model_class_copy._keys_to_ignore_on_load_missing = []
+
+            # make init deterministic, but make sure that
+            # non-initialized weights throw errors nevertheless
+            model_class_copy._init_weights = _mock_init_weights
+            model_class_copy.init_weights = _mock_all_init_weights
+
+            model = base_class(config)
+            state_dict = model.state_dict()
+
+            # this will often delete a single weight of a multi-weight module
+            # to test an edge case
+            random_key_to_del = random.choice(list(state_dict.keys()))
+            del state_dict[random_key_to_del]
+
+            # check that certain keys didn't get saved with the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
+
+                model_fast_init = model_class_copy.from_pretrained(tmpdirname)
+                model_slow_init = model_class_copy.from_pretrained(tmpdirname, _fast_init=False)
+                # Before we test anything
+
+                for key in model_fast_init.state_dict().keys():
+                    if isinstance(model_slow_init.state_dict()[key], torch.BoolTensor):
+                        max_diff = (model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]).sum().item()
+                    else:
+                        max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
 
 @require_torch
