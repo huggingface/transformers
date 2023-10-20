@@ -107,9 +107,10 @@ class PatchTSTConfig(PretrainedConfig):
         mask_ratio (`float`, *optional*, defaults to 0.5):
             Masking ratio is applied to mask the input data during pretraining.
         mask_patches (`List`, *optional*, defaults to `[2, 3]`):
-            TODO
+            List of patch lengths to mask in the end of the data.
         mask_patch_ratios (`List`, *optional*, defaults to `[1, 1]`):
-            TODO
+            List of weights to use for each patch length. For Ex. if patch_lengths is [5,4] and mix_ratio is [1,1],
+            then equal weights to both patch lengths. Defaults to None.
         channel_consistent_masking (`bool`, *optional*, defaults to `False`):
             If channel consistent masking is True, all the channels will have the same masking.
         unmasked_channel_indices (`list`, *optional*):

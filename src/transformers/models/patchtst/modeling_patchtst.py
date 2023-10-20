@@ -459,8 +459,9 @@ class PatchTSTMasking(nn.Module):
         mask_type (`str`, *optional*): Masking type. Allowed values are random, forecast. Defaults to random.
         mask_ratio (`float`, *optional*): Mask ratio.
         mask_patches (`list`, *optional*): List of patch lengths to mask in the end of the data.
-        mask_patch_ratios (`list`, *optional*): List of weights to use for each patch length. For Ex.
-        if patch_lengths is [5,4] and mix_ratio is [1,1], then equal weights to both patch lengths. Defaults to None.
+        mask_patch_ratios (`list`, *optional*):
+            List of weights to use for each patch length. For Ex. if patch_lengths is [5,4] and mix_ratio is [1,1],
+            then equal weights to both patch lengths. Defaults to None.
         unmasked_channel_indices (`list`, *optional*):
             Define what channels not to mask. These channels will not be masked during pretrainin. Defaults to None.
         channel_consistent_masking (`bool`, *optional*):
