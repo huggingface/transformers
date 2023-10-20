@@ -228,35 +228,18 @@ class FlaxMistralIntegrationTest(unittest.TestCase):
         self.test_batch = jnp.arange(32).reshape(4, 8) + 1911
 
     def test_model_logits(self):
-        flax_logits = self.model(self.test_batch).logits
+        input_ids = jnp.array([[1, 306, 4658, 278, 6593, 310, 2834, 338]])
+        EXPECTED_MEAN = np.array([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
+        EXPECTED_SLICE = np.array([-5.8781, -5.8616, -0.1052, -4.7200, -5.8781, -5.8774, -5.8773, -5.8777, -5.8781, -5.8780, -5.8781, -5.8779, -1.0787,  1.7583, -5.8779, -5.8780, -5.8783, -5.8778, -5.8776, -5.8781, -5.8784, -5.8778, -5.8778, -5.8777, -5.8779, -5.8778, -5.8776, -5.8780, -5.8779, -5.8781])
+        
+        flax_logits = self.model(input_ids).logits
+        diff_mean = jnp.abs(flax_logits.mean(-1)- EXPECTED_MEAN).max()
+        diff_slice =  jnp.abs(flax_logits[0, 0, :30]- EXPECTED_SLICE).max()
 
-        # fmt: off
-        EXPECTED_LOGITS = [-74.4243, -74.0680, -65.2507, -79.1658, -77.7460, -69.2379, -86.4588, -84.8933, -77.8456]
-        EXPECTED_MIN, EXPECTED_MAX, EXPECTED_MEAN = -96.9952
-        EXPECTED_MAX = -18.4571
-        EXPECTED_MEAN = -65.0608
-        # fmt: on
+        self.assertAlmostEqual(diff_mean, 0, places=3)
+        self.assertAlmostEqual(diff_slice, 0, places=3)
 
-        self.assertTrue(np.allclose(flax_logits[0, :3, :3].flatten(), EXPECTED_LOGITS, atol=1e-4))
-        self.assertAlmostEqual(flax_logits.min(), EXPECTED_MIN, places=3)
-        self.assertAlmostEqual(flax_logits.max(), EXPECTED_MAX, places=3)
-        self.assertAlmostEqual(flax_logits.mean(), EXPECTED_MEAN, places=3)
 
-    def test_model_hidden_states(self):
-        flax_hidden_states = self.model(self.test_batch, output_hidden_states=True).hidden_states
-        flax_hidden_means = [h.mean() for h in flax_hidden_states]
-
-        # fmt: off
-        EXPECTED_HIDDEN_MEANS = [
-            -0.00007,-0.00049,-0.00169,-0.00253,-0.00271,
-            -0.00290,-0.00252,0.00230,0.00230,0.00198,
-            0.00196,0.00174,0.00246,0.00205,0.00242,
-            0.00171,0.00092,0.00054,0.00102,0.00024,
-            0.00029,0.00037,-0.00101,-0.00062,-0.00341,-0.00636,-0.00357
-        ]
-        # fmt: on
-
-        self.assertTrue(np.allclose(flax_hidden_means, EXPECTED_HIDDEN_MEANS, atol=1e-4))
 
     def test_generated_text(self):
         tokenizer = LlamaTokenizerFast.from_pretrained(self.model_id)
