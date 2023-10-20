@@ -16,6 +16,7 @@
 import argparse
 import copy
 import json
+import logging
 
 import numpy as np
 import pandas as pd
@@ -28,6 +29,7 @@ from transformers import (
     FastConfig,
     FASTForImageCaptioning
 )
+from transformers.models.fast.image_processing_fast import FastImageProcessor
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 tiny_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_tiny.config"
@@ -193,6 +195,7 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_
 
     model_config = namespace.get('model')
     test_config = namespace.get('test_cfg', None)
+    data_config = namespace.get('data')
 
     min_score = 0.88
     min_area = 250
@@ -200,8 +203,8 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_
     loss_bg = False
     if test_config is not None:
         min_area = test_config.get('min_area', min_area)
-        min_score = test_config.get('min_area', min_score)
-        bbox_type = test_config.get('min_area', bbox_type)
+        min_score = test_config.get('min_score', min_score)
+        bbox_type = test_config.get('bbox_type', bbox_type)
         loss_bg = test_config.get('loss_emb', None) == "EmbLoss_v2"
 
     if 'tiny' in model_config['backbone']['config']:
@@ -213,8 +216,15 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_
     else:
         config = prepare_config(base_config_url, model_config['detection_head']['pooling_size'],
                                 min_area, min_score, bbox_type, loss_bg)
+    size = 640
+    if "train" in data_config:
+        if "short_size" in data_config['train']:
+            size = data_config['train']['short_size']
 
     model = FASTForImageCaptioning(config)
+    fast_image_processor = FastImageProcessor(size={'height': size, 'width': size}, min_score=config.min_score,
+                                              min_area=config.min_area,
+                                              bbox_type=config.bbox_type, pooling_size=config.head_pooling_size)
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)['ema']
     state_dict_changed = copy.deepcopy(state_dict)
     for key in state_dict:
@@ -223,6 +233,8 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_
     model.load_state_dict(state_dict_changed)
 
     model.save_pretrained(pytorch_dump_folder_path)
+    fast_image_processor.save_pretrained(pytorch_dump_folder_path)
+    logging.info("The converted weights are save here : " + pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

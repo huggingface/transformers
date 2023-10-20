@@ -103,7 +103,9 @@ class My2DLayer(nn.Module):
     """ Methods defined in MyModule"""
 
     def forward(self, x):
-        for module in self._modules.values():
+        for key, module in self._modules.items():
+            if key == 'bn' and not self.training:
+                continue
             x = module(x)
         return x
 
@@ -134,7 +136,7 @@ class My2DLayer(nn.Module):
         return False
 
 
-class ConvLayer(My2DLayer):
+class ConvLayer(nn.Module):
     def __init__(
             self,
             in_channels,
@@ -148,18 +150,19 @@ class ConvLayer(My2DLayer):
             use_bn=True,
             act_func="relu",
             dropout_rate=0,
-            ops_order="weight_bn_act",
+            use_act=True
     ):
+
+        super().__init__()
+
         self.kernel_size = kernel_size
         self.stride = stride
         self.dilation = dilation
         self.groups = groups
         self.bias = bias
         self.has_shuffle = has_shuffle
+        self.act_func = act_func
 
-        super(ConvLayer, self).__init__(in_channels, out_channels, use_bn, act_func, dropout_rate, ops_order)
-
-    def weight_op(self):
         padding = get_same_padding(self.kernel_size)
         if isinstance(padding, int):
             padding *= self.dilation
@@ -167,23 +170,61 @@ class ConvLayer(My2DLayer):
             padding[0] *= self.dilation
             padding[1] *= self.dilation
 
-        weight_dict = OrderedDict()
-        weight_dict["conv"] = nn.Conv2d(
-            self.in_channels,
-            self.out_channels,
-            kernel_size=self.kernel_size,
-            stride=self.stride,
+        self.conv = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
             padding=padding,
-            dilation=self.dilation,
-            groups=self.groups,
-            bias=self.bias,
+            dilation=dilation,
+            groups=groups,
+            bias=bias,
         )
+        self.bn = nn.Identity()
+        if use_bn:
+            self.bn = nn.BatchNorm2d(out_channels)
 
-        return weight_dict
+        self.act = nn.Identity()
+        if use_act:
+            act = build_activation(self.act_func, True)
+            if act is not None:
+                self.act = act
+
+    def forward(self, x):
+        if self.training:
+            if hasattr(self, 'fused_conv'):
+                delattr(self, 'fused_conv')
+            x = self.conv(x)
+            x = self.bn(x)
+            return self.act(x)
+        else:
+            if not hasattr(self, 'fused_conv'):
+                setattr(self, 'fused_conv', self.fuse_conv_bn(self.conv, self.bn))
+            x = self.fused_conv(x)
+            if self.act is not None:
+                x = self.act(x)
+            return x
+
+    def fuse_conv_bn(self, conv, bn):
+        """During inference, the functionary of batch norm layers is turned off but
+        only the mean and var alone channels are used, which exposes the chance to
+        fuse it with the preceding conv layers to save computations and simplify
+        network structures."""
+        if isinstance(bn, nn.Identity):
+            return conv
+        conv_w = conv.weight
+        conv_b = conv.bias if conv.bias is not None else torch.zeros_like(
+            bn.running_mean)
+
+        factor = bn.weight / torch.sqrt(bn.running_var + bn.eps)
+        conv.weight = nn.Parameter(conv_w *
+                                   factor.reshape([conv.out_channels, 1, 1, 1]))
+        conv.bias = nn.Parameter((conv_b - bn.running_mean) * factor + bn.bias)
+        return conv
 
 
 class RepConvLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1, deploy=False):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1):
         super(RepConvLayer, self).__init__()
 
         self.in_channels = in_channels
@@ -192,78 +233,66 @@ class RepConvLayer(nn.Module):
         self.stride = stride
         self.dilation = dilation
         self.groups = groups
-        self.deploy = deploy
 
         assert len(kernel_size) == 2
         padding = (int(((kernel_size[0] - 1) * dilation) / 2), int(((kernel_size[1] - 1) * dilation) / 2))
 
         self.nonlinearity = nn.ReLU(inplace=True)
 
-        if deploy:
-            self.fused_conv = nn.Conv2d(
+        self.main_conv = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=groups,
+            bias=False,
+        )
+        self.main_bn = nn.BatchNorm2d(num_features=out_channels)
+
+        ver_pad = (int(((kernel_size[0] - 1) * dilation) / 2), 0)
+        hor_pad = (0, int(((kernel_size[1] - 1) * dilation) / 2))
+
+        if kernel_size[1] != 1:
+            self.ver_conv = nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
-                kernel_size=kernel_size,
+                kernel_size=(kernel_size[0], 1),
                 stride=stride,
-                padding=padding,
-                dilation=dilation,
-                groups=groups,
-                bias=True,
-            )
-        else:
-            self.main_conv = nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
+                padding=ver_pad,
                 dilation=dilation,
                 groups=groups,
                 bias=False,
             )
-            self.main_bn = nn.BatchNorm2d(num_features=out_channels)
+            self.ver_bn = nn.BatchNorm2d(num_features=out_channels)
+        else:
+            self.ver_conv, self.ver_bn = None, None
 
-            ver_pad = (int(((kernel_size[0] - 1) * dilation) / 2), 0)
-            hor_pad = (0, int(((kernel_size[1] - 1) * dilation) / 2))
-
-            if kernel_size[1] != 1:  # 卷积核的宽大于1 -> 有垂直卷积
-                self.ver_conv = nn.Conv2d(
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    kernel_size=(kernel_size[0], 1),
-                    stride=stride,
-                    padding=ver_pad,
-                    dilation=dilation,
-                    groups=groups,
-                    bias=False,
-                )
-                self.ver_bn = nn.BatchNorm2d(num_features=out_channels)
-            else:
-                self.ver_conv, self.ver_bn = None, None
-
-            if kernel_size[0] != 1:  # 卷积核的高大于1 -> 有水平卷积
-                self.hor_conv = nn.Conv2d(
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    kernel_size=(1, kernel_size[1]),
-                    stride=stride,
-                    padding=hor_pad,
-                    dilation=dilation,
-                    groups=groups,
-                    bias=False,
-                )
-                self.hor_bn = nn.BatchNorm2d(num_features=out_channels)
-            else:
-                self.hor_conv, self.hor_bn = None, None
-
-            self.rbr_identity = (
-                nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
+        if kernel_size[0] != 1:  # 卷积核的高大于1 -> 有水平卷积
+            self.hor_conv = nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=(1, kernel_size[1]),
+                stride=stride,
+                padding=hor_pad,
+                dilation=dilation,
+                groups=groups,
+                bias=False,
             )
+            self.hor_bn = nn.BatchNorm2d(num_features=out_channels)
+        else:
+            self.hor_conv, self.hor_bn = None, None
+
+        self.rbr_identity = (
+            nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
+        )
 
     def forward(self, input):
-        if hasattr(self, "fused_conv"):
-            return self.nonlinearity(self.fused_conv(input))
-        else:
+        if self.training:
+            if hasattr(self, 'fused_conv'):
+                self.__delattr__('fused_conv')
+
             main_outputs = self.main_conv(input)
             main_outputs = self.main_bn(main_outputs)
             if self.ver_conv is not None:
@@ -284,6 +313,10 @@ class RepConvLayer(nn.Module):
                 id_out = self.rbr_identity(input)
 
             return self.nonlinearity(main_outputs + vertical_outputs + horizontal_outputs + id_out)
+        else:
+            if not hasattr(self, 'fused_conv'):
+                self.prepare_for_eval()
+            return self.nonlinearity(self.fused_conv(input))
 
     def _identity_to_conv(self, identity):
         if identity is None:
@@ -340,66 +373,17 @@ class RepConvLayer(nn.Module):
         pad_top_down = (kernel_height - height) // 2
         return torch.nn.functional.pad(kernel, [pad_left_right, pad_left_right, pad_top_down, pad_top_down])
 
-    # def switch_to_deploy(self):
-    #     if hasattr(self, 'fused_conv'):
-    #         return
-    #     kernel, bias = self.get_equivalent_kernel_bias()
-    #     self.fused_conv = nn.Conv2d(in_channels=self.main_conv.in_channels,
-    #                                 out_channels=self.main_conv.out_channels,
-    #                                 kernel_size=self.main_conv.kernel_size, stride=self.main_conv.stride,
-    #                                 padding=self.main_conv.padding, dilation=self.main_conv.dilation,
-    #                                 groups=self.main_conv.groups, bias=True)
-    #     self.fused_conv.weight.data = kernel
-    #     self.fused_conv.bias.data = bias
-    #     self.deploy = True
-    #     for para in self.parameters():
-    #         para.detach_()
-    #     for attr in ['main_conv', 'main_bn', 'ver_conv', 'ver_bn', 'hor_conv', 'hor_bn']:
-    #         if hasattr(self, attr):
-    #             self.__delattr__(attr)
-    #
-    #     if hasattr(self, 'rbr_identity'):
-    #         self.__delattr__('rbr_identity')
-
-    # def switch_to_test(self):
-    #     kernel, bias = self.get_equivalent_kernel_bias()
-    #     self.fused_conv = nn.Conv2d(in_channels=self.main_conv.in_channels,
-    #                                 out_channels=self.main_conv.out_channels,
-    #                                 kernel_size=self.main_conv.kernel_size, stride=self.main_conv.stride,
-    #                                 padding=self.main_conv.padding, dilation=self.main_conv.dilation,
-    #                                 groups=self.main_conv.groups, bias=True)
-    #     self.fused_conv.weight.data = kernel
-    #     self.fused_conv.bias.data = bias
-    #     for para in self.fused_conv.parameters():
-    #         para.detach_()
-    #     self.deploy = True
-
-    # def switch_to_train(self):
-    #     if hasattr(self, 'fused_conv'):
-    #         self.__delattr__('fused_conv')
-    #     self.deploy = False
-
-    # @staticmethod
-    # def is_zero_layer():
-    #     return False
-
-    # @property
-    # def module_str(self):
-    #     return 'Rep_%dx%d' % (self.kernel_size[0], self.kernel_size[1])
-
-    # @property
-    # def config(self):
-    #     return {'name': RepConvLayer.__name__,
-    #             'in_channels': self.in_channels,
-    #             'out_channels': self.out_channels,
-    #             'kernel_size': self.kernel_size,
-    #             'stride': self.stride,
-    #             'dilation': self.dilation,
-    #             'groups': self.groups}
-
-    # @staticmethod
-    # def build_from_config(config):
-    #     return RepConvLayer(**config)
+    def prepare_for_eval(self):
+        kernel, bias = self.get_equivalent_kernel_bias()
+        self.fused_conv = nn.Conv2d(in_channels=self.main_conv.in_channels,
+                                    out_channels=self.main_conv.out_channels,
+                                    kernel_size=self.main_conv.kernel_size, stride=self.main_conv.stride,
+                                    padding=self.main_conv.padding, dilation=self.main_conv.dilation,
+                                    groups=self.main_conv.groups, bias=True)
+        self.fused_conv.weight.data = kernel
+        self.fused_conv.bias.data = bias
+        for para in self.fused_conv.parameters():
+            para.detach_()
 
 
 class FastPreTrainedModel(PreTrainedModel):

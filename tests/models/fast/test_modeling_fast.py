@@ -16,6 +16,8 @@
 import inspect
 import unittest
 
+import requests
+from PIL import Image
 from parameterized import parameterized
 
 from transformers import (
@@ -23,7 +25,9 @@ from transformers import (
     is_torch_available,
     set_seed,
 )
-from transformers.testing_utils import CaptureLogger, require_bitsandbytes, require_torch, slow, tooslow, torch_device
+from transformers.models.fast.image_processing_fast import FastImageProcessor
+from transformers.testing_utils import CaptureLogger, require_bitsandbytes, require_torch, slow, tooslow, torch_device, \
+    require_vision
 from transformers.utils import logging as transformers_logging
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -63,13 +67,13 @@ class FastModelTester:
             backbone_stage1_groups=[1],
             backbone_stage2_in_channels=[64],
             backbone_stage2_out_channels=[128],
-            backbone_stage2_kernel_size=[ [3, 1]],
+            backbone_stage2_kernel_size=[[3, 1]],
             backbone_stage2_stride=[2],
             backbone_stage2_dilation=[1],
             backbone_stage2_groups=[1],
             backbone_stage3_in_channels=[128],
             backbone_stage3_out_channels=[256],
-            backbone_stage3_kernel_size=[ [1, 3]],
+            backbone_stage3_kernel_size=[[1, 3]],
             backbone_stage3_stride=[2],
             backbone_stage3_dilation=[1],
             backbone_stage3_groups=[1],
@@ -377,5 +381,59 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             model = model_class(config)
             num_params = model.num_parameters()
             assert (
-                num_params < 3000000
+                    num_params < 3000000
             ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
+
+        # def prepare_image():
+        #     image_url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img_329.jpg"
+        #     raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+        #     return raw_image
+
+
+@require_torch
+@require_vision
+class FastModelIntegrationTest(unittest.TestCase):
+    # @slow
+    def test_inference_fast_tiny_ic17mlt_model(self):
+        model = FASTForImageCaptioning.from_pretrained("Raghavan/ic17mlt_Fast_T")
+
+        image_processor = FastImageProcessor.from_pretrained("Raghavan/ic17mlt_Fast_T")
+
+        def prepare_image():
+            image_url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img_329.jpg"
+            raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+            return raw_image
+
+        image = prepare_image()
+        input = image_processor(image, return_tensor="np")
+
+        output = model(pixel_values=torch.tensor(input['pixel_values']))
+        target_sizes = [(image.shape[1], image.shape[2]) for image in input['pixel_values']]
+        final_out = image_processor.get_results(output, target_sizes)
+
+        assert (
+                final_out[0]['bboxes'][0] == [224, 120, 246, 120, 246, 134, 224, 134]
+        )
+        assert round(float(final_out[0]['scores'][0]), 5) == 0.95541
+
+    def test_inference_fast_base_800_total_text_ic17mlt_model(self):
+        model = FASTForImageCaptioning.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
+
+        image_processor = FastImageProcessor.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
+
+        def prepare_image():
+            image_url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"
+            raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+            return raw_image
+
+        image = prepare_image()
+        input = image_processor(image, return_tensor="np")
+
+        output = model(pixel_values=torch.tensor(input['pixel_values']))
+        target_sizes = [(image.shape[1], image.shape[2]) for image in input['pixel_values']]
+        final_out = image_processor.get_results(output, target_sizes)
+
+        assert (
+                final_out[0]['bboxes'][0][:10] == [484, 175, 484, 178, 483, 179, 452, 179, 452, 182]
+        )
+        assert round(float(final_out[0]['scores'][0]), 5) == 0.92356
