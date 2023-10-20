@@ -100,7 +100,7 @@ jobs:
   run_tests_single_gpu:
     name: Single GPU tests
     strategy:
-      max-parallel: 1  # We do not want to parallelize over several runners, in order to leave room for the push CI.
+      max-parallel: 2  # We do not want to parallelize over the 4 runners, in order to leave room for the push CI.
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
@@ -166,7 +166,7 @@ jobs:
   run_tests_multi_gpu:
     name: Multi GPU tests
     strategy:
-      max-parallel: 1  # We do not want to parallelize over several runners, in order to leave room for the push CI.
+      max-parallel: 1  # Only 2 runners for multi-GPU tests are available. Leave one for push CI.
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
