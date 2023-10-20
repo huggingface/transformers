@@ -32,6 +32,7 @@ deps = {
     "jaxlib": "jaxlib>=0.4.1,<=0.4.13",
     "jieba": "jieba",
     "kenlm": "kenlm",
+    "keras": "keras<2.15",
     "keras-nlp": "keras-nlp>=0.3.1",
     "librosa": "librosa",
     "nltk": "nltk",

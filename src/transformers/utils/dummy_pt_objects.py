@@ -3614,6 +3614,20 @@ def load_tf_weights_in_funnel(*args, **kwargs):
     requires_backends(load_tf_weights_in_funnel, ["torch"])
 
 
+class FuyuForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class FuyuPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 GIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
