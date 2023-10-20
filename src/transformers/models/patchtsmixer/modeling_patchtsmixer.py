@@ -2099,14 +2099,20 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         return_loss: bool = True,
     ) -> PatchTSMixerForRegressionOutput:
         """
+        Parameters:
+            past_values (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`, *required*):
+                Input sequence to the model
+            target_values (`torch.Tensor` of shape `(batch_size, num_targets)`, *optional*):
+                target labels associates with the `past_values`
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers
+            return_loss (`bool`, default to True): Whether or not to calculate the loss value.
 
         Returns:
+            `PatchTSTForRegressionOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
+            `config.return_dict`=False)
 
         """
-
-        # past_values: tensor [batch_size x seq_len x num_input_channels]
-        # target_values: tensor [batch_size x num_targets]
-
         model_output = self.model(
             past_values,
             output_hidden_states=output_hidden_states,
