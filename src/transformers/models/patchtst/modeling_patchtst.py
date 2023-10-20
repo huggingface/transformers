@@ -360,11 +360,11 @@ def forecast_masking(
     total_length = 0
     total_ratio = sum(mix_ratio)
 
-    for i, j in zip(patch_lengths, mix_ratio):
-        if i <= 0 or i >= sequence_length:
+    for patch_length, ratio in zip(patch_lengths, mix_ratio):
+        if patch_length <= 0 or patch_length >= sequence_length:
             raise Exception("masked_patch_len should be greater than 0 and less than total patches.")
-        temp_len = int(batch_size * j / total_ratio)
-        t_list.append([i, j, temp_len])
+        temp_len = int(batch_size * ratio / total_ratio)
+        t_list.append([patch_length, ratio, temp_len])
         total_length += temp_len
 
     t_list = sorted(t_list, key=lambda x: x[2])
@@ -374,11 +374,11 @@ def forecast_masking(
     elif total_length > batch_size:
         t_list[-1][2] = t_list[-1][2] + (total_length - batch_size)
 
-    b1 = 0
-    for p, _, l in t_list:
-        b2 = b1 + l
-        mask[b1:b2, :, -p:] = 1
-        b1 = b2
+    batch1 = 0
+    for patch_len, _, temp_len in t_list:
+        batch2 = batch1 + temp_len
+        mask[batch1:batch2, :, -patch_len:] = 1
+        batch1 = batch2
 
     perm = torch.randperm(mask.shape[0])
     mask = mask[perm]
