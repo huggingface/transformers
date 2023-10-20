@@ -61,18 +61,19 @@ BEIT3_MODEL = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-        text_padding_mask (`torch.LongTensor` of shape `({0})`):
-            Padding mask for input tokens , of same shape as `input_ids`
+        attention_mask (`torch.LongTensor` of shape `({0})`):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            [What are attention masks?](../glossary#attention-mask)
+        image_text_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on image-text tokens. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            [What are attention masks?](../glossary#attention-mask)
         vision_masked_position (`torch.LongTensor` of shape pixel_values):
             Padding mask for input tokens , of same shape as `pixel_values`
 
@@ -571,8 +572,8 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
     def forward(
         self,
         hidden_states,
-        encoder_padding_mask,
-        attention_mask=None,
+        attention_mask,
+        image_text_mask=None,
         multiway_split_position=None,
         past_key_value=None,
         output_attentions=None,
@@ -587,8 +588,8 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
             query=hidden_states,
             key=hidden_states,
             value=hidden_states,
-            key_padding_mask=encoder_padding_mask,
-            attention_mask=attention_mask,
+            attention_mask=image_text_mask,
+            key_padding_mask=attention_mask,
             past_key_value=past_key_value,
             multiway_split_position=split_position,
             output_attentions=output_attentions,
@@ -643,8 +644,8 @@ class Beit3Encoder(nn.Module):
     def forward(
         self,
         hidden_state,
-        encoder_padding_mask=None,
         attention_mask=None,
+        image_text_mask=None,
         output_hidden_states=None,
         output_attentions=None,
         multiway_split_position=None,
@@ -655,11 +656,11 @@ class Beit3Encoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        if encoder_padding_mask is None:
-            encoder_padding_mask = torch.zeros(hidden_state.shape[:2], device=hidden_state.device).bool()
+        if attention_mask is None:
+            attention_mask = torch.zeros(hidden_state.shape[:2], device=hidden_state.device).bool()
 
         hidden_state = self.add_position_embeddings(hidden_state, text_end_positions, multiway_split_position)
-        hidden_state = hidden_state * (1 - encoder_padding_mask.unsqueeze(-1).type_as(hidden_state))
+        hidden_state = hidden_state * (1 - attention_mask.unsqueeze(-1).type_as(hidden_state))
 
         # past_key_value is not None during inference if we use the bidirectional encoder as a generator as in s2s-ft (https://arxiv.org/abs/2110.13640)
         for idx, layer in enumerate(self.layers):
@@ -668,8 +669,8 @@ class Beit3Encoder(nn.Module):
 
             hidden_state = layer(
                 hidden_state,
-                encoder_padding_mask=encoder_padding_mask if past_key_value is None else None,
-                attention_mask=attention_mask,
+                attention_mask=attention_mask if past_key_value is None else None,
+                image_text_mask=image_text_mask,
                 multiway_split_position=multiway_split_position,
                 past_key_value=past_key_value[idx] if past_key_value is not None else None,
                 output_attentions=output_attentions,
@@ -728,7 +729,7 @@ class Beit3Model(Beit3PreTrainedModel):
         self,
         input_ids=None,
         pixel_values=None,
-        text_padding_mask=None,
+        attention_mask=None,
         image_text_mask=None,
         vision_masked_position=None,
         past_key_value=None,
@@ -748,11 +749,11 @@ class Beit3Model(Beit3PreTrainedModel):
 
         if input_ids is None:
             embeddings = self.vision_embedding(pixel_values, vision_masked_position)
-            encoder_padding_mask = None
+            attention_mask = None
             multiway_split_position = -1
         elif pixel_values is None:
             embeddings = self.text_embedding(input_ids)
-            encoder_padding_mask = text_padding_mask
+            attention_mask = attention_mask
             multiway_split_position = 0
         else:
             vision_embeddings = self.vision_embedding(pixel_values, vision_masked_position)
@@ -760,24 +761,24 @@ class Beit3Model(Beit3PreTrainedModel):
             text_embeddings = self.text_embedding(input_ids)
             embeddings = torch.cat([vision_embeddings, text_embeddings], dim=1)
 
-            if text_padding_mask is not None:
+            if attention_mask is not None:
                 zeros_for_vision_padding = (
                     torch.zeros(vision_embeddings.shape[:-1]).to(vision_embeddings.device).bool()
                 )
-                encoder_padding_mask = torch.cat(
+                attention_mask = torch.cat(
                     [
                         zeros_for_vision_padding,
-                        text_padding_mask,
+                        attention_mask,
                     ],
                     dim=1,
                 )
             else:
-                encoder_padding_mask = None
+                attention_mask = None
 
         outputs = self.encoder(
             hidden_state=embeddings,
-            encoder_padding_mask=encoder_padding_mask,
-            attention_mask=image_text_mask,
+            attention_mask=attention_mask,
+            image_text_mask=image_text_mask,
             multiway_split_position=multiway_split_position,
             past_key_value=past_key_value,
             text_end_positions=text_end_positions,
@@ -814,7 +815,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         input_ids,
         pixel_values,
         attention_mask,
-        output_hidden_states=True,
+        output_hidden_states=None,
         output_attentions=None,
         return_dict=None,
         labels=None,
@@ -860,12 +861,12 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         image2_values = image2_values.squeeze(1)
         vision_input = torch.cat((image1_values, image2_values), dim=0)
         language_input = torch.cat((input_ids, input_ids), dim=0)
-        text_padding_mask = torch.cat((attention_mask, attention_mask), dim=0)
+        attention_mask = torch.cat((attention_mask, attention_mask), dim=0)
 
         outputs = self.beit3(
             input_ids=language_input,
             pixel_values=vision_input,
-            text_padding_mask=text_padding_mask,
+            attention_mask=attention_mask,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             return_dict=return_dict,
@@ -875,9 +876,8 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         else:
             last_hidden_state = outputs[0]
 
-        all_hidden_states = None
         if output_hidden_states:
-            all_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+            outputs.hidden_states if return_dict else outputs[1]
 
         if not return_dict:
             multiway_split_position = outputs[-1]
@@ -898,13 +898,13 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
             loss = loss_fct(logits, labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + (all_hidden_states,) if output_hidden_states else (logits,)
+            output = (logits,) + outputs[1:] if output_hidden_states else (logits,)
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=all_hidden_states,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
@@ -1002,19 +1002,15 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
 
-        all_hidden_states = None
-        if output_hidden_states:
-            all_hidden_states = outputs.hidden_states if return_dict else outputs[1]
-
         if not return_dict:
             output = (logits,)
-            output = (output + (all_hidden_states,)) if output_hidden_states else output
+            output = (output + (outputs[2:],)) if output_hidden_states else output
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=all_hidden_states,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
@@ -1041,7 +1037,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         input_ids,
         pixel_values,
         attention_mask,
-        language_masked_pos,
+        language_masked_pos=None,
         text_len=None,
         past_key_value=None,
         output_hidden_states: Optional[bool] = None,
@@ -1120,7 +1116,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         outputs = self.beit3(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            text_padding_mask=attention_mask,
+            attention_mask=attention_mask,
             image_text_mask=image_text_mask,
             past_key_value=past_key_value,
             text_end_positions=text_end_positions,
@@ -1207,7 +1203,7 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         input_ids,
         pixel_values,
         attention_mask,
-        output_hidden_states: Optional[bool] = True,
+        output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1244,18 +1240,14 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         outputs = self.beit3(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            text_padding_mask=attention_mask,
+            attention_mask=attention_mask,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             return_dict=return_dict,
         )
 
-        if return_dict:
-            last_hidden_state = outputs.last_hidden_state
-        else:
-            last_hidden_state = outputs[0]
+        last_hidden_state = outputs.last_hidden_state if return_dict else outputs[0]
 
-        last_hidden_state = last_hidden_state
         cls_rep = self.pooler(last_hidden_state)
         logits = self.classifier(cls_rep)
         reshaped_logits = logits.view(-1, self.num_labels)
@@ -1267,18 +1259,17 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
             reshaped_logits = log_softmax(reshaped_logits)
             loss = loss_fct(reshaped_logits, labels.contiguous())
 
-        all_hidden_states = None
         if output_hidden_states:
-            all_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+            outputs.hidden_states if return_dict else outputs[1]
 
         if not return_dict:
-            output = (reshaped_logits,) + (all_hidden_states,) if output_hidden_states else (reshaped_logits,)
+            output = (reshaped_logits,) + outputs[2:] if output_hidden_states else (reshaped_logits,)
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
             logits=reshaped_logits,
-            hidden_states=all_hidden_states,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
@@ -1351,7 +1342,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         outputs = self.beit3(
             input_ids=None,
             pixel_values=pixel_values,
-            text_padding_mask=None,
+            attention_mask=None,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             return_dict=return_dict,
@@ -1368,7 +1359,10 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         outputs = self.beit3(
             input_ids=input_ids,
             pixel_values=None,
-            text_padding_mask=attention_mask,
+            attention_mask=attention_mask,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+            return_dict=return_dict,
         )
 
         if return_dict:

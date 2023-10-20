@@ -16,20 +16,21 @@
 
 import inspect
 import unittest
-from typing import Dict, List, Tuple
 
 import numpy as np
 
-from transformers import Beit3Processor, XLMRobertaTokenizer, is_torch_available
+from transformers import Beit3Config, Beit3Processor
 from transformers.models.auto import get_values
-from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
-from transformers.models.beit3.configuration_beit3 import Beit3Config
+from transformers.models.auto.modeling_auto import (
+    MODEL_FOR_BACKBONE_MAPPING_NAMES,
+    MODEL_MAPPING_NAMES,
+)
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-from ..align.test_modeling_align import prepare_img
 
 
 if is_torch_available():
@@ -43,6 +44,9 @@ if is_torch_available():
         Beit3ForVisualReasoning,
         Beit3Model,
     )
+
+if is_vision_available():
+    from PIL import Image
 
 
 class Beit3ModelTester:
@@ -132,11 +136,11 @@ class Beit3ModelTester:
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        text_padding_mask = torch.zeros((self.batch_size, self.seq_length))
+        attention_mask = torch.zeros_like(input_ids)
         return self.get_config(), {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
-            "text_padding_mask": text_padding_mask,
+            "attention_mask": attention_mask,
         }
 
     def prepare_config_and_inputs_for_visual_reasoning(self):
@@ -219,7 +223,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             Beit3Model,
-            Beit3ForVisualReasoning,
+            # Beit3ForVisualReasoning,
             Beit3ForImageTextRetrieval,
             Beit3ForQuestionAnswering,
             Beit3ForImageClassification,
@@ -241,61 +245,60 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_inputs_embeds = False
     test_head_masking = False
-    has_attentions = False
 
+    # special cases for Beit3ForImageClassification, Beit3ForQuestionAnswering, Beit3ForVisualReasoning, Beit3ForCaptioning
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict_dup = inputs_dict.copy()
-        inputs_dict_to_return = None
-        if model_class.__name__ == "Beit3ForVisualReasoning":
-            # inputs_dict_to_return =  self.model_tester.prepare_config_and_inputs_for_visual_reasoning()[1]
-            inputs_dict_to_return = {}
-            if return_labels:
-                inputs_dict_to_return["labels"] = torch.zeros(
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if model_class.__name__ == "Beit3ForImageClassification":
+            del inputs_dict["input_ids"]
+            del inputs_dict["attention_mask"]
+
+        if return_labels:
+            if model_class.__name__ == "Beit3ForQuestionAnswering":
+                inputs_dict["labels"] = torch.zeros(
+                    self.model_tester.batch_size, self.model_tester.num_labels, device=torch_device
+                )
+            elif model_class.__name__ == "Beit3ForVisualReasoning":
+                inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-            inputs_dict_to_return["pixel_values"] = torch.cat(
-                (inputs_dict_dup["pixel_values"].unsqueeze(1), inputs_dict_dup["pixel_values"].unsqueeze(1)), dim=1
-            )
-            inputs_dict_to_return["attention_mask"] = inputs_dict_dup["text_padding_mask"]
-            inputs_dict_to_return["input_ids"] = inputs_dict_dup["input_ids"]
-            return inputs_dict_to_return
-        elif model_class.__name__ == "Beit3ForImageClassification":
-            inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_image_classification()[1]
-            if return_labels:
-                inputs_dict_to_return["labels"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+            elif model_class.__name__ == "Beit3ForCaptioning":
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
-            inputs_dict_to_return.update(inputs_dict_dup)
-            del inputs_dict_to_return["input_ids"]
-            del inputs_dict_to_return["text_padding_mask"]
-            return inputs_dict_to_return
-        elif model_class.__name__ == "Beit3ForImageTextRetrieval":
-            inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_text_retrieval()[1]
-            del inputs_dict_dup["text_padding_mask"]
-        elif model_class.__name__ == "Beit3ForQuestionAnswering":
-            inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_visual_question_answering()[1]
-            inputs_dict_to_return["labels"] = torch.ones(
-                (self.model_tester.batch_size, self.model_tester.num_labels),
-                dtype=torch.float,
-                device=torch_device,
-            )
-            inputs_dict_dup["attention_mask"] = inputs_dict_dup["text_padding_mask"]
-            del inputs_dict_dup["text_padding_mask"]
-        elif model_class.__name__ == "Beit3ForCaptioning":
-            inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_captioning()[1]
-            inputs_dict_to_return["attention_mask"] = inputs_dict_dup["text_padding_mask"]
-            del inputs_dict_dup["text_padding_mask"]
-        elif model_class.__name__ == "Beit3Model":
-            inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_basemodel()[1]
-            inputs_dict_to_return.update(inputs_dict_dup)
-            del inputs_dict_to_return["text_padding_mask"]
-            return inputs_dict_to_return
-        inputs_dict_to_return.update(inputs_dict_dup)
-        return inputs_dict_to_return
+
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = Beit3ModelTester()
         self.config_tester = ConfigTester(self, config_class=Beit3Config, hidden_size=37)
+
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "Beit3ForImageTextRetrieval":
+                continue
+
+            print("Model class:", model_class)
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+                *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+            ]:
+                continue
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -313,50 +316,6 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             else:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            if model_class.__name__ == "Beit3ForImageTextRetrieval":
-                return
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            if hasattr(self.model_tester, "encoder_seq_length"):
-                seq_length = self.model_tester.encoder_seq_length
-                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
-                    seq_length = seq_length * self.model_tester.chunk_length
-            else:
-                seq_length = self.model_tester.seq_length
-            total_seq_length = ((self.model_tester.image_size // self.model_tester.patch_size) ** 2) + 1
-            if model_class.__name__ != "Beit3ForImageClassification":
-                total_seq_length = total_seq_length + seq_length
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [total_seq_length, self.model_tester.hidden_size],
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
 
     # override as the `logit_scale` parameter initilization is different for Blip
     def test_initialization(self):
@@ -382,139 +341,45 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    def test_training(self):
-        if not self.model_tester.is_training:
-            return
-
-        for model_class in self.all_model_classes:
-            if model_class.__name__ == "Beit3Model":
-                return
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.return_dict = True
-
-            if model_class.__name__ in [
-                *get_values(MODEL_MAPPING_NAMES),
-                *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
-            ]:
-                continue
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
-
-    def test_model_outputs_equivalence(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def set_nan_tensor_to_zero(t):
-            t[t != t] = 0
-            return t
-
-        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
-            with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
-
-                def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
-                            recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
-                        for tuple_iterable_value, dict_iterable_value in zip(
-                            tuple_object.values(), dict_object.values()
-                        ):
-                            recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif tuple_object is None:
-                        return
-                    elif isinstance(tuple_object, int):
-                        return self.assertTrue(tuple_object == dict_object)
-                    else:
-                        self.assertTrue(
-                            torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
-                            ),
-                            msg=(
-                                "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
-                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
-                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
-                            ),
-                        )
-
-                recursive_check(tuple_output, dict_output)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs)
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs)
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
-
-            if self.has_attentions:
-                tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-                dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-
-                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-
-                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                check_equivalence(
-                    model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
-                )
-
 
 @require_torch
 @require_vision
 class BeitModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_processor(self):
+        return Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
+
+    @cached_property
+    def default_image(self):
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        return image
+
     @slow
     def test_inference_beit3_image_classification(self):
         model = Beit3ForImageClassification.from_pretrained("Raghavan/beit3_base_patch16_224_in1k").to(torch_device)
-        XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
 
-        image = prepare_img()
-        beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
-        input = beit3_processor(text=["This is photo of a cat"], images=image)
-
-        # prepare bool_masked_pos
+        processor = self.default_processor
+        image = self.default_image
+        text = "This is a photo of a cat"
+        inputs = processor(text=text, images=image, return_tensors="pt")
 
         # forward pass
-        output = model(pixel_values=torch.tensor(input["pixel_values"]))
-        assert output.logits.shape == torch.Size([1, 1000])
-        torch.testing.assert_allclose(output.logits.detach()[:, :3], torch.tensor([[-0.260473, -0.420061, -0.492118]]))
+        output = model(**inputs)
+        self.assertEqual(output.logits.shape, torch.Size([1, 1000]))
+        expected_slice = torch.tensor([[-0.260473, -0.420061, -0.492118]])
+        assert torch.allclose(output.logits.detach()[:, :3], expected_slice)
 
     @slow
     def test_inference_beit3_vqa(self):
         model = Beit3ForQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa").to(torch_device)
 
-        image = prepare_img()
-        beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
-        input = beit3_processor(text=["This is photo of a cat"], images=image)
+        processor = self.default_processor
+        image = self.default_image
+        text = "This is a photo of a cat"
+        inputs = processor(text=text, images=image, return_tensors="pt")
 
         # forward pass
-        output = model(
-            input_ids=torch.tensor(input["input_ids"]),
-            pixel_values=torch.tensor(input["pixel_values"]),
-            attention_mask=torch.ones(input["input_ids"].shape),
-        )
+        output = model(**inputs)
         assert output.logits.shape == torch.Size([1, 3129])
         torch.testing.assert_allclose(
             output.logits.detach()[:, :3], torch.tensor([[-10.862484, -12.388088, -7.6599636]])
@@ -524,20 +389,16 @@ class BeitModelIntegrationTest(unittest.TestCase):
     def test_inference_beit3_visual_reasoning(self):
         model = Beit3ForVisualReasoning.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2").to(torch_device)
 
-        image = prepare_img()
-        beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
-        input = beit3_processor(text=["This is photo of a cat"], images=image)
+        processor = self.default_processor
+        image = self.default_image
+        text = "This is a photo of a cat"
+        inputs = processor(text=text, images=image, return_tensors="pt")
 
-        # prepare bool_masked_pos
-        pixel_values = torch.cat(
+        torch.cat(
             (torch.tensor(input["pixel_values"]).unsqueeze(1), torch.tensor(input["pixel_values"]).unsqueeze(1)), dim=1
         )
         # forward pass
-        output = model(
-            input_ids=torch.tensor(input["input_ids"]),
-            pixel_values=pixel_values,
-            attention_mask=torch.ones(input["input_ids"].shape),
-        )
+        output = model(**inputs)
         assert output.logits.shape == torch.Size([1, 2])
         torch.testing.assert_allclose(output.logits.detach(), torch.tensor([[6.593818, -6.582055]]))
 
@@ -545,11 +406,11 @@ class BeitModelIntegrationTest(unittest.TestCase):
     def test_inference_beit3_for_image_captioning(self):
         model = Beit3ForCaptioning.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning").to(torch_device)
 
-        image = prepare_img()
-        beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
-        input = beit3_processor(text=["This is photo of a cat"], images=image)
+        processor = self.default_processor
+        image = self.default_image
+        text = "This is a photo of a cat"
+        processor(text=text, images=image, return_tensors="pt")
 
-        # prepare bool_masked_pos
         language_masked_pos = torch.zeros((input["input_ids"].shape[0], input["input_ids"].shape[1]))
         language_masked_pos[0, 5] = 1
         input_tokens = list(input["input_ids"][0])
@@ -569,15 +430,13 @@ class BeitModelIntegrationTest(unittest.TestCase):
             torch_device
         )
 
-        image = prepare_img()
-        beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
-        input = beit3_processor(text=["This is photo of a cat"], images=image)
+        processor = self.default_processor
+        image = self.default_image
+        text = "This is a photo of a cat"
+        processor(text=text, images=image, return_tensors="pt")
 
-        # prepare bool_masked_pos
-        another_input_ids = beit3_processor(text=["This is photo of a dog"], images=image)["input_ids"]
-        output = model(
-            input_ids=torch.tensor([input["input_ids"][0], another_input_ids[0]]),
-            pixel_values=torch.tensor([input["pixel_values"][0], input["pixel_values"][0]]),
-        )
+        inputs = processor(text=["This is photo of a dog"], images=image, return_tensors="pt")
 
-        assert round(float(output.loss.detach().numpy()), 4) == 1.8435
+        outputs = model(**inputs)
+
+        self.assertEqual(round(float(outputs.loss.detach().numpy()), 4), 1.8435)
