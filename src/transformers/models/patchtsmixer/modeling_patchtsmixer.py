@@ -368,6 +368,8 @@ class PatchMixerBlock(nn.Module):
             data = data.transpose(1, 2)
         elif self.mode in ["common_channel", "mix_channel"]:
             data = data.transpose(2, 3)
+        else:
+            raise ValueError(f"self.mode has to be one of ['flatten', 'common_channel', 'mix_channel'], but is {self.mode}.")
 
         data = self.mlp(data)
 
@@ -379,6 +381,8 @@ class PatchMixerBlock(nn.Module):
             data = data.transpose(1, 2)
         elif self.mode in ["common_channel", "mix_channel"]:
             data = data.transpose(2, 3)
+        else:
+            raise ValueError(f"self.mode has to be one of ['flatten', 'common_channel', 'mix_channel'], but is {self.mode}.")
 
         if self.self_attn:
             data = self.norm_attn(data + x_attn)
@@ -884,6 +888,8 @@ class PretrainHead(nn.Module):
         elif self.mode in ["common_channel", "mix_channel"]:
             forecast = self.base_pt_block(hidden_features)  # [batch_size x n_vars x num_patch x patch_len]
             return forecast
+        else:
+            raise ValueError(f"self.mode has to be one of ['flatten', 'common_channel', 'mix_channel'], but is {self.mode}.")
 
 
 # TODO: add copied from after PatchTST master merge
