@@ -469,9 +469,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             output_range=None,
             head_agg=None,
             scaling="std",
-            use_pe=False,
-            pe="sincos",
-            learn_pe=True,
+            use_positional_encoding=False,
+            positional_encoding="sincos",
+            learn_positional_encoding=True,
             self_attn=False,
             self_attn_heads=1,
             num_parallel_samples=4,
@@ -804,9 +804,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         params = self.__class__.params.copy()
         params.update(
             self_attn=True,
-            use_pe=True,
-            pe="sincos",
-            learn_pe=True,
+            use_positional_encoding=True,
+            positional_encoding="sincos",
+            learn_positional_encoding=True,
         )
         self.forecast_full_module(params, output_hidden_states=True)
 

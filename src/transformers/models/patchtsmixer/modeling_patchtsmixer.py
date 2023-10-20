@@ -550,12 +550,9 @@ class PatchTSMixer(nn.Module):
         num_features = config.num_features
         num_layers = config.num_layers
         mode = config.mode
-        use_pe = config.use_pe
-        pe = config.pe
-        learn_pe = config.learn_pe
 
         self.mode = mode
-        self.use_pe = use_pe
+        self.use_positional_encoding = config.use_positional_encoding
 
         if mode == "flatten":
             self.patcher = nn.Linear(input_size * patch_len, num_features)
@@ -573,8 +570,10 @@ class PatchTSMixer(nn.Module):
             config=config,
         )
 
-        if use_pe:
-            self.W_pos = positional_encoding(pe, learn_pe, num_patches, num_features)
+        if self.use_positional_encoding:
+            self.position_enc = positional_encoding(
+                config.positional_encoding, config.learn_positional_encoding, num_patches, num_features
+            )
 
     def forward(self, input_ts, output_hidden_states: bool = False):
         # input_ts: [bs  x n_vars x num_patch x patch_len]
@@ -591,8 +590,8 @@ class PatchTSMixer(nn.Module):
             input_ts
         )  # flatten: [bs x num_patch x num_features]   common_channel/mix_channel: [bs x n_vars x num_patch x num_features]
 
-        if self.use_pe:
-            patches = patches + self.W_pos
+        if self.use_positional_encoding:
+            patches = patches + self.position_enc
 
         embedding, all_hidden_states = self.mlp_mixer_encoder(patches, output_hidden_states=output_hidden_states)
 
@@ -894,35 +893,35 @@ class PretrainHead(nn.Module):
 
 
 # TODO: add copied from after PatchTST master merge
-def positional_encoding(pe, learn_pe, q_len, d_model):
+def positional_encoding(position_embedding_type, learned, q_len, d_model):
     # Positional encoding
-    if pe is None:
-        w_pos = torch.empty((q_len, d_model))  # pe = None and learn_pe = False can be used to measure impact of pe
-        nn.init.uniform_(w_pos, -0.02, 0.02)
-        learn_pe = False
-    elif pe == "zeros":
-        w_pos = torch.empty((q_len, d_model))
-        nn.init.uniform_(w_pos, -0.02, 0.02)
-    elif pe == "normal":
-        w_pos = torch.zeros((q_len, 1))
-        torch.nn.init.normal_(w_pos, mean=0.0, std=0.1)
-    elif pe == "uniform":
-        w_pos = torch.zeros((q_len, 1))
-        nn.init.uniform_(w_pos, a=0.0, b=0.1)
-    elif pe == "sincos":
-        pos_enc = torch.zeros(q_len, d_model)
+    if position_embedding_type is None:
+        # position_embedding_type = None and learned = False can be used to measure impact of positional encoding
+        position_enc = torch.empty((q_len, d_model))
+        nn.init.uniform_(position_enc, -0.02, 0.02)
+        learned = False
+    elif position_embedding_type == "zeros":
+        position_enc = torch.empty((q_len, d_model))
+        nn.init.uniform_(position_enc, -0.02, 0.02)
+    elif position_embedding_type == "normal":
+        position_enc = torch.zeros((q_len, 1))
+        nn.init.normal_(position_enc, mean=0.0, std=0.1)
+    elif position_embedding_type == "uniform":
+        position_enc = torch.zeros((q_len, 1))
+        nn.init.uniform_(position_enc, a=0.0, b=0.1)
+    elif position_embedding_type == "sincos":
+        position_enc = torch.zeros(q_len, d_model)
         position = torch.arange(0, q_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model))
-        pos_enc[:, 0::2] = torch.sin(position * div_term)
-        pos_enc[:, 1::2] = torch.cos(position * div_term)
-        pos_enc = pos_enc - pos_enc.mean()
-        pos_enc = pos_enc / (pos_enc.std() * 10)
-        w_pos = pos_enc
+        position_enc[:, 0::2] = torch.sin(position * div_term)
+        position_enc[:, 1::2] = torch.cos(position * div_term)
+        position_enc = position_enc - position_enc.mean()
+        position_enc = position_enc / (position_enc.std() * 10)
     else:
         raise ValueError(
-            f"{pe} is not a valid positional encoder. Available types are 'normal', 'zeros', 'zero', uniform', 'sincos', None."
+            f"{position_embedding_type} is not a valid positional encoder. Available types are 'normal', 'zeros', 'zero', uniform', 'sincos', None."
         )
-    return nn.Parameter(w_pos, requires_grad=learn_pe)
+    return nn.Parameter(position_enc, requires_grad=learned)
 
 
 # TODO: add copied from after PatchTST master merge

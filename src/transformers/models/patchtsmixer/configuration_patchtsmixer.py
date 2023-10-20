@@ -82,14 +82,14 @@ class PatchTSMixerConfig(PretrainedConfig):
             across patches.
         self_attn_heads (`int`, *optional*, defaults to 1):
             Number of self-attention heads. Works only when `self_attn` is set to `True`.
-        use_pe (`bool`, *optional*, defaults to `False`):
+        use_positional_encoding (`bool`, *optional*, defaults to `False`):
             Enable the use of positional embedding for the tiny self-attention layers. Works only when `self_attn` is
             set to `True`.
-        pe (`str`, *optional*, defaults to `"zeros"`):
+        positional_encoding (`str`, *optional*, defaults to `"zeros"`):
             Type of positional encoding. Allowed values are `None`, "zeros", "normal", "uniform", "sincos". Works only
-            when `use_pe` is set to `True`
-        learn_pe (`bool`, *optional*, defaults to `False`):
-            Whether to learn the positional encoding. Works only when `use_pe` is set to `True`
+            when `use_positional_encoding` is set to `True`
+        learn_positional_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to learn the positional encoding. Works only when `use_positional_encoding` is set to `True`
         mask_type (`str`, *optional*, defaults to `"random"`):
             Type of masking to use for Masked Pretraining mode. Allowed values are "random", "forecast". In Random
             masking, points are maskes random. In Forecast masking, Points are masked towards the end.
@@ -176,9 +176,9 @@ class PatchTSMixerConfig(PretrainedConfig):
         norm_mlp: str = "LayerNorm",
         self_attn: bool = False,
         self_attn_heads: int = 1,
-        use_pe: bool = False,
-        pe: str = "zeros",
-        learn_pe: bool = False,
+        use_positional_encoding: bool = False,
+        positional_encoding: str = "zeros",
+        learn_positional_encoding: bool = False,
         mask_type: str = "random",
         mask_ratio=0.5,
         mask_patches: list = [2, 3],
@@ -233,9 +233,9 @@ class PatchTSMixerConfig(PretrainedConfig):
         # patching related
         self.patch_last = True
 
-        self.use_pe = use_pe
-        self.pe = pe
-        self.learn_pe = learn_pe
+        self.use_positional_encoding = use_positional_encoding
+        self.positional_encoding = positional_encoding
+        self.learn_positional_encoding = learn_positional_encoding
 
         # forecast/prediction related
         self.forecast_len = forecast_len
