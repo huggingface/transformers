@@ -4995,7 +4995,6 @@ if TYPE_CHECKING:
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
-        from .models.rwkv import RWKVWorldTokenizer
         from .tokenization_utils_fast import PreTrainedTokenizerFast
 
     try:

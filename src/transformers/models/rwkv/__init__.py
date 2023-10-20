@@ -37,7 +37,6 @@ else:
         "RwkvForCausalLM",
         "RwkvModel",
         "RwkvPreTrainedModel",
-        "RWKVWorldTokenizer",
     ]
 
 

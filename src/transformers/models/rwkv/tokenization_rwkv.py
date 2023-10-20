@@ -56,7 +56,7 @@ VOCAB_FILES_NAMES = {
 }
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "rwkv": "https://huggingface.co/RWKV/rwkv-5-world-169m/blob/main/rwkv_vocab_v20230424.json",
+        "RWKV/rwkv-5-world-169m": "https://huggingface.co/RWKV/rwkv-5-world-169m/blob/main/rwkv_vocab_v20230424.json",
     },
 }
 
@@ -248,7 +248,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
     ```python
     >>> from transformers import RWKVWorldTokenizer
 
-    >>> tokenizer = RWKVWorldTokenizer.from_pretrained("rwkv")
+    >>> tokenizer = RWKVWorldTokenizer.from_pretrained("RWKV/rwkv-5-world-169m")
     >>> tokenizer("Hello world")["input_ids"]
     [33155, 40213]
 
@@ -289,6 +289,14 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
             **kwargs
     ):
         self.add_bos_token = False
+        self._bos_token = None
+        self._eos_token = None
+        self._unk_token = None
+        self._sep_token = None
+        self._pad_token = None
+        self._cls_token = None
+        self._mask_token = None
+        self._additional_special_tokens = []
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}

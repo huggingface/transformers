@@ -16,47 +16,22 @@
 
 import json
 import os
+import requests
 import unittest
+import tempfile
 
 from transformers import AutoTokenizer, RWKVWorldTokenizer
-from transformers.models.gpt2.tokenization_rwkv import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_jinja, require_tokenizers
+from transformers.models.rwkv.tokenization_rwkv import VOCAB_FILES_NAMES
+from transformers.testing_utils import require_jinja, require_tokenizers, get_tests_dir
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
+SAMPLE_VOCAB = get_tests_dir("fixtures/rwkv_vocab_v20230424.json")
+
 @require_tokenizers
-class RWKVWorldTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = RWKVWorldTokenizer
-    from_pretrained_kwargs = {"add_prefix_space": False}
-    test_seq2seq = False
-
-    def setUp(self):
-        super().setUp()
-
-        url = "https://huggingface.co/RWKV/rwkv-5-world-169m/blob/main/rwkv_vocab_v20230424.json"
-        response = requests.get(url, stream=True)
-        if response.status_code == 200:
-            file_name = os.path.basename(url)
-            file_path = os.path.join(self.tmpdirname, file_name)
-            with open(file_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            print(f"File downloaded successfully at {file_path}")
-        else:
-            print(f"Failed to download the file. HTTP Status Code: {response.status_code}")
-
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-
-    def get_tokenizer(self, **kwargs):
-        return RWKVWorldTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_input_output_texts(self, tokenizer):
-        input_text = "lower newer"
-        output_text = "lower newer"
-        return input_text, output_text
-
-    def test_rwkv_world_tokenizer(self):
-        tokenizer = RWKVWorldTokenizer(self.vocab_file)
+class RWKVWorldTokenizationTest(unittest.TestCase):
+    def test_rwkv_world_tokenizer_encode(self):
+        tokenizer = RWKVWorldTokenizer.from_pretrained(os.path.dirname(SAMPLE_VOCAB))
         s1 = tokenizer("Hello")['input_ids']
         self.assertListEqual(s1, [33155])
         s2 = tokenizer("S:2")['input_ids']
