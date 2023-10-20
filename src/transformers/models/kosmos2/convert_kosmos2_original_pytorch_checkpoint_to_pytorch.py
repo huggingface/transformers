@@ -54,6 +54,8 @@ def convert_kosmos2_checkpoint_to_pytorch(checkpoint_path, pytorch_dump_folder_p
     state_dict_keys = list(state_dict.keys())
 
     config = Kosmos2Config()
+    # This is necessary to match the results given by the original demo
+    config.text_config.no_repeat_ngram_size = 3
     model = Kosmos2ForConditionalGeneration(config)
 
     # convert (by renaming keys)
