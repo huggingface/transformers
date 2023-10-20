@@ -10,3 +10,7 @@
   - local: accelerate
     title: 加速分布式训练
   title: 教程
+- sections:
+  - local: fast_tokenizers
+    title: 使用 🤗 Tokenizers 中的分词器
+  title: 开发者指南
