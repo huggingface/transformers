@@ -423,13 +423,9 @@ class FalconAttention(nn.Module):
 
         batch_size, query_length, _, _ = query_layer.shape
 
-        query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, query_length, self.head_dim)
-        key_layer = key_layer.transpose(1, 2).reshape(
-            batch_size * num_kv_heads,
-            query_length,
-            self.head_dim,
-        )
-        value_layer = value_layer.transpose(1, 2).reshape(batch_size * num_kv_heads, query_length, self.head_dim)
+        query_layer = query_layer.transpose(1, 2).reshape(batch_size, self.num_heads, query_length, self.head_dim)
+        key_layer = key_layer.transpose(1, 2).reshape(batch_size, num_kv_heads, query_length, self.head_dim)
+        value_layer = value_layer.transpose(1, 2).reshape(batch_size, num_kv_heads, query_length, self.head_dim)
 
         kv_seq_len = key_layer.shape[-2]
         if layer_past is not None:
@@ -441,12 +437,12 @@ class FalconAttention(nn.Module):
         if layer_past is not None:
             past_key, past_value = layer_past
             # concatenate along seq_length dimension:
-            #  - key: [batch_size * self.num_heads, kv_length, head_dim]
-            #  - value: [batch_size * self.num_heads, kv_length, head_dim]
-            key_layer = torch.cat((past_key, key_layer), dim=1)
-            value_layer = torch.cat((past_value, value_layer), dim=1)
+            #  - key: [batch_size, self.num_heads, kv_length, head_dim]
+            #  - value: [batch_size, self.num_heads, kv_length, head_dim]
+            key_layer = torch.cat((past_key, key_layer), dim=-2)
+            value_layer = torch.cat((past_value, value_layer), dim=-2)
 
-        _, kv_length, _ = key_layer.shape
+        kv_length = key_layer.shape[-2]
         if use_cache:
             present = (key_layer, value_layer)
         else:
@@ -454,10 +450,6 @@ class FalconAttention(nn.Module):
 
         float_min = torch.finfo(query_layer.dtype).min
         attention_mask_float = (attention_mask * 1.0).masked_fill(attention_mask, float_min).to(query_layer.dtype)
-
-        query_layer_ = query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim)
-        key_layer_ = key_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim)
-        value_layer_ = value_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim)
 
         if alibi is None:
             if hasattr(F, "scaled_dot_product_attention") and not output_attentions:
@@ -469,17 +461,17 @@ class FalconAttention(nn.Module):
                 )
 
                 attn_output = F.scaled_dot_product_attention(
-                    query_layer_, key_layer_, value_layer_, attention_mask_float, 0.0, is_causal=False
+                    query_layer, key_layer, value_layer, attention_mask_float, 0.0, is_causal=False
                 )
                 attention_scores = None
             else:
-                attention_scores = query_layer_ @ key_layer_.transpose(-1, -2)
+                attention_scores = query_layer @ key_layer.transpose(-1, -2)
                 attention_scores /= math.sqrt(self.head_dim)
 
                 attention_scores = F.softmax(
                     attention_scores + attention_mask_float, dim=-1, dtype=hidden_states.dtype
                 )
-                attn_output = attention_scores @ value_layer_
+                attn_output = attention_scores @ value_layer
 
             attn_output = attn_output.view(batch_size, self.num_heads, query_length, self.head_dim)
             attn_output = attn_output.permute(0, 2, 1, 3)
@@ -493,7 +485,7 @@ class FalconAttention(nn.Module):
                 return output_tensor, present
 
         else:
-            matmul_result = query_layer_ @ key_layer_.transpose(-1, -2)
+            matmul_result = query_layer @ key_layer.transpose(-1, -2)
 
             # change view to [batch_size, num_heads, q_length, kv_length]
             attention_scores = matmul_result.view(batch_size, self.num_heads, query_length, kv_length)
@@ -520,7 +512,7 @@ class FalconAttention(nn.Module):
             attention_probs_reshaped = attention_probs.view(batch_size, self.num_heads, query_length, kv_length)
 
             # matmul: [batch_size * num_heads, q_length, head_dim]
-            context_layer = (attention_probs_reshaped @ value_layer_).flatten(0, 1)
+            context_layer = (attention_probs_reshaped @ value_layer).flatten(0, 1)
 
             # change view [batch_size, q_length, num_heads * head_dim]
             context_layer = self._merge_heads(context_layer)
@@ -559,13 +551,9 @@ class FalconFlashAttention2(FalconAttention):
 
         batch_size, query_length, _, _ = query_layer.shape
 
-        query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, query_length, self.head_dim)
-        key_layer = key_layer.transpose(1, 2).reshape(
-            batch_size * num_kv_heads,
-            query_length,
-            self.head_dim,
-        )
-        value_layer = value_layer.transpose(1, 2).reshape(batch_size * num_kv_heads, query_length, self.head_dim)
+        query_layer = query_layer.transpose(1, 2).reshape(batch_size, self.num_heads, query_length, self.head_dim)
+        key_layer = key_layer.transpose(1, 2).reshape(batch_size, num_kv_heads, query_length, self.head_dim)
+        value_layer = value_layer.transpose(1, 2).reshape(batch_size, num_kv_heads, query_length, self.head_dim)
 
         kv_seq_len = key_layer.shape[-2]
         if layer_past is not None:
@@ -577,22 +565,12 @@ class FalconFlashAttention2(FalconAttention):
         if layer_past is not None and use_cache:
             past_key, past_value = layer_past
             # concatenate along seq_length dimension:
-            #  - key: [batch_size * self.num_heads, kv_length, head_dim]
-            #  - value: [batch_size * self.num_heads, kv_length, head_dim]
-            key_layer = torch.cat((past_key, key_layer), dim=1)
-            value_layer = torch.cat((past_value, value_layer), dim=1)
-
-        _, kv_seq_length, _ = key_layer.shape
-
-        torch_dtype = query_layer.dtype
+            #  - key: [batch_size, self.num_heads, kv_length, head_dim]
+            #  - value: [batch_size, self.num_heads, kv_length, head_dim]
+            key_layer = torch.cat((past_key, key_layer), dim=-2)
+            value_layer = torch.cat((past_value, value_layer), dim=-2)
 
         past_key_value = (key_layer, value_layer) if use_cache else None
-
-        query_layer = (
-            query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim).transpose(1, 2).to(torch_dtype)
-        )
-        key_layer = key_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim).transpose(1, 2).to(torch_dtype)
-        value_layer = value_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim).transpose(1, 2).to(torch_dtype)
 
         if alibi is not None:
             raise ValueError("`alibi` is not supported when `use_flash_attn` is True")
@@ -940,42 +918,6 @@ class FalconPreTrainedModel(PreTrainedModel):
         if isinstance(module, FalconModel):
             module.gradient_checkpointing = value
 
-    @staticmethod
-    def _convert_cache_to_standard_format(
-        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]], batch_size: int
-    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
-        """
-        Standardizes the format of the cache so as to match most implementations, i.e. to tuple(tuple([batch_size,
-        num_heads, ...]))
-        """
-        batch_size_times_num_heads, kv_length, head_dim = past_key_value[0][0].shape
-        # [batch_size * self.num_heads, kv_length, head_dim] -> [batch_size, num_heads, kv_length, head_dim]
-        # Note that don't want to use self.num_attention_heads because the number of heads may vary depending
-        # on whether we use multi_query attention.
-        num_heads = batch_size_times_num_heads // batch_size
-        return tuple(
-            (
-                layer_past[0].view(batch_size, num_heads, kv_length, head_dim),
-                layer_past[1].view(batch_size, num_heads, kv_length, head_dim),
-            )
-            for layer_past in past_key_value
-        )
-
-    @staticmethod
-    def _convert_to_rw_cache(
-        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]]
-    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
-        batch_size, num_heads, kv_length, head_dim = past_key_value[0][0].shape
-        batch_size_times_num_heads = batch_size * num_heads
-        # [batch_size, num_heads, kv_length, head_dim] -> [batch_size * num_heads, kv_length, head_dim]
-        return tuple(
-            (
-                layer_past[0].view(batch_size_times_num_heads, kv_length, head_dim),
-                layer_past[1].view(batch_size_times_num_heads, kv_length, head_dim),
-            )
-            for layer_past in past_key_value
-        )
-
 
 @add_start_docstrings(
     "The bare Falcon Model transformer outputting raw hidden-states without any specific head on top.",
@@ -1077,8 +1019,6 @@ class FalconModel(FalconPreTrainedModel):
 
         if past_key_values is None:
             past_key_values = tuple([None] * len(self.h))
-        else:
-            past_key_values = self._convert_to_rw_cache(past_key_values)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -1104,7 +1044,7 @@ class FalconModel(FalconPreTrainedModel):
         # Compute alibi tensor: check build_alibi_tensor documentation
         past_key_values_length = 0
         if past_key_values[0] is not None:
-            past_key_values_length = past_key_values[0][0].shape[1]  # 1 because RW-cache, not standard format
+            past_key_values_length = past_key_values[0][0].shape[-2]
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length + past_key_values_length), device=hidden_states.device)
             padding_mask = None
@@ -1180,9 +1120,6 @@ class FalconModel(FalconPreTrainedModel):
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if presents is not None:
-            presents = self._convert_cache_to_standard_format(presents, batch_size)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
