@@ -31,15 +31,13 @@ from flax.linen.initializers import ones
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
-from ...modeling_flax_outputs import (
-    FlaxBaseModelOutputWithPast,
-    FlaxCausalLMOutputWithCrossAttentions,
-    FlaxSequenceClassifierOutput,
-)
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, logging
+from ...modeling_flax_outputs import (FlaxBaseModelOutputWithPast,
+                                      FlaxCausalLMOutputWithCrossAttentions,
+                                      FlaxSequenceClassifierOutput)
+from ...modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
+                                    append_call_sample_docstring, logging)
 from ...utils import add_start_docstrings
 from .configuration_mistral import MistralConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -67,7 +65,7 @@ MISTRAL_START_DOCSTRING = r"""
         config ([`MistralConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
-        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `float32`):
             The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16`, or
             `jax.numpy.bfloat16`.
 
@@ -386,8 +384,8 @@ class FlaxMistralDecoderLayer(nn.Module):
     ) -> Tuple[jnp.ndarray, Optional[Tuple[jnp.ndarray, jnp.ndarray]]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+            hidden_states (`jnp.ndarray`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`jnp.ndarray`, *optional*): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -395,7 +393,7 @@ class FlaxMistralDecoderLayer(nn.Module):
             init_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_value (`Tuple(jnp.ndarray)`, *optional*): cached past key and value projection states
         """
 
         residual = hidden_states
@@ -438,9 +436,9 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: MistralConfig,
-        input_shape: Tuple = (1, 5),
-        seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        _input_shape: Tuple = (1, 1),
+        _seed: int = 0,
         _do_init: bool = True,
         **kwargs,
     ):
@@ -449,7 +447,7 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
             dtype=dtype,
             **kwargs,
         )
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+        super().__init__(config, module, input_shape=_input_shape, seed=_seed, dtype=dtype, _do_init=_do_init)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
@@ -493,7 +491,6 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    # @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
         self,
         input_ids,
