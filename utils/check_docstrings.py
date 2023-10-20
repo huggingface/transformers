@@ -467,7 +467,6 @@ OBJECTS_TO_IGNORE = [
     "SpecialTokensMixin",
     "Speech2Text2Config",
     "Speech2Text2Tokenizer",
-    "Speech2TextConfig",
     "Speech2TextTokenizer",
     "SpeechEncoderDecoderModel",
     "SpeechT5Config",
