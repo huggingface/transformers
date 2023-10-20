@@ -1381,7 +1381,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
 
                 - 1 for values that are **observed**,
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            output_hidden_states (`bool`, *optional*, default to False):
+            output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
@@ -1447,7 +1447,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
 
                 - 1 for values that are **observed**,
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            output_hidden_states (`bool`, *optional*, default to False):
+            output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
@@ -1612,7 +1612,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             future_values (`torch.Tensor` of shape `(bs, pred_len, num_output_channels)`, *optional*):
                 future target values associates with the `past_values`
-            output_hidden_states (`bool`, *optional*, default to False):
+            output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
@@ -1820,7 +1820,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             future_values (`torch.Tensor` of shape `(bs, forecast_len, num_input_channels)`, *optional*):
                 future target values associates with the `past_values`
-            output_hidden_states (`bool`, *optional*, default to False):
+            output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
@@ -2015,7 +2015,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             labels (`torch.Tensor` of shape `(bs, num_input_channels)`, *optional*):
                 target labels associates with the `past_values`
-            output_hidden_states (`bool`, *optional*, default to False):
+            output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
