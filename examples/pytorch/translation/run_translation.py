@@ -364,15 +364,17 @@ def main():
         data_files = {}
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
-            builder_name = data_args.train_file.split(".")[-1]
+            extension = data_args.train_file.split(".")[-1]
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
-            builder_name = data_args.validation_file.split(".")[-1]
+            extension = data_args.validation_file.split(".")[-1]
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
-            builder_name = data_args.test_file.split(".")[-1]
-        if builder_name == "jsonl":
-            builder_name = "json"
+            extension = data_args.test_file.split(".")[-1]
+        if extension == "jsonl":
+            builder_name = "json"  # the "json" builder reads both .json and .jsonl files
+        else:
+            builder_name = extension  # e.g. "parquet"
         raw_datasets = load_dataset(
             builder_name,
             data_files=data_files,
