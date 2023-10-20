@@ -77,32 +77,13 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(query, key, cos, sin, position_ids):
-    cos = cos[position_ids]  # [seq_len, dim] -> [batch_size, seq_len, head_dim]
-    sin = sin[position_ids]
-
-    # Query and key's shapes are [bs * num_heads, seq_len, dim], might need manual expansion. Ifs and elses used to
-    # avoid unnecessary repeat_interleave operations.
-    query_expansion_factor = int(query.shape[0] / cos.shape[0])
-    if query_expansion_factor > 1:
-        query_cos = torch.repeat_interleave(cos, query_expansion_factor, dim=0)
-        query_sin = torch.repeat_interleave(sin, query_expansion_factor, dim=0)
-    else:
-        query_cos, query_sin = cos, sin
-
-    key_expansion_factor = int(key.shape[0] / cos.shape[0])
-    if key_expansion_factor > 1:
-        if key_expansion_factor != query_expansion_factor:
-            key_cos = torch.repeat_interleave(cos, key_expansion_factor, dim=0)
-            key_sin = torch.repeat_interleave(sin, key_expansion_factor, dim=0)
-        else:
-            key_cos, key_sin = query_cos, query_sin
-    else:
-        key_cos, key_sin = cos, sin
-
-    query_embed = (query * query_cos) + (rotate_half(query) * query_sin)
-    key_embed = (key * key_cos) + (rotate_half(key) * key_sin)
-    return query_embed, key_embed
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.apply_rotary_pos_emb
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
+    cos = cos[position_ids].unsqueeze(1)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
+    sin = sin[position_ids].unsqueeze(1)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
