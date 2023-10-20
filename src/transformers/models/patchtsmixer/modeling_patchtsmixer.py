@@ -661,15 +661,13 @@ class ForecastHead(nn.Module):
 
             self.flatten = nn.Flatten(start_dim=1)
 
-    def forward(self, hidden_features, target=None):
+    def forward(self, hidden_features):
         """
 
         Args:
             hidden_features (`torch.Tensor` of shape `(batch_size x num_patch x num_features)` in `flatten` mode
                 or `(batch_size x n_vars x num_patch x num_features)` in `common_channel`/`mix_channel` mode.): Input
                 hidden features.
-            target (`torch.Tensor`, *optional*):
-                Target tensor.
 
         Returns:
             `torch.Tensor` of shape `(batch_size x forecast_len x nvars)`.
@@ -764,14 +762,12 @@ class LinearHead(nn.Module):
 
         self.dropout = nn.Dropout(head_dropout)
 
-    def forward(self, hidden_features, target=None):
+    def forward(self, hidden_features):
         """
         Args:
             hidden_features (`torch.Tensor` of shape `(batch_size x num_patch x num_features)` in `flatten` mode
                 or `(batch_size x n_vars x num_patch x num_features)` in `common_channel`/`mix_channel` mode.): Input
                 hidden features.
-            target (`torch.Tensor`, *optional*):
-                Target tensor.
 
         Returns:
             `torch.Tensor` of shape `(batch_size x output_dim)`.
@@ -859,14 +855,12 @@ class PretrainHead(nn.Module):
                 nn.Linear(num_features, patch_len * input_size),
             )
 
-    def forward(self, hidden_features, target=None):
+    def forward(self, hidden_features):
         """
         Args:
             hidden_features (`torch.Tensor` of shape `(batch_size x num_patch x num_features)` in `flatten` mode
                 or `(batch_size x n_vars x num_patch x num_features)` in `common_channel`/`mix_channel` mode.): Input
                 hidden features.
-            target (`torch.Tensor`, *optional*):
-                Target tensor.
 
         Returns:
             `torch.Tensor` of shape `(batch_size x n_vars x num_patch x patch_len)`.
