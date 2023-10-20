@@ -534,6 +534,7 @@ def pipeline(
     tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None,
     feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
     image_processor: Optional[Union[str, BaseImageProcessor]] = None,
+    qformer_tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None,
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
@@ -878,6 +879,7 @@ def pipeline(
     model_config = model.config
     hub_kwargs["_commit_hash"] = model.config._commit_hash
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
+    load_qformer_tokenizer = model_config.model_type == "instructblip"
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
     load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
 
@@ -966,6 +968,36 @@ def pipeline(
                 tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
             )
 
+    if load_qformer_tokenizer:
+        # Try to infer qformer_tokenizer from model or config name (if provided as str)
+        if qformer_tokenizer is None:
+            if isinstance(model_name, str):
+                qformer_tokenizer = model_name
+            elif isinstance(config, str):
+                qformer_tokenizer = config
+            else:
+                # Impossible to guess what is the right qformer_tokenizer here
+                raise Exception(
+                    "Impossible to guess which qformer_tokenizer to use. "
+                    "Please provide a PreTrainedTokenizer class or a path/identifier to a pretrained tokenizer."
+                )
+
+        # Instantiate qformer_tokenizer if needed
+        if isinstance(qformer_tokenizer, (str, tuple)):
+            if isinstance(qformer_tokenizer, tuple):
+                # For tuple we have (tokenizer name, {kwargs})
+                use_fast = qformer_tokenizer[1].pop("use_fast", use_fast)
+                tokenizer_identifier = qformer_tokenizer[0]
+                tokenizer_kwargs = qformer_tokenizer[1]
+            else:
+                tokenizer_identifier = qformer_tokenizer
+                tokenizer_kwargs = model_kwargs.copy()
+                tokenizer_kwargs.pop("torch_dtype", None)
+
+            qformer_tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer_identifier, subfolder="qformer_tokenizer", use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
+            )
+
     if load_image_processor:
         # Try to infer image processor from model or config name (if provided as str)
         if image_processor is None:
@@ -1052,6 +1084,9 @@ def pipeline(
 
     if tokenizer is not None:
         kwargs["tokenizer"] = tokenizer
+
+    if qformer_tokenizer is not None:
+        kwargs["qformer_tokenizer"] = qformer_tokenizer
 
     if feature_extractor is not None:
         kwargs["feature_extractor"] = feature_extractor
