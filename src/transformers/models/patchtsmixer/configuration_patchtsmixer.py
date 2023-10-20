@@ -117,7 +117,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         forecast_channel_indices (`list`, *optional*):
             List of channel indices to forecast. If None, forecast all channels. Target data is expected to have all
             channels and we explitly filter the channels in prediction and target before loss computation.
-        n_targets (`int`, *optional*, defaults to 3):
+        num_targets (`int`, *optional*, defaults to 3):
             Number of targets (dimensionality of the regressed variable) for a regression task.
         output_range (`list`, *optional*):
             Output range to restrict for the regression task. Defaults to None.
@@ -190,7 +190,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         head_dropout: float = 0.2,
         forecast_len: int = 16,
         forecast_channel_indices: list = None,
-        n_targets: int = 3,
+        num_targets: int = 3,
         output_range: list = None,
         head_agg: str = "max_pool",
         init_std: float = 0.02,
@@ -242,7 +242,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.forecast_channel_indices = forecast_channel_indices
 
         # classification/regression related
-        self.n_targets = n_targets
+        self.num_targets = num_targets
         self.output_range = output_range
         self.head_agg = head_agg
 

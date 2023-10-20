@@ -77,7 +77,7 @@ PATCHTSMIXER_INPUTS_DOCSTRING = r"""
             than 1.
 
         target_values (`torch.FloatTensor` of shape `(batch_size, target_len, input_size)` for forecasting,
-            `(batch_size, n_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target values
+            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target values
             of the time series, that serve as labels for the model. The `target_values` is what the Transformer needs
             during training to learn to output, given the `past_values`. Note that, this is NOT required for a
             pretraining task.
@@ -89,7 +89,7 @@ PATCHTSMIXER_INPUTS_DOCSTRING = r"""
 
             For a classification task, it has a shape of `(batch_size,)`.
 
-            For a regression task, it has a shape of `(batch_size, n_targets)`.
+            For a regression task, it has a shape of `(batch_size, num_targets)`.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers.
@@ -732,7 +732,7 @@ class LinearHead(nn.Module):
         input_size = config.input_size
         num_features = config.num_features
         head_dropout = config.head_dropout
-        output_dim = config.n_targets
+        output_dim = config.num_targets
         output_range = config.output_range
         head_agg = config.head_agg
         mode = config.mode
@@ -1704,7 +1704,7 @@ class SamplePatchTSMixerRegressionOutput(ModelOutput):
     distribution.
 
     Parameters:
-        sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, n_targets)`
+        sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, num_targets)`
                 Sampled values from the chosen distribution.
     """
 
@@ -2023,7 +2023,7 @@ class PatchTSMixerForRegressionOutput(ModelOutput):
     Output type of [`PatchTSMixerForRegressionOutput`].
 
     Args:
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, n_targets)`):
+        prediction_logits (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
             Prediction output from the regression head.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, num_features)`):
             Backbone embeddings before passing through the head.
@@ -2063,11 +2063,11 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             self.loss = nll
 
             if config.distribution_output == "student_t":
-                self.distribution_output = StudentTOutput(dim=config.n_targets)
+                self.distribution_output = StudentTOutput(dim=config.num_targets)
             elif config.distribution_output == "normal":
-                self.distribution_output = NormalOutput(dim=config.n_targets)
+                self.distribution_output = NormalOutput(dim=config.num_targets)
             elif config.distribution_output == "negative_binomial":
-                self.distribution_output = NegativeBinomialOutput(dim=config.n_targets)
+                self.distribution_output = NegativeBinomialOutput(dim=config.num_targets)
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
@@ -2098,14 +2098,14 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
     ) -> PatchTSMixerForRegressionOutput:
-        r"""
-
+        """
+        
         Returns:
 
         """
 
         # past_values: tensor [batch_size x seq_len x input_size]
-        # target_values: tensor [batch_size x n_targets]
+        # target_values: tensor [batch_size x num_targets]
 
         model_output = self.model(
             past_values,
@@ -2119,7 +2119,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
                 scale=model_output.scale,
             )  # x: [batch_size x nvars x num_patch x num_features]
 
-        y_hat = self.head(model_output.last_hidden_state)  # tensor [batch_size x n_targets]
+        y_hat = self.head(model_output.last_hidden_state)  # tensor [batch_size x num_targets]
 
         if target_values is not None and return_loss is True:
             if self.distribution_output:
@@ -2135,7 +2135,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             loss_val = None
 
         return PatchTSMixerForRegressionOutput(
-            prediction_logits=y_hat,  # tensor [batch_size x n_targets]
+            prediction_logits=y_hat,  # tensor [batch_size x num_targets]
             last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
@@ -2154,7 +2154,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
 
         Return:
             [`SamplePatchTSMixerRegressionOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
-            number of samples, n_targets)`.
+            number of samples, num_targets)`.
         """
         # get number of samples
         num_parallel_samples = self.config.num_parallel_samples
@@ -2172,7 +2172,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         # get samples
         samples = [
             distribution.sample() for _ in range(num_parallel_samples)
-        ]  # samples: list of [batch_size x n_targets]
+        ]  # samples: list of [batch_size x num_targets]
         # stack tensors
-        samples = torch.stack(samples, dim=1)  # [batch_size x num_samples x n_targets]
+        samples = torch.stack(samples, dim=1)  # [batch_size x num_samples x num_targets]
         return SamplePatchTSMixerRegressionOutput(sequences=samples)
