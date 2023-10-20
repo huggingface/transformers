@@ -31,13 +31,15 @@ from flax.linen.initializers import ones
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
-from ...modeling_flax_outputs import (FlaxBaseModelOutputWithPast,
-                                      FlaxCausalLMOutputWithCrossAttentions,
-                                      FlaxSequenceClassifierOutput)
-from ...modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
-                                    append_call_sample_docstring, logging)
+from ...modeling_flax_outputs import (
+    FlaxBaseModelOutputWithPast,
+    FlaxCausalLMOutputWithCrossAttentions,
+    FlaxSequenceClassifierOutput,
+)
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, logging
 from ...utils import add_start_docstrings
 from .configuration_mistral import MistralConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -187,13 +189,8 @@ def flax_rotate_half(x):
     return jnp.concatenate((-x2, x1), axis=-1)
 
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
-    cos = cos[position_ids].unsqueeze(1)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
-    sin = sin[position_ids].unsqueeze(1)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+def apply_rotary_pos_emb(tensor, sin_pos, cos_pos):
+    return (tensor * cos_pos) + (rotate_half(tensor) * sin_pos)
 
 
 def create_sinusoidal_positions(num_pos, dim):
@@ -211,10 +208,6 @@ def rotate_half(tensor):
         (-tensor[..., tensor.shape[-1] // 2 :], tensor[..., : tensor.shape[-1] // 2]), axis=-1
     )
     return rotate_half_tensor
-
-
-def apply_rotary_pos_emb(tensor, sin_pos, cos_pos):
-    return (tensor * cos_pos) + (rotate_half(tensor) * sin_pos)
 
 
 def flax_repeat_kv(hidden_states: jnp.ndarray, n_rep: int) -> jnp.ndarray:
