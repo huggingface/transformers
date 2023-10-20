@@ -24,7 +24,7 @@ from typing import Dict, List, Tuple
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
-from tokenizers.models import BPE, Unigram, WordPiece
+from tokenizers.models import BPE, Unigram, WordPiece, WordLevel
 
 from .utils import is_protobuf_available, requires_backends
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
@@ -130,6 +130,36 @@ class BertConverter(Converter):
             ],
         )
         tokenizer.decoder = decoders.WordPiece(prefix="##")
+
+        return tokenizer
+
+
+class MolformerConverter(Converter):
+    def converted(self) -> Tokenizer:
+        vocab = self.original_tokenizer.vocab
+        tokenizer = Tokenizer(WordLevel(vocab, unk_token=str(self.original_tokenizer.unk_token)))
+        tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Split(Regex(self.original_tokenizer.pattern), behavior="removed", invert=True),
+                pre_tokenizers.Split(Regex(self.original_tokenizer.pattern), behavior="isolated"),
+            ]
+        )
+
+        cls = str(self.original_tokenizer.cls_token)
+        sep = str(self.original_tokenizer.sep_token)
+        cls_token_id = self.original_tokenizer.cls_token_id
+        sep_token_id = self.original_tokenizer.sep_token_id
+
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{cls}:0 $A:0 {sep}:0",
+            pair=f"{cls}:0 $A:0 {sep}:0 $B:1 {sep}:1",
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+            ],
+        )
+        # remove spaces between tokens
+        tokenizer.decoder = decoders.Fuse()
 
         return tokenizer
 
@@ -1268,6 +1298,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "MBart50Tokenizer": MBart50Converter,
     "MPNetTokenizer": MPNetConverter,
     "MobileBertTokenizer": BertConverter,
+    "MolformerTokenizer": MolformerConverter,
     "MvpTokenizer": RobertaConverter,
     "NllbTokenizer": NllbConverter,
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
