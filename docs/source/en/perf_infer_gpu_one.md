@@ -36,7 +36,7 @@ FlashAttention-2 is experimental and may change considerably in future versions.
 1. additionally parallelizing the attention computation over sequence length
 2. partitioning the work between GPU threads to reduce communication and shared memory reads/writes between them
 
-FlashAttention-2 is supported inference with Llama, Mistral, and Falcon models. You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
+FlashAttention-2 is supports inference with Llama, Mistral, and Falcon models. You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
 
 Before you begin, make sure you have FlashAttention-2 installed (see the [installation](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features) guide for more details about prerequisites):
 
@@ -44,7 +44,7 @@ Before you begin, make sure you have FlashAttention-2 installed (see the [instal
 pip install flash-attn --no-build-isolation
 ```
 
-To enable FlashAttention 2, add the `use_flash_attention_2` parameter to [`~AutoModelForCausalLM.from_pretrained`]:
+To enable FlashAttention-2, add the `use_flash_attention_2` parameter to [`~AutoModelForCausalLM.from_pretrained`]:
 
 ```python
 import torch
@@ -136,7 +136,7 @@ Check out our benchmarks with BetterTransformer and scaled dot product attention
 
 BetterTransformer accelerates inference with its fastpath (native PyTorch specialized implementation of Transformer functions) execution. The two optimizations in the fastpath execution are:
 
-1. fusion combines multiple sequential operations into a single "kernel" to reduce the number of computation steps
+1. fusion, which combines multiple sequential operations into a single "kernel" to reduce the number of computation steps
 2. skipping the inherent sparsity of padding tokens to avoid unnecessary computation with nested tensors
 
 BetterTransformer also converts all attention operations to use the more memory-efficient [scaled dot product attention (SDPA)](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention), and it calls optimized kernerls like [FlashAttention](https://huggingface.co/papers/2205.14135) under the hood.
@@ -158,7 +158,7 @@ model.save_pretrained("saved_model")
 
 ### FlashAttention
 
-SDPA can also call FlashAttention kernels under the hood. FlashAttention can only be used for models using the `fp16` or `bf16` dtype, so make sure to cast your model to the appropriate dtype before using it. 
+SDPA can also call FlashAttention kernels under the hood. FlashAttention can only be used for models using the `fp16` or `bf16` dtype, so make sure to cast your model to the appropriate dtype before using it.
 
 To enable FlashAttention or to check whether it is available in a given setting (hardware, problem size), use [`torch.backends.cuda.sdp_kernel`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as a context manager:
 

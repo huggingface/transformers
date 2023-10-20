@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # CPU inference
 
-With some optimizations, it is possible to efficiently run large model inference on a CPU. One of these optimization techniques involve compiling the PyTorch code into an intermediate format that is better for high-performance environments like C++, and the other technique fuses multiple operations into one kernel to reduce the overhead of running each operation separately.
+With some optimizations, it is possible to efficiently run large model inference on a CPU. One of these optimization techniques involve compiling the PyTorch code into an intermediate format for high-performance environments like C++, and the other technique fuses multiple operations into one kernel to reduce the overhead of running each operation separately.
 
 You'll learn how to use [BetterTransformer](https://pytorch.org/blog/a-better-transformer-for-fast-transformer-encoder-inference/) for faster inference, and how to convert your PyTorch code to [TorchScript](https://pytorch.org/tutorials/beginner/Intro_to_TorchScript_tutorial.html). If you're using an Intel CPU, you can also use [graph optimizations](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/features.html#graph-optimization) from [Intel Extension for PyTorch](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/index.html) to boost inference speed even more.
 
@@ -23,7 +23,7 @@ You'll learn how to use [BetterTransformer](https://pytorch.org/blog/a-better-tr
 
 BetterTransformer accelerates inference with its fastpath (native PyTorch specialized implementation of Transformer functions) execution. The two optimizations in the fastpath execution are:
 
-1. fusion combines multiple sequential operations into a single "kernel" to reduce the number of computation steps
+1. fusion, which combines multiple sequential operations into a single "kernel" to reduce the number of computation steps
 2. skipping the inherent sparsity of padding tokens to avoid unnecessary computation with nested tensors
 
 BetterTransformer also converts all attention operations to use the more memory-efficient [scaled dot product attention](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention).
@@ -47,7 +47,7 @@ model.to_bettertransformer()
 
 ## TorchScript
 
-TorchScript is an intermediate PyTorch model representation that can be run in production environments where performance is important. You can train a model in PyTorch and then export it to TorchScript to free the model from Python performance constraints. To enable this, PyTorch [traces](https://pytorch.org/docs/stable/generated/torch.jit.trace.html#torch.jit.trace) a model to return a [`ScriptFunction`] that is optimized with just-in-time compilation (JIT). Compared to the default eager mode, JIT mode in PyTorch typically yields better performance for inference using optimization techniques like operator fusion.
+TorchScript is an intermediate PyTorch model representation that can be run in production environments where performance is important. You can train a model in PyTorch and then export it to TorchScript to free the model from Python performance constraints. PyTorch [traces](https://pytorch.org/docs/stable/generated/torch.jit.trace.html) a model to return a [`ScriptFunction`] that is optimized with just-in-time compilation (JIT). Compared to the default eager mode, JIT mode in PyTorch typically yields better performance for inference using optimization techniques like operator fusion.
 
 For a gentle introduction to TorchScript, see the [Introduction to PyTorch TorchScript](https://pytorch.org/tutorials/beginner/Intro_to_TorchScript_tutorial.html) tutorial.
 
