@@ -722,7 +722,7 @@ def main():
             predictions = np.squeeze(predictions)
         elif is_multi_label:
             # Convert logits to multi-hot encoding. We compare the logits to 0 instead of 0.5, because the sigmoid is not applied.
-            # You can aso pass `preprocess_logits_for_metrics=lambda logits, labels: nn.functional.sigmoid(logits)` to the Trainer
+            # You can also pass `preprocess_logits_for_metrics=lambda logits, labels: nn.functional.sigmoid(logits)` to the Trainer
             # and set p > 0.5 below (less efficient in this case)
             predictions = np.array([np.where(p > 0, 1, 0) for p in predictions])
         else:
