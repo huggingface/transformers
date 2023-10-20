@@ -555,7 +555,7 @@ class PatchTSTEncoderBlock(nn.Module):
         Parameters:
             hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`, *required*):
                 Past values of the time series
-            output_hidden_states (`bool`, *optional*):
+            output_hidden_states (`bool`, *optional*, default to False):
                 output hidden state option
         Return:
             hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`)
@@ -860,7 +860,7 @@ PATCHTST_INPUTS_DOCSTRING = r"""
             For multivariate time series, the `num_input_channels` > 1 dimension is required and corresponds to the
             number of variates in the time series per time step.
 
-        output_hidden_states (`bool`, *optional*):
+        output_hidden_states (`bool`, *optional*, default to False):
             Whether or not to return the hidden states of all layers.
 """
 
@@ -1378,7 +1378,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
 
                 - 1 for values that are **observed**,
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            output_hidden_states (`bool`, *optional*): Whether or not to return the hidden states of all layers
+            output_hidden_states (`bool`, *optional*, default to False): Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
@@ -1443,7 +1443,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
 
                 - 1 for values that are **observed**,
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            output_hidden_states (`bool`, *optional*): Whether or not to return the hidden states of all layers
+            output_hidden_states (`bool`, *optional*, default to False): Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
@@ -1607,7 +1607,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             future_values (`torch.Tensor` of shape `(bs, pred_len, num_output_channels)`, *optional*):
                 future target values associates with the `past_values`
-            output_hidden_states (`bool`, *optional*): Whether or not to return the hidden states of all layers
+            output_hidden_states (`bool`, *optional*, default to False): Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
@@ -1814,7 +1814,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             future_values (`torch.Tensor` of shape `(bs, forecast_len, num_input_channels)`, *optional*):
                 future target values associates with the `past_values`
-            output_hidden_states (`bool`, *optional*): Whether or not to return the hidden states of all layers
+            output_hidden_states (`bool`, *optional*, default to False): Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
@@ -2008,7 +2008,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             labels (`torch.Tensor` of shape `(bs, num_input_channels)`, *optional*):
                 target labels associates with the `past_values`
-            output_hidden_states (`bool`, *optional*): Whether or not to return the hidden states of all layers
+            output_hidden_states (`bool`, *optional*, default to False): Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
