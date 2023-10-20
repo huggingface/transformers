@@ -776,18 +776,41 @@ class T5Block(nn.Module):
 class T5ClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
-    def __init__(self, config: T5Config):
+    def __init__(self, config: T5Config, projection_only: Optional[bool] = False):
         super().__init__()
-        self.dense = nn.Linear(config.d_model, config.d_model)
+        self.include_dense_layer = not projection_only
+        if self.include_dense_layer:
+            self.dense = nn.Linear(config.d_model, config.d_model)
         self.dropout = nn.Dropout(p=config.classifier_dropout)
         self.out_proj = nn.Linear(config.d_model, config.num_labels)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.dense(hidden_states)
-        hidden_states = torch.tanh(hidden_states)
+        if self.include_dense_layer:
+            hidden_states = self.dropout(hidden_states)
+            hidden_states = self.dense(hidden_states)
+            hidden_states = torch.tanh(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.out_proj(hidden_states)
+        return hidden_states
+
+
+class T5MultiLabelClassificationHead(nn.Module):
+    """Head for sentence-level multi-label classification tasks."""
+
+    def __init__(self, config: T5Config):
+        super().__init__()
+        self.weights = nn.Parameter(torch.Tensor(config.num_labels, config.d_model))
+        self.biases = nn.Parameter(torch.Tensor(config.num_labels))
+        self.dropout = nn.Dropout(p=config.classifier_dropout)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # The input hidden_states shape should be (batch_size, num_labels, d_model)
+        hidden_states = self.dropout(hidden_states)
+
+        # This is an element-wise multiplication of the weights, followed by a summation and addition of biases. This is
+        # equivalent to a linear projection from d_model down to 1 for each label, but works better with vectorization.
+        hidden_states = torch.sum(hidden_states * self.weights, dim=-1) + self.biases  # (batch_size, num_labels)
+
         return hidden_states
 
 
@@ -836,12 +859,16 @@ class T5PreTrainedModel(PreTrainedModel):
         elif isinstance(module, EncT5ForSequenceClassification):
             module.decoder_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, T5ClassificationHead):
-            module.dense.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.dense, "bias") and module.dense.bias is not None:
-                module.dense.bias.data.zero_()
+            if hasattr(module, "dense"):
+                module.dense.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+                if hasattr(module.dense, "bias") and module.dense.bias is not None:
+                    module.dense.bias.data.zero_()
             module.out_proj.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
                 module.out_proj.bias.data.zero_()
+        elif isinstance(module, T5MultiLabelClassificationHead):
+            module.weights.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            module.biases.data.zero_()
         elif isinstance(module, T5DenseActDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
@@ -2300,8 +2327,8 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
 @add_start_docstrings(
     """
     Model for non-autoregressive tasks based on fine-tuning pre-trained T5encoder layers with a single re-initialized
-    decoder layer and classification head(s). Research has shown that EncT5 can improve efficiency and usability over T5
-    and BERT for non-autoregressive tasks.
+    decoder layer and classification head(s). Research has shown that EncT5 can improve efficiency and usability over
+    T5 and BERT for non-autoregressive tasks.
     """,
     T5_START_DOCSTRING,
 )
@@ -2311,33 +2338,35 @@ class EncT5ForSequenceClassification(T5PreTrainedModel):
     def __init__(self, config: T5Config):
         super().__init__(config)
 
-        # The paper uses a different approach to multi-label classification. The approach involves utilizing one
-        # classification head per label, which could work better with large output spaces (for when there are a lot of
-        # labels).
-        if config.problem_type == "multi_label_classification":
-            raise ValueError("Multi-label classification is currently not supported.")
+        # TODO: Add config to disable causal mask
 
         # Set number of decoders to 1.
         single_decoder_layer_config = copy.deepcopy(config)
         single_decoder_layer_config.num_decoder_layers = 1
         self.transformer = T5Model(single_decoder_layer_config)
 
-        # Initiate decoder embedding from scratch and set the latent vector vocabulary size to 1.
-        self.decoder_embeddings = nn.Embedding(1, config.d_model)
+        # Initiate decoder embedding from scratch and define the corresponding latent vector vocabulary size.
+        vocab_size = 1
+        if config.problem_type == "multi_label_classification":
+            vocab_size = config.num_labels
+        self.decoder_embeddings = nn.Embedding(vocab_size, config.d_model)
         self.transformer.get_decoder().set_input_embeddings(self.decoder_embeddings)
 
         # Initiate decoder projection head from scratch.
-        self.classification_head = T5ClassificationHead(config)
+        if config.problem_type == "multi_label_classification":
+            self.classification_head = T5MultiLabelClassificationHead(config)
+        else:
+            self.classification_head = T5ClassificationHead(config, projection_only=True)
 
         # Initialize weights and apply final processing
         self.post_init()
 
         self.model_parallel = False
 
-    def reinit_weights_for_fine_tuning(self):
+    def prepare_for_fine_tuning(self):
         r"""
-        Re-initialize the weights for fine-tuning. The weights for the decoder layer and classification head will be
-        re-initialized. This step should be performed after loading the pre-trained T5 model but before fine-tuning.
+        Prepare for fine-tuning by re-initializing the necessary weights. This step should be performed after loading
+        the pre-trained T5 model but before fine-tuning.
         """
         self.transformer.get_decoder().apply(self._init_weights)
         self._init_weights(self.classification_head)
@@ -2375,14 +2404,17 @@ class EncT5ForSequenceClassification(T5PreTrainedModel):
 
         if input_ids is None and inputs_embeds is None:
             raise ValueError("You have to specify either input_ids or inputs_embeds.")
-
         batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        if decoder_inputs_embeds is not None or decoder_input_ids is not None or decoder_attention_mask is not None:
-            raise ValueError("The decoder inputs must be `None`.")
+        if decoder_input_ids is not None or decoder_inputs_embeds is not None:
+            raise ValueError("The decoder input ids and decoder inputs embeds must be `None`.")
 
-        decoder_input_ids = torch.zeros(batch_size, 1, device=device, dtype=torch.long)
+        if self.config.problem_type == "multi_label_classification":
+            decoder_input_ids = torch.arange(end=self.config.num_labels, device=device, dtype=torch.long)
+            decoder_input_ids = decoder_input_ids.repeat(batch_size, 1)  # Shape: (batch_size, num_labels)
+        else:
+            decoder_input_ids = torch.zeros(batch_size, 1, device=device, dtype=torch.long)
 
         outputs = self.transformer(
             input_ids=input_ids,
@@ -2400,9 +2432,9 @@ class EncT5ForSequenceClassification(T5PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        sequence_output = outputs[0]
-        sentence_representation = sequence_output[:, 0, :]
-        logits = self.classification_head(sentence_representation)
+        sequence_output = outputs[0]  # Shape: (batch_size, 1 or num_labels, d_model)
+
+        logits = self.classification_head(sequence_output)
 
         loss = None
         if labels is not None:
@@ -2413,7 +2445,10 @@ class EncT5ForSequenceClassification(T5PreTrainedModel):
                 elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
                     self.config.problem_type = "single_label_classification"
                 else:
-                    self.config.problem_type = "multi_label_classification"
+                    raise ValueError(
+                        "Unexpected dtype for labels. For multi-label classification, the `config.problem_type` must "
+                        "be specified during model initialization."
+                    )
 
             if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
@@ -2425,8 +2460,8 @@ class EncT5ForSequenceClassification(T5PreTrainedModel):
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
             else:
-                raise ValueError("Multi-label classification is currently not supported.")
-
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
