@@ -304,6 +304,7 @@ class FlaxGPTNeoXModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unit
 
 @require_flax
 class FlaxGPTNeoXLanguageGenerationTest(unittest.TestCase):
+    @is_pt_flax_cross_test
     def test_lm_generate_gptneox(self):
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-410m-deduped")
         model = FlaxGPTNeoXForCausalLM.from_pretrained("EleutherAI/pythia-410m-deduped", from_pt=True)
