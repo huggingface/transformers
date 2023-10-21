@@ -221,6 +221,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -270,6 +271,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
+            labels=labels,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
