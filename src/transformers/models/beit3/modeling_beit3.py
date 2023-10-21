@@ -772,7 +772,6 @@ class Beit3Model(Beit3PreTrainedModel):
         >>> import requests
 
         >>> processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
-
         >>> model = Beit3Model.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -783,6 +782,10 @@ class Beit3Model(Beit3PreTrainedModel):
 
         >>> # forward pass
         >>> outputs = model(**inputs)
+
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> print(last_hidden_state.shape)
+        torch.Size([1, 205, 768])
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
