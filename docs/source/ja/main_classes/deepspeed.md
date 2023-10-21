@@ -68,13 +68,12 @@ ZeRO (近日公開)。
 
 ### Installation
 
-Install the library via pypi:
-
+pypi 経由でライブラリをインストールします。
 ```bash
 pip install deepspeed
 ```
 
-or via `transformers`' `extras`:
+または`tansformers`, `extras`経由:
 
 ```bash
 pip install transformers[deepspeed]

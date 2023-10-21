@@ -85,7 +85,7 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=gptq_config)
 ```
 
-ディスク オフロードはサポートされていないことに注意してください。さらに、データセットが原因でメモリが不足している場合は、`from_pretained` で `max_memory` を渡す必要がある場合があります。 「device_map」と「max_memory」の詳細については、この [ガイド](https://huggingface.co/docs/accelerate/usage_guides/big_modeling#designing-a-device-map) を参照してください。
+ディスク オフロードはサポートされていないことに注意してください。さらに、データセットが原因でメモリが不足している場合は、`from_pretained` で `max_memory` を渡す必要がある場合があります。 「device_map」と`max_memory`の詳細については、この [ガイド](https://huggingface.co/docs/accelerate/usage_guides/big_modeling#designing-a-device-map) を参照してください。
 
 <Tip warning={true}>
 GPTQ 量子化は、現時点ではテキスト モデルでのみ機能します。さらに、量子化プロセスはハードウェアによっては長時間かかる場合があります (NVIDIA A100 を使用した場合、175B モデル = 4 gpu 時間)。モデルの GPTQ 量子化バージョンが存在しない場合は、ハブで確認してください。そうでない場合は、github で要求を送信できます。
@@ -117,9 +117,8 @@ quantized_model.save_pretrained("opt-125m-gptq")
 
 ### Load a quantized model from the 🤗 Hub
 
-You can load a quantized model from the Hub by using `from_pretrained`.
-Make sure that the pushed weights are quantized, by checking that the attribute `quantization_config` is present in the model configuration object.
-
+`from_pretrained`を使用して、量子化されたモデルをハブからロードできます。
+属性 `quantization_config` がモデル設定オブジェクトに存在することを確認して、プッシュされた重みが量子化されていることを確認します。
 
 ```python
 from transformers import AutoModelForCausalLM
