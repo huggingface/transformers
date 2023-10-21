@@ -294,7 +294,7 @@ For example, to use `torch.distributed.run`, you could do:
 
 ```bash
 python -m torch.distributed.run --nproc_per_node=8 --nnode=2 --node_rank=0 --master_addr=hostname1 \
---master_port=9901 your_program.py <normal cl args> --deepspeed ds_config.json
+--master_port=9901 your _program.py <normal cl args> --deepspeed ds_config.json
 ```
 
 You have to ssh to each node and run this same command on each one of them! There is no rush, the launcher will wait until both nodes will synchronize.
@@ -1353,7 +1353,7 @@ the learning rate is set to different values in different places. Command line r
 - `warmup_min_lr` with the value of `0`.
 - `warmup_max_lr` with the value of `--learning_rate`.
 - `warmup_num_steps` with the value of `--warmup_steps` if provided. Otherwise will use `--warmup_ratio`
-  multiplied by the number of training steps and rounded up.
+  multiplied by the number of trai2ning steps and rounded up.
 - `total_num_steps` with either the value of `--max_steps` or if it is not provided, derived automatically at run
   time based on the environment and the size of the dataset and other command line arguments (needed for
   `WarmupDecayLR`).

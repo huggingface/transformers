@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# DeepSpeed の統合
+# DeepSpeed Integration
 
 [DeepSpeed](https://github.com/microsoft/DeepSpeed) は、[ZeRO 論文](https://arxiv.org/abs/1910.02054) で説明されているすべてを実装します。現在、次のものを完全にサポートしています。
 
@@ -25,8 +25,7 @@ rendered properly in your Markdown viewer.
 5. 一連の高速 CUDA 拡張ベースのオプティマイザー
 6. CPU および NVMe への ZeRO オフロード
 
-ZeRO-Offload には独自の専用ペーパーがあります: [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://arxiv.org/abs/2101.06840)。 NVMe サポートについては、論文 [ZeRO-Infinity: Breaking the GPU] で説明されています。
-極端なスケールの深層学習のためのメモリ ウォール](https://arxiv.org/abs/2104.07857)。
+ZeRO-Offload には独自の専用ペーパーがあります: [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://arxiv.org/abs/2101.06840)。 NVMe サポートについては、論文 [ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://arxiv.org/abs/2104.07857)。
 
 DeepSpeed ZeRO-2 は、その機能が推論には役に立たないため、主にトレーニングのみに使用されます。
 
@@ -40,7 +39,7 @@ DeepSpeed ZeRO-3 は、巨大なモデルを複数の GPU にロードできる�
    このドキュメントではこの機能に焦点を当てています。
 2. [`Trainer`] を使用せず、DeepSpeed を統合した独自のトレーナーを使用したい場合
    `from_pretrained` や `from_config` などのコア機能には、重要な機能の統合が含まれています。
-   ZeRO ステージ 3 以降の「zero.Init」などの DeepSpeed の部分。この機能を活用するには、次のドキュメントをお読みください。
+   ZeRO ステージ 3 以降の `zero.Init`などの DeepSpeed の部分。この機能を活用するには、次のドキュメントをお読みください。
    [非トレーナー DeepSpeed 統合](#nontrainer-deepspeed-integration)。
 
 統合されているもの:
@@ -53,7 +52,7 @@ DeepSpeed ZeRO-3 は、巨大なモデルを複数の GPU にロードできる�
 
 1. DeepSpeed ZeRO Inference は、ZeRO-Infinity による ZeRO ステージ 3 をサポートします。トレーニングと同じ ZeRO プロトコルを使用しますが、
    オプティマイザと lr スケジューラは使用せず、ステージ 3 のみが関連します。詳細については、以下を参照してください。
-   [ゼロ推論](#ゼロ推論)。
+   [ゼロ推論](#zero-inference)。
 
 DeepSpeed Inference もあります。これは、Tensor Parallelism の代わりに Tensor Parallelism を使用するまったく異なるテクノロジーです。
 ZeRO (近日公開)。
@@ -98,7 +97,7 @@ TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 pip install . \
 --disable-pip-version-check 2>&1 | tee build.log
 ```
 
-NVMe オフロードを使用する場合は、上記の手順に「DS_BUILD_AIO=1」を含める必要があります (また、
+NVMe オフロードを使用する場合は、上記の手順に`DS_BUILD_AIO=1`を含める必要があります (また、
 *libaio-dev* システム全体にインストールします)。
 
 `TORCH_CUDA_ARCH_LIST` を編集して、使用する GPU カードのアーキテクチャのコードを挿入します。すべてを仮定すると
@@ -158,6 +157,7 @@ _CudaDeviceProperties(name='GeForce RTX 3090', major=8, minor=6, total_memory=24
 [ディープスピード](https://github.com/microsoft/DeepSpeed/issues)、
 
 <a id='deepspeed-multi-gpu'></a>
+
 ### Deployment with multiple GPUs
 
 DeepSpeed 統合をデプロイするには、[`Trainer`] コマンド ライン引数を調整して新しい引数 `--deepspeed ds_config.json` を含めます。ここで、`ds_config.json` は DeepSpeed 構成ファイルです。
@@ -194,7 +194,7 @@ deepspeed examples/pytorch/translation/run_translation.py \
 --source_lang en --target_lang ro
 ```
 
-DeepSpeed のドキュメントには、「--deepspeed --deepspeed_config ds_config.json」が表示される可能性が高いことに注意してください。
+DeepSpeed のドキュメントには、`--deepspeed --deepspeed_config ds_config.json`が表示される可能性が高いことに注意してください。
 DeepSpeed 関連の引数が 2 つありますが、簡単にするためであり、処理すべき引数がすでに非常に多いためです。
 この 2 つを 1 つの引数に結合しました。
 
@@ -272,7 +272,7 @@ DeepSpeed を使用するには、構成ファイルに少なくとも次の構�
 
 ### 複数のノードを使用したデプロイメント
 
-このセクションの情報は DeepSpeed 統合に固有のものではなく、あらゆるマルチノード プログラムに適用できます。ただし、DeepSpeed は、SLURM 環境でない限り、他のランチャーよりも使いやすい「deepspeed」ランチャーを提供します。
+このセクションの情報は DeepSpeed 統合に固有のものではなく、あらゆるマルチノード プログラムに適用できます。ただし、DeepSpeed は、SLURM 環境でない限り、他のランチャーよりも使いやすい`deepspeed`ランチャーを提供します。
 
 このセクションでは、それぞれ 8 GPU を備えた 2 つのノードがあると仮定します。また、最初のノードには `ssh hostname1` を使用して、2 番目のノードには `ssh hostname2` を使用して接続できます。両方ともパスワードなしでローカルの ssh 経由で相互に接続できる必要があります。もちろん、これらのホスト (ノード) 名を、作業している実際のホスト名に変更する必要があります。
 
@@ -292,7 +292,7 @@ python -m torch.distributed.run --nproc_per_node=8 --nnode=2 --node_rank=0 --mas
 
 #### ディープスピード ランチャー
 
-代わりに`deepspeed`ランチャーを使用するには、まず「hostfile」ファイルを作成する必要があります。
+代わりに`deepspeed`ランチャーを使用するには、まず`hostfile`ファイルを作成する必要があります。
 
 ```
 hostname1 slots=8
@@ -306,7 +306,7 @@ deepspeed --num_gpus 8 --num_nodes 2 --hostfile hostfile --master_addr hostname1
 your_program.py <normal cl args> --deepspeed ds_config.json
 ```
 
-`torch.distributed.run`ランチャーとは異なり、「deepspeed」は両方のノードでこのコマンドを自動的に起動します。
+`torch.distributed.run`ランチャーとは異なり、`deepspeed`は両方のノードでこのコマンドを自動的に起動します。
 
 詳細については、[リソース構成 (マルチノード)](https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node) を参照してください。
 
@@ -355,7 +355,7 @@ sbatch launch.slurm
 
 <a id='deepspeed-notebook'></a>
 
-### ノートブックでの展開
+### Deployment in Notebooks
 
 ノートブックのセルをスクリプトとして実行する場合の問題は、依存する通常の`deepspeed`ランチャーがないことです。
 特定の設定では、それをエミュレートする必要があります。
@@ -451,7 +451,7 @@ cat <<'EOT' > ds_config_zero3.json
 EOT
 ```
 
-トレーニング スクリプトがノートブックのセルではなく通常のファイルにある場合は、次のようにして「deepspeed」を通常どおり起動できます。
+トレーニング スクリプトがノートブックのセルではなく通常のファイルにある場合は、次のようにして`deepspeed`を通常どおり起動できます。
 細胞からのシェル。たとえば、`run_translation.py` を使用するには、次のように起動します。
 
 ```python no-style
@@ -481,8 +481,8 @@ deepspeed examples/pytorch/translation/run_translation.py ...
 設定ファイルで使用できる DeepSpeed 設定オプションの完全なガイドについては、次を参照してください。
 [次のドキュメント](https://www.deepspeed.ai/docs/config-json/) にアクセスしてください。
 
-さまざまな実際のニーズに対応する数十の DeepSpeed 構成例を [DeepSpeedExamples] で見つけることができます。
-リポジトリ](https://github.com/microsoft/DeepSpeedExamples):
+さまざまな実際のニーズに対応する数十の DeepSpeed 構成例を [DeepSpeedExamples] (https://github.com/microsoft/DeepSpeedExamples)で見つけることができます。
+リポジトリ:
 
 ```bash
 git clone https://github.com/microsoft/DeepSpeedExamples
@@ -503,7 +503,7 @@ DeepSpeed を使用する場合は、常に DeepSpeed 構成ファイルを指�
 コマンドライン経由で設定します。微妙な違いについては、このガイドの残りの部分で説明します。
 
 DeepSpeed 構成ファイルがどのようなものかを理解するために、ZeRO ステージ 2 機能を有効にする構成ファイルを次に示します。
-オプティマイザー状態の CPU オフロードを含み、`AdamW`オプティマイザーと「WarmupLR」スケジューラーを使用し、混合を有効にします。
+オプティマイザー状態の CPU オフロードを含み、`AdamW`オプティマイザーと`WarmupLR`スケジューラーを使用し、混合を有効にします。
 `--fp16` が渡された場合の精度トレーニング:
 
 
@@ -558,7 +558,7 @@ DeepSpeed 構成ファイルがどのようなものかを理解するために�
 }
 ```
 
-プログラムを実行すると、DeepSpeed は [`トレーナー`] から受け取った設定をログに記録します。
+プログラムを実行すると、DeepSpeed は [`Trainer`] から受け取った設定をログに記録します。
 コンソールに渡されるため、最終的にどのような設定が渡されたのかを正確に確認できます。
 
 <a id='deepspeed-config-passing'></a>
@@ -600,7 +600,7 @@ TrainingArguments(..., deepspeed=ds_config_dict)
 [`Trainer`] コマンドライン引数経由。
 
 さらに、一部の構成値はモデルの構成に基づいて自動的に導出されます。
-複数の値を手動で調整することを忘れないでください。[`トレーナー`] に大部分を任せるのが最善です
+複数の値を手動で調整することを忘れないでください。[`Trainer`] に大部分を任せるのが最善です
 の設定を行います。
 
 したがって、このガイドの残りの部分では、特別な設定値 `auto` が表示されます。これを設定すると、
@@ -619,7 +619,7 @@ DeepSpeed のみに固有の値や、それに合わせて手動で設定する�
 1. マスター構成として使用する DeepSpeed 構成を作成またはロードします
 2. これらの値に基づいて [`TrainingArguments`] オブジェクトを作成します
 
-「scheduler.params.total_num_steps」などの一部の値は次のように計算されることに注意してください。
+`scheduler.params.total_num_steps`などの一部の値は次のように計算されることに注意してください。
 `train` 中に [`Trainer`] を実行しますが、もちろん自分で計算することもできます。
 
 <a id='deepspeed-zero'></a>
@@ -672,7 +672,7 @@ DeepSpeed のドキュメント。
 - `"overlap_comm": true` は、GPU RAM 使用量の増加とトレードオフして、遅延をすべて削減します。 `overlap_comm`は 4.5x を使用します
   `allgather_bucket_size`と`reduce_bucket_size`の値。したがって、5e8 に設定されている場合、9GB が必要になります。
   フットプリント (`5e8 x 2Bytes x 2 x 4.5`)。したがって、8GB 以下の RAM を搭載した GPU を使用している場合、
-  OOM エラーが発生した場合は、これらのパラメータを「2e8」程度に減らす必要があり、それには 3.6GB が必要になります。やりたくなるでしょう
+  OOM エラーが発生した場合は、これらのパラメータを`2e8`程度に減らす必要があり、それには 3.6GB が必要になります。やりたくなるでしょう
   OOM に達し始めている場合は、より大容量の GPU でも同様です。
 - これらのバッファを減らすと、より多くの GPU RAM を利用するために通信速度を犠牲にすることになります。バッファサイズが小さいほど、
   通信が遅くなり、他のタスクで使用できる GPU RAM が増えます。したがって、バッチサイズが大きい場合は、
@@ -736,13 +736,13 @@ NVMe については後ほど説明します。
 - `stage3_max_reuse_distance`: `1e9`
 
 OOM に達した場合は、「stage3_max_live_parameters」と「stage3_max_reuse_ distance」を減らします。影響は最小限に抑えられるはずです
-アクティブ化チェックポイントを実行しない限り、パフォーマンスに影響します。 「1e9」は約 2GB を消費します。記憶を共有しているのは、
-`stage3_max_live_parameters` と `stage3_max_reuse_ distance` なので、加算されるものではなく、合計で 2GB になります。
+アクティブ化チェックポイントを実行しない限り、パフォーマンスに影響します。 `1e9`は約 2GB を消費します。記憶を共有しているのは、
+`stage3_max_live_parameters` と `stage3_max_reuse_distance` なので、加算されるものではなく、合計で 2GB になります。
 
 `stage3_max_live_parameters` は、特定の時点で GPU 上に保持する完全なパラメータの数の上限です。
 時間。 「再利用距離」は、パラメータが将来いつ再び使用されるかを判断するために使用する指標です。
 `stage3_max_reuse_ distance`を使用して、パラメータを破棄するか保持するかを決定します。パラメータが
-近い将来に再び使用される予定 (「stage3_max_reuse_ distance」未満) なので、通信を減らすために保持します。
+近い将来に再び使用される予定 (`stage3_max_reuse_distance`未満) なので、通信を減らすために保持します。
 オーバーヘッド。これは、アクティベーション チェックポイントを有効にしている場合に非常に役立ちます。フォワード再計算が行われ、
 backward は単一レイヤー粒度を渡し、後方再計算までパラメータを前方再計算に保持したいと考えています。
 
@@ -859,15 +859,15 @@ ZeRO-Infinity は、GPU と CPU メモリを NVMe メモリで拡張すること
 
 オプティマイザの状態とパラメータの両方を NVMe にオフロードするか、どちらか 1 つだけをオフロードするか、まったくオフロードしないかを選択できます。たとえば、次の場合
 利用可能な CPU メモリが大量にある場合は、高速になるため、必ず CPU メモリのみにオフロードしてください (ヒント:
-*"デバイス": "CPU"*)。
+*"device": "CPU"*)。
 
-[オプティマイザーの状態](https://www.deepspeed.ai/docs/config-json/#optimizer-offloading) と [パラメーター](https://www.deepspeed.ai/docs/) のオフロードに関する完全なドキュメントは次のとおりです。 config-json/#parameter-offloading)。
+[オプティマイザーの状態](https://www.deepspeed.ai/docs/config-json/#optimizer-offloading) と [パラメーター](https://www.deepspeed.ai/docs/config-json/#parameter-offloading)。
 
 `nvme_path`が実際に NVMe であることを確認してください。NVMe は通常のハードドライブまたは SSD で動作しますが、
 はるかに遅くなります。高速スケーラブルなトレーニングは、最新の NVMe 転送速度を念頭に置いて設計されました (この時点では
 書き込みでは、読み取り最大 3.5 GB/秒、書き込み最大 3 GB/秒のピーク速度が得られます)。
 
-最適な「aio」構成ブロックを見つけるには、ターゲット設定でベンチマークを実行する必要があります。
+最適な`aio`構成ブロックを見つけるには、ターゲット設定でベンチマークを実行する必要があります。
 [ここで説明](https://github.com/microsoft/DeepSpeed/issues/998)。
 
 <a id='deepspeed-zero2-zero3-performance'></a>
@@ -1190,10 +1190,10 @@ HF Transformers モデルは、DeepSpeed のアクティベーション チェ�
 `offload_optimizer`を有効にしない限り、DeepSpeed スケジューラーと HuggingFace スケジューラーを組み合わせて使用​​できます。
 オプティマイザー (HuggingFace スケジューラーと DeepSpeed オプティマイザーの組み合わせを除く):
 
-|コンボ | HF スケジューラー | DS スケジューラ |
-|:---------------|:---------------|:---------------|
-| HFオプティマイザー |はい |はい |
-| DS オプティマイザー |いいえ |はい |
+| Combos       | HF Scheduler | DS Scheduler |
+|:-------------|:-------------|:-------------|
+| HF Optimizer | Yes          | Yes          |
+| DS Optimizer | No           | Yes          |
 
 `offload_optimizer`が有効な場合、CPU と
 GPU 実装 (LAMB を除く)。
@@ -1295,7 +1295,7 @@ DeepSpeed は、`LRRangeTest`、`OneCycle`、`WarmupLR`、および`WarmupDecayL
 `--lr_scheduler_type`、`--learning_rate`、および `--warmup_steps` または `--warmup_ratio` の値を設定します。
 🤗 それのトランスフォーマーバージョン。
 
-以下は、`WarmupLR`の自動構成された`スケジューラー`エントリの例です。
+以下は、`WarmupLR`の自動構成された`scheduler`エントリの例です。
 
 ```json
 {
@@ -1487,7 +1487,7 @@ bf16 が有効な状態で [勾配累積](#gradient-accumulation) を使用す�
 }
 ```
 
-この記事の執筆時点での有効な値は、`fp16`、`bfp16`、`fp32`です。
+この記事の執筆時点での有効な値は、"fp16"、"bfp16"、"fp32"です。
 
 注: ステージ ゼロ 3 には、bf16 通信タイプに関するバグがあり、`deepspeed==0.8.1`で修正されました。
 
@@ -1538,7 +1538,7 @@ apex AMP のようなモード セットを設定するには:
 ```
 
 [`Trainer`] は自動的に `train_micro_batch_size_per_gpu` を次の値に設定します。
-「`args.per_device_train_batch_size`」と「`train_batch_size`」を`args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps`に変更します。
+`args.per_device_train_batch_size`と`train_batch_size`を`args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps`に変更します。
 
 値を明示的に設定することもできます。
 
@@ -1617,7 +1617,7 @@ fp32 のカスタム チェックポイント オプティマイザー ファイ
 
 ZeRO-3 では、モデルの重みが複数の GPU に分割されるため、状況はさらに複雑になります。
 したがって、fp16 を保存するための `Trainer` を取得するには、`"stage3_gather_16bit_weights_on_model_save": true` が必要です。
-重みのバージョン。この設定が`False`の場合、「pytorch_model.bin」は作成されません。これは、デフォルトで DeepSpeed の `state_dict` に実際の重みではなくプレースホルダーが含まれるためです。この `state_dict` を保存した場合、ロードし直すことはできません。
+重みのバージョン。この設定が`False`の場合、`pytorch_model.bin`は作成されません。これは、デフォルトで DeepSpeed の `state_dict` に実際の重みではなくプレースホルダーが含まれるためです。この `state_dict` を保存した場合、ロードし直すことはできません。
 
 ```json
 {
@@ -1687,9 +1687,9 @@ model.load_state_dict(state_dict)
 
 **オフライン FP32 ウェイト リカバリ:**
 
-DeepSpeed は特別な変換スクリプト「zero_to_fp32.py」を作成し、チェックポイントの最上位に配置します。
+DeepSpeed は特別な変換スクリプト`zero_to_fp32.py`を作成し、チェックポイントの最上位に配置します。
 フォルダ。このスクリプトを使用すると、いつでも重みを抽出できます。スクリプトはスタンドアロンなので、もう必要ありません。
-抽出を行うための設定ファイルまたは「トレーナー」が必要です。
+抽出を行うための設定ファイルまたは `Trainer` が必要です。
 
 チェックポイント フォルダーが次のようになっているとします。
 
@@ -1843,7 +1843,7 @@ ZeRO テクノロジーに準拠していますが、代わりにテンソル並
 
 Deepspeed ZeRO はメモリを CPU (および NVMe) にオフロードできるため、フレームワークは、使用されている GPU の数に応じて必要な CPU および GPU メモリの量を知ることができるユーティリティを提供します。
 
-単一の GPU で"bigscience/T0_3B"を微調整するために必要なメモリの量を見積もってみましょう。
+単一の GPU で `bigscience/T0_3B`を微調整するために必要なメモリの量を見積もってみましょう。
 
 ```bash
 $ python -c 'from transformers import AutoModel; \
@@ -2003,7 +2003,7 @@ SW: Model with 2783M total params, 65M largest layer params.
 ## Non-Trainer Deepspeed Integration
 
 [`~integrations.HfDeepSpeedConfig`] は、Deepspeed を 🤗 Transformers コアに統合するために使用されます
-[`Trainer`] を使用しない場合の機能。実行する唯一のことは、Deepspeed ZeRO-3 パラメータ収集を処理し、「from_pretrained」呼び出し中にモデルを複数の GPU に自動的に分割することです。それ以外はすべて自分で行う必要があります。
+[`Trainer`] を使用しない場合の機能。実行する唯一のことは、Deepspeed ZeRO-3 パラメータ収集を処理し、`from_pretrained`呼び出し中にモデルを複数の GPU に自動的に分割することです。それ以外はすべて自分で行う必要があります。
 
 [`Trainer`] を使用すると、すべてが自動的に処理されます。
 
@@ -2217,7 +2217,7 @@ rank1:
 
 ### `generate` nuances
 
-ZeRO Stage-3 で複数の GPU を使用する場合、「generate(..., synced_gpus=True)」を呼び出して GPU を同期する必要があります。これを行わないと、1 つの GPU が他の GPU より先に生成を終了した場合、残りの GPU が生成を停止した GPU からウェイトのシャードを受信できなくなるため、システム全体がハングします。
+ZeRO Stage-3 で複数の GPU を使用する場合、`generate(..., synced_gpus=True)`を呼び出して GPU を同期する必要があります。これを行わないと、1 つの GPU が他の GPU より先に生成を終了した場合、残りの GPU が生成を停止した GPU からウェイトのシャードを受信できなくなるため、システム全体がハングします。
 
 `transformers>=4.28` 以降、`synced_gpus` が明示的に指定されていない場合、これらの条件が検出されると自動的に `True` に設定されます。ただし、必要に応じて `synced_gpus` の値をオーバーライドすることもできます。
 
