@@ -176,12 +176,14 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         embeddings.
 
         Args:
-            word_embeddings: Tensor of word embeddings. Shape: [b, s, h]
-            continuous_embeddings:
-                Tensor of continuous embeddings. The length of the list is the batch size. Each entry is
-            shape [num_image_embeddings, hidden], and num_image_embeddings needs to match the number of non-negative
-            indices in image_patch_input_indices for that batch element.
-            image_patch_input_indices: Tensor of indices of the image patches in the input_ids tensor. Shape: [b, s]
+            word_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Tensor of word embeddings.
+            continuous_embeddings (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
+                Tensor of continuous embeddings. The length of the list is the batch size. Each entry is shape
+                [num_image_embeddings, hidden], and num_image_embeddings needs to match the number of non-negative
+                indices in image_patch_input_indices for that batch element.
+            image_patch_input_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Tensor of indices of the image patches in the input_ids tensor.
         """
         if not (word_embeddings.shape[0] == len(continuous_embeddings)):
             raise ValueError(
