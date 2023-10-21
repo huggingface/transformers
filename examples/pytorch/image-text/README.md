@@ -32,12 +32,12 @@ The following example fine-tunes Fuyu-8B on facebook/winoground which is a small
 python run_cvlm.py \
     --model_name_or_path adept/fuyu-8b \
     --dataset_name facebook/winoground \
-    --token \ # Needed to use the facebook/winoground dataset
     --text_column_name caption_0 \
     --image_column_name image_0 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
     --do_train \
+    --low_cpu_mem_usage \
     --output_dir /tmp/test-cvlm
 ```
 
@@ -55,7 +55,7 @@ python run_cvlm.py \
     --per_device_eval_batch_size 8 \
     --do_train \
     --do_eval \
-    --output_dir /tmp/test-clm
+    --output_dir /tmp/test-cvlm
 ```
 
 This uses the built in HuggingFace `Trainer` for training. If you want to use a custom training loop, you can utilize or adapt the `run_cvlm_no_trainer.py` script. Take a look at the script for a list of supported arguments. An example is shown below:

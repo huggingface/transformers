@@ -334,7 +334,24 @@ def main():
             token=model_args.token,
             streaming=data_args.streaming,
         )
-        if "validation" not in raw_datasets.keys():
+        if ["test"] == raw_datasets.keys(): # specifically for facebook/winoground testing
+            raw_datasets["validation"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"test[:{data_args.validation_split_percentage}%]",
+                cache_dir=model_args.cache_dir,
+                token=model_args.token,
+                **dataset_args,
+            )
+            raw_datasets["train"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"test[{data_args.validation_split_percentage}%:]",
+                cache_dir=model_args.cache_dir,
+                token=model_args.token,
+                **dataset_args,
+            )
+        elif "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
