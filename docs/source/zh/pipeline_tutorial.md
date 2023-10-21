@@ -215,6 +215,7 @@ for out in pipe(KeyDataset(dataset, "audio")):
 
 指定您的任务并将图像传递给分类器。图像可以是链接、本地路径或base64编码的图像。例如，下面显示的是哪种品种的猫？
 
+![pipeline-cat-chonk](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg)
 ```py
 >>> from transformers import pipeline
 
