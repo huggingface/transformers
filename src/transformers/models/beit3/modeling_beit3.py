@@ -26,6 +26,7 @@ from transformers import PreTrainedModel, add_start_docstrings
 from transformers.activations import get_activation
 from transformers.modeling_outputs import (
     BaseModelOutput,
+    BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
     ImageClassifierOutput,
     SequenceClassifierOutput,
@@ -215,24 +216,41 @@ BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
 
 
 @dataclass
-class Beit3ImageTextMatchingModelOutput(ModelOutput):
+# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIPTextModel->Beit3Model, CLIPVisionModel->Beit3Model, CLIP->Beit3ImageTextMatching
+class Beit3ImageTextMatchingOutput(ModelOutput):
     """
-    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
-    last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
-    scores.
-
     Args:
-        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Languge modeling loss from the text decoder.
-        text_hidden (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional*):
-            The image hidden states.
-        image_hidden (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional*):
-            The image hidden states.
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+            Contrastive loss for image-text similarity.
+        logits_per_image:(`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+            similarity scores.
+        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+            similarity scores.
+        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The text embeddings obtained by applying the projection layer to the pooled output of [`Beit3Model`].
+        image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The image embeddings obtained by applying the projection layer to the pooled output of [`Beit3Model`].
+        text_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`Beit3Model`].
+        vision_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`Beit3Model`].
     """
 
-    loss: Optional[torch.Tensor] = None
-    text_hidden: Optional[torch.FloatTensor] = None
-    image_hidden: Optional[torch.FloatTensor] = None
+    loss: Optional[torch.FloatTensor] = None
+    logits_per_image: torch.FloatTensor = None
+    logits_per_text: torch.FloatTensor = None
+    text_embeds: torch.FloatTensor = None
+    image_embeds: torch.FloatTensor = None
+    text_model_output: BaseModelOutputWithPooling = None
+    vision_model_output: BaseModelOutputWithPooling = None
+
+    def to_tuple(self) -> Tuple[Any]:
+        return tuple(
+            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
 
 
 class Beit3MLP(nn.Module):
@@ -708,11 +726,15 @@ class Beit3Encoder(nn.Module):
     BEIT3_START_DOCSTRING,
 )
 class Beit3Model(Beit3PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer=False):
         super().__init__(config)
+
         self.text_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
         self.vision_embedding = Beit3VisionEmbedding(config)
         self.encoder = Beit3Encoder(config)
+
+        self.pooler = Beit3Pooler(config) if add_pooling_layer else None
+
         self.post_init()
 
     def get_input_embeddings(self):
@@ -725,6 +747,7 @@ class Beit3Model(Beit3PreTrainedModel):
         return self.encoder.num_layers
 
     @add_start_docstrings_to_model_forward(BEIT3_MODEL)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -738,6 +761,30 @@ class Beit3Model(Beit3PreTrainedModel):
         output_attentions=None,
         return_dict=None,
     ):
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import Beit3Processor, Beit3Model
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
+
+        >>> model = Beit3Model.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "This is photo of a cat"
+
+        >>> inputs = processor(text=text, images=image, return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(**inputs)
+        ```"""
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -775,7 +822,7 @@ class Beit3Model(Beit3PreTrainedModel):
             else:
                 attention_mask = None
 
-        outputs = self.encoder(
+        encoder_outputs = self.encoder(
             hidden_state=embeddings,
             attention_mask=attention_mask,
             image_text_mask=image_text_mask,
@@ -787,12 +834,18 @@ class Beit3Model(Beit3PreTrainedModel):
             return_dict=return_dict,
         )
 
-        if not return_dict:
-            outputs = outputs + (multiway_split_position,)
-        else:
-            outputs["multiway_split_position"] = multiway_split_position
+        sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        return outputs
+        if not return_dict:
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -826,7 +879,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import Beit3ForVisualReasoning, Beit3Processor
+        >>> from transformers import Beit3Processor, Beit3ForVisualReasoning
         >>> from PIL import Image
         >>> import requests
         >>> import torch
@@ -835,9 +888,10 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "This is photo of a cat"
 
         >>> processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
-        >>> input = processor(text=["This is photo of vision_cls_rep cat"], images=image)
+        >>> inputs = processor(text=text, images=image, return_tensors="pt")
 
         >>> pixel_values = torch.cat(
         ...     (torch.tensor(input["pixel_values"]).unsqueeze(1), torch.tensor(input["pixel_values"]).unsqueeze(1)),
@@ -946,7 +1000,6 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         >>> from transformers import Beit3Processor, Beit3ForImageClassification
         >>> from PIL import Image
         >>> import requests
-        >>> import torch
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -954,12 +1007,15 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         >>> processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
         >>> model = Beit3ForImageClassification.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
 
-        >>> input = processor(text=["This is photo of a cat"], images=image)
+        >>> inputs = processor(images=image, return_tensors="pt")
 
         >>> # forward pass
-        >>> output = model(pixel_values=torch.tensor(input["pixel_values"]))
-        >>> list(output.logits.shape)
-        [1, 1000]
+        >>> outputs = model(**inputs)
+
+        >>> predicted_class_idx = outputs.logits.argmax(-1).item()
+        >>> predicted_class = model.config.id2label[predicted_class_idx]
+        >>> print("Predicted class:", predicted_class)
+        Predicted class: remote control, remote
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1004,7 +1060,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
 
         if not return_dict:
             output = (logits,)
-            output = (output + (outputs[2:],)) if output_hidden_states else output
+            output = (output + (outputs[1:],)) if output_hidden_states else output
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutput(
@@ -1175,8 +1231,8 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         super().__init__(config)
         embed_dim = config.hidden_size
         self.num_labels = config.num_labels
-        self.beit3 = Beit3Model(config)
-        self.pooler = Beit3Pooler(config)
+        self.beit3 = Beit3Model(config, add_pooling_layer=True)
+
         self.classifier = nn.Sequential(
             nn.Linear(embed_dim, embed_dim * 2),
             nn.LayerNorm(embed_dim * 2, eps=config.layer_norm_eps),
@@ -1206,22 +1262,24 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         >>> from transformers import Beit3Processor, Beit3ForQuestionAnswering
         >>> from PIL import Image
         >>> import requests
-        >>> import torch
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
         >>> model = Beit3ForQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
 
-        >>> input = processor(text=["This is photo of a cat"], images=image)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> question = "How many cats are there?"
 
-        >>> output = model(
-        ...     input_ids=torch.tensor(input["input_ids"]),
-        ...     pixel_values=torch.tensor(input["pixel_values"]),
-        ...     attention_mask=torch.ones(input["input_ids"].shape),
-        ... )
-        >>> list(output.logits.shape)
+        >>> inputs = processor(text=question, images=image, return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(**inputs)
+
+        >>> logits = outputs.logits
+        >>> # model predicts one of the 3129 possible answers
+        >>> predicted_answer_idx = logits.argmax(-1).item()
+        >>> predicted_answer = model.config.id2label[predicted_answer_idx]
+        >>> print("Predicted answer:", predicted_answer)
         [1, 3129]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1235,29 +1293,23 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
             return_dict=return_dict,
         )
 
-        last_hidden_state = outputs.last_hidden_state if return_dict else outputs[0]
-
-        cls_rep = self.pooler(last_hidden_state)
-        logits = self.classifier(cls_rep)
-        reshaped_logits = logits.view(-1, self.num_labels)
+        pooled_output = outputs.pooler_output if return_dict else outputs[1]
+        logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:
             loss_fct = nn.KLDivLoss(reduction="batchmean")
             log_softmax = nn.LogSoftmax(dim=-1)
-            reshaped_logits = log_softmax(reshaped_logits)
-            loss = loss_fct(reshaped_logits, labels.contiguous())
-
-        if output_hidden_states:
-            outputs.hidden_states if return_dict else outputs[1]
+            logits = log_softmax(logits)
+            loss = loss_fct(logits, labels.contiguous())
 
         if not return_dict:
-            output = (reshaped_logits,) + outputs[2:] if output_hidden_states else (reshaped_logits,)
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
-            logits=reshaped_logits,
+            logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -1289,16 +1341,17 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Beit3ImageTextMatchingModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Beit3ImageTextMatchingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor,
         pixel_values: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
+        return_loss: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[Any], Beit3ImageTextMatchingModelOutput]:
+    ) -> Union[Tuple[Any], Beit3ImageTextMatchingOutput]:
         r"""
         Returns:
 
@@ -1308,27 +1361,27 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         >>> from transformers import Beit3Processor, Beit3ForImageTextRetrieval
         >>> from PIL import Image
         >>> import requests
-        >>> import torch
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
         >>> model = Beit3ForImageTextRetrieval.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
 
-        >>> input = processor(text=["This is photo of a cat"], images=image)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "This is photo of a cat"
 
-        >>> another_input_ids = processor(text=["This is photo of a dog"], images=image)["input_ids"]
-        >>> output = model(
-        ...     input_ids=torch.tensor([input["input_ids"][0], another_input_ids[0]]),
-        ...     pixel_values=torch.tensor([input["pixel_values"][0], input["pixel_values"][0]]),
-        ... )
-        >>> float(output.loss.detach().numpy())
+        >>> inputs = processor(text=text, images=image, return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(**inputs)
+
+        >>> logits_per_image = outputs.logits_per_image
+        >>> print(logits_per_image)
         1.8435165
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.beit3(
+        # forward images through the model
+        vision_outputs = self.beit3(
             input_ids=None,
             pixel_values=pixel_values,
             attention_mask=None,
@@ -1336,16 +1389,12 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
             output_attentions=output_attentions,
             return_dict=return_dict,
         )
-        if return_dict:
-            last_hidden_state = outputs.last_hidden_state
-        else:
-            last_hidden_state = outputs[0]
 
-        vision_out = last_hidden_state
-        vision_cls = self.vision_classifier(vision_out[:, 0, :])
-        vision_cls = F.normalize(vision_cls, dim=-1)
+        vision_last_hidden_state = vision_outputs.last_hidden_state if return_dict else vision_outputs[0]
+        image_embeds = self.vision_classifier(vision_last_hidden_state[:, 0, :])
 
-        outputs = self.beit3(
+        # forward text through the model
+        text_outputs = self.beit3(
             input_ids=input_ids,
             pixel_values=None,
             attention_mask=attention_mask,
@@ -1354,29 +1403,32 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
             return_dict=return_dict,
         )
 
-        if return_dict:
-            last_hidden_state = outputs.last_hidden_state
-        else:
-            last_hidden_state = outputs[0]
+        text_last_hidden_state = text_outputs.last_hidden_state if return_dict else text_outputs[0]
+        text_embeds = self.language_classifier(text_last_hidden_state[:, 0, :])
 
-        text_out = last_hidden_state
-        text_cls = self.language_classifier(text_out[:, 0, :])
-        text_cls = F.normalize(text_cls, dim=-1)
+        # normalized features
+        image_embeds = F.normalize(image_embeds, dim=-1)
+        text_embeds = F.normalize(text_embeds, dim=-1)
 
+        # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(vision_cls, text_cls.t()) * logit_scale
-        similarity = clip_loss(logits_per_text)
+        logits_per_text = torch.matmul(image_embeds, text_embeds.t()) * logit_scale
+        logits_per_image = logits_per_text.t()
+
+        loss = None
+        if return_loss:
+            loss = clip_loss(logits_per_text)
 
         if not return_dict:
-            outputs = (similarity,)
-            return (
-                outputs
-                + (
-                    text_out,
-                    vision_out,
-                )
-                if output_hidden_states
-                else outputs
-            )
+            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
+            return ((loss,) + output) if loss is not None else output
 
-        return Beit3ImageTextMatchingModelOutput(similarity, text_out, vision_out)
+        return Beit3ImageTextMatchingOutput(
+            loss=loss,
+            logits_per_image=logits_per_image,
+            logits_per_text=logits_per_text,
+            text_embeds=text_embeds,
+            image_embeds=image_embeds,
+            text_model_output=text_outputs,
+            vision_model_output=vision_outputs,
+        )
