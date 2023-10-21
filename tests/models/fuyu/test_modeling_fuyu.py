@@ -1,3 +1,19 @@
+# coding=utf-8
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+""" Testing suite for the PyTorch Fuyu model. """
+
 import io
 import unittest
 
@@ -6,7 +22,7 @@ import requests
 from transformers import FuyuConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
-from ...test_modeling_common import ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_vision_available():
@@ -23,19 +39,17 @@ if is_torch_available():
     from transformers import FuyuForCausalLM
 
 
-# Copied from transformers.tests.llama.test_modelling_llama.LlamaModelTest with Llama->Fuyu
 class FuyuModelTester:
     def __init__(
         self,
         parent,
         batch_size=13,
         seq_length=7,
-        image_size=300,
-        patch_size=30,
+        image_size=30,
+        patch_size=15,
         num_channels=3,
         is_training=True,
         use_input_mask=True,
-        use_token_type_ids=False,
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
@@ -62,7 +76,6 @@ class FuyuModelTester:
         self.num_channels = num_channels
         self.is_training = is_training
         self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -88,21 +101,15 @@ class FuyuModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
         sequence_labels = None
         token_labels = None
-        choice_labels = None
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, input_ids, input_mask, sequence_labels, token_labels
 
     def get_config(self):
         return FuyuConfig(
@@ -122,7 +129,12 @@ class FuyuModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
     ):
         model = FuyuForCausalLM(config=config)
         model.to(torch_device)
@@ -135,11 +147,9 @@ class FuyuModelTester:
         self,
         config,
         input_ids,
-        token_type_ids,
         input_mask,
         sequence_labels,
         token_labels,
-        choice_labels,
         encoder_hidden_states,
         encoder_attention_mask,
     ):
@@ -165,11 +175,9 @@ class FuyuModelTester:
         self,
         config,
         input_ids,
-        token_type_ids,
         input_mask,
         sequence_labels,
         token_labels,
-        choice_labels,
         encoder_hidden_states,
         encoder_attention_mask,
     ):
@@ -183,11 +191,9 @@ class FuyuModelTester:
         self,
         config,
         input_ids,
-        token_type_ids,
         input_mask,
         sequence_labels,
         token_labels,
-        choice_labels,
         encoder_hidden_states,
         encoder_attention_mask,
     ):
@@ -246,25 +252,21 @@ class FuyuModelTester:
         (
             config,
             input_ids,
-            token_type_ids,
             input_mask,
             sequence_labels,
             token_labels,
-            choice_labels,
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
 
 @require_torch
-@require_torch_accelerator
-@slow
-class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
-    """
-    Currently, all these tests depend on a value of max_tokens_to_generate of 10.
-    """
+class FuyuModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (FuyuForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-to-text": FuyuForCausalLM}
 
-    all_model_classes = ("FuyuForCausalLM") if is_torch_available() else ()
+    test_head_masking = False
+    test_pruning = False
 
     def setUp(self):
         self.pretrained_model_name = "adept/fuyu-8b"
