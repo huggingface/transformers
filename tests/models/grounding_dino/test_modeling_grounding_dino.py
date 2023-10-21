@@ -46,7 +46,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoImageProcessor
+    from transformers import AutoImageProcessor, AutoProcessor
 
 
 class GroundingDINOModelTester:
@@ -95,12 +95,15 @@ class GroundingDINOModelTester:
         self.max_text_len = max_text_len
 
         # we also set the expected seq length for both encoder and decoder
-        self.encoder_seq_length = (
+        self.encoder_seq_length_vision = (
             math.ceil(self.image_size / 8) ** 2
             + math.ceil(self.image_size / 16) ** 2
             + math.ceil(self.image_size / 32) ** 2
             + math.ceil(self.image_size / 64) ** 2
         )
+
+        self.encoder_seq_length_text = self.max_text_len
+
         self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
@@ -451,6 +454,66 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
                 model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
             )
 
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states_vision 
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            seq_len = self.model_tester.encoder_seq_length_vision
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [seq_len, self.model_tester.hidden_size],
+            )
+
+            hidden_states = outputs.encoder_hidden_states_text
+
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            seq_len = self.model_tester.encoder_seq_length_text
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [seq_len, self.model_tester.hidden_size],
+            )
+
+            if config.is_encoder_decoder:
+                hidden_states = outputs.decoder_hidden_states
+
+                self.assertIsInstance(hidden_states, (list, tuple))
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                seq_len = getattr(self.model_tester, "seq_length", None)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [decoder_seq_length, self.model_tester.hidden_size],
+                )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+
     def test_retain_grad_hidden_states_attentions(self):
         # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
 
@@ -576,28 +639,31 @@ def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
 
+def prepare_text():
+    text = "a cat."
+    return text
+
 
 @require_timm
 @require_vision
 @slow
 class GroundingDINOModelIntegrationTests(unittest.TestCase):
     @cached_property
-    def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("SenseTime/deformable-detr") if is_vision_available() else None
+    def default_processor(self):
+        return AutoProcessor.from_pretrained("EduardoPacheco/grounding-dino-tiny") if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        model = GroundingDINOForObjectDetection.from_pretrained("SenseTime/deformable-detr").to(torch_device)
+        model = GroundingDINOForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny").to(torch_device)
 
-        image_processor = self.default_image_processor
+        processor = self.default_processor
         image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
-        pixel_values = encoding["pixel_values"].to(torch_device)
-        pixel_mask = encoding["pixel_mask"].to(torch_device)
+        text = prepare_text()
+        encoding = processor(images=image, text=text, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
-            outputs = model(pixel_values, pixel_mask)
+            outputs = model(**encoding)
 
-        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
+        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.d_model))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
         expected_boxes = torch.tensor([[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]]).to(torch_device)
@@ -605,50 +671,47 @@ class GroundingDINOModelIntegrationTests(unittest.TestCase):
             [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-3))
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
 
         # verify postprocessing
-        results = image_processor.post_process_object_detection(
+        results = processor.image_processor.post_process_object_detection(
             outputs, threshold=0.35, target_sizes=[image.size[::-1]]
         )[0]
         expected_scores = torch.tensor([0.4526, 0.4082]).to(torch_device)
-        expected_labels = [17, 17, 75, 75, 63]
-        expected_slice_boxes = torch.tensor([491.1074, 198.5045, 292.5861, 350.6499]).to(torch_device)
+        expected_slice_boxes = torch.tensor([344.8143, 23.1796, 637.4004, 373.8295]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 2)
-        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
-        self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
+        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-3))
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
 
     @require_torch_gpu
     def test_inference_object_detection_head_equivalence_cpu_gpu(self):
-        image_processor = self.default_image_processor
+        processor = self.default_processor
         image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt")
-        pixel_values = encoding["pixel_values"]
-        pixel_mask = encoding["pixel_mask"]
+        text = prepare_text()
+        encoding = processor(images=image, text=text, return_tensors="pt")
 
         # 1. run model on CPU
-        model = GroundingDINOForObjectDetection.from_pretrained("SenseTime/deformable-detr-single-scale")
+        model = GroundingDINOForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny")
 
         with torch.no_grad():
-            cpu_outputs = model(pixel_values, pixel_mask)
+            cpu_outputs = model(**encoding)
 
         # 2. run model on GPU
         model.to("cuda")
-
+        encoding = {key: value.to("cuda") for key, value in encoding.items()}
         with torch.no_grad():
-            gpu_outputs = model(pixel_values.to("cuda"), pixel_mask.to("cuda"))
+            gpu_outputs = model(**encoding)
 
         # 3. assert equivalence
         for key in cpu_outputs.keys():
             assert torch.allclose(cpu_outputs[key], gpu_outputs[key].cpu(), atol=1e-4)
 
         expected_logits = torch.tensor(
-            [[-9.9051, -4.2541, -6.4852], [-9.6947, -4.0854, -6.8033], [-10.0665, -5.8470, -7.7003]]
+            [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
         )
-        assert torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
+        assert torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=1e-3)

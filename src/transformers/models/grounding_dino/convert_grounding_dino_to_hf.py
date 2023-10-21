@@ -29,6 +29,7 @@ from transformers import (
     GroundingDINOConfig,
     GroundingDINOForObjectDetection,
     GroundingDINOProcessor,
+    GroundingDINOImageProcessor
 )
 
 
@@ -369,7 +370,7 @@ def convert_grounding_dino_checkpoint(args):
     transforms = T.Compose([T.Resize(size=800, max_size=1333), T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
     original_pixel_values = transforms(image).unsqueeze(0)
 
-    image_processor = DeformableDetrImageProcessor()
+    image_processor = GroundingDINOImageProcessor()
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
     processor = GroundingDINOProcessor(image_processor=image_processor, tokenizer=tokenizer)
 

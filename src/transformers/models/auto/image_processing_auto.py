@@ -66,7 +66,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("focalnet", "BitImageProcessor"),
         ("git", "CLIPImageProcessor"),
         ("glpn", "GLPNImageProcessor"),
-        ("grounding-dino", "DeformableDetrImageProcessor"),
+        ("grounding-dino", "GroundingDINOImageProcessor"),
         ("groupvit", "CLIPImageProcessor"),
         ("idefics", "IdeficsImageProcessor"),
         ("imagegpt", "ImageGPTImageProcessor"),
