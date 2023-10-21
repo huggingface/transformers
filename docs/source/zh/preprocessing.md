@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 预处理
 
-[[在Colab中打开]]
+[[open-in-colab]]
 
 在您可以在数据集上训练模型之前，数据需要被预处理为期望的模型输入格式。无论您的数据是文本、图像还是音频，它们都需要被转换并组合成批量的张量。🤗 Transformers 提供了一组预处理类来帮助准备数据以供模型使用。在本教程中，您将了解以下内容：
 
@@ -378,7 +378,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vision-preprocess-tutorial.png"/>
 </div>
 
-使用 [`AutoImageProcessor.from_pretrained`] 加载`image processo`：
+使用 [`AutoImageProcessor.from_pretrained`] 加载`image processor`：
 
 ```py
 >>> from transformers import AutoImageProcessor
@@ -454,12 +454,9 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 对于诸如目标检测、语义分割、实例分割和全景分割等任务，`ImageProcessor`提供了训练后处理方法。这些方法将模型的原始输出转换为有意义的预测，如边界框或分割地图。
 
-<Tip>
-
-在某些情况下，例如，在微调[DETR](./model_doc/detr)时，模型在训练时应用了尺度增强。这可能导致批处理中的图像大小不同。您可以使用[`DetrImageProcessor.pad`]来指定自定义的`collate_fn`将图像批处理在一起。
-
 </Tip>
 
+在某些情况下，例如，在微调[DETR](./model_doc/detr)时，模型在训练时应用了尺度增强。这可能导致批处理中的图像大小不同。您可以使用[`DetrImageProcessor.pad`]来指定自定义的`collate_fn`将图像批处理在一起。
 
 ```py
 >>> def collate_fn(batch):

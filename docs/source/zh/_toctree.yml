@@ -9,4 +9,6 @@
 - sections:
   - local: accelerate
     title: 加速分布式训练
+  - local: preprocessing
+    title: 预处理
   title: 教程
