@@ -496,7 +496,7 @@ class LlamaFlashAttention2(LlamaAttention):
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
-        attn_output = self.o_proj(attn_output)
+        attn_output = self.o_proj(attn_output.to(self.o_proj.weight.dtype))
 
         if not output_attentions:
             attn_weights = None
