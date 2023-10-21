@@ -14,7 +14,15 @@
 
 import unittest
 
-from transformers import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING, is_vision_available
+import requests
+
+from transformers import (
+    MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
+    Beit3ForQuestionAnswering,
+    BeitImageProcessor,
+    XLMRobertaTokenizer,
+    is_vision_available,
+)
 from transformers.pipelines import pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -33,7 +41,6 @@ from .test_pipelines_common import ANY
 
 if is_torch_available():
     import torch
-
 
 if is_vision_available():
     from PIL import Image
@@ -176,3 +183,19 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
     @unittest.skip("Visual question answering not implemented in TF")
     def test_small_model_tf(self):
         pass
+
+    @slow
+    @require_torch
+    def test_pipeline_visual_question_answering_pipeline(self):
+        model = Beit3ForQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
+        tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
+
+        image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
+
+        vqa_pipeline = pipeline(
+            "visual-question-answering", model, tokenizer=tokenizer, image_processor=image_processor
+        )
+        ans = vqa_pipeline(image, "What is in this photo ?", top_k=1)
+        self.assertEqual(ans[0]["answer"] == "cat")

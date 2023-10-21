@@ -20,7 +20,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
-from transformers import Beit3Processor, BeitImageProcessor, XLMRobertaTokenizer, is_torch_available, pipeline
+from transformers import Beit3Processor, XLMRobertaTokenizer, is_torch_available
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.models.beit3.configuration_beit3 import Beit3Config
@@ -488,14 +488,12 @@ class BeitModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_beit3_image_classification(self):
         model = Beit3ForImageClassification.from_pretrained("Raghavan/beit3_base_patch16_224_in1k").to(torch_device)
-        tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
+        XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
 
-        image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
         image = prepare_img()
-        beit3_processor = Beit3Processor(image_processor, tokenizer)
+        beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
         input = beit3_processor(text=["This is photo of a cat"], images=image)
 
-        model.eval()
         # prepare bool_masked_pos
 
         # forward pass
@@ -506,15 +504,10 @@ class BeitModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_beit3_vqa(self):
         model = Beit3ForQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa").to(torch_device)
-        tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
 
-        image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
         image = prepare_img()
-        beit3_processor = Beit3Processor(image_processor, tokenizer)
+        beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
         input = beit3_processor(text=["This is photo of a cat"], images=image)
-
-        model.eval()
-        # prepare bool_masked_pos
 
         # forward pass
         output = model(
@@ -530,14 +523,11 @@ class BeitModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_beit3_visual_reasoning(self):
         model = Beit3ForVisualReasoning.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2").to(torch_device)
-        tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
 
-        image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
         image = prepare_img()
-        beit3_processor = Beit3Processor(image_processor, tokenizer)
+        beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
         input = beit3_processor(text=["This is photo of a cat"], images=image)
 
-        model.eval()
         # prepare bool_masked_pos
         pixel_values = torch.cat(
             (torch.tensor(input["pixel_values"]).unsqueeze(1), torch.tensor(input["pixel_values"]).unsqueeze(1)), dim=1
@@ -554,14 +544,11 @@ class BeitModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_beit3_for_image_captioning(self):
         model = Beit3ForCaptioning.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning").to(torch_device)
-        tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
 
-        image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
         image = prepare_img()
-        beit3_processor = Beit3Processor(image_processor, tokenizer)
+        beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
         input = beit3_processor(text=["This is photo of a cat"], images=image)
 
-        model.eval()
         # prepare bool_masked_pos
         language_masked_pos = torch.zeros((input["input_ids"].shape[0], input["input_ids"].shape[1]))
         language_masked_pos[0, 5] = 1
@@ -581,14 +568,11 @@ class BeitModelIntegrationTest(unittest.TestCase):
         model = Beit3ForImageTextRetrieval.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval").to(
             torch_device
         )
-        tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
 
-        image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
         image = prepare_img()
-        beit3_processor = Beit3Processor(image_processor, tokenizer)
+        beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
         input = beit3_processor(text=["This is photo of a cat"], images=image)
 
-        model.eval()
         # prepare bool_masked_pos
         another_input_ids = beit3_processor(text=["This is photo of a dog"], images=image)["input_ids"]
         output = model(
@@ -597,17 +581,3 @@ class BeitModelIntegrationTest(unittest.TestCase):
         )
 
         assert round(float(output.loss.detach().numpy()), 4) == 1.8435
-
-    @slow
-    def test_pipeline_visual_question_answering(self):
-        model = Beit3ForQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
-        tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
-
-        image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
-
-        image = prepare_img()
-        vqa_pipeline = pipeline(
-            "visual-question-answering", model, tokenizer=tokenizer, image_processor=image_processor
-        )
-        ans = vqa_pipeline(image, "What is in this photo ?", top_k=1)
-        assert ans[0]["answer"] == "cat"
