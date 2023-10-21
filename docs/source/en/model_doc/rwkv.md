@@ -73,6 +73,9 @@ output = model.generate(inputs["input_ids"], max_new_tokens=64, stopping_criteri
 
 [[autodoc]] RwkvConfig
 
+## RWKVWorldTokenizer
+
+[[autodoc]] RWKVWorldTokenizer
 
 ## RwkvModel
 

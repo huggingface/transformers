@@ -28,21 +28,41 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/rwkv_vocab_v20230424.json")
 
+
 @require_tokenizers
 class RWKVWorldTokenizationTest(unittest.TestCase):
     def test_rwkv_world_tokenizer_encode(self):
         tokenizer = RWKVWorldTokenizer.from_pretrained(os.path.dirname(SAMPLE_VOCAB))
-        s1 = tokenizer("Hello")['input_ids']
+        s1 = tokenizer("Hello")["input_ids"]
         self.assertListEqual(s1, [33155])
-        s2 = tokenizer("S:2")['input_ids']
+        s2 = tokenizer("S:2")["input_ids"]
         self.assertListEqual(s2, [84, 59, 51])
-        s3 = tokenizer("Made in China")['input_ids']
+        s3 = tokenizer("Made in China")["input_ids"]
         self.assertListEqual(s3, [23897, 4596, 36473])
-        s4 = tokenizer("今天天气不错")['input_ids']
+        s4 = tokenizer("今天天气不错")["input_ids"]
         self.assertListEqual(s4, [10381, 11639, 11639, 13655, 10260, 17631])
-        s5 = tokenizer("男：听说你们公司要派你去南方工作?")['input_ids']
-        self.assertListEqual(s5, [14601, 19151, 11065, 16735, 10464, 10402, 10678, 11029, 16503, 13818, 10464, 10985, 10934, 13036, 12137, 10460, 64])
-        s6 = tokenizer("Pré")['input_ids']
+        s5 = tokenizer("男：听说你们公司要派你去南方工作?")["input_ids"]
+        self.assertListEqual(
+            s5,
+            [
+                14601,
+                19151,
+                11065,
+                16735,
+                10464,
+                10402,
+                10678,
+                11029,
+                16503,
+                13818,
+                10464,
+                10985,
+                10934,
+                13036,
+                12137,
+                10460,
+                64,
+            ],
+        )
+        s6 = tokenizer("Pré")["input_ids"]
         self.assertListEqual(s6, [1371, 2503])
-
-

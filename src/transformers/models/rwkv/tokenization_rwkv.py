@@ -110,8 +110,8 @@ class DATrie:
         node = self.root
         while idx < len(word):
             w = word[idx]
-            is_leaf = (idx == (len(word) - 1))
-            leaf_data = (data if is_leaf else None)
+            is_leaf = idx == (len(word) - 1)
+            leaf_data = data if is_leaf else None
             # 不存在则插入
             if not node.has_next(w):
                 node.add_node(w, self.Node(is_leaf=is_leaf, leaf_data=leaf_data))
@@ -147,7 +147,7 @@ class DATrie:
                 # last word
             node = node.get_node(w)
             if node.is_leaf():
-                result.append([word[:idx + 1], node.get_data()])
+                result.append([word[: idx + 1], node.get_data()])
             idx += 1
         return result
 
@@ -155,7 +155,11 @@ class DATrie:
         idx = start_idx
         node = self.root
         l = len(content)
-        result = [["", ], ]
+        result = [
+            [
+                "",
+            ],
+        ]
         while node is not None and idx < l:
             w = content[idx]
             if not node.has_next(w):
@@ -163,7 +167,7 @@ class DATrie:
                 # last word
             node = node.get_node(w)
             if node.is_leaf():
-                result.append([content[start_idx:idx + 1], node.get_data()])
+                result.append([content[start_idx : idx + 1], node.get_data()])
             idx += 1
         return result[-1]
 
@@ -171,7 +175,9 @@ class DATrie:
         idx = start_idx
         node = self.root
         l = len(content)
-        result = [["", (3, 0)], ]
+        result = [
+            ["", (3, 0)],
+        ]
         while node is not None and idx < l:
             w = content[idx]
             if not node.has_next(w):
@@ -179,7 +185,7 @@ class DATrie:
                 # last word
             node = node.get_node(w)
             if node.is_leaf():
-                result.append([content[start_idx:idx + 1], node.get_data()])
+                result.append([content[start_idx : idx + 1], node.get_data()])
             idx += 1
         if len(result) > 1:
             result = sorted(result, key=lambda x: x[1][1])
@@ -256,15 +262,6 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
     [36786, 40213]
     ```
 
-    You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
-    call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
-
-    <Tip>
-
-    When used with `is_split_into_words=True`, this tokenizer will add a space before each word (even the first one).
-
-    </Tip>
-
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
 
@@ -274,20 +271,13 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
-        add_prefix_space (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (RWKVWorldTokenizer detect beginning of words by the preceding space).
     """
+
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     model_input_names = ["input_ids", "attention_mask"]
 
-    def __init__(
-            self,
-            vocab_file,
-            errors="replace",
-            **kwargs
-    ):
+    def __init__(self, vocab_file, errors="replace", **kwargs):
         self.add_bos_token = False
         self._bos_token = None
         self._eos_token = None
@@ -332,8 +322,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         return output + bos_token_ids + token_ids_1
 
     def get_special_tokens_mask(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None,
-            already_has_special_tokens: bool = False
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -368,12 +357,12 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         """Tokenize a string."""
         return self.trie.match(text, unk_id=self.unk_token_id, **kwargs)
 
-    def _decode(self,
-               token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
-               skip_special_tokens: bool = False,
-               **kwargs
-               ) -> str:
-
+    def _decode(
+        self,
+        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        skip_special_tokens: bool = False,
+        **kwargs,
+    ) -> str:
         # Convert inputs to python lists
         token_ids = to_py_obj(token_ids)
         if isinstance(token_ids, int):
@@ -381,11 +370,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
                 return ""
             return self.decoder.get(token_ids, self.unk_token)
         elif isinstance(token_ids, list):
-            return self.trie.id2str(
-                token_ids,
-                escape_special_ids=skip_special_tokens,
-                **kwargs
-            )
+            return self.trie.id2str(token_ids, escape_special_ids=skip_special_tokens, **kwargs)
         else:
             return token_ids
 
@@ -432,7 +417,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         def get_input_ids(text):
             if isinstance(text, str):
@@ -497,7 +482,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         def get_input_ids(text):
             if isinstance(text, str):
@@ -554,5 +539,5 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         for is_user, text in conversation.iter_texts():
             input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
         if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length:]
+            input_ids = input_ids[-self.model_max_length :]
         return input_ids
