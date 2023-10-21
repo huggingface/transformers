@@ -729,7 +729,7 @@ class Beit3Model(Beit3PreTrainedModel):
         input_ids=None,
         pixel_values=None,
         text_padding_mask=None,
-        attention_mask=None,
+        image_text_mask=None,
         vision_masked_position=None,
         past_key_value=None,
         text_end_positions=None,
@@ -777,7 +777,7 @@ class Beit3Model(Beit3PreTrainedModel):
         outputs = self.encoder(
             hidden_state=embeddings,
             encoder_padding_mask=encoder_padding_mask,
-            attention_mask=attention_mask,
+            attention_mask=image_text_mask,
             multiway_split_position=multiway_split_position,
             past_key_value=past_key_value,
             text_end_positions=text_end_positions,
@@ -1089,18 +1089,18 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         text_len = text_len if text_len is not None else input_ids.size(1)
         image_len = self.beit3.vision_embedding.num_position_embeddings
         max_len = text_len + image_len
-        uni_mask = torch.zeros((max_len, max_len), dtype=torch.long, device=input_ids.device)
+        image_text_mask = torch.zeros((max_len, max_len), dtype=torch.long, device=input_ids.device)
         i_start, i_end = 0, image_len
         t_start, t_end = image_len, max_len
         # triangle mask for caption to caption
-        uni_mask[t_start:t_end, t_start:t_end] = torch.tril(
+        image_text_mask[t_start:t_end, t_start:t_end] = torch.tril(
             torch.ones(text_len, text_len, dtype=torch.long, device=input_ids.device)
         )
         # full attention for caption to image
-        uni_mask[t_start:t_end, i_start:i_end] = 1
+        image_text_mask[t_start:t_end, i_start:i_end] = 1
         # full attention for image to image
-        uni_mask[i_start:i_end, i_start:i_end] = 1
-        uni_mask = 1 - uni_mask
+        image_text_mask[i_start:i_end, i_start:i_end] = 1
+        image_text_mask = 1 - image_text_mask
 
         if past_key_value is not None:
             for idx in range(self.get_num_layers()):
@@ -1110,7 +1110,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         # for incremental decoding
         text_end_positions = None
         if pixel_values is None:
-            uni_mask = uni_mask[-2:]
+            image_text_mask = image_text_mask[-2:]
             attention_mask = None
             # start position (2 (fairseq starts at 2) + cur_position) is equal to text_len
             text_end_positions = (
@@ -1121,7 +1121,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
             input_ids=input_ids,
             pixel_values=pixel_values,
             text_padding_mask=attention_mask,
-            attention_mask=uni_mask,
+            image_text_mask=image_text_mask,
             past_key_value=past_key_value,
             text_end_positions=text_end_positions,
             output_hidden_states=output_hidden_states,
