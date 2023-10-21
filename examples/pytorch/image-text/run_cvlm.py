@@ -334,22 +334,22 @@ def main():
             token=model_args.token,
             streaming=data_args.streaming,
         )
-        if ["test"] == raw_datasets.keys(): # specifically for facebook/winoground testing
+        if data_args.dataset_name == "facebook/winoground": # specifically for facebook/winoground testing
             raw_datasets["validation"] = load_dataset(
-                extension,
-                data_files=data_files,
+                data_args.dataset_name,
+                data_args.dataset_config_name,
                 split=f"test[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
-                **dataset_args,
+                streaming=data_args.streaming,
             )
             raw_datasets["train"] = load_dataset(
-                extension,
-                data_files=data_files,
+                data_args.dataset_name,
+                data_args.dataset_config_name,
                 split=f"test[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
-                **dataset_args,
+                streaming=data_args.streaming,
             )
         elif "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
@@ -491,8 +491,8 @@ def main():
         column_names = list(raw_datasets["train"].features)
     else:
         column_names = list(raw_datasets["validation"].features)
-    text_column_name = dataset_args.text_column_name
-    image_column_name = dataset_args.image_column_name
+    text_column_name = data_args.text_column_name
+    image_column_name = data_args.image_column_name
 
     # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function
     tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
@@ -500,10 +500,9 @@ def main():
     def process_function(examples):
         with CaptureLogger(tok_logger) as cl:
             output = processor(text=examples[text_column_name], images=[examples[image_column_name]])
-            output["labels"] = output["input_ids"].copy()
             position = (output["input_ids"] == tokenizer.vocab["<s>"]).nonzero(as_tuple=True)[0][0]  # This gets the index of the first '1' in the tensor
-            
-            output["labels"] = torch.full_like(input_ids, -100)  # This creates a tensor filled with -100
+
+            output["labels"] = torch.full_like(output["input_ids"], -100)  # This creates a tensor filled with -100
             output["labels"][position:] = output["input_ids"][position:]
         # clm input could be much much longer than block_size
         if "Token indices sequence length is longer than the" in cl.out:
@@ -512,22 +511,40 @@ def main():
                 " before being passed to the model."
             )
         return output
+    
+    def filter_corrupt_images(examples):
+        """remove problematic images"""
+        valid_images = []
+        for i in range(0, len(examples[image_column_name])):
+            try:
+                processor(text="test", images=[examples[image_column_name][i]])
+                valid_images.append(True)
+            except Exception:
+                valid_images.append(False)
+        return valid_images
 
     with training_args.main_process_first(desc="dataset map tokenization"):
+        raw_datasets = raw_datasets.filter(
+            filter_corrupt_images,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers
+        )
         if not data_args.streaming:
             tokenized_datasets = raw_datasets.map(
                 process_function,
-                batched=True,
+                batched=False,
                 num_proc=data_args.preprocessing_num_workers,
                 remove_columns=column_names,
                 load_from_cache_file=not data_args.overwrite_cache,
                 desc="Running tokenizer on dataset",
+                writer_batch_size=100
             )
         else:
             tokenized_datasets = raw_datasets.map(
                 process_function,
-                batched=True,
+                batched=False,
                 remove_columns=column_names,
+                writer_batch_size=100
             )
 
     if data_args.block_size is None:
@@ -570,18 +587,20 @@ def main():
 
     with training_args.main_process_first(desc="grouping texts together"):
         if not data_args.streaming:
-            vlm_datasets = tokenized_datasets.map(
-                group_texts,
-                batched=True,
-                num_proc=data_args.preprocessing_num_workers,
-                load_from_cache_file=not data_args.overwrite_cache,
-                desc=f"Grouping texts in chunks of {block_size}",
-            )
+            vlm_datasets = tokenized_datasets
+            # .map(
+            #     group_texts,
+            #     batched=True,
+            #     num_proc=data_args.preprocessing_num_workers,
+            #     load_from_cache_file=not data_args.overwrite_cache,
+            #     desc=f"Grouping texts in chunks of {block_size}",
+            # )
         else:
-            vlm_datasets = tokenized_datasets.map(
-                group_texts,
-                batched=True,
-            )
+            vlm_datasets = tokenized_datasets
+            # .map(
+            #     group_texts,
+            #     batched=True,
+            # )
 
     if training_args.do_train:
         if "train" not in tokenized_datasets:
