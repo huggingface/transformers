@@ -445,7 +445,7 @@ class FlaxGPTNeoXPreTrainedModel(FlaxPreTrainedModel):
     config_class = GPTNeoXConfig
     base_model_prefix = "gpt_neox"
     module_class: nn.Module = None
-    
+
     # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.__init__ with GPTNeo->GPTNeoX
     def __init__(
         self,
@@ -569,7 +569,6 @@ class FlaxGPTNeoXPreTrainedModel(FlaxPreTrainedModel):
             outputs = outputs[:1] + (unfreeze(past_key_values["cache"]),) + outputs[1:]
 
         return outputs
-
 
 
 class FlaxGPTNeoXBlockCollection(nn.Module):
@@ -737,7 +736,6 @@ class FlaxGPTNeoXForCausalLMModule(nn.Module):
             return (lm_logits,) + outputs[1:]
 
         return FlaxCausalLMOutput(logits=lm_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
-
 
 
 @add_start_docstrings(
