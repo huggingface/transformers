@@ -158,7 +158,7 @@ _CudaDeviceProperties(name='GeForce RTX 3090', major=8, minor=6, total_memory=24
 提案されたことをすべて試してもまだビルドの問題が発生する場合は、GitHub の問題に進んでください。
 [ディープスピード](https://github.com/microsoft/DeepSpeed/issues)、
 
-
+<a id='deepspeed-multi-gpu'></a>
 ### Deployment with multiple GPUs
 
 DeepSpeed 統合をデプロイするには、[`Trainer`] コマンド ライン引数を調整して新しい引数 `--deepspeed ds_config.json` を含めます。ここで、`ds_config.json` は DeepSpeed 構成ファイルです。
