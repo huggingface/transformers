@@ -436,7 +436,6 @@ class FlaxGPTNeoXBlock(nn.Module):
         return (hidden_states,) + attn_outputs[1:]
 
 
-# Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel with GPTNeo -> GPTNeoX
 class FlaxGPTNeoXPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -446,7 +445,8 @@ class FlaxGPTNeoXPreTrainedModel(FlaxPreTrainedModel):
     config_class = GPTNeoXConfig
     base_model_prefix = "gpt_neox"
     module_class: nn.Module = None
-
+    
+    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.__init__ with GPTNeo->GPTNeoX
     def __init__(
         self,
         config: GPTNeoXConfig,
@@ -459,6 +459,7 @@ class FlaxGPTNeoXPreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
+    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.init_weights with GPTNeo->GPTNeoX
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
@@ -479,6 +480,7 @@ class FlaxGPTNeoXPreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
+    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.init_cache
     def init_cache(self, batch_size, max_length):
         r"""
         Args:
@@ -569,7 +571,7 @@ class FlaxGPTNeoXPreTrainedModel(FlaxPreTrainedModel):
         return outputs
 
 
-# Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoBlockCollection with GPTNeo -> GPTNeoX
+
 class FlaxGPTNeoXBlockCollection(nn.Module):
     config: GPTNeoXConfig
     dtype: jnp.dtype = jnp.float32
@@ -737,13 +739,14 @@ class FlaxGPTNeoXForCausalLMModule(nn.Module):
         return FlaxCausalLMOutput(logits=lm_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
 
 
-# Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoForCausalLM with GPTNeo -> GPTNeoX
+
 @add_start_docstrings(
     """
     The GPTNeoX Model transformer with a language modeling head on top.
     """,
     GPTNeoX_START_DOCSTRING,
 )
+# Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoForCausalLM with GPTNeo->GPTNeoX
 class FlaxGPTNeoXForCausalLM(FlaxGPTNeoXPreTrainedModel):
     module_class = FlaxGPTNeoXForCausalLMModule
 
