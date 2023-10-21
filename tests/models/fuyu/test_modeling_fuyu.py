@@ -269,27 +269,33 @@ class FuyuModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
 
     def setUp(self):
-        self.pretrained_model_name = "adept/fuyu-8b"
-        self.processor = FuyuProcessor.from_pretrained(self.pretrained_model_name)
-        self.model = FuyuForCausalLM.from_pretrained(self.pretrained_model_name)
-        self.bus_image_url = (
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
-        )
-        self.bus_image_pil = Image.open(io.BytesIO(requests.get(self.bus_image_url).content))
+        self.model_tester = FuyuModelTester(self)
 
-    @slow
-    def test_model_8b_chat_greedy_generation_bus_captioning(self):
-        EXPECTED_TEXT_COMPLETION = """A blue bus parked on the side of a road.|ENDOFTEXT|"""
+
+@require_torch
+@slow
+class FuyuModelIntegrationTest(unittest.TestCase):
+    def test_inference(self):
+        processor = FuyuProcessor.from_pretrained("adept/fuyu-8b")
+        model = FuyuForCausalLM.from_pretrained("adept/fuyu-8b")
+
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
+        image = Image.open(io.BytesIO(requests.get(url).content))
+
         text_prompt_coco_captioning = "Generate a coco-style caption.\n"
-        model_inputs_bus_captioning = self.processor(text=text_prompt_coco_captioning, images=self.bus_image_pil)
-        generated_tokens = self.model.generate(**model_inputs_bus_captioning, max_new_tokens=10)
-        text = self.processor.tokenizer.batch_decode(generated_tokens)
+
+        inputs = processor(text=text_prompt_coco_captioning, images=image, return_tensors="pt")
+        generated_tokens = model.generate(**inputs, max_new_tokens=10)
+
+        text = processor.batch_decode(generated_tokens)
         end_sequence = text[0].split("\x04")[1]
         clean_sequence = (
             end_sequence[: end_sequence.find("|ENDOFTEXT|") + len("|ENDOFTEXT|")]
             if "|ENDOFTEXT|" in end_sequence
             else end_sequence
         )
+
+        EXPECTED_TEXT_COMPLETION = """A bus parked on the side of a road.|ENDOFTEXT|"""
         self.assertEqual(EXPECTED_TEXT_COMPLETION, clean_sequence[1:])
 
 
