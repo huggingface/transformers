@@ -449,8 +449,111 @@ Epoch 5/5
 250/250 [==============================] - 238s 949ms/step - loss: 0.1232 - val_loss: 0.3259 - accuracy: 0.9890
 ```
 
-Congratulations! You have fine-tuned your model and shared it on the 🤗 Hub. You can now use it for inference!
+おめでとう！モデルを微調整し、🤗 Hub で共有しました。これで推論に使用できるようになりました。
 </tf>
 </frameworkcontent>
 
+
+<Tip>
+
+画像分類用のモデルを微調整する方法の詳細な例については、対応する [PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/) を参照してください。例/image_classification.ipynb)。
+
+</Tip>
+
+## Inference
+
+モデルを微調整したので、それを推論に使用できるようになりました。
+
+推論を実行したい画像を読み込みます。
+
+```py
+>>> ds = load_dataset("food101", split="validation[:10]")
+>>> image = ds["image"][0]
+```
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/beignets-task-guide.png" alt="image of beignets"/>
+</div>
+
+推論用に微調整されたモデルを試す最も簡単な方法は、それを [`pipeline`] で使用することです。モデルを使用して画像分類用の`pipeline`をインスタンス化し、それに画像を渡します。
+
+```py
+>>> from transformers import pipeline
+
+>>> classifier = pipeline("image-classification", model="my_awesome_food_model")
+>>> classifier(image)
+[{'score': 0.31856709718704224, 'label': 'beignets'},
+ {'score': 0.015232225880026817, 'label': 'bruschetta'},
+ {'score': 0.01519392803311348, 'label': 'chicken_wings'},
+ {'score': 0.013022331520915031, 'label': 'pork_chop'},
+ {'score': 0.012728818692266941, 'label': 'prime_rib'}]
+```
+
+必要に応じて、`pipeline`の結果を手動で複製することもできます。
+
+<frameworkcontent>
+<pt>
+
+画像プロセッサをロードして画像を前処理し、`input`を PyTorch テンソルとして返します。
+
+```py
+>>> from transformers import AutoImageProcessor
+>>> import torch
+
+>>> image_processor = AutoImageProcessor.from_pretrained("my_awesome_food_model")
+>>> inputs = image_processor(image, return_tensors="pt")
+```
+
+入力をモデルに渡し、ロジットを返します。
+
+```py
+>>> from transformers import AutoModelForImageClassification
+
+>>> model = AutoModelForImageClassification.from_pretrained("my_awesome_food_model")
+>>> with torch.no_grad():
+...     logits = model(**inputs).logits
+```
+
+最も高い確率で予測されたラベルを取得し、モデルの `id2label` マッピングを使用してラベルに変換します。
+
+```py
+>>> predicted_label = logits.argmax(-1).item()
+>>> model.config.id2label[predicted_label]
+'beignets'
+```
+</pt>
+</frameworkcontent>
+
+<frameworkcontent>
+<tf>
+
+画像プロセッサをロードして画像を前処理し、`input`を TensorFlow テンソルとして返します。
+
+```py
+>>> from transformers import AutoImageProcessor
+
+>>> image_processor = AutoImageProcessor.from_pretrained("MariaK/food_classifier")
+>>> inputs = image_processor(image, return_tensors="tf")
+```
+
+入力をモデルに渡し、ロジットを返します。
+
+```py
+>>> from transformers import TFAutoModelForImageClassification
+
+>>> model = TFAutoModelForImageClassification.from_pretrained("MariaK/food_classifier")
+>>> logits = model(**inputs).logits
+```
+
+最も高い確率で予測されたラベルを取得し、モデルの `id2label` マッピングを使用してラベルに変換します。
+
+
+```py
+>>> predicted_class_id = int(tf.math.argmax(logits, axis=-1)[0])
+>>> model.config.id2label[predicted_class_id]
+'beignets'
+```
+
+</tf>
+</frameworkcontent>
 
