@@ -384,7 +384,6 @@ class FuyuProcessor(ProcessorMixin):
         self.tokenizer = tokenizer
         self.max_tokens_to_generate = 10
         self.max_position_embeddings = 16384  # TODO Can't derive this from model files: where to set it?
-        self.image_processor = FuyuImageProcessor()
 
     def _process_images(self, images):
         """Utility function to preprocess the images and extract necessary information about original formats."""
