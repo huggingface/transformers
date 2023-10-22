@@ -343,6 +343,10 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
                 # check that the output for the restored model is the same
                 self.assert_outputs_same(restored_model_outputs, outputs)
 
+    @unittest.skip("Does not support conversations.")
+    def test_pipeline_conversational(self):
+        pass
+
 
 def _long_tensor(tok_lst):
     return tf.constant(tok_lst, dtype=tf.int32)
