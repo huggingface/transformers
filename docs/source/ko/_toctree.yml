@@ -205,7 +205,7 @@
       title: (번역중) Logging
     - local: in_translation
       title: (번역중) Models
-    - local: text_generation
+    - local: main_classes/text_generation
       title: 텍스트 생성
     - local: in_translation
       title: (번역중) ONNX
