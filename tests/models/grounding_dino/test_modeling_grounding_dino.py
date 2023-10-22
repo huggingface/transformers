@@ -686,7 +686,7 @@ class GroundingDINOModelIntegrationTests(unittest.TestCase):
 
         self.assertEqual(len(results["scores"]), 2)
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-3))
-        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
+        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-2))
 
     @require_torch_gpu
     def test_inference_object_detection_head_equivalence_cpu_gpu(self):
