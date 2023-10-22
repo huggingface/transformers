@@ -1552,7 +1552,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> query_url = "http://images.cocodataset.org/val2017/000000001675.jpg"
+        >>> query_url = "http://images.cocodataset.org/val2017/000000058111.jpg"
         >>> query_image = Image.open(requests.get(query_url, stream=True).raw)
         >>> inputs = processor(images=image, query_images=query_image, return_tensors="pt")
         >>> with torch.no_grad():
@@ -1561,26 +1561,15 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> target_sizes = torch.Tensor([image.size[::-1]])
         >>> # Convert outputs (bounding boxes and class logits) to COCO API
         >>> results = processor.post_process_image_guided_detection(
-        ...     outputs=outputs, threshold=0.9, nms_threshold=0.3, target_sizes=target_sizes
+        ...     outputs=outputs, threshold=0.98, nms_threshold=0.95, target_sizes=target_sizes
         ... )
         >>> i = 0  # Retrieve predictions for the first image
         >>> boxes, scores = results[i]["boxes"], results[i]["scores"]
         >>> for box, score in zip(boxes, scores):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(f"Detected similar object with confidence {round(score.item(), 3)} at location {box}")
-        Detected similar object with confidence 0.938 at location [327.31, 54.94, 547.39, 268.06]
-        Detected similar object with confidence 0.959 at location [5.78, 360.65, 619.12, 366.39]
-        Detected similar object with confidence 0.902 at location [2.85, 360.01, 627.63, 380.79]
-        Detected similar object with confidence 0.985 at location [176.97, -29.45, 672.69, 182.83]
-        Detected similar object with confidence 1.0 at location [6.53, 14.35, 624.87, 470.82]
-        Detected similar object with confidence 0.998 at location [579.98, 29.14, 615.49, 489.05]
-        Detected similar object with confidence 0.985 at location [206.15, 10.53, 247.74, 466.01]
-        Detected similar object with confidence 0.947 at location [18.62, 429.72, 646.5, 457.72]
-        Detected similar object with confidence 0.996 at location [523.88, 20.69, 586.84, 483.18]
-        Detected similar object with confidence 0.998 at location [3.39, 360.59, 617.29, 499.21]
-        Detected similar object with confidence 0.969 at location [4.47, 449.05, 614.5, 474.76]
-        Detected similar object with confidence 0.966 at location [31.44, 463.65, 654.66, 471.07]
-        Detected similar object with confidence 0.924 at location [30.93, 468.07, 635.35, 475.39]
+        Detected similar object with confidence 1.0 at location [341.67, 17.54, 642.32, 278.51]
+        Detected similar object with confidence 1.0 at location [6.75, 38.97, 326.62, 354.85]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1606,6 +1595,107 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         # Predict object classes [batch_size, num_patches, num_queries+1]
         (pred_logits, class_embeds) = self.class_predictor(image_feats=image_feats, query_embeds=query_embeds)
+
+        # Predict object boxes
+        target_pred_boxes = self.box_predictor(image_feats, feature_map)
+
+        if not return_dict:
+            output = (
+                feature_map,
+                query_feature_map,
+                target_pred_boxes,
+                query_pred_boxes,
+                pred_logits,
+                class_embeds,
+                vision_outputs.to_tuple(),
+            )
+            output = tuple(x for x in output if x is not None)
+            return output
+
+        return Owlv2ImageGuidedObjectDetectionOutput(
+            image_embeds=feature_map,
+            query_image_embeds=query_feature_map,
+            target_pred_boxes=target_pred_boxes,
+            query_pred_boxes=query_pred_boxes,
+            logits=pred_logits,
+            class_embeds=class_embeds,
+            text_model_output=None,
+            vision_model_output=vision_outputs,
+        )
+
+    @add_start_docstrings_to_model_forward(OWLV2_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Owlv2ImageGuidedObjectDetectionOutput, config_class=Owlv2Config)
+    def image_guided_detection_v2(
+        self,
+        pixel_values: torch.FloatTensor,
+        query_pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Owlv2ImageGuidedObjectDetectionOutput:
+        r"""
+        Returns:
+
+        Examples:
+        ```python
+        >>> import requests
+        >>> from PIL import Image
+        >>> import torch
+        >>> from transformers import AutoProcessor, Owlv2ForObjectDetection
+
+        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
+        >>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble")
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> query_url = "http://images.cocodataset.org/val2017/000000058111.jpg"
+        >>> query_image = Image.open(requests.get(query_url, stream=True).raw)
+        >>> inputs = processor(images=image, query_images=query_image, return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     outputs = model.image_guided_detection(**inputs)
+        >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
+        >>> target_sizes = torch.Tensor([image.size[::-1]])
+        >>> # Convert outputs (bounding boxes and class logits) to COCO API
+        >>> results = processor.post_process_image_guided_detection(
+        ...     outputs=outputs, threshold=0.98, nms_threshold=0.95, target_sizes=target_sizes
+        ... )
+        >>> i = 0  # Retrieve predictions for the first image
+        >>> boxes, scores = results[i]["boxes"], results[i]["scores"]
+        >>> for box, score in zip(boxes, scores):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     print(f"Detected similar object with confidence {round(score.item(), 3)} at location {box}")
+        Detected similar object with confidence 1.0 at location [341.67, 17.54, 642.32, 278.51]
+        Detected similar object with confidence 1.0 at location [6.75, 38.97, 326.62, 354.85]
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # Compute feature maps for the input and query images
+        query_feature_map = self.image_embedder(pixel_values=query_pixel_values)[0]
+        feature_map, vision_outputs = self.image_embedder(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+
+        batch_size, num_patches, num_patches, hidden_dim = feature_map.shape
+        image_feats = torch.reshape(feature_map, (batch_size, num_patches * num_patches, hidden_dim))
+
+        batch_size, num_patches, num_patches, hidden_dim = query_feature_map.shape
+        query_image_feats = torch.reshape(query_feature_map, (batch_size, num_patches * num_patches, hidden_dim))
+
+        # Get top class embedding based on objectness logits
+        objectnesses = self.objectness_predictor(query_image_feats)
+        objectnesses = nn.functional.sigmoid(objectnesses)
+        query_object_index = torch.argmax(objectnesses)
+        query_pred_boxes = self.box_predictor(query_image_feats, feature_map=query_feature_map)
+        query_class_embeddings = self.class_predictor(query_image_feats)[1]
+        query_embedding = query_class_embeddings[query_object_index]
+
+        # Predict object classes [batch_size, num_patches, num_queries+1]
+        (pred_logits, class_embeds) = self.class_predictor(image_feats=image_feats, query_embeds=query_embedding)
 
         # Predict object boxes
         target_pred_boxes = self.box_predictor(image_feats, feature_map)
