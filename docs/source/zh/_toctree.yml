@@ -19,4 +19,6 @@
     title: 使用 🤗 Tokenizers 中的分词器
   - local: multilingual
     title: 使用多语言模型进行推理
+  - local: create_a_model
+    title: 使用特定于模型的 API
   title: 开发者指南
