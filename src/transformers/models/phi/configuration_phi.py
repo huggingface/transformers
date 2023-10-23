@@ -52,8 +52,6 @@ class PhiConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer decoder.
         resid_pdrop (`float`, *optional*, defaults to 0.0):
             Dropout probability for mlp outputs.
-        embd_pdrop (`float`, *optional*, defaults to 0.0):
-            Dropout probability for token embeddings.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio after computing the attention scores.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_new"`):
@@ -63,7 +61,7 @@ class PhiConfig(PretrainedConfig):
             tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
@@ -114,12 +112,11 @@ class PhiConfig(PretrainedConfig):
         num_hidden_layers=24,
         num_attention_heads=32,
         resid_pdrop=0.0,
-        embd_pdrop=0.0,
         attention_dropout=0.0,
         hidden_act="gelu_new",
         max_position_embeddings=2048,
         initializer_range=0.02,
-        layer_norm_epsilon=1e-5,
+        layer_norm_eps=1e-5,
         use_cache=True,
         tie_word_embeddings=False,
         rope_theta=10000.0,
@@ -136,12 +133,11 @@ class PhiConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.resid_pdrop = resid_pdrop
-        self.embd_pdrop = embd_pdrop
         self.attention_dropout = attention_dropout
         self.hidden_act = hidden_act
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
-        self.layer_norm_epsilon = layer_norm_epsilon
+        self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
