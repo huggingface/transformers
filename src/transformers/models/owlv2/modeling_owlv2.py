@@ -1686,14 +1686,15 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         batch_size, num_patches, num_patches, hidden_dim = query_feature_map.shape
         query_image_feats = torch.reshape(query_feature_map, (batch_size, num_patches * num_patches, hidden_dim))
 
-        # v2 differs from v1 in that we use the objectness head to predict the objectness of the patches of the query image
-        # Get top class embedding based on objectness logits
-        objectnesses = self.objectness_predictor(query_image_feats)
-        objectnesses = torch.sigmoid(objectnesses)
-        query_object_index = torch.argmax(objectnesses)
+        # Get boxes and class embeddings of query image
         query_pred_boxes = self.box_predictor(query_image_feats, feature_map=query_feature_map)
         query_class_embeddings = self.class_predictor(query_image_feats)[1]
 
+        # v2 differs from v1 in that we use the objectness head to predict the objectness of the patches of the query image
+        # The query embedding corresponds to the top class embedding based on objectness logits
+        objectnesses = self.objectness_predictor(query_image_feats)
+        objectnesses = torch.sigmoid(objectnesses)
+        query_object_index = torch.argmax(objectnesses)
         query_embedding = query_class_embeddings[:, query_object_index, :]
 
         # Predict object classes [batch_size, num_patches, num_queries+1]
