@@ -60,6 +60,7 @@ from transformers.testing_utils import (
     require_safetensors,
     require_sentencepiece,
     require_sigopt,
+    require_tensorboard,
     require_tokenizers,
     require_torch,
     require_torch_bf16_cpu,
@@ -2269,6 +2270,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         for i in range(5, max_steps, 5):
             self.assertIn(f"Training in progress, step {i}", commits)
 
+    @require_tensorboard
     def test_push_to_hub_with_tensorboard_logs(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
