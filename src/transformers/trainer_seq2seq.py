@@ -160,8 +160,10 @@ class Seq2SeqTrainer(Trainer):
             gen_kwargs["max_length"] = self.args.generation_max_length
         if gen_kwargs.get("num_beams") is None and self.args.generation_num_beams is not None:
             gen_kwargs["num_beams"] = self.args.generation_num_beams
+        # We don't want to drop samples if `num_return_sequences` > 1
+        if "generation_config" in gen_kwargs and gen_kwargs["generation_config"].num_return_sequences > 1:
+            self.gather_function = self.accelerator.gather
         self._gen_kwargs = gen_kwargs
-
         return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
     def predict(
@@ -223,6 +225,10 @@ class Seq2SeqTrainer(Trainer):
             gen_kwargs["max_length"] = self.args.generation_max_length
         if gen_kwargs.get("num_beams") is None and self.args.generation_num_beams is not None:
             gen_kwargs["num_beams"] = self.args.generation_num_beams
+        raise ValueError("A")
+        # We don't want to drop samples if `num_return_sequences` > 1
+        if gen_kwargs.get("num_return_sequences", 1) > 1:
+            self.gather_function = self.accelerator.gather
         self._gen_kwargs = gen_kwargs
 
         return super().predict(test_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
