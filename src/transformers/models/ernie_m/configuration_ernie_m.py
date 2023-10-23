@@ -61,19 +61,20 @@ class ErnieMConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings and encoder.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability used in `MultiHeadAttention` in all encoder layers to drop some attention target.
-        act_dropout (`float`, *optional*, defaults to 0.0):
-            This dropout probability is used in `ErnieMEncoderLayer` after activation.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
+        max_position_embeddings (`int`, *optional*, defaults to 514):
             The maximum value of the dimensionality of position encoding, which dictates the maximum supported length
             of an input sequence.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the normal initializer for initializing all weight matrices.
+            The index of padding token in the token vocabulary.
+        pad_token_id (`int`, *optional*, defaults to 1): <fill_docstring>
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the normal initializer for initializing all weight matrices.
-        pad_token_id(`int`, *optional*, defaults to 1):
-            The index of padding token in the token vocabulary.
+        is_decoder (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        act_dropout (`float`, *optional*, defaults to 0.0):
+            This dropout probability is used in `ErnieMEncoderLayer` after activation.
 
     A normal_initializer initializes weight matrices as normal distributions. See
     `ErnieMPretrainedModel._init_weights()` for how weights are initialized in `ErnieMModel`.
