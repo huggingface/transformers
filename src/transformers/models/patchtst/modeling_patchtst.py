@@ -1998,7 +1998,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        target_values: Optional[torch.Tensor],
+        target_values: torch.Tensor,
         past_observed_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -2013,7 +2013,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
 
                 - 1 for values that are **observed**,
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            target_values (`torch.Tensor` of shape `(bs, num_input_channels)`, *optional*):
+            target_values (`torch.Tensor` of shape `(bs, num_input_channels)`):
                 target values associates with the `past_values`
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers

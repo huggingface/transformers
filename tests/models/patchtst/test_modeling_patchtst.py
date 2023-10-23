@@ -199,8 +199,10 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             inputs_dict.pop("future_values")
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
-            labels = floats_tensor([self.model_tester.batch_size, self.model_tester.num_output_channels], rng=rng)
-            inputs_dict["labels"] = labels
+            target_values = floats_tensor(
+                [self.model_tester.batch_size, self.model_tester.num_output_channels], rng=rng
+            )
+            inputs_dict["target_values"] = target_values
             inputs_dict.pop("future_values")
         return inputs_dict
 
@@ -281,7 +283,9 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             ):
                 expected_arg_names.remove("future_values")
                 expected_arg_names.remove("past_observed_mask")
-                expected_arg_names.append("labels")
+                expected_arg_names.append("labels") if model_class in get_values(
+                    MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING
+                ) else expected_arg_names.append("target_values")
                 expected_arg_names.append("past_observed_mask")
             expected_arg_names.extend(
                 [
