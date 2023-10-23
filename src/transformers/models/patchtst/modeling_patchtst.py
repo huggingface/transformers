@@ -1596,7 +1596,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_observed_mask: Optional[torch.Tensor] = None,
-        future_values: Optional[torch.Tensor] = None,
+        target_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, PatchTSTForPredictionOutput]:
@@ -1610,7 +1610,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
 
                 - 1 for values that are **observed**,
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            future_values (`torch.Tensor` of shape `(bs, pred_len, num_output_channels)`, *optional*):
+            target_values (`torch.Tensor` of shape `(bs, pred_len, num_output_channels)`, *optional*):
                 future target values associates with the `past_values`
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
@@ -1633,15 +1633,15 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         y_hat = self.head(model_output.last_hidden_state)
 
         loss_val = None
-        if future_values is not None:
+        if target_values is not None:
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(y_hat)
-                loss_val = nll(distribution, future_values)
+                loss_val = nll(distribution, target_values)
                 # take average of the loss
                 loss_val = weighted_average(loss_val)
             else:
                 loss = nn.MSELoss(reduction="mean")
-                loss_val = loss(y_hat, future_values)
+                loss_val = loss(y_hat, target_values)
 
         encoder_states = model_output.hidden_states
         if not return_dict:
@@ -1677,7 +1677,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         # get model output
         outputs = self(
             past_values=past_values,
-            future_values=None,
+            target_values=None,
             past_observed_mask=past_observed_mask,
             output_hidden_states=False,
         )
