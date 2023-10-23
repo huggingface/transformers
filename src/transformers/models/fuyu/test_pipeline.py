@@ -1,7 +1,10 @@
-from transformers import pipeline
 import io
+
 import requests
 from PIL import Image
+
+from transformers import pipeline
+
 
 pipe = pipeline(task="image-to-text", model="adept/fuyu-8b")
 
