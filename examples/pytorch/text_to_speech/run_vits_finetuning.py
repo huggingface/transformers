@@ -57,40 +57,8 @@ from accelerate.logging import get_logger
 from accelerate.state import AcceleratorState
 from accelerate.utils import ProjectConfiguration, set_seed, is_wandb_available
 
-############ UTILS
-import matplotlib
-import matplotlib.pyplot as plt
-import numpy as np
-import torch
-from matplotlib.colors import LogNorm
-
-matplotlib.use("Agg")
-
-
-def plot_alignment(alignment, info=None, fig_size=(16, 10), title=None, output_fig=False, plot_log=False):
-    if isinstance(alignment, torch.Tensor):
-        alignment_ = alignment.detach().cpu().numpy().squeeze()
-    else:
-        alignment_ = alignment
-    alignment_ = alignment_.astype(np.float32) if alignment_.dtype == np.float16 else alignment_
-    fig, ax = plt.subplots(figsize=fig_size)
-    im = ax.imshow(
-        alignment_.T, aspect="auto", origin="lower", interpolation="none", norm=LogNorm() if plot_log else None
-    )
-    fig.colorbar(im, ax=ax)
-    xlabel = "Decoder timestep"
-    if info is not None:
-        xlabel += "\n\n" + info
-    plt.xlabel(xlabel)
-    plt.ylabel("Encoder timestep")
-    # plt.yticks(range(len(text)), list(text))
-    plt.tight_layout()
-    if title is not None:
-        plt.title(title)
-    if not output_fig:
-        plt.close()
-    return fig
-################
+from utils import plot_alignment_to_numpy, plot_spectrogram_to_numpy
+from monotonic_align import maximum_path
 
 
 if is_wandb_available():
@@ -170,14 +138,6 @@ def kl_loss(z_p, logs_q, m_p, logs_p, z_mask):
   kl = torch.sum(kl * z_mask)
   l = kl / torch.sum(z_mask)
   return l
-
-#SMALL_CONST = 1e-15
-# kl_loss = 0
-#unpert_probs = nn.functional.softmax(unpert_logits[:, -1, :], dim=-1)
-#unpert_probs = unpert_probs + SMALL_CONST * (unpert_probs <= SMALL_CONST).float().to(device).detach()
-#correction = SMALL_CONST * (probs <= SMALL_CONST).float().to(device).detach()
-#corrected_probs = probs + correction.detach()
-#kl_loss = kl_scale * ((corrected_probs * (corrected_probs / unpert_probs).log()).sum())
 
 @dataclass
 class ModelArguments:
@@ -290,6 +250,14 @@ class DataTrainingArguments:
         metadata={"help": """If set, corresponds to the name of the speaker id column containing the speaker ids. Note that it assumes that speakers are indexed from 0 to `num_speakers-1`. 
                   `num_speakers` and `speaker_embedding_size` have to be set in the model config. Defaults to None, i.e it is not used by default."""},
     )
+    max_tokens_length: float = field(
+        default=450,
+        metadata={
+            "help": (
+                "Truncate audio files with a transcription that are longer than `max_tokens_length` tokens"
+            )
+        },
+    )
     max_duration_in_seconds: float = field(
         default=20.0,
         metadata={
@@ -376,10 +344,7 @@ class DataCollatorTTSWithPadding:
         # always return batch
         if not is_batched:
             raw_speech = [np.asarray([raw_speech]).T]
-        
-        if self.feature_extractor.max_wav_value is not None:
-            raw_speech = [speech if self.feature_extractor.max_wav_value is not None else speech/self.feature_extractor.max_wav_value for speech in raw_speech]
-
+    
         batched_speech = BatchFeature({"input_features": raw_speech})
 
         # convert into correct format for padding
@@ -454,21 +419,15 @@ def training_loop(
     per_device_train_batch_size = args.per_device_train_batch_size if args.per_device_train_batch_size else 1
     total_batch_size = per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
     
-    sampler = LengthGroupedSampler(
-                            batch_size=per_device_train_batch_size,
-                            dataset=train_dataset,
-                            lengths=train_dataset["tokens_input_length"]
-                            ) if args.group_by_length else None
-    
-    eval_sampler = LengthGroupedSampler(
-                            batch_size=args.per_device_eval_batch_size,
-                            dataset=eval_dataset ,
-                            lengths=eval_dataset["tokens_input_length"]
-                            ) if args.group_by_length else None
     
     # define train_dataloader and eval_dataloader if relevant
     train_dataloader = None
     if args.do_train:
+        sampler = LengthGroupedSampler(
+                                batch_size=per_device_train_batch_size,
+                                dataset=train_dataset,
+                                lengths=train_dataset["tokens_input_length"]
+                                ) if args.group_by_length else None
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset,
             shuffle=not args.group_by_length,
@@ -480,6 +439,12 @@ def training_loop(
     
     eval_dataloader = None
     if args.do_eval:
+        eval_sampler = LengthGroupedSampler(
+                        batch_size=args.per_device_eval_batch_size,
+                        dataset=eval_dataset ,
+                        lengths=eval_dataset["tokens_input_length"]
+                        ) if args.group_by_length else None
+        
         eval_dataloader = torch.utils.data.DataLoader(
             eval_dataset,
             shuffle=False,
@@ -612,7 +577,8 @@ def training_loop(
         train_loss_fmaps = 0.0
         train_loss_gen = 0.0
         
-
+        train_losses = [train_summed_losses, train_loss_duration, train_loss_mel, train_loss_kl, train_loss_fmaps, train_loss_gen, train_loss_disc, train_loss_real_disc, train_loss_fake_disc]
+        
         for step, batch in enumerate(train_dataloader):
             print(f"batch {step}, process{accelerator.process_index}, waveform {(batch['waveform'].shape)}, tokens {(batch['input_ids'].shape)}... ") 
 
@@ -624,6 +590,7 @@ def training_loop(
                     labels_attention_mask = batch["labels_attention_mask"],
                     speaker_id = batch["speaker_id"],
                     return_dict = True,
+                    monotic_alignment_function = maximum_path,
                 )
                 
                 waveform, log_duration, attn, ids_slice, input_padding_mask, labels_padding_mask, latents, prior_latents, prior_means, prior_log_variances, posterior_means, posterior_log_variances = model_outputs.training_outputs
@@ -681,39 +648,30 @@ def training_loop(
                 gen_lr_scheduler.step()
                 gen_optimizer.zero_grad()
                 
+                print(f"batch {step}, process{accelerator.process_index}, aggregation")
+                # losses = [total_generator_loss, loss_duration, loss_mel, loss_kl, loss_fmaps, loss_gen, loss_disc, loss_real_disc, loss_fake_disc]
+                # losses = [loss.repeat(per_device_train_batch_size) for loss in losses]
                 
-                # Gather the losses across all processes for logging (if we use distributed training).
-                avg_total_loss = accelerator.gather(total_generator_loss.repeat(per_device_train_batch_size)).mean()
-                train_summed_losses += avg_total_loss.item() / args.gradient_accumulation_steps
-
-                avg_train_loss_duration = accelerator.gather(loss_duration.repeat(per_device_train_batch_size)).mean()
-                train_loss_duration += avg_train_loss_duration.item() / args.gradient_accumulation_steps
-
-                avg_train_loss_mel = accelerator.gather(loss_mel.repeat(per_device_train_batch_size)).mean()
-                train_loss_mel += avg_train_loss_mel.item() / args.gradient_accumulation_steps
-
-                avg_train_loss_kl = accelerator.gather(loss_kl.repeat(per_device_train_batch_size)).mean()
-                train_loss_kl += avg_train_loss_kl.item() / args.gradient_accumulation_steps
-
-                avg_train_loss_fmaps = accelerator.gather(loss_fmaps.repeat(per_device_train_batch_size)).mean()
-                train_loss_fmaps += avg_train_loss_fmaps.item() / args.gradient_accumulation_steps
-
-                avg_train_loss_gen = accelerator.gather(loss_gen.repeat(per_device_train_batch_size)).mean()
-                train_loss_gen += avg_train_loss_gen.item() / args.gradient_accumulation_steps
-
-                avg_train_loss_disc = accelerator.gather(loss_disc.repeat(per_device_train_batch_size)).mean()
-                train_loss_disc += avg_train_loss_disc.item() / args.gradient_accumulation_steps
+                losses = torch.stack([total_generator_loss, loss_duration, loss_mel, loss_kl, loss_fmaps, loss_gen, loss_disc, loss_real_disc, loss_fake_disc])
+                losses = accelerator.gather(losses.repeat(per_device_train_batch_size,1)).mean(0)
                 
-                avg_train_loss_real_disc = accelerator.gather(loss_real_disc.repeat(per_device_train_batch_size)).mean()
-                train_loss_real_disc += avg_train_loss_real_disc.item() / args.gradient_accumulation_steps
+                for i, total_loss in enumerate(train_losses):
+                    total_loss += losses[i].item()/args.gradient_accumulation_steps
+
                 
-                avg_train_loss_fake_disc = accelerator.gather(loss_fake_disc.repeat(per_device_train_batch_size)).mean()
-                train_loss_fake_disc += avg_train_loss_fake_disc.item() / args.gradient_accumulation_steps
+                
+                # TODO: gather in right dim and do things
+                
+                #for loss, total_loss in zip(accelerator.gather(losses), train_losses):
+                #    total_loss += loss.mean().item() / args.gradient_accumulation_steps
+                    
+                print(f"batch {step}, process{accelerator.process_index}, aggregated")
                 
 
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
                 
+                train_summed_losses, train_loss_duration, train_loss_mel, train_loss_kl, train_loss_fmaps, train_loss_gen, train_loss_disc, train_loss_real_disc, train_loss_fake_disc = train_losses
                 progress_bar.update(1)
                 global_step += 1
                 # TODO: enrich log
@@ -780,23 +738,24 @@ def training_loop(
                 break
 
             eval_steps = args.eval_steps if args.eval_steps else 1
-            do_eval = args.do_eval and (global_step % eval_steps == 0)
+            do_eval = args.do_eval and (global_step % eval_steps == 0) and accelerator.sync_gradients
             
             if do_eval:
                 logger.info("Running validation... ")
-                audios = []
-                audios_lengths = []
+                # audios = []
+                # audios_lengths = []
                 generated_audio = []
                 generated_attn = []
+                generated_spec = []
                 for step, batch in enumerate(eval_dataloader):
-                    
-                    with torch.inference_mode():
-                        model_outputs = model(
-                            input_ids = batch["input_ids"],
-                            attention_mask = batch["attention_mask"],
-                            speaker_id = batch["speaker_id"],
-                            return_dict = False
-                        )
+                    print(f"VALIDATION - batch {step}, process{accelerator.process_index}, waveform {(batch['waveform'].shape)}, tokens {(batch['input_ids'].shape)}... ") 
+                    with torch.no_grad():
+                        # model_outputs = model(
+                        #     input_ids = batch["input_ids"],
+                        #     attention_mask = batch["attention_mask"],
+                        #     speaker_id = batch["speaker_id"],
+                        #     return_dict = False
+                        # )
     
                         model_outputs_train = model(
                             input_ids = batch["input_ids"],
@@ -805,6 +764,7 @@ def training_loop(
                             labels_attention_mask = batch["labels_attention_mask"],
                             speaker_id = batch["speaker_id"],
                             return_dict = True,
+                            monotic_alignment_function = maximum_path,
                         )
                         
                         waveform, log_duration, attn, ids_slice, input_padding_mask, labels_padding_mask, latents, prior_latents, prior_means, prior_log_variances, posterior_means, posterior_log_variances = model_outputs_train.training_outputs
@@ -814,46 +774,55 @@ def training_loop(
                     # compute_metrics(...)
                     
                     # take waveform and waveform lengths
-                    model_outputs = accelerator.pad_across_processes(model_outputs[:2],dim=1)  
-                    model_outputs = accelerator.gather_for_metrics(model_outputs)  
+                    # model_outputs = accelerator.pad_across_processes(model_outputs[:2],dim=1)  
+                    # model_outputs = accelerator.gather_for_metrics(model_outputs)  
                     
-                    generated_train_waveform = accelerator.gather_for_metrics(waveform)
-                    padded_attn = accelerator.pad_across_processes(attn.squeeze(), dim=1) 
-                    padded_attn = accelerator.pad_across_processes(padded_attn, dim=2) 
-                    padded_attn = accelerator.gather_for_metrics(padded_attn)
-                        
+                    # TODO: make one
+                    print(f"VALIDATION - batch {step}, process{accelerator.process_index}, PADDING AND GATHER... ") 
+                    padded_attn, specs = accelerator.pad_across_processes([attn.squeeze(), latents], dim=1) 
+                    padded_attn, specs = accelerator.pad_across_processes([padded_attn, specs], dim=2)
+                    
+                    generated_train_waveform, padded_attn, specs = accelerator.gather_for_metrics([waveform, padded_attn, specs])
+
+
                     if accelerator.is_main_process:
-                        audios.append(model_outputs[0].cpu())
-                        audios_lengths.append(model_outputs[1].cpu())
+                        # audios.append(model_outputs[0].cpu())
+                        # audios_lengths.append(model_outputs[1].cpu())
                         generated_audio.append(generated_train_waveform.cpu())
                         generated_attn.append(padded_attn.cpu())
+                        generated_spec.append(specs.cpu())
                         
                                         
                 logger.info("Validation inference done, now evaluating... ")      
                 if accelerator.is_main_process:
-                    audios = [audio[:length].numpy() for (audio_batch, audio_length_batch) in zip(audios, audios_lengths)  for (audio,length) in zip(audio_batch, audio_length_batch) ]
+                    # audios = [audio[:length].numpy() for (audio_batch, audio_length_batch) in zip(audios, audios_lengths)  for (audio,length) in zip(audio_batch, audio_length_batch) ]
                     generated_audio = [audio.numpy() for audio_batch in generated_audio  for audio in audio_batch]
+                    generated_attn = [attn.numpy() for attn_batch in generated_attn for attn in attn_batch]
+                    generated_spec = [attn.numpy() for attn_batch in generated_spec for attn in attn_batch]
+                    
                     for tracker in accelerator.trackers:
                         if tracker.name == "tensorboard":
                             # limit to 100, otherwise too heavy
-                            for (cpt,audio) in enumerate(audios[:min(len(audios), 100)]):
-                                tracker.writer.add_audio(f"validation_{cpt}", audio[None,:], epoch, sample_rate=sampling_rate)
+                            # for (cpt,audio) in enumerate(audios[:min(len(audios), 100)]):
+                            #     tracker.writer.add_audio(f"validation_{cpt}", audio[None,:], epoch, sample_rate=sampling_rate)
 
-                            for (cpt,audio) in enumerate(generated_audio[:min(len(audios), 100)]):
+                            for (cpt,audio) in enumerate(generated_audio[:min(len(generated_audio), 100)]):
                                 tracker.writer.add_audio(f"train_step_audio_{cpt}", audio[None,:], epoch, sample_rate=sampling_rate)                            
                             
+                            # TODO: add images
                         elif tracker.name == "wandb":
                             # wandb can only loads 100 audios per step
                             tracker.log(
                                         {
-                                            "generated audio": [
-                                                wandb.Audio(audio, caption=f"Audio epoch {epoch}", sample_rate=sampling_rate)
-                                                for audio in audios[:min(len(audios), 100)]
-                                            ],
-                                            **{f"alignment_{i}":plot_alignment(attn) for (i,attn) in enumerate(generated_attn[0])},
+                                            # "generated audio": [
+                                            #     wandb.Audio(audio, caption=f"Audio epoch {epoch}", sample_rate=sampling_rate)
+                                            #     for audio in audios[:min(len(audios), 100)]
+                                            # ],
+                                            "alignments" : [wandb.Image(plot_alignment_to_numpy(attn),caption=f"Audio epoch {epoch}") for attn in generated_attn[:min(len(generated_audio), 100)]],
+                                            "spectrogram": [wandb.Image(plot_spectrogram_to_numpy(spec),caption=f"Audio epoch {epoch}") for spec in generated_spec[:min(len(generated_audio), 100)]],
                                             "train generated audio": [
                                                 wandb.Audio(audio[0], caption=f"Audio during train step epoch {epoch}", sample_rate=sampling_rate)
-                                                for audio in generated_audio[:min(len(audios), 100)]
+                                                for audio in generated_audio[:min(len(generated_audio), 100)]
                                             ],
                                         }
                                     )
@@ -869,6 +838,11 @@ def training_loop(
     if accelerator.is_main_process:
         model = accelerator.unwrap_model(model)
         discriminator = accelerator.unwrap_model(discriminator)
+        
+        # add weight norms
+        for disc in discriminator.discriminators:
+            disc.remove_weight_norm()
+        model.decoder.remove_weight_norm()
 
         model.save_pretrained(args.output_dir)
         discriminator.save_pretrained(args.output_dir)
@@ -877,7 +851,7 @@ def training_loop(
         eval_steps = args.eval_steps if args.eval_steps else 1
 
         # Run a final round of inference.
-        do_eval = args.do_eval and (num_update_steps_per_epoch * epoch) % eval_steps
+        do_eval = args.do_eval
         
         if do_eval:
             logger.info("Running validation... ")         
@@ -894,9 +868,10 @@ def training_loop(
                 # TODO: metrics
                 # compute_metrics(...)
                 
-                model_outputs = model_outputs[0].cpu().numpy()
-                
-                audios.append(model_outputs)
+                # TODO: make something
+                #model_outputs = model_outputs[0].cpu().numpy()
+                #
+                #audios.append(model_outputs)
           
 
     accelerator.end_training()
@@ -1059,7 +1034,16 @@ def main():
         token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
     )
-
+    
+    # apply weight norms
+    for disc in discriminator.discriminators:
+        disc.apply_weight_norm()
+    model.decoder.apply_weight_norm()
+    for flow in model.flow.flows:
+        torch.nn.utils.weight_norm(flow.conv_pre)
+        torch.nn.utils.weight_norm(flow.conv_post)
+        
+    
     # 6. Resample speech dataset if necessary
     dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate
     if dataset_sampling_rate != feature_extractor.sampling_rate:
@@ -1140,6 +1124,7 @@ def main():
         return length > min_input_length and length < max_input_length
 
     with training_args.main_process_first(desc="filter lengths"):
+        # TODO: for now, I'm quite conservative about length-> only small samples
         vectorized_datasets = vectorized_datasets.filter(
             is_audio_in_length_range,
             num_proc=num_workers,
@@ -1147,7 +1132,7 @@ def main():
         )
         
         vectorized_datasets = vectorized_datasets.filter(
-            lambda x: x<650,
+            lambda x: x<data_args.max_tokens_length,
             num_proc=num_workers,
             input_columns=["tokens_input_length"],
         )

@@ -32,9 +32,6 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
-MAX_WAV_VALUE = 32768.0
-
-
 class VitsFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Vits feature extractor.
@@ -68,7 +65,6 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         n_fft=1024,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
-        max_wav_value=32768.0,  # TODO : add to docstrings
         **kwargs,
     ):
         super().__init__(
@@ -90,7 +86,6 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
             norm="slaney",
             mel_scale="slaney",
         )
-        self.max_wav_value = max_wav_value
 
     def _torch_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
         """
@@ -239,11 +234,6 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         # always return batch
         if not is_batched:
             raw_speech = [np.asarray([raw_speech]).T]
-
-        if self.max_wav_value is not None:
-            raw_speech = [
-                speech if self.max_wav_value is None else speech / self.max_wav_value for speech in raw_speech
-            ]
 
         batched_speech = BatchFeature({"input_features": raw_speech})
 

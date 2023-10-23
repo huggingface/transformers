@@ -17,6 +17,7 @@
 import math
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
+from collections.abc import Callable
 
 import numpy as np
 import torch
@@ -144,7 +145,7 @@ def slice_segments(hidden_states, ids_str, segment_size=4):
     ret = torch.zeros_like(hidden_states[:, :, :segment_size])
     for i in range(hidden_states.size(0)):
         idx_str = ids_str[i]
-        idx_end = idx_str + segment_size  # + 1 # TODO: +1 was added by me, why doesn't it work w/o if it works?
+        idx_end = idx_str + segment_size
         ret[i] = hidden_states[i, :, idx_str:idx_end]
     return ret
 
@@ -415,6 +416,7 @@ class VitsWaveNet(torch.nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_layers = num_layers
+        self.speaker_embedding_size = config.speaker_embedding_size
 
         self.in_layers = torch.nn.ModuleList()
         self.res_skip_layers = torch.nn.ModuleList()
@@ -488,6 +490,19 @@ class VitsWaveNet(torch.nn.Module):
             torch.nn.utils.remove_weight_norm(layer)
         for layer in self.res_skip_layers:
             torch.nn.utils.remove_weight_norm(layer)
+            
+    def apply_weight_norm(self):
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+        else:
+            weight_norm = nn.utils.weight_norm
+        
+        if self.speaker_embedding_size != 0:
+            weight_norm(self.cond_layer)
+        for layer in self.in_layers:
+            weight_norm(layer)
+        for layer in self.res_skip_layers:
+            weight_norm(layer)
 
 
 class VitsPosteriorEncoder(nn.Module):
@@ -506,6 +521,12 @@ class VitsPosteriorEncoder(nn.Module):
         mean, log_stddev = torch.split(stats, self.out_channels, dim=1)
         sampled = (mean + torch.randn_like(mean) * torch.exp(log_stddev)) * padding_mask
         return sampled, mean, log_stddev
+    
+    def apply_weight_norm(self):
+        self.wavenet.apply_weight_norm()
+    
+    def remove_weight_norm(self):
+        self.wavenet.remove_weight_norm()
 
 
 class HifiGanDiscriminatorScaleResidualBlock(nn.Module):
@@ -775,6 +796,15 @@ class VitsResidualCouplingLayer(nn.Module):
             outputs = torch.cat([first_half, second_half], dim=1)
             return outputs, None
 
+    def apply_weight_norm(self):
+        nn.utils.weight_norm(self.conv_pre)
+        self.wavenet.apply_weight_norm()
+        nn.utils.weight_norm(self.conv_post)
+    
+    def remove_weight_norm(self):
+        nn.utils.remove_weight_norm(self.conv_pre)
+        self.wavenet.remove_weight_norm()
+        nn.utils.remove_weight_norm(self.conv_post)       
 
 class VitsResidualCouplingBlock(nn.Module):
     def __init__(self, config: VitsConfig):
@@ -793,6 +823,14 @@ class VitsResidualCouplingBlock(nn.Module):
                 inputs = torch.flip(inputs, [1])
                 inputs, _ = flow(inputs, padding_mask, global_conditioning, reverse=True)
         return inputs
+    
+    def apply_weight_norm(self):
+        for flow in self.flows:
+            flow.apply_weight_norm()
+    
+    def remove_weight_norm(self):
+        for flow in self.flows:
+            flow.remove_weight_norm()
 
 
 class VitsDilatedDepthSeparableConv(nn.Module):
@@ -1725,6 +1763,16 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+        
+    def apply_weight_norm(self):
+        self.decoder.apply_weight_norm()
+        self.flow.apply_weight_norm()
+        self.posterior_encoder.apply_weight_norm()
+        
+    def remove_weight_norm(self):
+        self.decoder.remove_weight_norm()
+        self.flow.remove_weight_norm()
+        self.posterior_encoder.remove_weight_norm()
 
     def get_encoder(self):
         return self.text_encoder
@@ -1819,11 +1867,12 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.FloatTensor] = None,
         labels_attention_mask: Optional[torch.Tensor] = None,
+        monotic_alignment_function: Optional[Callable] = None, # TODO: add
     ) -> Union[Tuple[Any], VitsModelOutput]:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`, *optional*):
             Float values of target spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
-            computation. TODO: is the time steps things True here ?
+            computation. TODO: is the time steps things True here ? Not true, set to 0
 
         # TODO: change speaker id docstrings, and throughout the file, now it can take multiple spekaer id as well
         Returns:
@@ -1852,6 +1901,8 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        
+        monotic_alignment_function = monotonic_align_max_path if monotic_alignment_function is None else monotic_alignment_function
 
         if attention_mask is not None:
             input_padding_mask = attention_mask.unsqueeze(-1).float()
@@ -1932,7 +1983,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
 
             attn_mask = torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(labels_padding_mask, -1)
 
-            attn = monotonic_align_max_path(neg_cent, attn_mask.squeeze(1)).unsqueeze(1).detach()
+            attn = monotic_alignment_function(neg_cent, attn_mask.squeeze(1)).unsqueeze(1).detach()
 
         durations = attn.sum(2)
 
@@ -1947,9 +1998,9 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             log_duration = torch.sum((log_duration - log_duration_padded) ** 2, [1, 2]) / torch.sum(input_padding_mask)
 
         # optional, shall we keep it ?
-        duration = torch.ceil(torch.exp(log_duration).unsqueeze(1).unsqueeze(2) * input_padding_mask)
-        predicted_lengths = torch.clamp_min(torch.sum(duration, [1, 2]), 1).long()
-        sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
+        # duration = torch.ceil(torch.exp(log_duration).unsqueeze(1).unsqueeze(2) * input_padding_mask)
+        # predicted_lengths = torch.clamp_min(torch.sum(duration, [1, 2]), 1).long()
+        # sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
 
         # expand priors
         prior_means = torch.matmul(attn.squeeze(1), prior_means.transpose(1, 2)).transpose(1, 2)
@@ -1969,7 +2020,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
 
         if not return_dict:
             outputs = (
-                (waveform, sequence_lengths)
+                (waveform, None)
                 + text_encoder_output[3:]
                 + (
                     (
@@ -1992,7 +2043,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
 
         return VitsModelOutput(
             waveform=waveform,
-            sequence_lengths=sequence_lengths,
+            sequence_lengths=None,
             hidden_states=text_encoder_output.hidden_states,
             attentions=text_encoder_output.attentions,
             training_outputs=(
@@ -2040,3 +2091,11 @@ class VitsDiscriminator(VitsPreTrainedModel):
             discriminated_hidden_states_list.append(discriminated_hidden_states)
 
         return discriminated_hidden_states_list, fmaps
+    
+    def apply_weight_norm(self):
+        for disc in self.discriminators:
+            disc.apply_weight_norm()
+
+    def remove_weight_norm(self):
+        for disc in self.discriminators:
+            disc.remove_weight_norm()
