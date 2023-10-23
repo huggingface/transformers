@@ -548,6 +548,7 @@ PHI_INPUTS_DOCSTRING = r"""
     "The bare Phi Model outputting raw hidden-states without any specific head on top.",
     PHI_START_DOCSTRING,
 )
+# Copied from transformers.models.persimmon.modeling_persimmon.PersimmonModel with Persimmon->Phi, PERSIMMON->PHI
 class PhiModel(PhiPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PhiDecoderLayer`]
@@ -556,15 +557,15 @@ class PhiModel(PhiPreTrainedModel):
         config: PhiConfig
     """
 
-    def __init__(self, config: PhiConfig):
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel.__init__ with LLAMA->PHI,Llama->Phi,PersimmonRMSNorm->nn.LayerNorm,norm->final_layernorm,rms_final_layernorm_eps->layer_norm_eps
+    def __init__(self, config: PersimmonConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.embed_dropout = nn.Dropout(config.embd_pdrop)
-        self.layers = nn.ModuleList([PhiDecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.layers = nn.ModuleList([PersimmonDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -600,7 +601,7 @@ class PhiModel(PhiPreTrainedModel):
 
         return combined_attention_mask
 
-    @add_start_docstrings_to_model_forward(PHI_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PERSIMMON_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -640,18 +641,18 @@ class PhiModel(PhiPreTrainedModel):
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(past_key_values_length, seq_length_with_past, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
+            position_ids = torch.arange(
+                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+            )
+            position_ids = position_ids.unsqueeze(0)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-            inputs_embeds = self.embed_dropout(inputs_embeds)
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(
                 (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
             )
-
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
         )
@@ -680,12 +681,16 @@ class PhiModel(PhiPreTrainedModel):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
+                        # None for past_key_value
                         return module(*inputs, past_key_value, output_attentions)
 
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer), hidden_states, attention_mask, position_ids
+                    create_custom_forward(decoder_layer),
+                    hidden_states,
+                    attention_mask,
+                    position_ids,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -705,7 +710,7 @@ class PhiModel(PhiPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        hidden_states = self.norm(hidden_states)
+        hidden_states = self.final_layernorm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
