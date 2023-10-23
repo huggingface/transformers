@@ -1998,7 +1998,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        labels: Optional[torch.Tensor],
+        target_values: Optional[torch.Tensor],
         past_observed_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -2013,8 +2013,8 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
 
                 - 1 for values that are **observed**,
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            labels (`torch.Tensor` of shape `(bs, num_input_channels)`, *optional*):
-                target labels associates with the `past_values`
+            target_values (`torch.Tensor` of shape `(bs, num_input_channels)`, *optional*):
+                target values associates with the `past_values`
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
@@ -2033,15 +2033,15 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         y_hat = self.head(model_output.last_hidden_state)
 
         loss_val = None
-        if labels is not None:
+        if target_values is not None:
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(y_hat)
-                loss_val = nll(distribution, labels)
+                loss_val = nll(distribution, target_values)
                 # take average of the loss
                 loss_val = weighted_average(loss_val)
             else:
                 loss = nn.MSELoss(reduction="mean")
-                loss_val = loss(y_hat, labels)
+                loss_val = loss(y_hat, target_values)
 
         encoder_states = model_output.hidden_states
 
@@ -2077,7 +2077,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
 
         # get model output
         outputs = self(
-            past_values=past_values, labels=None, past_observed_mask=past_observed_mask, output_hidden_states=False
+            past_values=past_values, target_values=None, past_observed_mask=past_observed_mask, output_hidden_states=False
         )
 
         # get distribution
