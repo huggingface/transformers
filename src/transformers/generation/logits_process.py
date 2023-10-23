@@ -1332,12 +1332,12 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     r"""
 
     [`LogitsProcessor`] that modifies the logits for the generation of timestamps in the transcription. When the input
-    tokens are at a specific threshold, the processor sets the scores to negative infinity. The processor makes
-    sure that timestamp tokens appear in pairs, by masking out the logits that would break this pairing pattern.
-    This is done to maintain the consistency and structure of generated timestamps. It also ensures that
-    when the predicted probability of sampling any of the timestamp token is greater than any individual
-    non-timestamp token, those non-timestamp logits are set to negative infinity.  This is done to ensure the
-    generation of timestamps over other potential tokens.
+    tokens are at a specific threshold, the processor sets the scores to negative infinity. The processor makes sure
+    that timestamp tokens appear in pairs, by masking out the logits that would break this pairing pattern. This is
+    done to maintain the consistency and structure of generated timestamps. It also ensures that when the predicted
+    probability of sampling any of the timestamp token is greater than any individual non-timestamp token, those
+    non-timestamp logits are set to negative infinity. This is done to ensure the generation of timestamps over other
+    potential tokens.
 
 
     See [the paper](https://arxiv.org/abs/2212.04356) for more information.
