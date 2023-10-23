@@ -1254,8 +1254,8 @@ class IdeficsModel(IdeficsPreTrainedModel):
         else:
             image_attention_mask = None
 
-        # cross_attention_gate: image_attention_mask has shape [bsz, 1, num_images, hidden_size] with elements equal to either 0.0 or a very negative number, so if . Otherwise, the hidden_states comming out of the cross-attention should be zeroed-out.
-        # If the batch contains no images, everything is zeroed out and hidden_states = residual
+        # cross_attention_gate: image_attention_mask has shape [bsz, 1, num_images, hidden_size] with elements equal to either 0.0 or a very negative number.
+        # For any tokens attending to no images, the hidden_states comming out of the cross-attention should be zeroed-out.
         cross_attention_gate = (((image_attention_mask == 0.0).any(dim=-1)).to(dtype=self.dtype)).permute(0, 2, 1)
 
         if inputs_embeds is None:
