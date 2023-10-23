@@ -1411,11 +1411,7 @@ class PatchTSMixerMeanScaler(nn.Module):
     """
 
     def __init__(
-        self,
-        dim: int = -1,
-        keepdim: bool = True,
-        default_scale: Optional[float] = None,
-        minimum_scale: float = 1e-10,
+        self, dim: int = -1, keepdim: bool = True, default_scale: Optional[float] = None, minimum_scale: float = 1e-10
     ):
         super().__init__()
         self.dim = dim
