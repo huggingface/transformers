@@ -56,7 +56,7 @@ class FuyuPreTrainedModel(PreTrainedModel):
     config_class = FuyuConfig
     base_model_prefix = "fuyu"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PersimmonDecoderLayer"]
+    _no_split_modules = []
     _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
@@ -261,9 +261,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
             if image_patches is not None and past_key_values is None:
-                patch_embeddings = self.vision_embed_tokens(
-                    image_patches.to(self.vision_embed_tokens.weight.dtype)
-                ).to(inputs_embeds.device)
+                patch_embeddings = self.vision_embed_tokens(image_patches.to(self.vision_embed_tokens.weight.dtype))
+                patch_embeddings = patch_embeddings.to(inputs_embeds.device)
                 inputs_embeds = self.gather_continuous_embeddings(
                     word_embeddings=inputs_embeds,
                     continuous_embeddings=patch_embeddings,
