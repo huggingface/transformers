@@ -3551,6 +3551,7 @@ class Trainer:
             token=self.args.hub_token,
             run_as_future=True,
             ignore_patterns=["_*", "**/*"],
+            allow_patterns=["runs/*"],
         )
 
         push_jobs = [model_push_job]
