@@ -53,8 +53,8 @@ def batched_nms(
             Each index value corresponds to a bbox cluster, and NMS will not be applied between elements of different
             idxs, shape (N, ).
         nms_cfg (`dict`, *optional*):
-            Supports skipping the nms when *nms_cfg* is None, otherwise it should specify nms type and other parameters
-            like *iou_thr*. Possible keys includes the following.
+            Supports skipping the nms when *nms_cfg* is None, otherwise it should specify parameters like
+            *iou_threshold*. Possible keys includes the following:
             - iou_threshold (float): IoU threshold used for NMS.
             - split_threshold (float): threshold number of boxes. In some cases the number of boxes is large (e.g.,
               200k). To avoid OOM during training, the users could set *split_threshold* to a small value. If the
@@ -104,8 +104,7 @@ def batched_nms(
     nms_op = torchvision.ops.nms
 
     split_threshold = nms_cfg_.pop("split_threshold", 10000)
-    # Won't split to multiple nms nodes when exporting to onnx
-    if boxes_for_nms.shape[0] < split_threshold or torch.onnx.is_in_onnx_export():
+    if boxes_for_nms.shape[0] < split_threshold:
         keep = nms_op(boxes_for_nms, scores, **nms_cfg_)
         detections = torch.cat((boxes[keep], scores[keep].reshape(-1, 1)), dim=1)
         boxes = boxes[keep]
