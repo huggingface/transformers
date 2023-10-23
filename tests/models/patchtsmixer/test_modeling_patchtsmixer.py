@@ -47,9 +47,9 @@ if is_torch_available():
         PatchTSMixerModel,
     )
     from transformers.models.patchtsmixer.modeling_patchtsmixer import (
+        PatchTSMixerEncoder,
         PatchTSMixerForecastHead,
         PatchTSMixerLinearHead,
-        PatchTSMixerEncoder,
         PatchTSMixerPretrainHead,
     )
 
