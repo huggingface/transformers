@@ -204,10 +204,10 @@ class PhiMLP(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.persimmon.modeling_persimmon.PersimmonAttention with Persimmon->Phi,persimmon->phi
 class PhiAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # Copied from transformers.models.persimmon.modeling_persimmon.PersimmonAttention.__init__ with Persimmon->Phi,persimmon->phi
     def __init__(self, config: PhiConfig):
         super().__init__()
         self.config = config
@@ -237,7 +237,6 @@ class PhiAttention(nn.Module):
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self._init_rope()
 
-    # Copied from transformers.models.persimmon.modeling_persimmon.PersimmonAttention._init_rope with Persimmon->Phi,persimmon->phi
     def _init_rope(self):
         if self.config.rope_scaling is None:
             self.rotary_emb = PhiRotaryEmbedding(
@@ -265,6 +264,7 @@ class PhiAttention(nn.Module):
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
+    # Copied from transformers.models.bloom.modeling_bloom.BloomAttention._split_heads
     def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory
@@ -278,10 +278,9 @@ class PhiAttention(nn.Module):
             value: [batch_size, seq_length, num_heads, head_dim]
         """
         batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
-        fused_qkv = fused_qkv.view(batch_size, seq_length, 3, self.num_heads, self.head_dim)
-        return fused_qkv[..., 0, :, :], fused_qkv[..., 1, :, :], fused_qkv[..., 2, :, :]
+        fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
+        return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
 
-    # Copied from transformers.models.persimmon.modeling_persimmon.PersimmonAttention.forward with Persimmon->Phi,persimmon->phi
     def forward(
         self,
         hidden_states: torch.Tensor,
