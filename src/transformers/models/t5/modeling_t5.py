@@ -432,10 +432,10 @@ class T5Attention(nn.Module):
         relative_buckets = 0
         if bidirectional:
             num_buckets //= 2
-            relative_buckets += (relative_position > 0).to(torch.long) * num_buckets
+            relative_buckets += (relative_position > 0).to(torch.long) * num_buckets  # negative and positive positions will have different buckets
             relative_position = torch.abs(relative_position)
         else:
-            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
+            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))  # zero all positive relative positions
         # now relative_position is in the range [0, inf)
 
         # half of the buckets are for exact increments in positions
@@ -479,12 +479,17 @@ class T5Attention(nn.Module):
             context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None] # shape ()
             memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
-        relative_position_bucket = self._relative_position_bucket(
-            relative_position,  # shape (query_length, key_length)
-            bidirectional=(not self.is_decoder),
-            num_buckets=num_buckets,
-            max_distance=max_distance,
-        )
+        
+        if num_buckets == 2:  # hack for special relative position of same / not same for encoder
+            assert not self.is_decoder 
+            relative_position_bucket = (relative_position != 0).to(torch.long) 
+        else:
+            relative_position_bucket = self._relative_position_bucket(
+                relative_position,  # shape (query_length, key_length)
+                bidirectional=(not self.is_decoder),
+                num_buckets=num_buckets,
+                max_distance=max_distance,
+            )
         values = self.relative_attention_bias(relative_position_bucket)  # shape (num_batches - optional, query_length, key_length, num_heads)
         if position_ids is not None:
             values = values.permute([0, 3, 1, 2]) # shape (num_batches, num_heads, query_length, key_length)
@@ -1698,6 +1703,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         # Model parallel
         self.model_parallel = False
         self.device_map = None
+        self.supports_new_embedding = True
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
