@@ -3,7 +3,7 @@ import unittest
 
 import requests
 
-from transformers import AutoTokenizer, FuyuConfig, is_torch_available, is_vision_available
+from transformers import FuyuConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...test_modeling_common import ids_tensor, random_attention_mask
@@ -14,7 +14,7 @@ if is_vision_available():
 
 
 if is_torch_available() and is_vision_available():
-    from transformers import FuyuImageProcessor, FuyuProcessor
+    from transformers import FuyuProcessor
 
 
 if is_torch_available():
@@ -267,11 +267,8 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
     all_model_classes = ("FuyuForCausalLM") if is_torch_available() else ()
 
     def setUp(self):
-        self.pretrained_model_name = "huggingface/new_model_release_weights"
-        tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name)
-        image_processor = FuyuImageProcessor()
-
-        self.processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        self.pretrained_model_name = "adept/fuyu-8b"
+        self.processor = FuyuProcessor.from_pretrained(self.pretrained_model_name)
         self.model = FuyuForCausalLM.from_pretrained(self.pretrained_model_name)
         self.bus_image_url = (
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"

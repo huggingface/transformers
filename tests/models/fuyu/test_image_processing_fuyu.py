@@ -51,8 +51,8 @@ class TestFuyuImageProcessor(unittest.TestCase):
 
     def test_scale_to_target_aspect_ratio(self):
         scaled_image = self.processor._scale_to_target_aspect_ratio(self.sample_image)
-        self.assertEqual(scaled_image.shape[0], 74)
-        self.assertEqual(scaled_image.shape[1], 160)
+        self.assertEqual(scaled_image.shape[0], 160)
+        self.assertEqual(scaled_image.shape[1], 74)
 
     def test_apply_transformation_numpy(self):
         transformed_image = self.processor.apply_transformation(self.sample_image)
