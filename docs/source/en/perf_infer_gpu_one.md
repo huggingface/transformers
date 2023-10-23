@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # GPU inference
 
-GPUs are the standard choice of hardware for machine learning, unlike CPUs, because they are optimized for memory bandwidth and parallelism. To keep up with the larger sizes of modern models or to run these large models on existing and older hardware, there are several optimizations you can use to speed up GPU inference. In this guide, you'll learn how to use FlashAttention-2 (a more memory-efficient attention mechansim), BetterTransformer (a PyTorch native fastpath execution), and bitsandbytes to quantize your model to a lower precision.
+GPUs are the standard choice of hardware for machine learning, unlike CPUs, because they are optimized for memory bandwidth and parallelism. To keep up with the larger sizes of modern models or to run these large models on existing and older hardware, there are several optimizations you can use to speed up GPU inference. In this guide, you'll learn how to use FlashAttention-2 (a more memory-efficient attention mechanism), BetterTransformer (a PyTorch native fastpath execution), and bitsandbytes to quantize your model to a lower precision.
 
 <Tip>
 
@@ -36,7 +36,7 @@ FlashAttention-2 is experimental and may change considerably in future versions.
 1. additionally parallelizing the attention computation over sequence length
 2. partitioning the work between GPU threads to reduce communication and shared memory reads/writes between them
 
-FlashAttention-2 is supports inference with Llama, Mistral, and Falcon models. You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
+FlashAttention-2 supports inference with Llama, Mistral, and Falcon models. You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
 
 Before you begin, make sure you have FlashAttention-2 installed (see the [installation](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features) guide for more details about prerequisites):
 
@@ -62,7 +62,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 <Tip>
 
-FlashAttention-2 can only be used when the models dtype is  `fp16` or `bf16`, and it only runs on Nvidia GPUs. Make sure to cast your model to the appropriate dtype and load them on a supported device before using FlashAttention-2.
+FlashAttention-2 can only be used when the model's dtype is  `fp16` or `bf16`, and it only runs on Nvidia GPUs. Make sure to cast your model to the appropriate dtype and load them on a supported device before using FlashAttention-2.
   
 </Tip>
 
@@ -139,7 +139,7 @@ BetterTransformer accelerates inference with its fastpath (native PyTorch specia
 1. fusion, which combines multiple sequential operations into a single "kernel" to reduce the number of computation steps
 2. skipping the inherent sparsity of padding tokens to avoid unnecessary computation with nested tensors
 
-BetterTransformer also converts all attention operations to use the more memory-efficient [scaled dot product attention (SDPA)](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention), and it calls optimized kernerls like [FlashAttention](https://huggingface.co/papers/2205.14135) under the hood.
+BetterTransformer also converts all attention operations to use the more memory-efficient [scaled dot product attention (SDPA)](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention), and it calls optimized kernels like [FlashAttention](https://huggingface.co/papers/2205.14135) under the hood.
 
 Before you start, make sure you have 🤗 Optimum [installed](https://huggingface.co/docs/optimum/installation).
 
@@ -274,7 +274,7 @@ Feel free to try running a 11 billion parameter [[!T5 model](https://colab.resea
 
 ## Combine optimizations
 
-Often times, it is possible to combine several of the optimization techniques described above to get the best inference performance possible for your model. For example, you can load a model in 4-bit, and then enable BetterTransformer with FlashAttention:
+It is often possible to combine several of the optimization techniques described above to get the best inference performance possible for your model. For example, you can load a model in 4-bit, and then enable BetterTransformer with FlashAttention:
 
 ```py
 import torch
