@@ -182,7 +182,7 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
 class MusicgenAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper
-    
+
     Args:
         embed_dim (`int`): The dimensionality of the input embeddings,which represents the complexity of the input.
         num_heads (`int`): The number of attention heads, which determine how the model pays attention to different parts of the input.
