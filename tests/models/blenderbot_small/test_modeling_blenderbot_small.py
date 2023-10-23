@@ -244,9 +244,6 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     ):
         if pipeline_test_casse_name == "TextGenerationPipelineTests":
             return True
-        # TODO @Rocketnight1 to fix
-        if pipeline_test_casse_name == "ConversationalPipelineTests":
-            return True
         return False
 
     def setUp(self):
