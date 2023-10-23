@@ -1493,7 +1493,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         if config.post_init:
             self.post_init()
 
-    @replace_return_docstrings(output_type=PatchTSMixerModelOutput, config_class=_CONFIG_FOR_DOC)
+    # @replace_return_docstrings(output_type=PatchTSMixerModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         past_values: torch.Tensor,
@@ -2090,7 +2090,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             self.post_init()
 
     @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=PatchTSMixerForRegressionOutput, config_class=_CONFIG_FOR_DOC)
+    # @replace_return_docstrings(output_type=PatchTSMixerForRegressionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         past_values: torch.Tensor,

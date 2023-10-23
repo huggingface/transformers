@@ -47,10 +47,10 @@ if is_torch_available():
         PatchTSMixerModel,
     )
     from transformers.models.patchtsmixer.modeling_patchtsmixer import (
-        ForecastHead,
-        LinearHead,
+        PatchTSMixerForecastHead,
+        PatchTSMixerLinearHead,
         PatchTSMixerEncoder,
-        PretrainHead,
+        PatchTSMixerPretrainHead,
     )
 
 
@@ -60,7 +60,7 @@ class PatchTSMixerModelTester:
         self,
         seq_len: int = 32,
         patch_len: int = 8,
-        input_size: int = 3,
+        num_input_channels: int = 3,
         stride: int = 8,
         # num_features: int = 128,
         hidden_size: int = 8,
@@ -89,7 +89,7 @@ class PatchTSMixerModelTester:
         out_channels: int = None,
         # Classification/regression related
         num_labels: int = 3,
-        n_targets: int = 3,
+        num_targets: int = 3,
         output_range: list = None,
         head_agg: str = None,
         # Trainer related
@@ -99,7 +99,7 @@ class PatchTSMixerModelTester:
         post_init=True,
         num_parallel_samples=4,
     ):
-        self.input_size = input_size
+        self.num_input_channels = num_input_channels
         self.seq_len = seq_len
         self.patch_len = patch_len
         self.stride = stride
@@ -131,7 +131,7 @@ class PatchTSMixerModelTester:
         self.out_channels = out_channels
         # classification/regression related
         self.num_labels = num_labels
-        self.n_targets = n_targets
+        self.num_targets = num_targets
         self.output_range = output_range
         self.head_agg = head_agg
         # Trainer related
@@ -143,7 +143,7 @@ class PatchTSMixerModelTester:
 
     def get_config(self):
         config_ = PatchTSMixerConfig(
-            input_size=self.input_size,
+            num_input_channels=self.num_input_channels,
             seq_len=self.seq_len,
             patch_len=self.patch_len,
             stride=self.stride,
@@ -170,7 +170,7 @@ class PatchTSMixerModelTester:
             forecast_len=self.forecast_len,
             out_channels=self.out_channels,
             num_labels=self.num_labels,
-            n_targets=self.n_targets,
+            num_targets=self.num_targets,
             output_range=self.output_range,
             head_agg=self.head_agg,
             post_init=self.post_init,
@@ -184,9 +184,9 @@ class PatchTSMixerModelTester:
         # bs, n_vars, num_patch, patch_len
 
         # [bs x seq_len x n_vars]
-        past_values = floats_tensor([self.batch_size, _past_length, self.input_size])
+        past_values = floats_tensor([self.batch_size, _past_length, self.num_input_channels])
 
-        target_values = floats_tensor([self.batch_size, config.forecast_len, self.input_size])
+        target_values = floats_tensor([self.batch_size, config.forecast_len, self.num_input_channels])
 
         inputs_dict = {
             "past_values": past_values,
@@ -260,7 +260,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             # inputs_dict.pop("target_values")
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
-            labels = floats_tensor([self.model_tester.batch_size, self.model_tester.n_targets], rng=rng)
+            labels = floats_tensor([self.model_tester.batch_size, self.model_tester.num_targets], rng=rng)
             # inputs_dict["labels"] = labels
             inputs_dict["target_values"] = labels
             # inputs_dict.pop("target_values")
@@ -394,7 +394,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         num_patch = (
             max(model.config.seq_len, model.config.patch_len) - model.config.patch_len
         ) // model.config.stride + 1
-        expected_shape = torch.Size([1024, model.config.input_size, num_patch, model.config.patch_len])
+        expected_shape = torch.Size([1024, model.config.num_input_channels, num_patch, model.config.patch_len])
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
@@ -426,7 +426,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
             ).prediction_logits
 
         print(output[0, :1, :7])
-        expected_shape = torch.Size([32, model.config.forecast_len, model.config.input_size])
+        expected_shape = torch.Size([32, model.config.forecast_len, model.config.num_input_channels])
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
@@ -445,7 +445,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         cls.params.update(
             seq_len=32,
             patch_len=8,
-            input_size=3,
+            num_input_channels=3,
             stride=8,
             num_features=4,
             expansion_factor=2,
@@ -465,7 +465,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             forecast_len=64,
             out_channels=None,
             num_labels=3,
-            n_targets=3,
+            num_targets=3,
             output_range=None,
             head_agg=None,
             scaling="std",
@@ -489,19 +489,19 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         cls.data = torch.rand(
             batch_size,
             cls.params["seq_len"],
-            cls.params["input_size"],
+            cls.params["num_input_channels"],
         )
 
         cls.enc_data = torch.rand(
             batch_size,
-            cls.params["input_size"],
+            cls.params["num_input_channels"],
             cls.num_patches,
             cls.params["patch_len"],
         )
 
         cls.enc_output = torch.rand(
             batch_size,
-            cls.params["input_size"],
+            cls.params["num_input_channels"],
             cls.num_patches,
             cls.params["num_features"],
         )
@@ -512,12 +512,12 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             cls.params["num_features"],
         )
 
-        cls.correct_pred_output = torch.rand(batch_size, cls.params["forecast_len"], cls.params["input_size"])
-        cls.correct_regression_output = torch.rand(batch_size, cls.params["n_targets"])
+        cls.correct_pred_output = torch.rand(batch_size, cls.params["forecast_len"], cls.params["num_input_channels"])
+        cls.correct_regression_output = torch.rand(batch_size, cls.params["num_targets"])
 
         cls.correct_pretrain_output = torch.rand(
             batch_size,
-            cls.params["input_size"],
+            cls.params["num_input_channels"],
             cls.num_patches,
             cls.params["patch_len"],
         )
@@ -525,7 +525,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         cls.correct_forecast_output = torch.rand(
             batch_size,
             cls.params["forecast_len"],
-            cls.params["input_size"],
+            cls.params["num_input_channels"],
         )
 
         cls.correct_sel_forecast_output = torch.rand(batch_size, cls.params["forecast_len"], 2)
@@ -553,7 +553,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
     def test_pretrainhead(self):
         config = PatchTSMixerConfig(**self.__class__.params)
-        head = PretrainHead(
+        head = PatchTSMixerPretrainHead(
             config=config,
         )
         output = head(self.__class__.enc_output)
@@ -572,7 +572,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
     def test_forecast_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
-        head = ForecastHead(
+        head = PatchTSMixerForecastHead(
             config=config,
         )
         # output = head(self.__class__.enc_output, raw_data = self.__class__.correct_pretrain_output)
@@ -874,7 +874,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
     def test_classification_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
-        head = LinearHead(
+        head = PatchTSMixerLinearHead(
             config=config,
         )
         # output = head(self.__class__.enc_output, raw_data = self.__class__.correct_pretrain_output)
@@ -899,7 +899,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
     def test_regression_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
-        head = LinearHead(
+        head = PatchTSMixerLinearHead(
             config=config,
         )
         # output = head(self.__class__.enc_output, raw_data = self.__class__.correct_pretrain_output)
