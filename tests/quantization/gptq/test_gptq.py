@@ -158,6 +158,7 @@ class GPTQTest(unittest.TestCase):
             group_size=self.group_size,
             bits=self.bits,
             disable_exllama=self.disable_exllama,
+            disable_exllamav2=True,
         )
         self.assertTrue(self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__ == QuantLinear)
 
@@ -320,7 +321,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
 @require_accelerate
 class GPTQTestExllamaV2(unittest.TestCase):
     """
-    Test GPTQ model with exllama kernel and desc_act=True (also known as act-order).
+    Test GPTQ model with exllamav2 kernel and desc_act=True (also known as act-order).
     More information on those arguments here:
     https://huggingface.co/docs/transformers/main_classes/quantization#transformers.GPTQConfig
     """
@@ -336,7 +337,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
         """
         Setup quantized model
         """
-        cls.quantization_config = GPTQConfig(bits=4, use_exllama_v2=True, disable_exllama=False)
+        cls.quantization_config = GPTQConfig(bits=4, use_exllama_v2=True, disable_exllama=True)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             revision=cls.revision,

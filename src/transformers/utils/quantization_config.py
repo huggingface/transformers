@@ -424,9 +424,18 @@ class GPTQConfig(QuantizationConfigMixin):
                     f"""dataset needs to be either a list of string or a value in
                     ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
                 )
-        if self.use_exllamav2 and not self.disable_exllama:
-            logger.error("You have activated both exllama and exllamav2 backend. You need to deactivate one of them.")
-        if self.disable_exllama:
+        if self.use_exllama_v2:
+            optimum_version = version.parse(importlib.metadata.version("optimum"))
+            autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
+            if optimum_version <= version.parse("1.13.2") or autogptq_version <= version.parse("0.4.2"):
+                raise ValueError(
+                    f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
+                )
+            elif not self.disable_exllama:
+                raise ValueError(
+                    "You have activated both exllama and exllamav2 backend. You need to disable one of them."
+                )
+        if not self.disable_exllama:
             logger.warning(
                 "You have activated exllama backend. Note that you can get better inference speed using exllamav2 kernel by setting `use_exllama_v2=True`"
             )
