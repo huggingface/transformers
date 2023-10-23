@@ -104,11 +104,11 @@ class PatchTSTConfig(PretrainedConfig):
             Apply masking during the pretraining.
         mask_type (`str`, *optional*, defaults to `"random"`):
             Masking type. Only `"random"` is currently supported.
-        mask_ratio (`float`, *optional*, defaults to 0.5):
-            Masking ratio is applied to mask the input data during pretraining.
-        mask_patches (`List`, *optional*, defaults to `[2, 3]`):
+        random_mask_ratio (`float`, *optional*, defaults to 0.5):
+            Masking ratio is applied to mask the input data during random pretraining.
+        forecast_mask_patches (`List`, *optional*, defaults to `[2, 3]`):
             List of patch lengths to mask in the end of the data.
-        mask_patch_ratios (`List`, *optional*, defaults to `[1, 1]`):
+        forecast_mask_ratios (`List`, *optional*, defaults to `[1, 1]`):
             List of weights to use for each patch length. For Ex. if patch_lengths is [5,4] and mix_ratio is [1,1],
             then equal weights to both patch lengths. Defaults to None.
         channel_consistent_masking (`bool`, *optional*, defaults to `False`):
