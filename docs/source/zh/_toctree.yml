@@ -9,6 +9,8 @@
 - sections:
   - local: accelerate
     title: 加速分布式训练
+  - local: pipeline_tutorial
+    title: pipeline教程
   title: 教程
 - sections:
   - local: fast_tokenizers
