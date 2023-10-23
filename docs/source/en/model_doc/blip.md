@@ -56,11 +56,13 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 
 [[autodoc]] BlipProcessor
 
-
 ## BlipImageProcessor
 
 [[autodoc]] BlipImageProcessor
     - preprocess
+
+<frameworkcontent>
+<pt>
 
 ## BlipModel
 
@@ -74,29 +76,28 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 [[autodoc]] BlipTextModel
     - forward
 
-
 ## BlipVisionModel
 
 [[autodoc]] BlipVisionModel
     - forward
-
 
 ## BlipForConditionalGeneration
 
 [[autodoc]] BlipForConditionalGeneration
     - forward
 
-
 ## BlipForImageTextRetrieval
 
 [[autodoc]] BlipForImageTextRetrieval
     - forward
 
-
 ## BlipForQuestionAnswering
 
 [[autodoc]] BlipForQuestionAnswering
     - forward
+
+</pt>
+<tf>
 
 ## TFBlipModel
 
@@ -110,26 +111,24 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 [[autodoc]] TFBlipTextModel
     - call
 
-
 ## TFBlipVisionModel
 
 [[autodoc]] TFBlipVisionModel
     - call
-
 
 ## TFBlipForConditionalGeneration
 
 [[autodoc]] TFBlipForConditionalGeneration
     - call
 
-
 ## TFBlipForImageTextRetrieval
 
 [[autodoc]] TFBlipForImageTextRetrieval
     - call
 
-
 ## TFBlipForQuestionAnswering
 
 [[autodoc]] TFBlipForQuestionAnswering
     - call
+</tf>
+</frameworkcontent>
