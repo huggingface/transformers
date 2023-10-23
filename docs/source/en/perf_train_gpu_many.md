@@ -32,7 +32,7 @@ the [🤗 Accelerate documentation](https://huggingface.co/docs/accelerate/index
 
 <Tip>
 
-While the main concepts discussed in this guide are likely applicable across frameworks, here we focus is on 
+While the main concepts discussed in this guide are likely applicable across frameworks, here we focus on 
 PyTorch-based implementations.
 
 </Tip>
@@ -45,8 +45,8 @@ Let's begin by introducing the main techniques that are discussed in this guide.
 * **DataParallel (DP)** - the same setup is replicated multiple times, with each instance receiving a distinct data slice. The processing is done in parallel and all setups are synchronized at the end of each training step.
 * **TensorParallel (TP)** - each tensor is split up into multiple chunks, so instead of having the whole tensor reside on a single GPU, each shard of the tensor resides on its designated GPU. Shards gets processed separately and in parallel on different GPUs and the results are synced at the end of the processing step. This is what is sometimes called horizontal parallelism, as the splitting happens on horizontal level.
 * **PipelineParallel (PP)** - the model is split up vertically (layer-level) across multiple GPUs, so that only one or several layers of the model are placed on a single GPU. Each GPU processes in parallel different stages of the pipeline and working on a small chunk of the batch.
-* **Zero Redundancy Optimizer (ZeRO)** - Also performs sharding of the tensors somewhat similar to TensorParallel, except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need to be modified. This method also supports various offloading techniques to compensate for limited GPU memory.
-* **Sharded DDP** - is another name for the foundational ZeRO concept as used by various other implementations of ZeRO.
+* **Zero Redundancy Optimizer (ZeRO)** - also performs sharding of the tensors somewhat similar to TensorParallel, except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need to be modified. This method also supports various offloading techniques to compensate for limited GPU memory.
+* **Sharded DDP** - another name for the foundational ZeRO concept as used by various other implementations of ZeRO.
 
 Before diving deeper into the specifics of each concept, let's have a look at the rough decision process when training 
 large models on a large infrastructure.
