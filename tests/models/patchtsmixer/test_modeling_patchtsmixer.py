@@ -18,7 +18,7 @@ import inspect
 import random
 import tempfile
 import unittest
-from typing import Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from huggingface_hub import hf_hub_download
 
@@ -47,9 +47,12 @@ if is_torch_available():
         PatchTSMixerModel,
     )
     from transformers.models.patchtsmixer.modeling_patchtsmixer import (
-        PatchTSMixerForecastHead,
-        PatchTSMixerLinearHead,
         PatchTSMixerEncoder,
+        PatchTSMixerForClassificationOutput,
+        PatchTSMixerForecastHead,
+        PatchTSMixerForForecastOutput,
+        PatchTSMixerForRegressionOutput,
+        PatchTSMixerLinearHead,
         PatchTSMixerPretrainHead,
     )
 
@@ -326,7 +329,73 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         pass
 
     def test_model_outputs_equivalence(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def set_nan_tensor_to_zero(t):
+            t[t != t] = 0
+            return t
+
+        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+            with torch.no_grad():
+                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+                output_ = model(**dict_inputs, return_dict=True, **additional_kwargs)
+                attributes_ = vars(output_)
+                dict_output = tuple(attributes_.values())
+
+                def recursive_check(tuple_object, dict_object):
+                    if isinstance(tuple_object, (List, Tuple)):
+                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif isinstance(tuple_object, Dict):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object.values(), dict_object.values()
+                        ):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif tuple_object is None:
+                        return
+                    else:
+                        self.assertTrue(
+                            torch.allclose(
+                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                            ),
+                            msg=(
+                                "Tuple and dict output are not equal. Difference:"
+                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
+                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
+                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
+                            ),
+                        )
+
+                recursive_check(tuple_output, dict_output)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            tuple_inputs.update({"output_hidden_states": False})
+            dict_inputs.update({"output_hidden_states": False})
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            tuple_inputs.update({"output_hidden_states": False})
+            dict_inputs.update({"output_hidden_states": False})
+            check_equivalence(
+                model,
+                tuple_inputs,
+                dict_inputs,
+            )
 
     def test_model_main_input_name(self):
         model_signature = inspect.signature(getattr(PatchTSMixerModel, "forward"))
@@ -570,6 +639,14 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
         # print("loss shape", output.loss, output.loss.shape)
 
+    def test_pretrain_full_with_return_dict(self):
+        config = PatchTSMixerConfig(**self.__class__.params)
+        mdl = PatchTSMixerForPretraining(config)
+        output = mdl(self.__class__.data, return_dict=False)
+        self.assertEqual(output[0].shape, self.__class__.correct_pretrain_output.shape)
+        self.assertEqual(output[1].shape, self.__class__.enc_output.shape)
+        self.assertEqual(output[-1].item() < 100, True)
+
     def test_forecast_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
         head = PatchTSMixerForecastHead(
@@ -743,7 +820,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         #                             for revin in [True, False]:
         #                                 for forecast_channel_indices in [None, [0,2]]:
 
-    def forecast_full_module(self, params=None, output_hidden_states=False):
+    def forecast_full_module(self, params=None, output_hidden_states=False, return_dict=None):
         config = PatchTSMixerConfig(**params)
         mdl = PatchTSMixerForForecasting(config)
 
@@ -761,7 +838,11 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             self.__class__.data,
             target_values=self.__class__.correct_forecast_output,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
+        if isinstance(output, tuple):
+            output = PatchTSMixerForForecastOutput(*output)
+
         if config.loss == "mse":
             self.assertEqual(output.prediction_logits.shape, target_val.shape)
 
@@ -792,6 +873,13 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             mode="mix_channel",
         )
         self.forecast_full_module(params, output_hidden_states=True)
+
+    def test_forecast_full_2_with_return_dict(self):
+        params = self.__class__.params.copy()
+        params.update(
+            mode="mix_channel",
+        )
+        self.forecast_full_module(params, output_hidden_states=True, return_dict=False)
 
     def test_forecast_full_3(self):
         params = self.__class__.params.copy()
@@ -897,6 +985,22 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         self.assertEqual(output.loss.item() < 100, True)
         # print("loss shape", output.loss, output.loss.shape)
 
+    def test_classification_full_with_return_dict(self):
+        config = PatchTSMixerConfig(**self.__class__.params)
+        mdl = PatchTSMixerForClassification(config)
+        output = mdl(
+            self.__class__.data, target_values=self.__class__.correct_classification_classes, return_dict=False
+        )
+        if isinstance(output, tuple):
+            output = PatchTSMixerForClassificationOutput(*output)
+        self.assertEqual(
+            output.prediction_logits.shape,
+            self.__class__.correct_classification_output.shape,
+        )
+        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
+        self.assertEqual(output.loss.item() < 100, True)
+        # print("loss shape", output.loss, output.loss.shape)
+
     def test_regression_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
         head = PatchTSMixerLinearHead(
@@ -911,6 +1015,19 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         config = PatchTSMixerConfig(**self.__class__.params)
         mdl = PatchTSMixerForRegression(config)
         output = mdl(self.__class__.data, target_values=self.__class__.correct_regression_output)
+        self.assertEqual(
+            output.prediction_logits.shape,
+            self.__class__.correct_regression_output.shape,
+        )
+        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
+        self.assertEqual(output.loss.item() < 100, True)
+
+    def test_regression_full_with_return_dict(self):
+        config = PatchTSMixerConfig(**self.__class__.params)
+        mdl = PatchTSMixerForRegression(config)
+        output = mdl(self.__class__.data, target_values=self.__class__.correct_regression_output, return_dict=False)
+        if isinstance(output, tuple):
+            output = PatchTSMixerForRegressionOutput(*output)
         self.assertEqual(
             output.prediction_logits.shape,
             self.__class__.correct_regression_output.shape,
