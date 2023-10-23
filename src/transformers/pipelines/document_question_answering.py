@@ -159,6 +159,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         max_seq_len=None,
         top_k=None,
         handle_impossible_answer=None,
+        timeout=None,
         **kwargs,
     ):
         preprocess_params, postprocess_params = {}, {}
@@ -174,6 +175,8 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             preprocess_params["lang"] = lang
         if tesseract_config is not None:
             preprocess_params["tesseract_config"] = tesseract_config
+        if timeout is not None:
+            preprocess_params["timeout"] = timeout
 
         if top_k is not None:
             if top_k < 1:
@@ -244,6 +247,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                 Language to use while running OCR. Defaults to english.
             tesseract_config (`str`, *optional*):
                 Additional flags to pass to tesseract while running OCR.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
 
         Return:
             A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
@@ -273,6 +279,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         word_boxes: Tuple[str, List[float]] = None,
         lang=None,
         tesseract_config="",
+        timeout=None,
     ):
         # NOTE: This code mirrors the code in question answering and will be implemented in a follow up PR
         # to support documents with enough tokens that overflow the model's window
@@ -285,7 +292,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         image = None
         image_features = {}
         if input.get("image", None) is not None:
-            image = load_image(input["image"])
+            image = load_image(input["image"], timeout=timeout)
             if self.image_processor is not None:
                 image_features.update(self.image_processor(images=image, return_tensors=self.framework))
             elif self.feature_extractor is not None:

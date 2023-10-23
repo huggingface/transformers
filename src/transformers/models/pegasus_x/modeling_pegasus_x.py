@@ -769,6 +769,7 @@ class PegasusXPreTrainedModel(PreTrainedModel):
     config_class = PegasusXConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = [r"PegasusXEncoderLayer", r"PegasusXDecoderLayer"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1013,6 +1014,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
@@ -1298,6 +1300,8 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         # embed positions
         positions = self.embed_positions(inputs_embeds, past_key_values_length)
 
+        positions = positions.to(inputs_embeds.device)
+
         hidden_states = inputs_embeds + positions
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1551,10 +1555,6 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        return new_embeddings
-
     def get_output_embeddings(self):
         return self.lm_head
 
@@ -1671,7 +1671,16 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
     ):
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1691,7 +1700,8 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
         for layer_past in past_key_values:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past[:2])
+                + layer_past[2:],
             )
         return reordered_past
 

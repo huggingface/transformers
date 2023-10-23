@@ -275,7 +275,12 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
     config_class = InstructBlipConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["InstructBlipAttention", "InstructBlipQFormerMultiHeadAttention"]
+    _no_split_modules = [
+        "InstructBlipQFormerEmbeddings",
+        "InstructBlipAttention",
+        "InstructBlipQFormerMultiHeadAttention",
+        "InstructBlipQFormerSelfOutput",
+    ]
     _keep_in_fp32_modules = []
 
     # Copied from transformers.models.blip_2.modeling_blip_2.Blip2PreTrainedModel._init_weights with Blip2->InstructBlip
@@ -930,7 +935,7 @@ class InstructBlipQFormerEncoder(nn.Module):
 
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
                 if use_cache:
-                    logger.warn(
+                    logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
@@ -1119,19 +1124,19 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
 
     def forward(
         self,
-        input_ids,
-        attention_mask=None,
-        position_ids=None,
-        query_embeds=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        query_embeds: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1559,6 +1564,9 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         # with the tokenizer's bos token being set to </s> which has ID=2,
         # whereas the model's text config has bos token id = 0
         if self.config.text_config.architectures[0] == "LLaMAForCausalLM":
-            outputs[outputs == 0] = 2
+            if isinstance(outputs, torch.Tensor):
+                outputs[outputs == 0] = 2
+            else:
+                outputs.sequences[outputs.sequences == 0] = 2
 
         return outputs

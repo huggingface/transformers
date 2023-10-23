@@ -75,7 +75,7 @@ include a local path to an image or an image url.
 The candidate labels can be simple words like in this example, or more descriptive.
 
 ```py
->>> predictions = classifier(image, candidate_labels=["fox", "bear", "seagull", "owl"])
+>>> predictions = detector(image, candidate_labels=["fox", "bear", "seagull", "owl"])
 >>> predictions
 [{'score': 0.9996670484542847, 'label': 'owl'},
  {'score': 0.000199399160919711, 'label': 'seagull'},

@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Mpt configuration"""
-import copy
 from typing import TYPE_CHECKING, Optional, Union
 
 
@@ -146,17 +145,17 @@ class MptConfig(PretrainedConfig):
             the `inputs_ids` passed when calling [`MptModel`]. Check [this
             discussion](https://huggingface.co/bigscience/mpt/discussions/120#633d28389addb8530b406c2a) on how the
             `vocab_size` has been defined.
-        resid_pdrop (`float`, *optional*, defaults to 0.1):
+        resid_pdrop (`float`, *optional*, defaults to 0.0):
             The dropout probability applied to the attention output before combining with residual.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
             The epsilon to use in the layer normalization layers.
-        emb_pdrop (`float`, *optional*, defaults to 0.1):
+        emb_pdrop (`float`, *optional*, defaults to 0.0):
             The dropout probability for the embedding layer.
-        learned_pos_emb (`bool`, *optional*, defaults to `False`):
+        learned_pos_emb (`bool`, *optional*, defaults to `True`):
             Whether to use learned positional embeddings.
         attn_config (`dict`, *optional*):
             A dictionary used to configure the model's attention module.
-        init_device (`str`, *optional*):
+        init_device (`str`, *optional*, defaults to `"cpu"`):
             The device to use for parameter initialization. Defined for backward compatibility
         logit_scale (`float`, *optional*):
             If not None, scale the logits by this value.
@@ -170,7 +169,7 @@ class MptConfig(PretrainedConfig):
         norm_type (`str`, *optional*, defaults to `"low_precision_layernorm"`):
             Type of layer norm to use. All MPT models uses the same layer norm implementation. Defined for backward
             compatibility.
-        use_cache (`bool`, *optional*, defaults to `True`):
+        use_cache (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -197,7 +196,6 @@ class MptConfig(PretrainedConfig):
         "hidden_size": "d_model",
         "num_hidden_layers": "n_layers",
     }
-    is_composition = True
 
     def __init__(
         self,
@@ -222,7 +220,12 @@ class MptConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        self.attn_config = attn_config
+        if attn_config is None:
+            self.attn_config = MptAttentionConfig()
+        elif isinstance(attn_config, dict):
+            self.attn_config = MptAttentionConfig(**attn_config)
+        else:
+            self.attn_config = attn_config
         self.d_model = d_model
         self.n_heads = n_heads
         self.n_layers = n_layers
@@ -242,35 +245,3 @@ class MptConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
-
-    @property
-    def attn_config(self):
-        return self._attn_config
-
-    @attn_config.setter
-    def attn_config(self, attn_config):
-        if attn_config is None:
-            self._attn_config = MptAttentionConfig()
-        elif isinstance(attn_config, dict):
-            self._attn_config = MptAttentionConfig(**attn_config)
-        elif isinstance(attn_config, MptAttentionConfig):
-            self._attn_config = attn_config
-        else:
-            raise ValueError(
-                f"`attn_config` has to be either a `MptAttentionConfig` or a dictionary. Received: {type(attn_config)}"
-            )
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["attn_config"] = (
-            self._attn_config.to_dict() if not isinstance(self.attn_config, dict) else self.attn_config
-        )
-        del output["_attn_config"]
-        output["model_type"] = self.__class__.model_type
-        return output

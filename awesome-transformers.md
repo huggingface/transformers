@@ -601,3 +601,9 @@ All Hugging Face models and pipelines can be seamlessly integrated into BentoML 
 
 Keywords: BentoML, Framework, Deployment, AI Applications
 
+## [LLaMA-Efficient-Tuning](https://github.com/hiyouga/LLaMA-Efficient-Tuning)
+
+[LLaMA-Efficient-Tuning](https://github.com/hiyouga/LLaMA-Efficient-Tuning) offers a user-friendly fine-tuning framework that incorporates PEFT. The repository includes training(fine-tuning) and inference examples for LLaMA-2, BLOOM, Falcon, Baichuan, Qwen, and other LLMs. A ChatGLM version is also available in [ChatGLM-Efficient-Tuning](https://github.com/hiyouga/ChatGLM-Efficient-Tuning).
+
+Keywords: PEFT, fine-tuning, LLaMA-2, ChatGLM, Qwen
+

@@ -23,7 +23,7 @@ import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
-from ...deepspeed import is_deepspeed_available
+from ...integrations.deepspeed import is_deepspeed_available
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     ContextManagers,
@@ -1204,7 +1204,7 @@ class EsmFoldTriangularSelfAttentionBlock(nn.Module):
 
         if sequence_state_dim != self.config.sequence_state_dim:
             raise ValueError(
-                "`sequence_state` last dimension should be equal to `self.sequence_state_dim`. Got"
+                "`sequence_state` last dimension should be equal to `self.sequence_state_dim`. Got "
                 f"{sequence_state_dim} != {self.config.sequence_state_dim}."
             )
         if pairwise_state_dim != self.config.pairwise_state_dim:
@@ -2018,6 +2018,8 @@ class EsmFoldingTrunk(nn.Module):
     ESM_START_DOCSTRING,
 )
 class EsmForProteinFolding(EsmPreTrainedModel):
+    _no_split_modules = ["EsmFoldStructureModule", "EsmFoldTriangularSelfAttentionBlock"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -2084,11 +2086,11 @@ class EsmForProteinFolding(EsmPreTrainedModel):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: torch.Tensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         masking_pattern: Optional[torch.Tensor] = None,
         num_recycles: Optional[int] = None,
-    ):
+    ) -> EsmForProteinFoldingOutput:
         r"""
         Returns:
 

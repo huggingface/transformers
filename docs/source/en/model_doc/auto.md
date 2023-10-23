@@ -266,6 +266,10 @@ The following auto classes are available for the following computer vision tasks
 
 [[autodoc]] AutoModelForImageSegmentation
 
+### AutoModelForImageToImage
+
+[[autodoc]] AutoModelForImageToImage
+
 ### AutoModelForSemanticSegmentation
 
 [[autodoc]] AutoModelForSemanticSegmentation
@@ -329,6 +333,14 @@ The following auto classes are available for the following audio tasks.
 ### AutoModelForAudioXVector
 
 [[autodoc]] AutoModelForAudioXVector
+
+### AutoModelForTextToSpectrogram
+
+[[autodoc]] AutoModelForTextToSpectrogram
+
+### AutoModelForTextToWaveform
+
+[[autodoc]] AutoModelForTextToWaveform
 
 ## Multimodal
 

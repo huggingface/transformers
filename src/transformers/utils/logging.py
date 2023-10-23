@@ -30,6 +30,9 @@ from logging import (
     WARN,  # NOQA
     WARNING,  # NOQA
 )
+from logging import (
+    captureWarnings as _captureWarnings,
+)
 from typing import Optional
 
 import huggingface_hub.utils as hf_hub_utils
@@ -40,6 +43,7 @@ _lock = threading.Lock()
 _default_handler: Optional[logging.Handler] = None
 
 log_levels = {
+    "detail": logging.DEBUG,  # will also print filename and line number
     "debug": logging.DEBUG,
     "info": logging.INFO,
     "warning": logging.WARNING,
@@ -95,6 +99,11 @@ def _configure_library_root_logger() -> None:
         library_root_logger = _get_library_root_logger()
         library_root_logger.addHandler(_default_handler)
         library_root_logger.setLevel(_get_default_logging_level())
+        # if logging level is debug, we add pathname and lineno to formatter for easy debugging
+        if os.getenv("TRANSFORMERS_VERBOSITY", None) == "detail":
+            formatter = logging.Formatter("[%(levelname)s|%(pathname)s:%(lineno)s] %(asctime)s >> %(message)s")
+            _default_handler.setFormatter(formatter)
+
         library_root_logger.propagate = False
 
 
@@ -113,6 +122,29 @@ def _reset_library_root_logger() -> None:
 
 def get_log_levels_dict():
     return log_levels
+
+
+def captureWarnings(capture):
+    """
+    Calls the `captureWarnings` method from the logging library to enable management of the warnings emitted by the
+    `warnings` library.
+
+    Read more about this method here:
+    https://docs.python.org/3/library/logging.html#integration-with-the-warnings-module
+
+    All warnings will be logged through the `py.warnings` logger.
+
+    Careful: this method also adds a handler to this logger if it does not already have one, and updates the logging
+    level of that logger to the library's root logger.
+    """
+    logger = get_logger("py.warnings")
+
+    if not logger.handlers:
+        logger.addHandler(_default_handler)
+
+    logger.setLevel(_get_library_root_logger().level)
+
+    _captureWarnings(capture)
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:

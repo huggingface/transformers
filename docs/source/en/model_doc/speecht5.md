@@ -71,7 +71,7 @@ This model was contributed by [Matthijs](https://huggingface.co/Matthijs). The o
 
 [[autodoc]] SpeechT5ForTextToSpeech
     - forward
-    - generate_speech
+    - generate
 
 ## SpeechT5ForSpeechToSpeech
 

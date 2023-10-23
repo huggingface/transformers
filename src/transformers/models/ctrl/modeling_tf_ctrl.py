@@ -39,11 +39,11 @@ from .configuration_ctrl import CTRLConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "ctrl"
+_CHECKPOINT_FOR_DOC = "Salesforce/ctrl"
 _CONFIG_FOR_DOC = "CTRLConfig"
 
 TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ctrl"
+    "Salesforce/ctrl"
     # See all CTRL models at https://huggingface.co/models?filter=ctrl
 ]
 

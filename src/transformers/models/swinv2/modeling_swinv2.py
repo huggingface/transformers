@@ -242,7 +242,7 @@ def window_reverse(windows, window_size, height, width):
 
 
 # Copied from transformers.models.swin.modeling_swin.drop_path
-def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -791,6 +791,11 @@ class Swinv2Stage(nn.Module):
         super().__init__()
         self.config = config
         self.dim = dim
+        window_size = (
+            config.window_size
+            if isinstance(config.window_size, collections.abc.Iterable)
+            else (config.window_size, config.window_size)
+        )
         self.blocks = nn.ModuleList(
             [
                 Swinv2Layer(
@@ -798,7 +803,7 @@ class Swinv2Stage(nn.Module):
                     dim=dim,
                     input_resolution=input_resolution,
                     num_heads=num_heads,
-                    shift_size=0 if (i % 2 == 0) else config.window_size // 2,
+                    shift_size=[0, 0] if (i % 2 == 0) else [window_size[0] // 2, window_size[1] // 2],
                     pretrained_window_size=pretrained_window_size,
                 )
                 for i in range(depth)

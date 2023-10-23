@@ -9,7 +9,7 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.0.1'
+ARG PYTORCH='2.1.0'
 # (not always a valid torch version)
 ARG INTEL_TORCH_EXT='1.11.0'
 # Example: `cu102`, `cu113`, etc.
@@ -31,7 +31,7 @@ RUN echo torch=$VERSION
 # TODO: We might need to specify proper versions that work with a specific torch version (especially for past CI).
 RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
-RUN python3 -m pip install --no-cache-dir -U tensorflow==2.12 protobuf==3.20.3 tensorflow_text tensorflow_probability
+RUN python3 -m pip install --no-cache-dir -U tensorflow==2.13 protobuf==3.20.3 tensorflow_text tensorflow_probability
 
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime]
 
@@ -44,11 +44,19 @@ RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
+RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/peft@main#egg=peft
+
 # Add bitsandbytes for mixed int8 testing
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
-# For bettertransformer
-RUN python3 -m pip install --no-cache-dir optimum
+# Add auto-gptq for gtpq quantization testing
+RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
+
+# Add einops for additional model testing
+RUN python3 -m pip install --no-cache-dir einops
+
+# For bettertransformer + gptq 
+RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
 # For video model testing
 RUN python3 -m pip install --no-cache-dir decord av==9.2.0

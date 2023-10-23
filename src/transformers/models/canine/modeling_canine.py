@@ -1126,6 +1126,7 @@ class CanineModel(CaninePreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -1168,7 +1169,9 @@ class CanineModel(CaninePreTrainedModel):
         # Contextualize character embeddings using shallow Transformer.
         # We use a 3D attention mask for the local attention.
         # `input_char_encoding`: shape (batch_size, char_seq_len, char_dim)
-        char_attention_mask = self._create_3d_attention_mask_from_input_mask(input_ids, attention_mask)
+        char_attention_mask = self._create_3d_attention_mask_from_input_mask(
+            input_ids if input_ids is not None else inputs_embeds, attention_mask
+        )
         init_chars_encoder_outputs = self.initial_char_encoder(
             input_char_embeddings,
             attention_mask=char_attention_mask,

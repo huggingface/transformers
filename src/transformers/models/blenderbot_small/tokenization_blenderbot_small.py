@@ -85,9 +85,9 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         unk_token (`str`, *optional*, defaults to `"__unk__"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (`str`, *optional*, defaults to `"__pad__"`):
+        pad_token (`str`, *optional*, defaults to `"__null__"`):
             The token used for padding, for example when batching sequences of different lengths.
-        **kwargs
+        kwargs (*optional*):
             Additional keyword arguments passed along to [`PreTrainedTokenizer`]
     """
 
@@ -106,8 +106,6 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         pad_token="__null__",
         **kwargs,
     ):
-        super().__init__(unk_token=unk_token, bos_token=bos_token, eos_token=eos_token, pad_token=pad_token, **kwargs)
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -116,6 +114,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+        super().__init__(unk_token=unk_token, bos_token=bos_token, eos_token=eos_token, pad_token=pad_token, **kwargs)
 
     @property
     def vocab_size(self) -> int:
@@ -236,3 +235,24 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+    @property
+    # Copied from transformers.models.blenderbot.tokenization_blenderbot.BlenderbotTokenizer.default_chat_template
+    def default_chat_template(self):
+        """
+        A very simple chat template that just adds whitespace between messages.
+        """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
+        return (
+            "{% for message in messages %}"
+            "{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}"
+            "{{ message['content'] }}"
+            "{% if not loop.last %}{{ '  ' }}{% endif %}"
+            "{% endfor %}"
+            "{{ eos_token }}"
+        )

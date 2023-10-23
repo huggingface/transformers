@@ -1296,7 +1296,7 @@ class SamModel(SamPreTrainedModel):
         target_embedding: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict=None,
+        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> List[Dict[str, torch.Tensor]]:
         r"""

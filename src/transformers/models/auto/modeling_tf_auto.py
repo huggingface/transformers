@@ -362,6 +362,7 @@ TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict([("wav2vec2", "TFW
 TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         ("layoutlm", "TFLayoutLMForQuestionAnswering"),
+        ("layoutlmv3", "TFLayoutLMv3ForQuestionAnswering"),
     ]
 )
 
@@ -409,6 +410,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("bert", "TFBertForMultipleChoice"),
         ("camembert", "TFCamembertForMultipleChoice"),
         ("convbert", "TFConvBertForMultipleChoice"),
+        ("deberta-v2", "TFDebertaV2ForMultipleChoice"),
         ("distilbert", "TFDistilBertForMultipleChoice"),
         ("electra", "TFElectraForMultipleChoice"),
         ("flaubert", "TFFlaubertForMultipleChoice"),

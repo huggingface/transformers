@@ -2,7 +2,7 @@ name: Stale Bot
 
 on:
   schedule:
-    - cron: "0 15 * * *"
+    - cron: "0 8 * * *"
 
 jobs:
   close_stale_issues:

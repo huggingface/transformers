@@ -2031,6 +2031,7 @@ class ReformerModel(ReformerPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()  # noqa: F841
             device = input_ids.device
         elif inputs_embeds is not None:
@@ -2299,12 +2300,12 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         for layer_past in past_key_values:
             # buckets
             if layer_past[0] is not None:
-                reord_buckets = layer_past[0].index_select(0, beam_idx)
+                reord_buckets = layer_past[0].index_select(0, beam_idx.to(layer_past[0].device))
             else:
                 reord_buckets = None
 
             # hidden states
-            reord_hidden_states = layer_past[1].index_select(0, beam_idx)
+            reord_hidden_states = layer_past[1].index_select(0, beam_idx.to(layer_past[1].device))
             reord_past_buckets_states.append((reord_buckets, reord_hidden_states))
         return reord_past_buckets_states
 

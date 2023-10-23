@@ -14,7 +14,6 @@
 # limitations under the License.
 """ SAM model configuration"""
 
-import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -105,7 +104,7 @@ class SamMaskDecoderConfig(PretrainedConfig):
             The number of layers in the IoU head module.
         iou_head_hidden_dim (`int`, *optional*, defaults to 256):
             The dimensionality of the hidden states in the IoU head module.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
 
     """
@@ -164,7 +163,7 @@ class SamVisionConfig(PretrainedConfig):
             Size of the patches to be extracted from the input image.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string)
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -174,9 +173,9 @@ class SamVisionConfig(PretrainedConfig):
             Whether to add a bias to query, key, value projections.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             Ratio of mlp hidden dim to embedding dim.
-        use_abs_pos (`bool`, *optional*, defaults to True):
+        use_abs_pos (`bool`, *optional*, defaults to `True`):
             Whether to use absolute position embedding.
-        use_rel_pos (`bool`, *optional*, defaults to True):
+        use_rel_pos (`bool`, *optional*, defaults to `True`):
             Whether to use relative position embedding.
         window_size (`int`, *optional*, defaults to 14):
             Window size for relative position.
@@ -184,7 +183,7 @@ class SamVisionConfig(PretrainedConfig):
             The indexes of the global attention layers.
         num_pos_feats (`int`, *optional*, defaults to 128):
             The dimensionality of the position embedding.
-        mlp_dim (`int`, *optional*, defaults to None):
+        mlp_dim (`int`, *optional*):
             The dimensionality of the MLP layer in the Transformer encoder. If `None`, defaults to `mlp_ratio *
             hidden_size`.
     """
@@ -286,7 +285,6 @@ class SamConfig(PretrainedConfig):
     ```"""
 
     model_type = "sam"
-    is_composition = True
 
     def __init__(
         self,
@@ -312,17 +310,3 @@ class SamConfig(PretrainedConfig):
         self.prompt_encoder_config = SamPromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = SamMaskDecoderConfig(**mask_decoder_config)
         self.initializer_range = initializer_range
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["vision_config"] = self.vision_config.to_dict()
-        output["prompt_encoder_config"] = self.prompt_encoder_config.to_dict()
-        output["mask_decoder_config"] = self.mask_decoder_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

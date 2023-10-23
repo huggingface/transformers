@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import GPTSw3Tokenizer
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import get_tests_dir, require_jinja, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -128,3 +128,27 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             model_name="AI-Sweden/gpt-sw3-126m",
             sequences=sequences,
         )
+
+    @require_jinja
+    def test_tokenization_for_chat(self):
+        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB)
+        # This is in English, but it's just here to make sure the chat control tokens are being added properly
+        test_chats = [
+            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
+            [
+                {"role": "system", "content": "You are a helpful chatbot."},
+                {"role": "user", "content": "Hello!"},
+                {"role": "assistant", "content": "Nice to meet you."},
+            ],
+            [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
+        ]
+        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
+        # fmt: off
+        expected_tokens = [
+            [2000, 1, 575, 541, 419, 530, 339, 265, 878, 708, 727, 275, 347, 541, 260, 1, 968, 263, 314, 419, 366, 354, 294, 360, 1, 575, 541, 419],
+            [2000, 1, 575, 541, 419, 530, 339, 265, 878, 708, 727, 275, 347, 541, 260, 1, 968, 263, 314, 419, 366, 354, 294, 360, 1, 575, 541, 419, 984, 429, 281, 264, 1261, 291, 260, 1, 575, 541, 419],
+            [2000, 1, 575, 541, 419, 984, 429, 281, 264, 1261, 291, 260, 1, 968, 263, 314, 419, 366, 354, 294, 360, 1, 575, 541, 419]
+            ]
+        # fmt: on
+        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
+            self.assertListEqual(tokenized_chat, expected_tokens)

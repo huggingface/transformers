@@ -171,7 +171,7 @@ Tokenize the text:
 MBart forces the target language id as the first generated token to translate to the target language. Set the `forced_bos_token_id` to `en` in the `generate` method to translate to English:
 
 ```py
->>> generated_tokens = model.generate(**encoded_en, forced_bos_token_id=tokenizer.lang_code_to_id("en_XX"))
+>>> generated_tokens = model.generate(**encoded_en, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
 >>> tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
 "Don't interfere with the wizard's affairs, because they are subtle, will soon get angry."
 ```

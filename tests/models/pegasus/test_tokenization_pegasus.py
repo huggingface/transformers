@@ -54,15 +54,15 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         token = "</s>"
         token_id = 1
 
-        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
-        self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
+        self.assertEqual(self.get_tokenizer().convert_tokens_to_ids(token), token_id)
+        self.assertEqual(self.get_tokenizer().convert_ids_to_tokens(token_id), token)
 
     def test_get_vocab(self):
         vocab_keys = list(self.get_tokenizer().get_vocab().keys())
 
         self.assertEqual(vocab_keys[0], "<pad>")
         self.assertEqual(vocab_keys[1], "</s>")
-        self.assertEqual(vocab_keys[-1], "v")
+        self.assertEqual(vocab_keys[104], "<unk_102>")
         self.assertEqual(len(vocab_keys), 1_103)
 
     def test_vocab_size(self):
@@ -128,6 +128,10 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             model_name="google/bigbird-pegasus-large-arxiv",
             revision="ba85d0851d708441f91440d509690f1ab6353415",
         )
+
+    # @unittest.skip("We have to use from_slow")
+    # def test_added_tokens_serialization(self):
+    #     pass
 
 
 @require_sentencepiece
@@ -211,3 +215,7 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             token_ids,
             [182, 117, 142, 587, 4211, 120, 117, 263, 112, 804, 109, 856, 25016, 3137, 464, 109, 26955, 3137, 1],
         )
+
+    # @unittest.skip("We have to use from_slow")
+    # def test_added_tokens_serialization(self):
+    #     pass

@@ -24,7 +24,7 @@ from transformers.testing_utils import get_tests_dir, require_sentencepiece, req
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
+SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 if is_sentencepiece_available():
     import sentencepiece as sp
@@ -45,7 +45,7 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         spm_model = sp.SentencePieceProcessor()
-        spm_model.Load(SAMPLE_SP)
+        spm_model.Load(SAMPLE_VOCAB)
         vocab = ["<s>", "<pad>", "</s>", "<unk>"]
 
         vocab += [spm_model.IdToPiece(id_) for id_ in range(len(spm_model))]
@@ -54,7 +54,7 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         save_dir = Path(self.tmpdirname)
         save_json(vocab_tokens, save_dir / VOCAB_FILES_NAMES["vocab_file"])
         if not (save_dir / VOCAB_FILES_NAMES["spm_file"]).exists():
-            copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["spm_file"])
+            copyfile(SAMPLE_VOCAB, save_dir / VOCAB_FILES_NAMES["spm_file"])
 
         tokenizer = Speech2TextTokenizer.from_pretrained(self.tmpdirname)
         tokenizer.save_pretrained(self.tmpdirname)

@@ -49,7 +49,7 @@ class CTRLModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -264,7 +264,7 @@ class CTRLModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_lm_generate_ctrl(self):
-        model = CTRLLMHeadModel.from_pretrained("ctrl")
+        model = CTRLLMHeadModel.from_pretrained("Salesforce/ctrl")
         model.to(torch_device)
         input_ids = torch.tensor(
             [[11859, 0, 1611, 8]], dtype=torch.long, device=torch_device

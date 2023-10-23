@@ -17,9 +17,11 @@ import copy
 import json
 import os
 import warnings
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from io import BytesIO
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
+import requests
 
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
@@ -34,9 +36,13 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
+    is_vision_available,
     logging,
 )
 
+
+if is_vision_available():
+    from PIL import Image
 
 logger = logging.get_logger(__name__)
 
@@ -508,6 +514,28 @@ class ImageProcessingMixin(PushToHubMixin):
 
         cls._auto_class = auto_class
 
+    def fetch_images(self, image_url_or_urls: Union[str, List[str]]):
+        """
+        Convert a single or a list of urls into the corresponding `PIL.Image` objects.
+
+        If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
+        returned.
+        """
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0"
+                " Safari/537.36"
+            )
+        }
+        if isinstance(image_url_or_urls, list):
+            return [self.fetch_images(x) for x in image_url_or_urls]
+        elif isinstance(image_url_or_urls, str):
+            response = requests.get(image_url_or_urls, stream=True, headers=headers)
+            response.raise_for_status()
+            return Image.open(BytesIO(response.content))
+        else:
+            raise ValueError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
+
 
 class BaseImageProcessor(ImageProcessingMixin):
     def __init__(self, **kwargs):
@@ -521,7 +549,12 @@ class BaseImageProcessor(ImageProcessingMixin):
         raise NotImplementedError("Each image processor must implement its own preprocess method")
 
     def rescale(
-        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
+        self,
+        image: np.ndarray,
+        scale: float,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ) -> np.ndarray:
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -536,11 +569,16 @@ class BaseImageProcessor(ImageProcessingMixin):
                 image is used. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
 
         Returns:
             `np.ndarray`: The rescaled image.
         """
-        return rescale(image, scale=scale, data_format=data_format, **kwargs)
+        return rescale(image, scale=scale, data_format=data_format, input_data_format=input_data_format, **kwargs)
 
     def normalize(
         self,
@@ -548,6 +586,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         mean: Union[float, Iterable[float]],
         std: Union[float, Iterable[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -565,17 +604,25 @@ class BaseImageProcessor(ImageProcessingMixin):
                 image is used. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
 
         Returns:
             `np.ndarray`: The normalized image.
         """
-        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
+        return normalize(
+            image, mean=mean, std=std, data_format=data_format, input_data_format=input_data_format, **kwargs
+        )
 
     def center_crop(
         self,
         image: np.ndarray,
         size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -588,12 +635,26 @@ class BaseImageProcessor(ImageProcessingMixin):
             size (`Dict[str, int]`):
                 Size of the output image.
             data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
-        return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
+        return center_crop(
+            image,
+            size=(size["height"], size["width"]),
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
 
 
 VALID_SIZE_DICT_KEYS = ({"height", "width"}, {"shortest_edge"}, {"shortest_edge", "longest_edge"}, {"longest_edge"})

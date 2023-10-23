@@ -51,7 +51,7 @@ class MraModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=16,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=2,
         intermediate_size=36,
         hidden_act="gelu",

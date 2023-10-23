@@ -47,6 +47,7 @@ _re_configuration_file = re.compile(r"config\.(.*)\.json")
 
 
 class PretrainedConfig(PushToHubMixin):
+    # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
     methods for loading/downloading/saving configurations.
@@ -762,6 +763,10 @@ class PretrainedConfig(PushToHubMixin):
         to_remove = []
         for key, value in kwargs.items():
             if hasattr(config, key):
+                current_attr = getattr(config, key)
+                # To authorize passing a custom subconfig as kwarg in models that have nested configs.
+                if isinstance(current_attr, PretrainedConfig) and isinstance(value, dict):
+                    value = current_attr.__class__(**value)
                 setattr(config, key, value)
                 if key != "torch_dtype":
                     to_remove.append(key)
@@ -823,6 +828,18 @@ class PretrainedConfig(PushToHubMixin):
         # only serialize values that differ from the default config
         for key, value in config_dict.items():
             if (
+                isinstance(getattr(self, key, None), PretrainedConfig)
+                and key in class_config_dict
+                and isinstance(class_config_dict[key], dict)
+            ):
+                # For nested configs we need to clean the diff recursively
+                diff = recursive_diff_dict(value, class_config_dict[key], config_obj=getattr(self, key, None))
+                if "model_type" in value:
+                    # Needs to be set even if it's not in the diff
+                    diff["model_type"] = value["model_type"]
+                if len(diff) > 0:
+                    serializable_config_dict[key] = diff
+            elif (
                 key not in default_config_dict
                 or key == "transformers_version"
                 or value != default_config_dict[key]
@@ -837,7 +854,13 @@ class PretrainedConfig(PushToHubMixin):
                 else self.quantization_config
             )
 
+            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            _ = serializable_config_dict.pop("_pre_quantization_dtype", None)
+
         self.dict_torch_dtype_to_str(serializable_config_dict)
+
+        if "_flash_attn_2_enabled" in serializable_config_dict:
+            del serializable_config_dict["_flash_attn_2_enabled"]
 
         return serializable_config_dict
 
@@ -855,9 +878,19 @@ class PretrainedConfig(PushToHubMixin):
             del output["_auto_class"]
         if "_commit_hash" in output:
             del output["_commit_hash"]
+        if "_flash_attn_2_enabled" in output:
+            del output["_flash_attn_2_enabled"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
+
+        for key, value in output.items():
+            # Deal with nested configs like CLIP
+            if isinstance(value, PretrainedConfig):
+                value = value.to_dict()
+                del value["transformers_version"]
+
+            output[key] = value
 
         if hasattr(self, "quantization_config"):
             output["quantization_config"] = (
@@ -865,6 +898,9 @@ class PretrainedConfig(PushToHubMixin):
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
+
+            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            _ = output.pop("_pre_quantization_dtype", None)
 
         self.dict_torch_dtype_to_str(output)
 
@@ -1018,6 +1054,24 @@ def get_configuration_file(configuration_files: List[str]) -> str:
             break
 
     return configuration_file
+
+
+def recursive_diff_dict(dict_a, dict_b, config_obj=None):
+    """
+    Helper function to recursively take the diff between two nested dictionaries. The resulting diff only contains the
+    values from `dict_a` that are different from values in `dict_b`.
+    """
+    diff = {}
+    default = config_obj.__class__().to_dict() if config_obj is not None else {}
+    for key, value in dict_a.items():
+        obj_value = getattr(config_obj, str(key), None)
+        if isinstance(obj_value, PretrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
+            diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
+            if len(diff_value) > 0:
+                diff[key] = diff_value
+        elif key not in dict_b or value != dict_b[key] or key not in default or value != default[key]:
+            diff[key] = value
+    return diff
 
 
 PretrainedConfig.push_to_hub = copy_func(PretrainedConfig.push_to_hub)

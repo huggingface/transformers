@@ -1187,13 +1187,13 @@ class TFMarianModel(TFMarianPreTrainedModel):
         past_key_values: Tuple[Tuple[tf.Tensor]] | None = None,
         inputs_embeds: tf.Tensor | None = None,
         decoder_inputs_embeds: tf.Tensor | None = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
         **kwargs,
-    ):
+    ) -> Tuple[tf.Tensor] | TFSeq2SeqModelOutput:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1311,17 +1311,17 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         head_mask: tf.Tensor | None = None,
         decoder_head_mask: tf.Tensor | None = None,
         cross_attn_head_mask: tf.Tensor | None = None,
-        encoder_outputs: Optional[TFBaseModelOutput] = None,
+        encoder_outputs: TFBaseModelOutput | None = None,
         past_key_values: Tuple[Tuple[tf.Tensor]] | None = None,
         inputs_embeds: tf.Tensor | None = None,
         decoder_inputs_embeds: tf.Tensor | None = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: tf.Tensor | None = None,
         training: bool = False,
-    ):
+    ) -> Tuple[tf.Tensor] | TFSeq2SeqLMOutput:
         r"""
         labels (`tf.tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1443,18 +1443,3 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
 
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
-
-    def adjust_logits_during_generation(
-        self, logits, cur_len, max_length, forced_bos_token_id, forced_eos_token_id, **kwargs
-    ):
-        """Never predict pad_token_id. Predict </s> when max_length is reached."""
-        vocab_range = tf.constant(range(self.config.vocab_size))
-        logits = tf.where(vocab_range == self.config.pad_token_id, LARGE_NEGATIVE, logits)
-        if cur_len == 1 and forced_bos_token_id is not None:
-            vocab_range = tf.constant(range(self.config.vocab_size))
-            return tf.where(vocab_range != forced_bos_token_id, LARGE_NEGATIVE, logits)
-        elif cur_len == max_length - 1 and forced_eos_token_id is not None:
-            vocab_range = tf.constant(range(self.config.vocab_size))
-            return tf.where(vocab_range != forced_eos_token_id, LARGE_NEGATIVE, logits)
-        else:
-            return logits

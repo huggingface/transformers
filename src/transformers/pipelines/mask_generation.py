@@ -113,6 +113,8 @@ class MaskGenerationPipeline(ChunkPipeline):
             preprocess_kwargs["crop_overlap_ratio"] = kwargs["crop_overlap_ratio"]
         if "crop_n_points_downscale_factor" in kwargs:
             preprocess_kwargs["crop_n_points_downscale_factor"] = kwargs["crop_n_points_downscale_factor"]
+        if "timeout" in kwargs:
+            preprocess_kwargs["timeout"] = kwargs["timeout"]
         # postprocess args
         if "pred_iou_thresh" in kwargs:
             forward_params["pred_iou_thresh"] = kwargs["pred_iou_thresh"]
@@ -156,6 +158,9 @@ class MaskGenerationPipeline(ChunkPipeline):
                 the image length. Later layers with more crops scale down this overlap.
             crop_n_points_downscale_factor (`int`, *optional*, defaults to `1`):
                 The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
 
         Return:
             `Dict`: A dictionary with the following keys:
@@ -175,8 +180,9 @@ class MaskGenerationPipeline(ChunkPipeline):
         crop_overlap_ratio: float = 512 / 1500,
         points_per_crop: Optional[int] = 32,
         crop_n_points_downscale_factor: Optional[int] = 1,
+        timeout: Optional[float] = None,
     ):
-        image = load_image(image)
+        image = load_image(image, timeout=timeout)
         target_size = self.image_processor.size["longest_edge"]
         crop_boxes, grid_points, cropped_images, input_labels = self.image_processor.generate_crop_boxes(
             image, target_size, crops_n_layers, crop_overlap_ratio, points_per_crop, crop_n_points_downscale_factor

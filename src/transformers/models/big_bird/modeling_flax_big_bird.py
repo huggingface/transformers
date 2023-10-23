@@ -316,7 +316,7 @@ class FlaxBigBirdSelfAttention(nn.Module):
         hidden_states,
         attention_mask,
         layer_head_mask,
-        key_value_states: Optional[jnp.array] = None,
+        key_value_states: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         deterministic=True,
         output_attentions: bool = False,
@@ -2599,7 +2599,7 @@ class FlaxBigBirdForCausalLMModule(nn.Module):
 class FlaxBigBirdForCausalLM(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForCausalLMModule
 
-    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
+    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
 

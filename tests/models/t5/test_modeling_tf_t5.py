@@ -314,6 +314,10 @@ class TFT5ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_keras_save_load(self):
         pass
 
+    @unittest.skip("Does not support conversations.")
+    def test_pipeline_conversational(self):
+        pass
+
 
 class TFT5EncoderOnlyModelTester:
     def __init__(
@@ -549,6 +553,8 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(expected_output_string, output_strings)
 
+    # TODO (ydshieh): undo skip once a fix is done on TF side.
+    @unittest.skip("Skip for now as TF 2.13 breaks it on GPU")
     @slow
     def test_beam_search_xla_generate_simple(self):
         model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
@@ -604,6 +610,10 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
 
         expected_output_string = ["Ich liebe es so sehr!", "die Transformatoren sind wirklich erstaunlich"]
         self.assertListEqual(expected_output_string, output_strings)
+
+    @unittest.skip("Does not support conversations.")
+    def test_pipeline_conversational(self):
+        pass
 
 
 @require_tf

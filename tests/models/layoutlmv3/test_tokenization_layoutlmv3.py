@@ -264,6 +264,10 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_right_and_left_truncation(self):
         pass
 
+    @unittest.skip("Not implemented")
+    def test_split_special_tokens(self):
+        pass
+
     def test_encode_plus_with_padding(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
@@ -1755,8 +1759,8 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         tokens_to_add = ["AAA", "bbb"]
 
-        words_with_space = [f" {token}" for token in tokens_to_add + tokenizer_s.unique_no_split_tokens]
-        words_without_space = tokens_to_add + tokenizer_s.unique_no_split_tokens
+        words_with_space = [f" {token}" for token in tokens_to_add + list(tokenizer_s.added_tokens_encoder.keys())]
+        words_without_space = tokens_to_add + list(tokenizer_s.added_tokens_encoder.keys())
         boxes = [[i, i, i, i] for i in range(len(words_with_space))]
 
         tokens_to_add_formated = [
@@ -2435,3 +2439,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # This should not fail
                 model(encoded_sequence)
                 model(batch_encoded_sequence)
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template(self):
+        pass

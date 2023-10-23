@@ -483,9 +483,18 @@ class BarkCausalModel(BarkPreTrainedModel):
         position_ids = kwargs.get("position_ids", None)
 
         if past_key_values is not None:
-            # only last token for inputs_ids if past is defined in kwargs
+            # Omit tokens covered by past_key_values
             seq_len = input_ids.shape[1]
-            input_ids = input_ids[:, [-1]]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
 
             # input_embeds have already been used and is not required anymore
             input_embeds = None
@@ -507,7 +516,7 @@ class BarkCausalModel(BarkPreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
+                position_ids = position_ids[:, -input_ids.shape[1] :]
         else:
             position_ids = None
 
@@ -1077,12 +1086,16 @@ class BarkFineModel(BarkPreTrainedModel):
         # one lm_head for each codebook
         self.lm_heads = new_output_embeddings
 
-    def _resize_token_embeddings(self, new_num_tokens):
+    def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None):
         old_embeddings_list = self.get_input_embeddings()
         new_embeddings_list = nn.ModuleList(
-            [self._get_resized_embeddings(old_embeddings, new_num_tokens) for old_embeddings in old_embeddings_list]
+            [
+                self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of)
+                for old_embeddings in old_embeddings_list
+            ]
         )
         self.set_input_embeddings(new_embeddings_list)
+        new_num_tokens = new_embeddings_list[0].weight.shape[0]
 
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
@@ -1093,6 +1106,45 @@ class BarkFineModel(BarkPreTrainedModel):
             self.set_output_embeddings(new_lm_head_list)
 
         return self.get_input_embeddings()
+
+    def resize_token_embeddings(
+        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of: Optional[int] = None
+    ) -> nn.Embedding:
+        """
+        Resizes input token embeddings matrix of the model if `new_num_tokens != config.vocab_size`.
+
+        Takes care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
+
+        Arguments:
+            new_num_tokens (`int`, *optional*):
+                The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
+                vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`, just
+                returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing anything.
+            pad_to_multiple_of (`int`, *optional*):
+                If set will pad the embedding matrix to a multiple of the provided value.
+
+                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128. For more
+                details about this, or help on choosing the correct value for resizing, refer to this guide:
+                https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
+
+        Return:
+            `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
+        """
+        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        if new_num_tokens is None and pad_to_multiple_of is None:
+            return model_embeds
+
+        # Update base model and current model config
+        self.config.output_vocab_size = model_embeds[0].weight.shape[0]
+        self.config.vocab_size = model_embeds[0].weight.shape[0]
+        self.output_vocab_size = model_embeds[0].weight.shape[0]
+        self.vocab_size = model_embeds[0].weight.shape[0]
+
+        # Tie weights again if needed
+        self.tie_weights()
+
+        return model_embeds
 
     def tie_weights(self):
         """
@@ -1224,13 +1276,6 @@ class BarkFineModel(BarkPreTrainedModel):
             attentions=all_self_attentions,
         )
 
-    def can_generate(self) -> bool:
-        """
-        Returns True. Despite being an autoencoder, BarkFineModel shares some characteristics with generative models
-        due to the way audio are generated.
-        """
-        return True
-
     def generate(
         self,
         coarse_output: torch.Tensor,
@@ -1336,7 +1381,7 @@ class BarkFineModel(BarkPreTrainedModel):
             input_buffer = fine_input[:, start_idx : start_idx + max_fine_input_length, :]
             for n_inner in range(n_coarse, fine_generation_config.n_fine_codebooks):
                 logits = self.forward(n_inner, input_buffer).logits
-                if temperature is None:
+                if temperature is None or temperature == 1.0:
                     relevant_logits = logits[:, rel_start_fill_idx:, :codebook_size]
                     codebook_preds = torch.argmax(relevant_logits, -1)
                 else:
@@ -1499,8 +1544,8 @@ class BarkModel(BarkPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, BarkModel
 
-        >>> processor = AutoProcessor.from_pretrained("ylacombe/bark-small")
-        >>> model = BarkModel.from_pretrained("ylacombe/bark-small")
+        >>> processor = AutoProcessor.from_pretrained("suno/bark-small")
+        >>> model = BarkModel.from_pretrained("suno/bark-small")
 
         >>> # To add a voice preset, you can pass `voice_preset` to `BarkProcessor.__call__(...)`
         >>> voice_preset = "v2/en_speaker_6"
@@ -1587,10 +1632,3 @@ class BarkModel(BarkPreTrainedModel):
             self.codec_model_hook.offload()
 
         return audio
-
-    def can_generate(self) -> bool:
-        """
-        Returns True. Despite not having a `self.generate` method, this model can `generate` and thus needs a
-        BarkGenerationConfig.
-        """
-        return True

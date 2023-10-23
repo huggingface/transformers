@@ -64,9 +64,11 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("efficientnet", "EfficientNetImageProcessor"),
         ("flava", "FlavaImageProcessor"),
         ("focalnet", "BitImageProcessor"),
+        ("fuyu", "FuyuImageProcessor"),
         ("git", "CLIPImageProcessor"),
         ("glpn", "GLPNImageProcessor"),
         ("groupvit", "CLIPImageProcessor"),
+        ("idefics", "IdeficsImageProcessor"),
         ("imagegpt", "ImageGPTImageProcessor"),
         ("instructblip", "BlipImageProcessor"),
         ("layoutlmv2", "LayoutLMv2ImageProcessor"),
@@ -81,7 +83,9 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "MobileViTImageProcessor"),
         ("mobilevitv2", "MobileViTImageProcessor"),
         ("nat", "ViTImageProcessor"),
+        ("nougat", "NougatImageProcessor"),
         ("oneformer", "OneFormerImageProcessor"),
+        ("owlv2", "Owlv2ImageProcessor"),
         ("owlvit", "OwlViTImageProcessor"),
         ("perceiver", "PerceiverImageProcessor"),
         ("pix2struct", "Pix2StructImageProcessor"),
@@ -106,6 +110,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("vit_hybrid", "ViTHybridImageProcessor"),
         ("vit_mae", "ViTImageProcessor"),
         ("vit_msn", "ViTImageProcessor"),
+        ("vitmatte", "VitMatteImageProcessor"),
         ("xclip", "CLIPImageProcessor"),
         ("yolos", "YolosImageProcessor"),
     ]
@@ -404,7 +409,7 @@ class AutoImageProcessor:
         )
 
     @staticmethod
-    def register(config_class, image_processor_class):
+    def register(config_class, image_processor_class, exist_ok=False):
         """
         Register a new image processor for this class.
 
@@ -413,4 +418,4 @@ class AutoImageProcessor:
                 The configuration corresponding to the model to register.
             image_processor_class ([`ImageProcessingMixin`]): The image processor to register.
         """
-        IMAGE_PROCESSOR_MAPPING.register(config_class, image_processor_class)
+        IMAGE_PROCESSOR_MAPPING.register(config_class, image_processor_class, exist_ok=exist_ok)

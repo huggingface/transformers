@@ -12,13 +12,37 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Utility that checks the custom inits of Transformers are well-defined: Transformers uses init files that delay the
+import of an object to when it's actually needed. This is to avoid the main init importing all models, which would
+make the line `import transformers` very slow when the user has all optional dependencies installed. The inits with
+delayed imports have two halves: one definining a dictionary `_import_structure` which maps modules to the name of the
+objects in each module, and one in `TYPE_CHECKING` which looks like a normal init for type-checkers. The goal of this
+script is to check the objects defined in both halves are the same.
+
+This also checks the main init properly references all submodules, even if it doesn't import anything from them: every
+submodule should be defined as a key of `_import_structure`, with an empty list as value potentially, or the submodule
+won't be importable.
+
+Use from the root of the repo with:
+
+```bash
+python utils/check_inits.py
+```
+
+for a check that will error in case of inconsistencies (used by `make repo-consistency`).
+
+There is no auto-fix possible here sadly :-(
+"""
 
 import collections
 import os
 import re
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 
+# Path is set with the intent you should run this script from the root of the repo.
 PATH_TO_TRANSFORMERS = "src/transformers"
 
 
@@ -46,8 +70,18 @@ _re_try = re.compile(r"^\s*try:")
 _re_else = re.compile(r"^\s*else:")
 
 
-def find_backend(line):
-    """Find one (or multiple) backend in a code line of the init."""
+def find_backend(line: str) -> Optional[str]:
+    """
+    Find one (or multiple) backend in a code line of the init.
+
+    Args:
+        line (`str`): A code line of the main init.
+
+    Returns:
+        Optional[`str`]: If one (or several) backend is found, returns it. In the case of multiple backends (the line
+        contains `if is_xxx_available() and `is_yyy_available()`) returns all backends joined on `_and_` (so
+        `xxx_and_yyy` for instance).
+    """
     if _re_test_backend.search(line) is None:
         return None
     backends = [b[0] for b in _re_backend.findall(line)]
@@ -55,14 +89,23 @@ def find_backend(line):
     return "_and_".join(backends)
 
 
-def parse_init(init_file):
+def parse_init(init_file) -> Optional[Tuple[Dict[str, List[str]], Dict[str, List[str]]]]:
     """
-    Read an init_file and parse (per backend) the _import_structure objects defined and the TYPE_CHECKING objects
-    defined
+    Read an init_file and parse (per backend) the `_import_structure` objects defined and the `TYPE_CHECKING` objects
+    defined.
+
+    Args:
+        init_file (`str`): Path to the init file to inspect.
+
+    Returns:
+        `Optional[Tuple[Dict[str, List[str]], Dict[str, List[str]]]]`: A tuple of two dictionaries mapping backends to list of
+        imported objects, one for the `_import_structure` part of the init and one for the `TYPE_CHECKING` part of the
+        init. Returns `None` if the init is not a custom init.
     """
     with open(init_file, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
 
+    # Get the to `_import_structure` definition.
     line_index = 0
     while line_index < len(lines) and not lines[line_index].startswith("_import_structure = {"):
         line_index += 1
@@ -91,7 +134,9 @@ def parse_init(init_file):
             objects.append(line[9:-3])
         line_index += 1
 
+    # Those are stored with the key "none".
     import_dict_objects = {"none": objects}
+
     # Let's continue with backend-specific objects in _import_structure
     while not lines[line_index].startswith("if TYPE_CHECKING"):
         # If the line is an if not is_backend_available, we grab all objects associated.
@@ -151,6 +196,7 @@ def parse_init(init_file):
         line_index += 1
 
     type_hint_objects = {"none": objects}
+
     # Let's continue with backend-specific objects
     while line_index < len(lines):
         # If the line is an if is_backend_available, we grab all objects associated.
@@ -186,19 +232,33 @@ def parse_init(init_file):
     return import_dict_objects, type_hint_objects
 
 
-def analyze_results(import_dict_objects, type_hint_objects):
+def analyze_results(import_dict_objects: Dict[str, List[str]], type_hint_objects: Dict[str, List[str]]) -> List[str]:
     """
     Analyze the differences between _import_structure objects and TYPE_CHECKING objects found in an init.
+
+    Args:
+        import_dict_objects (`Dict[str, List[str]]`):
+            A dictionary mapping backend names (`"none"` for the objects independent of any specific backend) to
+            list of imported objects.
+        type_hint_objects (`Dict[str, List[str]]`):
+            A dictionary mapping backend names (`"none"` for the objects independent of any specific backend) to
+            list of imported objects.
+
+    Returns:
+        `List[str]`: The list of errors corresponding to mismatches.
     """
 
     def find_duplicates(seq):
         return [k for k, v in collections.Counter(seq).items() if v > 1]
 
+    # If one backend is missing from the other part of the init, error early.
     if list(import_dict_objects.keys()) != list(type_hint_objects.keys()):
         return ["Both sides of the init do not have the same backends!"]
 
     errors = []
+    # Find all errors.
     for key in import_dict_objects.keys():
+        # Duplicate imports in any half.
         duplicate_imports = find_duplicates(import_dict_objects[key])
         if duplicate_imports:
             errors.append(f"Duplicate _import_structure definitions for: {duplicate_imports}")
@@ -206,6 +266,7 @@ def analyze_results(import_dict_objects, type_hint_objects):
         if duplicate_type_hints:
             errors.append(f"Duplicate TYPE_CHECKING objects for: {duplicate_type_hints}")
 
+        # Missing imports in either part of the init.
         if sorted(set(import_dict_objects[key])) != sorted(set(type_hint_objects[key])):
             name = "base imports" if key == "none" else f"{key} backend"
             errors.append(f"Differences for {name}:")
@@ -237,7 +298,7 @@ def check_all_inits():
         raise ValueError("\n\n".join(failures))
 
 
-def get_transformers_submodules():
+def get_transformers_submodules() -> List[str]:
     """
     Returns the list of Transformers submodules.
     """
@@ -272,6 +333,9 @@ IGNORE_SUBMODULES = [
 
 
 def check_submodules():
+    """
+    Check all submodules of Transformers are properly registered in the main init. Error otherwise.
+    """
     # This is to make sure the transformers module imported is the one in the repo.
     from transformers.utils import direct_transformers_import
 

@@ -14,7 +14,6 @@
 # limitations under the License.
 """ RAG model configuration"""
 
-import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings
@@ -179,16 +178,3 @@ class RagConfig(PretrainedConfig):
             [`EncoderDecoderConfig`]: An instance of a configuration object
         """
         return cls(question_encoder=question_encoder_config.to_dict(), generator=generator_config.to_dict(), **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["question_encoder"] = self.question_encoder.to_dict()
-        output["generator"] = self.generator.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

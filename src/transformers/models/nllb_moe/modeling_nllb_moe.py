@@ -24,7 +24,7 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
-from ...deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     MoEModelOutput,
     MoEModelOutputWithPastAndCrossAttentions,
@@ -126,7 +126,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.load_balancing_loss_func with SwitchTransformers->NllbMoeModel
 def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -144,6 +143,9 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     Returns:
         The auxiliary loss.
     """
+    if router_probs is None:
+        return 0
+
     num_experts = router_probs.shape[-1]
 
     # cast the expert indices to int64, otherwise one-hot encoding will fail
@@ -699,7 +701,9 @@ class NllbMoeEncoderLayer(nn.Module):
         if self.is_sparse:
             hidden_states, router_states = self.ffn(hidden_states, attention_mask)
         else:
-            hidden_states = self.ffn(hidden_states)
+            # router_states set to None to track which layers have None gradients.
+            hidden_states, router_states = self.ffn(hidden_states), None
+
         hidden_states = self.ff_dropout(hidden_states)
 
         hidden_states = residual + hidden_states
@@ -830,7 +834,8 @@ class NllbMoeDecoderLayer(nn.Module):
         if self.is_sparse:
             hidden_states, router_states = self.ffn(hidden_states, attention_mask)
         else:
-            hidden_states = self.ffn(hidden_states)
+            hidden_states, router_states = self.ffn(hidden_states), None
+
         hidden_states = self.ff_dropout(hidden_states)
 
         hidden_states = residual + hidden_states
@@ -1105,6 +1110,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
@@ -1651,10 +1657,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        return new_embeddings
-
     def get_output_embeddings(self):
         return self.lm_head
 
@@ -1733,7 +1735,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
 
             if output_router_logits:
                 encoder_router_logits = outputs[-1]
-                decoder_router_logits = outputs[5 if output_attentions else 3]
+                decoder_router_logits = outputs[3 if output_attentions else 4]
 
                 # Compute the router loss (z_loss + auxiliary loss) for each router in the encoder and decoder
                 encoder_router_logits, encoder_expert_indexes = self._unpack_router_logits(encoder_router_logits)
@@ -1778,7 +1780,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
             decoder_router_logits=outputs.decoder_router_logits,
         )
 
-    # Copied from transfomers.models.switch_transformers.SwitchTransformersForConditionalGeneration._unpack_router_logits
     def _unpack_router_logits(self, router_outputs):
         total_router_logits = []
         total_expert_indexes = []
@@ -1787,11 +1788,10 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
                 router_logits, expert_indexes = router_output
                 total_router_logits.append(router_logits)
                 total_expert_indexes.append(expert_indexes)
-        if len(total_expert_indexes) > 0:
-            total_router_logits = torch.cat(total_router_logits, dim=1)
-        if len(total_expert_indexes) > 0:
-            torch.cat(total_expert_indexes, dim=1)
-        return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
+
+        total_router_logits = torch.cat(total_router_logits, dim=1) if len(total_router_logits) > 0 else None
+        total_expert_indexes = torch.stack(total_expert_indexes, dim=1) if len(total_expert_indexes) > 0 else None
+        return total_router_logits, total_expert_indexes
 
     # Copied from transfomers.models.switch_transformers.SwitchTransformersForConditionalGeneration.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
@@ -1808,7 +1808,16 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
     ):
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1826,5 +1835,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
         return reordered_past

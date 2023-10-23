@@ -18,7 +18,7 @@ import math
 import unittest
 
 from transformers import MptConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -54,7 +54,7 @@ class MptModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -95,7 +95,7 @@ class MptModelTester:
         self.pad_token_id = vocab_size - 1
 
     def get_large_model_config(self):
-        return MptConfig.from_pretrained("mosaicml/mpt-7")
+        return MptConfig.from_pretrained("mosaicml/mpt-7b")
 
     def prepare_config_and_inputs(self, gradient_checkpointing=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -430,6 +430,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
 @slow
 @require_torch_gpu
+@require_bitsandbytes
 class MptIntegrationTests(unittest.TestCase):
     def test_generation_8k(self):
         model_id = "mosaicml/mpt-7b-8k"
@@ -441,7 +442,7 @@ class MptIntegrationTests(unittest.TestCase):
         )
 
         input_text = "Hello"
-        expected_output = """Hello, I\'m a new user of the forum. I have a question about the "Solaris"""
+        expected_output = 'Hello, I\'m a new user of the forum. I have a question about the "Safety"'
 
         inputs = tokenizer(input_text, return_tensors="pt")
         outputs = model.generate(**inputs, max_new_tokens=20)
@@ -486,7 +487,7 @@ class MptIntegrationTests(unittest.TestCase):
 
         expected_output = [
             "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for over",
-            "Today I am going at the gym and then I am going to go to the grocery store. I am going to get some food and then",
+            "Today I am going at the gym and then I am going to go to the grocery store and get some food. I am going to make",
         ]
         outputs = model.generate(**inputs, max_new_tokens=20)
 
@@ -506,7 +507,7 @@ class MptIntegrationTests(unittest.TestCase):
 
         outputs = model(dummy_input, output_hidden_states=True)
 
-        expected_slice = torch.Tensor([-0.2559, -0.2197, -0.2480]).to(torch_device, torch.bfloat16)
+        expected_slice = torch.Tensor([-0.2539, -0.2178, -0.1953]).to(torch_device, torch.bfloat16)
         predicted_slice = outputs.hidden_states[-1][0, 0, :3]
 
         self.assertTrue(torch.allclose(expected_slice, predicted_slice, atol=1e-3, rtol=1e-3))

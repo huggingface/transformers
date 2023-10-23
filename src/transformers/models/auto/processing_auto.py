@@ -54,9 +54,11 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clip", "CLIPProcessor"),
         ("clipseg", "CLIPSegProcessor"),
         ("flava", "FlavaProcessor"),
+        ("fuyu", "FuyuProcessor"),
         ("git", "GitProcessor"),
         ("groupvit", "CLIPProcessor"),
         ("hubert", "Wav2Vec2Processor"),
+        ("idefics", "IdeficsProcessor"),
         ("instructblip", "InstructBlipProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
@@ -64,8 +66,10 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mctct", "MCTCTProcessor"),
         ("mgp-str", "MgpstrProcessor"),
         ("oneformer", "OneFormerProcessor"),
+        ("owlv2", "Owlv2Processor"),
         ("owlvit", "OwlViTProcessor"),
         ("pix2struct", "Pix2StructProcessor"),
+        ("pop2piano", "Pop2PianoProcessor"),
         ("sam", "SamProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
@@ -312,12 +316,12 @@ class AutoProcessor:
 
         raise ValueError(
             f"Unrecognized processing class in {pretrained_model_name_or_path}. Can't instantiate a processor, a "
-            "tokenizer, an image processor or a feature extractor for this model. Make sure the repository contains"
+            "tokenizer, an image processor or a feature extractor for this model. Make sure the repository contains "
             "the files of at least one of those processing classes."
         )
 
     @staticmethod
-    def register(config_class, processor_class):
+    def register(config_class, processor_class, exist_ok=False):
         """
         Register a new processor for this class.
 
@@ -326,4 +330,4 @@ class AutoProcessor:
                 The configuration corresponding to the model to register.
             processor_class ([`FeatureExtractorMixin`]): The processor to register.
         """
-        PROCESSOR_MAPPING.register(config_class, processor_class)
+        PROCESSOR_MAPPING.register(config_class, processor_class, exist_ok=exist_ok)

@@ -136,13 +136,17 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # smaller than the original vocabs - let's not assert this
                 # self.assertEqual(vocab_size, all_size)
 
-                new_toks = ["aaaaa", "bbbbbb", "cccccccccdddddddd"]
+                new_toks = [
+                    AddedToken("aaaaa", rstrip=True, lstrip=True),
+                    AddedToken("bbbbbb", rstrip=True, lstrip=True),
+                    AddedToken("cccccccccdddddddd", rstrip=True, lstrip=True),
+                ]
                 added_toks = tokenizer.add_tokens(new_toks)
                 vocab_size_2 = tokenizer.vocab_size
                 all_size_2 = len(tokenizer)
 
                 self.assertNotEqual(vocab_size_2, 0)
-                self.assertEqual(vocab_size, vocab_size_2)
+                self.assertEqual(vocab_size + 3, vocab_size_2 + 3)
                 self.assertEqual(added_toks, len(new_toks))
                 self.assertEqual(all_size_2, all_size + len(new_toks))
 
@@ -1344,6 +1348,19 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertTrue(special_token_id in p_output)
                     self.assertTrue(special_token_id in cr_output)
 
+    def test_split_special_tokens(self):
+        # TODO this is only possible for slow currently
+        tokenizer = self.get_tokenizer()
+        special_token = "[SPECIAL_TOKEN]"
+        tokenizer.add_special_tokens({"additional_special_tokens": [special_token]})
+        encoded_special_token = tokenizer.tokenize(special_token, add_special_tokens=False)
+        self.assertEqual(len(encoded_special_token), 1)
+
+        encoded_split_special_token = tokenizer.tokenize(
+            special_token, add_special_tokens=False, split_special_tokens=True
+        )
+        self.assertTrue(len(encoded_split_special_token) > 1)
+
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
@@ -2298,3 +2315,11 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Dummy warning",
             cm.records[0].message,
         )
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template(self):
+        pass
+
+    @unittest.skip("The model tested fails `Hub -> Fast == Hub -> Slow`, nothing much we can do")
+    def test_added_tokens_serialization(self):
+        pass

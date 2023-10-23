@@ -264,7 +264,7 @@ class Tool:
         if len(tool_class.name) == 0:
             tool_class.name = custom_tool["name"]
         if tool_class.name != custom_tool["name"]:
-            logger.warn(
+            logger.warning(
                 f"{tool_class.__name__} implements a different name in its configuration and class. Using the tool "
                 "configuration name."
             )
@@ -273,7 +273,7 @@ class Tool:
         if len(tool_class.description) == 0:
             tool_class.description = custom_tool["description"]
         if tool_class.description != custom_tool["description"]:
-            logger.warn(
+            logger.warning(
                 f"{tool_class.__name__} implements a different description in its configuration and class. Using the "
                 "tool configuration description."
             )
@@ -348,7 +348,7 @@ class RemoteTool(Tool):
     A [`Tool`] that will make requests to an inference endpoint.
 
     Args:
-        endpoint_url (`str`):
+        endpoint_url (`str`, *optional*):
             The url of the endpoint to use.
         token (`str`, *optional*):
             The token to use as HTTP bearer authorization for remote files. If unset, will use the token generated when

@@ -68,11 +68,13 @@ Instala las siguientes dependencias si aún no lo has hecho:
 
 <frameworkcontent>
 <pt>
+
 ```bash
 pip install torch
 ```
 </pt>
 <tf>
+
 ```bash
 pip install tensorflow
 ```
@@ -224,6 +226,7 @@ Como con el [`pipeline`], el tokenizador aceptará una lista de inputs. Además,
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> pt_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
@@ -235,6 +238,7 @@ Como con el [`pipeline`], el tokenizador aceptará una lista de inputs. Además,
 ```
 </pt>
 <tf>
+
 ```py
 >>> tf_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
@@ -377,6 +381,7 @@ Una característica particularmente interesante de 🤗 Transformers es la habil
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> from transformers import AutoModel
 
@@ -385,6 +390,7 @@ Una característica particularmente interesante de 🤗 Transformers es la habil
 ```
 </pt>
 <tf>
+
 ```py
 >>> from transformers import TFAutoModel
 

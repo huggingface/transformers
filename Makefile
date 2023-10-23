@@ -43,6 +43,7 @@ repo-consistency:
 	python utils/check_doctest_list.py
 	python utils/update_metadata.py --check-only
 	python utils/check_task_guides.py
+	python utils/check_docstrings.py
 
 # this target runs checks on all files
 
@@ -80,7 +81,9 @@ fix-copies:
 	python utils/check_copies.py --fix_and_overwrite
 	python utils/check_table.py --fix_and_overwrite
 	python utils/check_dummies.py --fix_and_overwrite
+	python utils/check_doctest_list.py --fix_and_overwrite
 	python utils/check_task_guides.py --fix_and_overwrite
+	python utils/check_docstrings.py --fix_and_overwrite
 
 # Run tests for the library
 

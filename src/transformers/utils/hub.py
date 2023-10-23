@@ -22,6 +22,7 @@ import sys
 import tempfile
 import traceback
 import warnings
+from concurrent import futures
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
@@ -31,6 +32,7 @@ import huggingface_hub
 import requests
 from huggingface_hub import (
     CommitOperationAdd,
+    create_branch,
     create_commit,
     create_repo,
     get_hf_file_metadata,
@@ -721,6 +723,7 @@ class PushToHubMixin:
         commit_message: Optional[str] = None,
         token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
+        revision: str = None,
     ):
         """
         Uploads all modified files in `working_dir` to `repo_id`, based on `files_timestamps`.
@@ -767,9 +770,17 @@ class PushToHubMixin:
                     CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file)
                 )
 
+        if revision is not None:
+            create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
+
         logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
         return create_commit(
-            repo_id=repo_id, operations=operations, commit_message=commit_message, token=token, create_pr=create_pr
+            repo_id=repo_id,
+            operations=operations,
+            commit_message=commit_message,
+            token=token,
+            create_pr=create_pr,
+            revision=revision,
         )
 
     def push_to_hub(
@@ -782,6 +793,7 @@ class PushToHubMixin:
         max_shard_size: Optional[Union[int, str]] = "10GB",
         create_pr: bool = False,
         safe_serialization: bool = False,
+        revision: str = None,
         **deprecated_kwargs,
     ) -> str:
         """
@@ -810,6 +822,8 @@ class PushToHubMixin:
                 Whether or not to create a PR with the uploaded files or directly commit.
             safe_serialization (`bool`, *optional*, defaults to `False`):
                 Whether or not to convert the model weights in safetensors format for safer serialization.
+            revision (`str`, *optional*):
+                Branch to push the uploaded files to.
 
         Examples:
 
@@ -885,6 +899,7 @@ class PushToHubMixin:
                 commit_message=commit_message,
                 token=token,
                 create_pr=create_pr,
+                revision=revision,
             )
 
 
@@ -1175,6 +1190,29 @@ def move_cache(cache_dir=None, new_cache_dir=None, token=None):
             etag=etag,
             commit_hash=commit_hash,
         )
+
+
+class PushInProgress:
+    """
+    Internal class to keep track of a push in progress (which might contain multiple `Future` jobs).
+    """
+
+    def __init__(self, jobs: Optional[futures.Future] = None) -> None:
+        self.jobs = [] if jobs is None else jobs
+
+    def is_done(self):
+        return all(job.done() for job in self.jobs)
+
+    def wait_until_done(self):
+        futures.wait(self.jobs)
+
+    def cancel(self) -> None:
+        self.jobs = [
+            job
+            for job in self.jobs
+            # Cancel the job if it wasn't started yet and remove cancelled/done jobs from the list
+            if not (job.cancel() or job.done())
+        ]
 
 
 cache_version_file = os.path.join(TRANSFORMERS_CACHE, "version.txt")

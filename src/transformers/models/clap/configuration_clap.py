@@ -14,7 +14,6 @@
 # limitations under the License.
 """ CLAP model configuration"""
 
-import copy
 import os
 from typing import Union
 
@@ -228,7 +227,7 @@ class ClapAudioConfig(PretrainedConfig):
         projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the projection layer. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        layer_norm_eps (`[type]`, *optional*, defaults to `1e-5`):
+        layer_norm_eps (`[type]`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
@@ -346,10 +345,10 @@ class ClapConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`ClapTextConfig`].
         audio_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`ClapAudioConfig`].
+        logit_scale_init_value (`float`, *optional*, defaults to 14.29):
+            The inital value of the *logit_scale* paramter. Default is used as per the original CLAP implementation.
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and audio projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original CLAP implementation.
         projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
             Activation function for the projection layers.
         initializer_factor (`float`, *optional*, defaults to 1.0):
@@ -382,7 +381,6 @@ class ClapConfig(PretrainedConfig):
     ```"""
 
     model_type = "clap"
-    is_composition = True
 
     def __init__(
         self,
@@ -431,16 +429,3 @@ class ClapConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["audio_config"] = self.audio_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
