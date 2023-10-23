@@ -39,11 +39,11 @@ class TestFuyuImageProcessor(unittest.TestCase):
 
     def test_patches(self):
         expected_num_patches = self.processor.get_num_patches(
-            img_h=self.height, img_w=self.width, patch_dim_h=self.image_patch_dim_h, patch_dim_w=self.image_patch_dim_w
+            image_height=self.height, image_width=self.width
         )
 
         patches_final = self.processor.patchify_image(
-            image=self.image_input, patch_dim_h=self.image_patch_dim_h, patch_dim_w=self.image_patch_dim_w
+            image=self.image_input
         )
         assert (
             patches_final.shape[1] == expected_num_patches
@@ -55,11 +55,11 @@ class TestFuyuImageProcessor(unittest.TestCase):
         self.assertEqual(scaled_image.shape[1], 74)
 
     def test_apply_transformation_numpy(self):
-        transformed_image = self.processor.apply_transformation(self.sample_image)
+        transformed_image = self.processor.scale_pad_normalize(self.sample_image)
         self.assertEqual(transformed_image.shape[0], 160)
         self.assertEqual(transformed_image.shape[1], 320)
 
     def test_apply_transformation_pil(self):
-        transformed_image = self.processor.apply_transformation(self.sample_image_pil)
+        transformed_image = self.processor.scale_pad_normalize(self.sample_image_pil)
         self.assertEqual(transformed_image.shape[0], 160)
         self.assertEqual(transformed_image.shape[1], 320)

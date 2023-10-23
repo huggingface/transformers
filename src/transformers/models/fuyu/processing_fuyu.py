@@ -593,8 +593,8 @@ class FuyuProcessor(ProcessorMixin):
         for prompt, image, image_unpadded_height, image_unpadded_width, tensor_batch_image in zip(
                 prompts, batch_images, image_unpadded_heights, image_unpadded_widths, tensor_batch_images):
             sample_encoding = self.get_sample_encoding(
-                prompts=prompt,
-                batch_images=image,
+                prompts=[prompt],
+                batch_images=[image],
                 image_unpadded_heights=image_unpadded_height.unsqueeze(0),
                 image_unpadded_widths=image_unpadded_width.unsqueeze(0),
                 image_placeholder_id=image_placeholder_id,

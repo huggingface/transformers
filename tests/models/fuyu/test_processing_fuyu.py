@@ -116,8 +116,6 @@ class TestProcessImagesForModelInput(unittest.TestCase):
             image_present=self.image_present,
             image_unpadded_h=self.image_unpadded_h,
             image_unpadded_w=self.image_unpadded_w,
-            image_patch_dim_h=self.image_patch_dim_h,
-            image_patch_dim_w=self.image_patch_dim_w,
             image_placeholder_id=self.image_placeholder_id,
             image_newline_id=self.image_newline_id,
             variable_sized=self.variable_sized,
