@@ -130,6 +130,11 @@ The `openfold` library is licensed under the Apache License 2.0.
 [[autodoc]] EsmForTokenClassification
     - forward
 
+## EsmForProteinClassification
+
+[[autodoc]] EsmForProteinClassification
+    - forward
+
 ## EsmForProteinFolding
 
 [[autodoc]] EsmForProteinFolding

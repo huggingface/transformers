@@ -25,6 +25,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
     SequenceClassifierOutput,
@@ -82,6 +83,28 @@ def average_product_correct(x):
     avg.div_(a12)  # in-place to reduce memory
     normalized = x - avg
     return normalized
+
+
+class EsmProteinClassificationOutput(BaseModelOutputWithPooling):
+    """
+    Output type of ['EsmForProteinClassification'].
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Protein modeling loss (for next-protein prediction).
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.protein_size)`):
+            Prediction scores of the protein modeling head (scores for each protein before SoftMax).
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token) after further processing
+            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
+            the classification token after processing through a linear layer and a tanh activation function. The linear
+            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
 
 
 class RotaryEmbedding(torch.nn.Module):
@@ -1277,3 +1300,98 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+
+class EsmProteinClassificationHead(nn.Module):
+    """Head for protein representation."""
+
+    def __init__(self, config, out_dim=512):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.out_proj = nn.Linear(config.hidden_size, out_dim)
+        self.activation = nn.Relu()
+
+    def forward(self, x):
+        x = self.dense(x)
+        x = self.activation(x)
+        x = self.out_proj(x)
+        return x
+
+
+@add_start_docstrings(
+    """
+    ESM Model with a protein classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    protein classification task.
+    """,
+    ESM_START_DOCSTRING,
+)
+class EsmForProteinClassification(EsmPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+
+        self.esm = EsmModel(config, add_pooling_layer=False)
+        self.protein_head = EsmProteinClassificationHead(config)
+        self.residue_head = EsmProteinClassificationHead(config)
+        self.classifier = EsmProteinClassificationHead(config, out_dim=config.num_labels)
+
+    @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=EsmProteinClassificationOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, EsmProteinClassificationOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the protein classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.esm(
+            input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        residue_feature = outputs.last_hidden_state # [batch_size, seq_len, hidden_dim]
+
+        # mean readout
+        is_special = (input_ids == self.cls_token_id) | (input_ids == self.eos_token_id) | (input_ids == self.pad_token_id)
+        special_mask = (~is_special).to(torch.float32).unsqueeze(-1)
+        pooled_feature = (residue_feature * special_mask).sum(1) / (special_mask.sum(1) + 1.0e-6)
+
+        pooled_feature = self.protein_head(pooled_feature)
+        residue_feature = self.residue_head(residue_feature)
+
+        logits = self.classifier(pooled_feature)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(logits.device)
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + (residue_feature, pooled_feature)
+            return ((loss,) + output) if loss is not None else output
+
+        return BaseModelOutputWithPooling(loss=loss, logits=logits, last_hidden_state=residue_feature, pooler_output=pooled_feature)

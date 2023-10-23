@@ -30,6 +30,7 @@ else:
     _import_structure["modeling_esm"] = [
         "ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "EsmForMaskedLM",
+        "EsmForProteinClassification",
         "EsmForSequenceClassification",
         "EsmForTokenClassification",
         "EsmModel",
@@ -65,6 +66,7 @@ if TYPE_CHECKING:
         from .modeling_esm import (
             ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
             EsmForMaskedLM,
+            EsmForProteinClassification,
             EsmForSequenceClassification,
             EsmForTokenClassification,
             EsmModel,
