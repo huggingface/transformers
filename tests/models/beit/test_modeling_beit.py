@@ -153,8 +153,9 @@ class BeitModelTester:
 
         # verify hidden states
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        expected_height = expected_width = self.image_size // config.patch_size
         self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, self.seq_length, self.hidden_size]
+            list(result.feature_maps[0].shape), [self.batch_size, self.hidden_size, expected_height, expected_width]
         )
 
         # verify channels
@@ -170,7 +171,7 @@ class BeitModelTester:
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
         self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, self.seq_length, self.hidden_size]
+            list(result.feature_maps[0].shape), [self.batch_size, self.hidden_size, expected_height, expected_width]
         )
 
         # verify channels

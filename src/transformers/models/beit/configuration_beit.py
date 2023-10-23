@@ -34,7 +34,7 @@ BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class BeitConfig(PretrainedConfig, BackboneConfigMixin):
+class BeitConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BeitModel`]. It is used to instantiate an BEiT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -85,8 +85,6 @@ class BeitConfig(PretrainedConfig, BackboneConfigMixin):
         use_mean_pooling (`bool`, *optional*, defaults to `True`):
             Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
             CLS token, before applying the classification head.
-        semantic_out_indices (`List[int]`, *optional*, defaults to `[3, 5, 7, 11]`):
-            Indices of the feature maps to use for semantic segmentation.
         pool_scales (`Tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
             Pooling scales used in Pooling Pyramid Module applied on the last feature map.
         use_auxiliary_head (`bool`, *optional*, defaults to `True`):
@@ -111,6 +109,12 @@ class BeitConfig(PretrainedConfig, BackboneConfigMixin):
             If unset and `out_features` is unset, will default to the last stage.
 
             Can also indicate the indices of the feature maps to use for semantic segmentation.
+        add_fpn (`bool`, *optional*, defaults to `False`):
+            Whether to add a FPN as part of the backbone. Only relevant for [`BeitBackbone`].
+        reshape_hidden_states (`bool`, *optional*, defaults to `True`):
+            Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
+            case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
+            seq_len, hidden_size)`. Only relevant for [`BeitBackbone`].
 
     Example:
 
@@ -160,6 +164,8 @@ class BeitConfig(PretrainedConfig, BackboneConfigMixin):
         semantic_loss_ignore_index=255,
         out_features=None,
         out_indices=None,
+        add_fpn=False,
+        reshape_hidden_states=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -212,6 +218,8 @@ class BeitConfig(PretrainedConfig, BackboneConfigMixin):
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
+        self.add_fpn = add_fpn
+        self.reshape_hidden_states = reshape_hidden_states
 
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
