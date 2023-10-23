@@ -875,6 +875,7 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         image_hidden_states: Optional[torch.Tensor] = None,
         image_attention_mask: Optional[torch.Tensor] = None,
+        cross_attention_gate: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
@@ -913,12 +914,6 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
             output_attentions=output_attentions,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.config, training=self.training)
-        # cross_attention_gate: Image masks have shape [bsz, 1, num_images, hidden_size] and elements are equal to either 0.0 or a very negative number, so if there are elements == 0.0 along the num_images dimension,
-        # then the image should be attended by the cross_attention. Otherwise, the hidden_states comming out of the cross-attention should be zeroed-out.
-        # If the batch contains no images, everything is zeroed out and hidden_states = residual
-        cross_attention_gate = (((image_attention_mask == 0.0).any(dim=-1)).to(dtype=hidden_states.dtype)).permute(
-            0, 2, 1
-        )
         hidden_states = residual + cross_attention_gate * self.act_cross_attn(self.alpha_cross_attn) * hidden_states
 
         # Fully Connected
@@ -1259,6 +1254,10 @@ class IdeficsModel(IdeficsPreTrainedModel):
         else:
             image_attention_mask = None
 
+        # cross_attention_gate: image_attention_mask has shape [bsz, 1, num_images, hidden_size] with elements equal to either 0.0 or a very negative number, so if . Otherwise, the hidden_states comming out of the cross-attention should be zeroed-out.
+        # If the batch contains no images, everything is zeroed out and hidden_states = residual
+        cross_attention_gate = (((image_attention_mask == 0.0).any(dim=-1)).to(dtype=self.dtype)).permute(0, 2, 1)
+
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
         # embed positions
@@ -1312,6 +1311,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                         attention_mask=attention_mask,
                         image_hidden_states=image_hidden_states,
                         image_attention_mask=image_attention_mask,
+                        cross_attention_gate=cross_attention_gate,
                         output_attentions=output_attentions,
                         use_cache=use_cache,
                         past_key_value=None,  # not implemented
