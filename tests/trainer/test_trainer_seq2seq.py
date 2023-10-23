@@ -133,6 +133,7 @@ class Seq2seqTrainerTester(TestCasePlus):
         # start training
         trainer.train()
 
+    @slow
     @require_torch
     def test_return_sequences(self):
         # Tests that the number of generated sequences is correct when num_return_sequences > 1
