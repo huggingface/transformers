@@ -139,7 +139,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
             The token used for unknown charactor
         pad_token (`str`, *optional*, defaults to `"<|separator|>"`):
             The token used for padding
-        bos_token (`str`, *optional*, defaults to `"<|startoftext|>""`):
+        bos_token (`str`, *optional*, defaults to `"<|startoftext|>"`):
             The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
@@ -166,15 +166,6 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         do_clean_text=False,
         **kwargs,
     ):
-        super().__init__(
-            unk_token=unk_token,
-            pad_token=pad_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            sep_token=sep_token,
-            do_clean_text=do_clean_text,
-            **kwargs,
-        )
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
@@ -189,6 +180,16 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         self.vocab, self.raw_vocab, self.ids_to_tokens, self.emoji = load_vocab_and_emoji(vocab_file, emoji_file)
         self.subword_tokenizer = SubWordJapaneseTokenizer(
             vocab=self.vocab, ids_to_tokens=self.ids_to_tokens, emoji=self.emoji
+        )
+
+        super().__init__(
+            unk_token=unk_token,
+            pad_token=pad_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            do_clean_text=do_clean_text,
+            **kwargs,
         )
 
     @property
@@ -260,6 +261,12 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         A simple chat template that adds standard BOS, SEP and EOS tokens between messages while discarding role
         information.
         """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
         return (
             "{% for message in messages %}"
             "{% if not loop.first %}{{ bos_token}}{% endif %}"

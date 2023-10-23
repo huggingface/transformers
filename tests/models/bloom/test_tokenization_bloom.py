@@ -42,6 +42,10 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         kwargs.update(self.special_tokens_map)
         return BloomTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
+    @unittest.skip("This needs a slow tokenizer. Bloom does not have one!")
+    def test_encode_decode_with_spaces(self):
+        return
+
     def test_encodings_from_sample_data(self):
         """
         Assert that the created tokens are the same than the hard-coded ones

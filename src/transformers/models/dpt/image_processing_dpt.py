@@ -100,14 +100,14 @@ class DPTImageProcessor(BaseImageProcessor):
             Whether to resize the image's (height, width) dimensions. Can be overidden by `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 384, "width": 384}`):
             Size of the image after resizing. Can be overidden by `size` in `preprocess`.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+            Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
         keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
             If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
             be overidden by `keep_aspect_ratio` in `preprocess`.
         ensure_multiple_of (`int`, *optional*, defaults to 1):
             If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
             by `ensure_multiple_of` in `preprocess`.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-            Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overidden by `do_rescale` in
             `preprocess`.

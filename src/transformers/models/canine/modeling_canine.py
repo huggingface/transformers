@@ -1169,7 +1169,9 @@ class CanineModel(CaninePreTrainedModel):
         # Contextualize character embeddings using shallow Transformer.
         # We use a 3D attention mask for the local attention.
         # `input_char_encoding`: shape (batch_size, char_seq_len, char_dim)
-        char_attention_mask = self._create_3d_attention_mask_from_input_mask(input_ids, attention_mask)
+        char_attention_mask = self._create_3d_attention_mask_from_input_mask(
+            input_ids if input_ids is not None else inputs_embeds, attention_mask
+        )
         init_chars_encoder_outputs = self.initial_char_encoder(
             input_char_embeddings,
             attention_mask=char_attention_mask,

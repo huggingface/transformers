@@ -36,6 +36,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "EncodecConfig": ["overlap"],
     # used as `self.bert_model = BertModel(config, ...)`
     "DPRConfig": True,
+    "FuyuConfig": True,
     # not used in modeling files, but it's an important information
     "FSMTConfig": ["langs"],
     # used internally in the configuration class file
@@ -85,6 +86,18 @@ SPECIAL_CASES_TO_ALLOW = {
     "SpeechT5HifiGanConfig": ["sampling_rate"],
     # used internally in the configuration class file
     "UdopConfig": ["feed_forward_proj"],
+    # Actually used in the config or generation config, in that case necessary for the sub-components generation
+    "SeamlessM4TConfig": [
+        "max_new_tokens",
+        "t2u_max_new_tokens",
+        "t2u_decoder_attention_heads",
+        "t2u_decoder_ffn_dim",
+        "t2u_decoder_layers",
+        "t2u_encoder_attention_heads",
+        "t2u_encoder_ffn_dim",
+        "t2u_encoder_layers",
+        "t2u_max_position_embeddings",
+    ],
 }
 
 

@@ -528,7 +528,7 @@ def main():
         and not training_args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty."
+            f"Output directory ({training_args.output_dir}) already exists and is not empty. "
             "Use --overwrite_output_dir to overcome."
         )
 
@@ -572,6 +572,7 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
+            num_proc=data_args.preprocessing_num_workers,
         )
 
         if "validation" not in datasets.keys():
@@ -581,6 +582,7 @@ def main():
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
+                num_proc=data_args.preprocessing_num_workers,
             )
             datasets["train"] = load_dataset(
                 data_args.dataset_name,
@@ -588,6 +590,7 @@ def main():
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
+                num_proc=data_args.preprocessing_num_workers,
             )
     else:
         data_files = {}
@@ -603,6 +606,7 @@ def main():
             data_files=data_files,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
+            num_proc=data_args.preprocessing_num_workers,
         )
 
         if "validation" not in datasets.keys():
@@ -612,6 +616,7 @@ def main():
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
+                num_proc=data_args.preprocessing_num_workers,
             )
             datasets["train"] = load_dataset(
                 extension,
@@ -619,6 +624,7 @@ def main():
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
+                num_proc=data_args.preprocessing_num_workers,
             )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
@@ -641,7 +647,7 @@ def main():
         )
     else:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
