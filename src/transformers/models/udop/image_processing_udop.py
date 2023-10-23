@@ -52,12 +52,17 @@ def normalize_box(box, width, height):
 
 
 # Copied from transformers.models.layoutlmv2.image_processing_layoutlmv2.apply_tesseract
-def apply_tesseract(image: np.ndarray, lang: Optional[str], tesseract_config: Optional[str] = None):
+def apply_tesseract(
+    image: np.ndarray,
+    lang: Optional[str],
+    tesseract_config: Optional[str] = None,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
     tesseract_config = tesseract_config if tesseract_config is not None else ""
 
     # apply OCR
-    pil_image = to_pil_image(image)
+    pil_image = to_pil_image(image, input_data_format=input_data_format)
     image_width, image_height = pil_image.size
     data = pytesseract.image_to_data(pil_image, lang=lang, output_type="dict", config=tesseract_config)
     words, left, top, width, height = data["text"], data["left"], data["top"], data["width"], data["height"]
@@ -96,7 +101,7 @@ class UdopImageProcessor(BaseImageProcessor):
             overridden by `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the image after resizing. Can be overridden by `size` in `preprocess`.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -105,9 +110,9 @@ class UdopImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
-        do_normalize:
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
+        do_normalize (`bool`, *optional*, defaults to `True`): <fill_docstring>
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
@@ -120,7 +125,7 @@ class UdopImageProcessor(BaseImageProcessor):
         ocr_lang (`str`, *optional*):
             The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
             used. Can be overridden by `ocr_lang` in `preprocess`.
-        tesseract_config (`str`, *optional*):
+        tesseract_config (`str`, *optional*, defaults to `""`):
             Any additional custom configuration flags that are forwarded to the `config` parameter when calling
             Tesseract. For example: '--psm 6'. Can be overridden by `tesseract_config` in `preprocess`.
     """

@@ -36,9 +36,9 @@ class UdopProcessor(ProcessorMixin):
     classification tasks (such as FUNSD, CORD).
 
     Args:
-        image_processor (`UdopImageProcessor`):
+        image_processor (`UdopImageProcessor`, *optional*):
             An instance of [`UdopImageProcessor`]. The image processor is a required input.
-        tokenizer (`UdopTokenizer` or `UdopTokenizerFast`):
+        tokenizer (`UdopTokenizer` or `UdopTokenizerFast`, *optional*):
             An instance of [`UdopTokenizer`] or [`UdopTokenizerFast`]. The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]

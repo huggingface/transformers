@@ -158,9 +158,10 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             Path to the vocabulary file.
 
+        tokenizer_file (`<fill_type>`, *optional*): <fill_docstring>
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
@@ -180,9 +181,6 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (`str`, *optional*, defaults to `"<mask>"`):
-            The token used for masking values. This is the token used when training this model with masked language
-            modeling. This is the token which the model will try to predict.
         sep_token_box (`List[int]`, *optional*, defaults to `[1000, 1000, 1000, 1000]`):
             The bounding box to use for the special [SEP] token.
         pad_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
@@ -192,6 +190,9 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
             CrossEntropyLoss.
         only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
+        extra_ids (`<fill_type>`, *optional*, defaults to 100): <fill_docstring>
+        loc_extra_ids (`<fill_type>`, *optional*, defaults to 501): <fill_docstring>
+        other_extra_ids (`<fill_type>`, *optional*, defaults to 200): <fill_docstring>
         additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
     """

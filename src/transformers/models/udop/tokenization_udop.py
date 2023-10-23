@@ -197,8 +197,7 @@ class UdopTokenizer(PreTrainedTokenizer):
 
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        sep_token_box_box (`List[int]`, *optional*, defaults to `[1000, 1000, 1000, 1000]`):
-            The bounding box to use for the special [SEP] token.
+        sep_token_box (`<fill_type>`, *optional*, defaults to `[1000, 1000, 1000, 1000]`): <fill_docstring>
         pad_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [PAD] token.
         pad_token_label (`int`, *optional*, defaults to -100):
@@ -206,9 +205,27 @@ class UdopTokenizer(PreTrainedTokenizer):
             CrossEntropyLoss.
         only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
+        extra_ids (`<fill_type>`, *optional*, defaults to 100): <fill_docstring>
+        loc_extra_ids (`<fill_type>`, *optional*, defaults to 501): <fill_docstring>
+        other_extra_ids (`<fill_type>`, *optional*, defaults to 200): <fill_docstring>
         additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
 
+        sp_model_kwargs (`dict`, *optional*):
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
+
+            - `enable_sampling`: Enable subword regularization.
+            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - `nbest_size = {0,1}`: No sampling is performed.
+              - `nbest_size > 1`: samples from the nbest_size results.
+              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
         legacy (`bool`, *optional*, defaults to `True`):
             Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622
             which includes fixes to properly handle tokens that appear after special tokens. A simple example:
@@ -231,21 +248,6 @@ class UdopTokenizer(PreTrainedTokenizer):
             Checkout the pull request and the issue [here](https://github.com/huggingface/transformers/pull/24565) for
             more details.
 
-        sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
-            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
-            to set:
-
-            - `enable_sampling`: Enable subword regularization.
-            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
-
-              - `nbest_size = {0,1}`: No sampling is performed.
-              - `nbest_size > 1`: samples from the nbest_size results.
-              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
-                using forward-filtering-and-backward-sampling algorithm.
-
-            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
-              BPE-dropout.
 
     Attributes:
         sp_model (`SentencePieceProcessor`):
@@ -384,7 +386,7 @@ class UdopTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_sentinel_token_ids
     def get_sentinel_token_ids(self):
-        return [self._convert_token_to_id(token) for token in self.get_sentinel_tokens()]
+        return [self.convert_tokens_to_ids(token) for token in self.get_sentinel_tokens()]
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._add_eos_if_not_present
     def _add_eos_if_not_present(self, token_ids: List[int]) -> List[int]:
@@ -466,34 +468,39 @@ class UdopTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(self.vocab_file)
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
-        # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
-        # the beginning of the text
-        if not self.legacy:
-            text = SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " ")
-        return super().tokenize(text, **kwargs)
+    def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
+        """
+        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
+        first token is special.
+        """
+        if self.legacy or len(text) == 0:
+            return super().tokenize(text, **kwargs)
+
+        tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+
+        if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
+            tokens = tokens[1:]
+        return tokens
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text, **kwargs):
         """
         Returns a tokenized string.
 
-        Since the sentencepiece internal model always adds a SPIECE_UNDERLINE, at the beginning of the provided text,
-        we need to remove it by hand when the current text is a subsequence. This happens whenever the `self.tokenize`
-        function is called with specials tokens: the input is split on the special tokens, and each subsequence is
-        passed to `_tokenize`. Thus if a subsequence did not start with a `" "` or SPIECE_UNDERLINE, we have to remove
-        the extra `SPIECE_UNDERLINE` prepended.
+        We de-activated the `add_dummy_prefix` option, thus the sentencepiece internals will always strip any
+        SPIECE_UNDERLINE. For example: `self.sp_model.encode(f"{SPIECE_UNDERLINE}Hey", out_type = str)` will give
+        `['H', 'e', 'y']` instead of `['▁He', 'y']`. Thus we always encode `f"{unk_token}text"` and strip the
+        `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
+        `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
-        if not self.legacy:
-            is_first = text.startswith(SPIECE_UNDERLINE)
-            if is_first:
-                text = text[1:]
-
         tokens = self.sp_model.encode(text, out_type=str)
+        if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
+            return tokens
 
-        if not self.legacy and not is_first and not text.startswith(" ") and tokens[0].startswith(SPIECE_UNDERLINE):
-            tokens = ([tokens[0][1:]] if len(tokens[0]) > 1 else []) + tokens[1:]
-        return tokens
+        # 1. Encode string + prefix ex: "<unk> Hey"
+        tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
+        # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
+        return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -567,6 +574,8 @@ class UdopTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         current_sub_tokens = []
+        # since we manually add the prefix space, we have to remove it
+        tokens[0] = tokens[0].lstrip(SPIECE_UNDERLINE)
         out_string = ""
         prev_is_special = False
         for token in tokens:
@@ -1356,7 +1365,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         return batch_outputs
 
     # Copied from transformers.models.layoutxlm.tokenization_layoutxlm.LayoutXLMTokenizer.truncate_sequences
-    def truncate_sequences_boxes(
+    def truncate_sequences(
         self,
         ids: List[int],
         token_boxes: List[List[int]],

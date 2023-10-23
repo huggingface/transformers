@@ -57,20 +57,26 @@ class UdopConfig(PretrainedConfig):
             The number of buckets to use for each attention layer.
         relative_attention_max_distance (`int`, *optional*, defaults to 128):
             The maximum distance of the longer sequences for the bucket separation.
+        relative_bias_args (`<fill_type>`, *optional*, defaults to `[{'type': '1d'}, {'type': 'horizontal'}, {'type': 'vertical'}]`): <fill_docstring>
         dropout_rate (`float`, *optional*, defaults to 0.1):
             The ratio for all dropout layers.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
-            The epsilon used by the layer normalization layers.
-        initializer_factor (`float`, *optional*, defaults to 1):
+        layer_norm_epsilon (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
         feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
             Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. Udopv1.1 uses the
             `"gated-gelu"` feed forward projection. Original Udop uses `"relu"`.
+        is_encoder_decoder (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        pad_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        eos_token_id (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
         max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum absolute position embeddings for relative position encoding.
+        image_size (`<fill_type>`, *optional*, defaults to 224): <fill_docstring>
+        patch_size (`<fill_type>`, *optional*, defaults to 16): <fill_docstring>
+        num_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
     """
     model_type = "udop"
     keys_to_ignore_at_inference = ["past_key_values"]
