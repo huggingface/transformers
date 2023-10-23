@@ -307,6 +307,20 @@ class UdopTokenizer(PreTrainedTokenizer):
         self.legacy = legacy
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
+        self.vocab_file = vocab_file
+        self._extra_ids = extra_ids
+        self._loc_extra_ids = loc_extra_ids
+        self._other_extra_ids = other_extra_ids
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
+
+        # additional properties
+        self.sep_token_box = sep_token_box
+        self.pad_token_box = pad_token_box
+        self.pad_token_label = pad_token_label
+        self.only_label_first_subword = only_label_first_subword
+
         super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
@@ -324,20 +338,6 @@ class UdopTokenizer(PreTrainedTokenizer):
             legacy=legacy,
             **kwargs,
         )
-
-        self.vocab_file = vocab_file
-        self._extra_ids = extra_ids
-        self._loc_extra_ids = loc_extra_ids
-        self._other_extra_ids = other_extra_ids
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
-
-        # additional properties
-        self.sep_token_box = sep_token_box
-        self.pad_token_box = pad_token_box
-        self.pad_token_label = pad_token_label
-        self.only_label_first_subword = only_label_first_subword
 
     @property
     def vocab_size(self):
