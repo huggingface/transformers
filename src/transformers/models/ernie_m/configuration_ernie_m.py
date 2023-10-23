@@ -65,14 +65,14 @@ class ErnieMConfig(PretrainedConfig):
             The maximum value of the dimensionality of position encoding, which dictates the maximum supported length
             of an input sequence.
         initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the normal initializer for initializing all weight matrices.
-            The index of padding token in the token vocabulary.
-        pad_token_id (`int`, *optional*, defaults to 1): <fill_docstring>
+            The standard deviation of the normal initializer for initializing all weight matrices. The index of padding
+            token in the token vocabulary.
+        pad_token_id (`int`, *optional*, defaults to 1):
+            Padding token id.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
-        is_decoder (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         act_dropout (`float`, *optional*, defaults to 0.0):
             This dropout probability is used in `ErnieMEncoderLayer` after activation.
 
@@ -98,7 +98,6 @@ class ErnieMConfig(PretrainedConfig):
         pad_token_id: int = 1,
         layer_norm_eps: float = 1e-05,
         classifier_dropout=None,
-        is_decoder=False,
         act_dropout=0.0,
         **kwargs,
     ):
@@ -115,5 +114,4 @@ class ErnieMConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout = classifier_dropout
-        self.is_decoder = is_decoder
         self.act_dropout = act_dropout
