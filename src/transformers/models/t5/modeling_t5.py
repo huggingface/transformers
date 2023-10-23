@@ -2338,8 +2338,6 @@ class EncT5ForSequenceClassification(T5PreTrainedModel):
     def __init__(self, config: T5Config):
         super().__init__(config)
 
-        # TODO: Add config to disable causal mask
-
         # Set number of decoders to 1.
         single_decoder_layer_config = copy.deepcopy(config)
         single_decoder_layer_config.num_decoder_layers = 1
@@ -2407,14 +2405,17 @@ class EncT5ForSequenceClassification(T5PreTrainedModel):
         batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        if decoder_input_ids is not None or decoder_inputs_embeds is not None:
-            raise ValueError("The decoder input ids and decoder inputs embeds must be `None`.")
-
-        if self.config.problem_type == "multi_label_classification":
-            decoder_input_ids = torch.arange(end=self.config.num_labels, device=device, dtype=torch.long)
-            decoder_input_ids = decoder_input_ids.repeat(batch_size, 1)  # Shape: (batch_size, num_labels)
-        else:
-            decoder_input_ids = torch.zeros(batch_size, 1, device=device, dtype=torch.long)
+        if decoder_input_ids is None:
+            if self.config.problem_type == "multi_label_classification":
+                decoder_input_ids = torch.arange(end=self.config.num_labels, device=device, dtype=torch.long)
+                decoder_input_ids = decoder_input_ids.repeat(batch_size, 1)  # Shape: (batch_size, num_labels)
+                # Provide a 3-dimensional attention mask by default to prevent the causal mask from being added.
+                if decoder_attention_mask is None:
+                    decoder_attention_mask = torch.ones(
+                        (batch_size, self.config.num_labels, self.config.num_labels), device=device, dtype=torch.long
+                    )
+            else:
+                decoder_input_ids = torch.zeros(batch_size, 1, device=device, dtype=torch.long)
 
         outputs = self.transformer(
             input_ids=input_ids,
