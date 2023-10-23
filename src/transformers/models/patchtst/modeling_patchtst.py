@@ -2077,7 +2077,10 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
 
         # get model output
         outputs = self(
-            past_values=past_values, target_values=None, past_observed_mask=past_observed_mask, output_hidden_states=False
+            past_values=past_values,
+            target_values=None,
+            past_observed_mask=past_observed_mask,
+            output_hidden_states=False,
         )
 
         # get distribution
