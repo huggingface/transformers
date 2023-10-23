@@ -209,6 +209,11 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
 
+    @unittest.skip("Tiny random model has too few position embeddings for this.")
+    def test_pipeline_conversational(self):
+        pass
+
+
 
 @require_tokenizers
 @require_tf
@@ -244,7 +249,3 @@ class TFBlenderbot90MIntegrationTests(unittest.TestCase):
             "i'm not sure. i just feel like i've been feeling like i have to be in a certain place",
             "i'm not sure. i just feel like i've been in a bad situation.",
         )
-
-    @unittest.skip("Tiny random model has too few position embeddings for this.")
-    def test_pipeline_conversational(self):
-        pass
