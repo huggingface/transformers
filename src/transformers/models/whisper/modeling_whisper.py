@@ -685,9 +685,10 @@ class WhisperPreTrainedModel(PreTrainedModel):
                 embed_positions = module.embed_positions.weight
                 embed_positions.copy_(sinusoids(*embed_positions.shape))
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (WhisperDecoder, WhisperEncoder)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
@@ -949,7 +950,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = self.gradient_checkpointing_func(
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         None,
@@ -1182,7 +1183,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     attention_mask,

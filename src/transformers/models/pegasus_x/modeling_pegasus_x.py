@@ -780,9 +780,10 @@ class PegasusXPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (PegasusXDecoder, PegasusXEncoder)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 PEGASUS_X_START_DOCSTRING = r"""
@@ -1078,7 +1079,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = self.gradient_checkpointing_func(
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         global_hidden_states,
@@ -1339,7 +1340,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     attention_mask,

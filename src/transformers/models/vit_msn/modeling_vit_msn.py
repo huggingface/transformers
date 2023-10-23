@@ -394,7 +394,7 @@ class ViTMSNEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     create_custom_forward(layer_module),
                     hidden_states,
                     layer_head_mask,
@@ -444,9 +444,10 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module: ViTMSNEncoder, value: bool = False) -> None:
+    def _set_gradient_checkpointing(self, module: ViTMSNEncoder, gradient_checkpointing_func=None) -> None:
         if isinstance(module, ViTMSNEncoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 VIT_MSN_START_DOCSTRING = r"""

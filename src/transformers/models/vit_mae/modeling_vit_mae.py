@@ -543,7 +543,7 @@ class ViTMAEEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     create_custom_forward(layer_module),
                     hidden_states,
                     layer_head_mask,
@@ -591,9 +591,10 @@ class ViTMAEPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, ViTMAEEncoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 VIT_MAE_START_DOCSTRING = r"""
@@ -800,7 +801,7 @@ class ViTMAEDecoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     create_custom_forward(layer_module),
                     hidden_states,
                     None,

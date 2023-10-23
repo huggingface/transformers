@@ -480,9 +480,10 @@ class GPT2PreTrainedModel(PreTrainedModel):
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
                 p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, GPT2Model):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 @dataclass
@@ -885,7 +886,7 @@ class GPT2Model(GPT2PreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch.utils.checkpoint.checkpoint(
+                outputs = self.gradient_checkpointing_func(
                     create_custom_forward(block),
                     hidden_states,
                     None,

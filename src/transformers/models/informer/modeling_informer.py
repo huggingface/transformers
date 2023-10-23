@@ -924,9 +924,10 @@ class InformerPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (InformerDecoder, InformerEncoder)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 INFORMER_START_DOCSTRING = r"""
@@ -1222,14 +1223,14 @@ class InformerEncoder(InformerPreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = self.gradient_checkpointing_func(
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
                     )
                     if conv_layer is not None:
-                        output = torch.utils.checkpoint.checkpoint(conv_layer, layer_outputs[0])
+                        output = self.gradient_checkpointing_func(conv_layer, layer_outputs[0])
                         layer_outputs = (output,) + layer_outputs[1:]
                 else:
                     layer_outputs = encoder_layer(
@@ -1446,7 +1447,7 @@ class InformerDecoder(InformerPreTrainedModel):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     attention_mask,

@@ -454,7 +454,7 @@ class Dinov2Encoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     create_custom_forward(layer_module),
                     hidden_states,
                     layer_head_mask,
@@ -516,9 +516,10 @@ class Dinov2PreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.cls_token.dtype)
 
-    def _set_gradient_checkpointing(self, module: Dinov2Encoder, value: bool = False) -> None:
+    def _set_gradient_checkpointing(self, module: Dinov2Encoder, gradient_checkpointing_func=None) -> None:
         if isinstance(module, Dinov2Encoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 DINOV2_START_DOCSTRING = r"""

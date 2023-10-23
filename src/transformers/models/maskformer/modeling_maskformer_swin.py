@@ -695,7 +695,7 @@ class MaskFormerSwinEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_hidden_states, output_dimensions, layer_all_hidden_states = torch.utils.checkpoint.checkpoint(
+                layer_hidden_states, output_dimensions, layer_all_hidden_states = self.gradient_checkpointing_func(
                     create_custom_forward(layer_module), hidden_states, layer_head_mask
                 )
             else:
@@ -752,9 +752,10 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, MaskFormerSwinEncoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):

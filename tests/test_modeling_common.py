@@ -569,6 +569,13 @@ class ModelTesterMixin:
             loss = model(**inputs).loss
             loss.backward()
 
+            model.gradient_checkpointing_disable()
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": True})
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
     def test_attention_outputs(self):
         if not self.has_attentions:
             self.skipTest(reason="Model does not output attentions")

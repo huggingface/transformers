@@ -350,7 +350,7 @@ class Pix2StructVisionEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,
@@ -563,9 +563,10 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _set_gradient_checkpointing(self, module: Pix2StructVisionEncoder, value: bool = False) -> None:
+    def _set_gradient_checkpointing(self, module: Pix2StructVisionEncoder, gradient_checkpointing_func=None) -> None:
         if isinstance(module, Pix2StructVisionEncoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
     def get_input_embeddings(self):
         return self.embeddings.patch_projection
@@ -1320,9 +1321,10 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
     supports_gradient_checkpointing = True
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (Pix2StructTextAttention, Pix2StructTextModel)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
     def __init__(self, config):
         super().__init__(config)

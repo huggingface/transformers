@@ -552,9 +552,10 @@ class M2M100PreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (M2M100Decoder, M2M100Encoder)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 M2M_100_START_DOCSTRING = r"""
@@ -827,7 +828,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = self.gradient_checkpointing_func(
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         attention_mask,
@@ -1074,7 +1075,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = self.gradient_checkpointing_func(
                         create_custom_forward(decoder_layer),
                         hidden_states,
                         combined_attention_mask,

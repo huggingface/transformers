@@ -978,9 +978,10 @@ class IdeficsPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, IdeficsModel):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 LLAMA_INPUTS_DOCSTRING = r"""
@@ -1339,7 +1340,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                     )
                     use_cache = False
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     vblock,
                     decoder_layer,
                     hidden_states,

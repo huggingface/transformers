@@ -315,9 +315,10 @@ class UperNetPreTrainedModel(PreTrainedModel):
         if self.auxiliary_head is not None:
             self.auxiliary_head.init_weights()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, BackboneMixin):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 UPERNET_START_DOCSTRING = r"""

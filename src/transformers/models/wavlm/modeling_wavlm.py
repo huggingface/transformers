@@ -361,7 +361,7 @@ class WavLMFeatureEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch.utils.checkpoint.checkpoint(
+                hidden_states = self.gradient_checkpointing_func(
                     create_custom_forward(conv_layer),
                     hidden_states,
                 )
@@ -720,7 +720,7 @@ class WavLMEncoder(nn.Module):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = self.gradient_checkpointing_func(
                         create_custom_forward(layer),
                         hidden_states,
                         attention_mask,
@@ -811,7 +811,7 @@ class WavLMEncoderStableLayerNorm(nn.Module):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = self.gradient_checkpointing_func(
                         create_custom_forward(layer),
                         hidden_states,
                         attention_mask,
@@ -1052,9 +1052,10 @@ class WavLMPreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (WavLMEncoder, WavLMEncoderStableLayerNorm, WavLMFeatureEncoder)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 WAVLM_START_DOCSTRING = r"""

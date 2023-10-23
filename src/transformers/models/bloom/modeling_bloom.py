@@ -496,9 +496,10 @@ class BloomPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module: nn.Module, value: bool = False):
+    def _set_gradient_checkpointing(self, module: nn.Module, gradient_checkpointing_func=None):
         if isinstance(module, BloomModel):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
     @staticmethod
     def _convert_to_standard_cache(
@@ -769,7 +770,7 @@ class BloomModel(BloomPreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch.utils.checkpoint.checkpoint(
+                outputs = self.gradient_checkpointing_func(
                     create_custom_forward(block),
                     hidden_states,
                     alibi,

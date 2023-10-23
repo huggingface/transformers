@@ -343,7 +343,7 @@ class ASTEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     create_custom_forward(layer_module),
                     hidden_states,
                     layer_head_mask,
@@ -395,9 +395,10 @@ class ASTPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     # Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel._set_gradient_checkpointing with ViT->AST
-    def _set_gradient_checkpointing(self, module: ASTEncoder, value: bool = False) -> None:
+    def _set_gradient_checkpointing(self, module: ASTEncoder, gradient_checkpointing_func=None) -> None:
         if isinstance(module, ASTEncoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING = r"""

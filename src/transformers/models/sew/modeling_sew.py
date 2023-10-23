@@ -367,7 +367,7 @@ class SEWFeatureEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch.utils.checkpoint.checkpoint(
+                hidden_states = self.gradient_checkpointing_func(
                     create_custom_forward(conv_layer),
                     hidden_states,
                 )
@@ -680,7 +680,7 @@ class SEWEncoder(nn.Module):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = self.gradient_checkpointing_func(
                         create_custom_forward(layer),
                         hidden_states,
                         attention_mask,
@@ -756,9 +756,10 @@ class SEWPreTrainedModel(PreTrainedModel):
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (SEWEncoder, SEWFeatureEncoder)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """

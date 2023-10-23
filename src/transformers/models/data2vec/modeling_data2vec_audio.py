@@ -300,7 +300,7 @@ class Data2VecAudioFeatureEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch.utils.checkpoint.checkpoint(
+                hidden_states = self.gradient_checkpointing_func(
                     create_custom_forward(conv_layer),
                     hidden_states,
                 )
@@ -600,7 +600,7 @@ class Data2VecAudioEncoder(nn.Module):
 
                         return custom_forward
 
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = self.gradient_checkpointing_func(
                         create_custom_forward(layer),
                         hidden_states,
                         attention_mask,
@@ -761,9 +761,10 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (Data2VecAudioEncoder, Data2VecAudioFeatureEncoder)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 DATA2VEC_AUDIO_START_DOCSTRING = r"""

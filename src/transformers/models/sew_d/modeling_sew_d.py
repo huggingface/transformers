@@ -460,7 +460,7 @@ class SEWDFeatureEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch.utils.checkpoint.checkpoint(
+                hidden_states = self.gradient_checkpointing_func(
                     create_custom_forward(conv_layer),
                     hidden_states,
                 )
@@ -1141,7 +1141,7 @@ class SEWDTransformerEncoder(nn.Module):
 
                     return custom_forward
 
-                output_states = torch.utils.checkpoint.checkpoint(
+                output_states = self.gradient_checkpointing_func(
                     create_custom_forward(layer_module),
                     next_kv,
                     attention_mask,
@@ -1322,9 +1322,10 @@ class SEWDPreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, SEWDTransformerEncoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 SEWD_START_DOCSTRING = r"""

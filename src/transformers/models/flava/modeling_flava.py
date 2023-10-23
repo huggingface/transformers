@@ -670,7 +670,7 @@ class FlavaEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,
@@ -879,9 +879,10 @@ class FlavaPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module: FlavaEncoder, value: bool = False) -> None:
+    def _set_gradient_checkpointing(self, module: FlavaEncoder, gradient_checkpointing_func=None) -> None:
         if isinstance(module, FlavaEncoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 @add_start_docstrings(
