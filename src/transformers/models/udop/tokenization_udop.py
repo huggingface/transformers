@@ -504,71 +504,11 @@ class UdopTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        if token.startswith("<extra_id_"):
-            match = re.match(r"<extra_id_(\d+)>", token)
-            num = int(match.group(1))
-            return self.vocab_size - num - 1 - self._other_extra_ids - self._loc_extra_ids - self._extra_ids * 4
-        elif token.startswith("<extra_l_id_"):
-            match = re.match(r"<extra_l_id_(\d+)>", token)
-            num = int(match.group(1))
-            return self.vocab_size - num - 1 - self._other_extra_ids - self._loc_extra_ids - self._extra_ids * 3
-        elif token.startswith("</extra_l_id_"):
-            match = re.match(r"</extra_l_id_(\d+)>", token)
-            num = int(match.group(1))
-            return self.vocab_size - num - 1 - self._other_extra_ids - self._loc_extra_ids - self._extra_ids * 2
-        elif token.startswith("<extra_t_id_"):
-            match = re.match(r"<extra_t_id_(\d+)>", token)
-            num = int(match.group(1))
-            return self.vocab_size - num - 1 - self._other_extra_ids - self._loc_extra_ids - self._extra_ids
-        elif token.startswith("</extra_t_id_"):
-            match = re.match(r"</extra_t_id_(\d+)>", token)
-            num = int(match.group(1))
-            return self.vocab_size - num - 1 - self._other_extra_ids - self._loc_extra_ids
-        elif token.startswith("<loc_"):
-            match = re.match(r"<loc_(\d+)>", token)
-            num = int(match.group(1))
-            return self.vocab_size - num - 1 - self._other_extra_ids
-        elif token.startswith("<other_"):
-            match = re.match(r"<other_(\d+)>", token)
-            num = int(match.group(1))
-            return self.vocab_size - num - 1
-
         return self.sp_model.piece_to_id(token)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index < self.sp_model.get_piece_size():
-            token = self.sp_model.IdToPiece(index)
-        else:
-            if index > self.sp_model.get_piece_size() + self._extra_ids * 5 + self._loc_extra_ids - 1:
-                index_loc = self.vocab_size - 1 - index
-                token = f"<other_{index_loc}>"
-            elif index > self.sp_model.get_piece_size() + self._extra_ids * 5 - 1:
-                index_loc = self.vocab_size - self._other_extra_ids - 1 - index
-                token = f"<loc_{index_loc}>"
-            elif index > self.sp_model.get_piece_size() + self._extra_ids * 4 - 1:
-                token = "</extra_t_id_{}>".format(
-                    self.vocab_size - self._other_extra_ids - self._loc_extra_ids - 1 - index
-                )
-            elif index > self.sp_model.get_piece_size() + self._extra_ids * 3 - 1:
-                token = "<extra_t_id_{}>".format(
-                    self.vocab_size - self._other_extra_ids - self._loc_extra_ids - self._extra_ids - 1 - index
-                )
-            elif index > self.sp_model.get_piece_size() + self._extra_ids * 2 - 1:
-                token = "</extra_l_id_{}>".format(
-                    self.vocab_size - self._other_extra_ids - self._loc_extra_ids - self._extra_ids * 2 - 1 - index
-                )
-            elif index > self.sp_model.get_piece_size() + self._extra_ids - 1:
-                token = "<extra_l_id_{}>".format(
-                    self.vocab_size - self._other_extra_ids - self._loc_extra_ids - self._extra_ids * 3 - 1 - index
-                )
-            elif index > self.sp_model.get_piece_size() - 1:
-                token = "<extra_id_{}>".format(
-                    self.vocab_size - self._other_extra_ids - self._loc_extra_ids - self._extra_ids * 4 - 1 - index
-                )
-            else:
-                raise
-        return token
+        return self.sp_model.IdToPiece(index)
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
