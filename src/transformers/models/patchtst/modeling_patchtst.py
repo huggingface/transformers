@@ -318,13 +318,13 @@ def random_masking(
 def forecast_masking(
     inputs: torch.Tensor,
     forecast_mask_patches: list,
-    mix_ratio: list = None,
+    forecast_mask_ratios: list = None,
     unmasked_channel_indices: list = None,
     mask_value: int = 0,
     seed_number: Optional[int] = None,
 ):
     """Forecast masking that masks the last K patches where K is from the forecast_mask_patches list.
-    For every batch, distribute the patch lengths based on mix_ratio and ignore masks for column indices mentioned in
+    For every batch, distribute the patch lengths based on forecast_mask_ratios and ignore masks for column indices mentioned in
     unmasked_channel_indices.
 
     Parameters:
@@ -333,8 +333,8 @@ def forecast_masking(
             patch_len)`
         forecast_mask_patches (`list`): [2, 4]
             List of patch lengths to mask in the end of the data.
-        mix_ratio (`list`, *optional*): [0.7, 0.3]
-            List of weights to use for each patch length. For Ex. if forecast_mask_patches is [5,4] and mix_ratio is [1,1],
+        forecast_mask_ratios (`list`, *optional*): [0.7, 0.3]
+            List of weights to use for each patch length. For Ex. if forecast_mask_patches is [5,4] and forecast_mask_ratios is [1,1],
             then equal weights to both patch lengths. Defaults to None.
         unmasked_channel_indices (`list`, *optional*):
             Control Variable channel indices. These channels will not be masked. Defaults to None.
@@ -350,17 +350,17 @@ def forecast_masking(
     if seed_number:
         set_seed(seed_number)
 
-    if mix_ratio is None:
-        mix_ratio = [1 for _ in forecast_mask_patches]
+    if forecast_mask_ratios is None:
+        forecast_mask_ratios = [1 for _ in forecast_mask_patches]
 
     batch_size, num_channels, sequence_length, num_features = inputs.shape
     mask = torch.zeros(batch_size, num_channels, sequence_length, device=inputs.device)
 
     t_list = []
     total_length = 0
-    total_ratio = sum(mix_ratio)
+    total_ratio = sum(forecast_mask_ratios)
 
-    for patch_length, ratio in zip(forecast_mask_patches, mix_ratio):
+    for patch_length, ratio in zip(forecast_mask_patches, forecast_mask_ratios):
         if patch_length <= 0 or patch_length >= sequence_length:
             raise Exception("masked_patch_len should be greater than 0 and less than total patches.")
         temp_len = int(batch_size * ratio / total_ratio)
@@ -457,10 +457,10 @@ class PatchTSTMasking(nn.Module):
 
     Parameters:
         mask_type (`str`, *optional*): Masking type. Allowed values are random, forecast. Defaults to random.
-        mask_ratio (`float`, *optional*): Mask ratio.
-        mask_patches (`list`, *optional*): List of patch lengths to mask in the end of the data.
-        mask_patch_ratios (`list`, *optional*):
-            List of weights to use for each patch length. For Ex. if forecast_mask_patches is [5,4] and mix_ratio is [1,1],
+        random_mask_ratio (`float`, *optional*): Mask ratio for random pretraining.
+        forecast_mask_patches (`list`, *optional*): List of patch lengths to mask in the end of the data.
+        forecast_mask_ratios (`list`, *optional*):
+            List of weights to use for each patch length. For Ex. if forecast_mask_patches is [5,4] and forecast_mask_ratios is [1,1],
             then equal weights to both patch lengths. Defaults to None.
         unmasked_channel_indices (`list`, *optional*):
             Define what channels not to mask. These channels will not be masked during pretrainin. Defaults to None.
@@ -481,20 +481,20 @@ class PatchTSTMasking(nn.Module):
     def __init__(
         self,
         mask_type: str = "random",
-        mask_ratio: float = 0.5,
-        mask_patches: list = [2, 3],
-        mask_patch_ratios: list = [1, 1],
+        random_mask_ratio: float = 0.5,
+        forecast_mask_patches: list = [2, 3],
+        forecast_mask_ratios: list = [1, 1],
         channel_consistent_masking: bool = False,
         unmasked_channel_indices: list = None,
         mask_value: int = 0,
         seed_number: Optional[int] = None,
     ):
         super().__init__()
-        self.mask_ratio = mask_ratio
+        self.random_mask_ratio = random_mask_ratio
         self.channel_consistent_masking = channel_consistent_masking
         self.mask_type = mask_type
-        self.mask_patches = mask_patches
-        self.mask_patch_ratios = mask_patch_ratios
+        self.forecast_mask_patches = forecast_mask_patches
+        self.forecast_mask_ratios = forecast_mask_ratios
         self.unmasked_channel_indices = unmasked_channel_indices
         self.mask_value = mask_value
         if self.unmasked_channel_indices is not None:
@@ -518,7 +518,7 @@ class PatchTSTMasking(nn.Module):
         if self.mask_type == "random":
             masked_input, mask = random_masking(
                 inputs=patch_input,
-                mask_ratio=self.mask_ratio,
+                mask_ratio=self.random_mask_ratio,
                 unmasked_channel_indices=self.unmasked_channel_indices,
                 channel_consistent_masking=self.channel_consistent_masking,
                 mask_value=self.mask_value,
@@ -528,7 +528,7 @@ class PatchTSTMasking(nn.Module):
             masked_input, mask = forecast_masking(
                 inputs=patch_input,
                 forecast_mask_patches=self.forecast_mask_patches,
-                mix_ratio=self.mask_patch_ratios,
+                forecast_mask_ratios=self.forecast_mask_ratios,
                 unmasked_channel_indices=self.unmasked_channel_indices,
                 mask_value=self.mask_value,
                 seed_number=self.seed_number,
@@ -1267,9 +1267,9 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         if self.mask_input:
             self.masking = PatchTSTMasking(
                 mask_type=config.mask_type,
-                mask_ratio=config.mask_ratio,
-                mask_patches=config.mask_patches,
-                mask_patch_ratios=config.mask_patch_ratios,
+                random_mask_ratio=config.random_mask_ratio,
+                forecast_mask_patches=config.forecast_mask_patches,
+                forecast_mask_ratios=config.forecast_mask_ratios,
                 channel_consistent_masking=config.channel_consistent_masking,
                 unmasked_channel_indices=config.unmasked_channel_indices,
                 mask_value=config.mask_value,

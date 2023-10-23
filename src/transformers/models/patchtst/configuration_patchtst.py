@@ -186,9 +186,9 @@ class PatchTSTConfig(PretrainedConfig):
         # mask pretraining
         mask_input: Optional[bool] = None,
         mask_type: str = "random",
-        mask_ratio: float = 0.5,
-        mask_patches: List[int] = [2, 3],
-        mask_patch_ratios: List[int] = [1, 1],
+        random_mask_ratio: float = 0.5,
+        forecast_mask_patches: List[int] = [2, 3],
+        forecast_mask_ratios: List[int] = [1, 1],
         channel_consistent_masking: bool = False,
         unmasked_channel_indices: Optional[List[int]] = None,
         mask_value=0,
@@ -240,9 +240,9 @@ class PatchTSTConfig(PretrainedConfig):
         self.seed_number = seed_number
         self.mask_input = mask_input
         self.mask_type = mask_type
-        self.mask_ratio = mask_ratio
-        self.mask_patches = mask_patches
-        self.mask_patch_ratios = mask_patch_ratios
+        self.random_mask_ratio = random_mask_ratio  # for random masking
+        self.forecast_mask_patches = forecast_mask_patches  # for forecast masking
+        self.forecast_mask_ratios = forecast_mask_ratios
         self.channel_consistent_masking = channel_consistent_masking
         self.unmasked_channel_indices = unmasked_channel_indices
         self.mask_value = mask_value
