@@ -1673,6 +1673,8 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
             enc_outputs = [
                 vision_features,
                 text_features,
+                encoder_vision_states,
+                encoder_text_states,
                 all_attns
             ]
             return tuple(v for v in enc_outputs if v is not None)
@@ -2501,8 +2503,11 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
             return_dict=return_dict,
         )
 
+        # index for encoder_last_hidden_state_text
+        idx = 5 + (1 if output_attentions else 0) + (1 if output_hidden_states else 0)
+
         hidden_states = outputs.intermediate_hidden_states if return_dict else outputs[2]
-        enc_text_hidden_state = outputs.encoder_last_hidden_state_text if return_dict else outputs[7]
+        enc_text_hidden_state = outputs.encoder_last_hidden_state_text if return_dict else outputs[idx]
         init_reference = outputs.init_reference_points if return_dict else outputs[0]
         inter_references = outputs.intermediate_reference_points if return_dict else outputs[3]
 
@@ -2561,8 +2566,8 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
             if self.config.two_stage:
-                enc_outputs_coord = outputs.enc_outputs_coord_logits.sigmoid()
-                outputs_loss["enc_outputs"] = {"logits": outputs.enc_outputs_class, "pred_boxes": enc_outputs_coord}
+                enc_outputs_coord = outputs[-1].sigmoid()
+                outputs_loss["enc_outputs"] = {"logits": outputs[-2], "pred_boxes": enc_outputs_coord}
 
             loss_dict = criterion(outputs_loss, labels)
             # Fourth: compute total loss, as a weighted sum of the various losses

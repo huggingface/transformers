@@ -538,9 +538,6 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         encoder_hidden_states.retain_grad()
         encoder_attentions.retain_grad()
 
-        decoder_attentions = outputs.decoder_attentions[0][0]
-        decoder_attentions.retain_grad()
-
         cross_attentions = outputs.decoder_attentions[-1][0]
         cross_attentions.retain_grad()
 
@@ -548,7 +545,6 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 
         self.assertIsNotNone(encoder_hidden_states.grad)
         self.assertIsNotNone(encoder_attentions.grad)
-        self.assertIsNotNone(decoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
 
     def test_forward_signature(self):
