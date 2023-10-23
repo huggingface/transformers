@@ -710,7 +710,10 @@ class PatchTSMixer(nn.Module):
 
         if self.use_positional_encoding:
             self.position_enc = positional_encoding(
-                config.positional_encoding, config.learn_positional_encoding, num_patches, num_features
+                config.positional_encoding,
+                config.learn_positional_encoding,
+                num_patches,
+                num_features,
             )
 
     def forward(self, input_ts, output_hidden_states: bool = False):
@@ -731,7 +734,11 @@ class PatchTSMixer(nn.Module):
             input_ts = input_ts.permute(0, 2, 1, 3)  # input_ts: [bs  x num_patch x n_vars  x patch_len]
             input_ts = torch.reshape(
                 input_ts,
-                (batch_size, self.num_patches, self.num_input_channels * self.patch_len),
+                (
+                    batch_size,
+                    self.num_patches,
+                    self.num_input_channels * self.patch_len,
+                ),
             )  # input_ts: [bs x num_patch x patch_len * n_vars]
 
         patches = self.patcher(
@@ -1404,7 +1411,11 @@ class PatchTSMixerMeanScaler(nn.Module):
     """
 
     def __init__(
-        self, dim: int = -1, keepdim: bool = True, default_scale: Optional[float] = None, minimum_scale: float = 1e-10
+        self,
+        dim: int = -1,
+        keepdim: bool = True,
+        default_scale: Optional[float] = None,
+        minimum_scale: float = 1e-10,
     ):
         super().__init__()
         self.dim = dim
@@ -1680,7 +1691,14 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [encoder_output.last_hidden_state, encoder_output.hidden_states, patched_x, mask, loc, scale]
+                for v in [
+                    encoder_output.last_hidden_state,
+                    encoder_output.hidden_states,
+                    patched_x,
+                    mask,
+                    loc,
+                    scale,
+                ]
             )
 
         return PatchTSMixerModelOutput(
@@ -1734,10 +1752,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
             config=config,
         )
         self.masked_loss = config.masked_loss
-        if config.masked_loss is True:
-            self.loss = torch.nn.MSELoss(reduction="none")
-        else:
-            self.loss = torch.nn.MSELoss(reduction="mean")
+        self.config = config
 
         # Initialize weights and apply final processing
         if config.post_init:
@@ -1775,6 +1790,11 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if self.config.masked_loss is True:
+            loss = torch.nn.MSELoss(reduction="none")
+        else:
+            loss = torch.nn.MSELoss(reduction="mean")
+
         # past_values: tensor [batch_size x seq_len x num_input_channels]
         model_output = self.model(
             past_values,
@@ -1788,7 +1808,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         x_hat = self.head(model_output.last_hidden_state)  # tensor [batch_size x nvars x num_patch x patch_len]
 
         if return_loss is True:
-            loss_val = self.loss(x_hat, model_output.patched_input)
+            loss_val = loss(x_hat, model_output.patched_input)
         else:
             loss_val = None
 
@@ -1797,7 +1817,15 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
             loss_val = (loss_val.mean(dim=-1) * model_output.mask).sum() / (model_output.mask.sum() + 1e-10)
 
         if not return_dict:
-            return tuple(v for v in [x_hat, model_output.last_hidden_state, model_output.hidden_states, loss_val])
+            return tuple(
+                v
+                for v in [
+                    x_hat,
+                    model_output.last_hidden_state,
+                    model_output.hidden_states,
+                    loss_val,
+                ]
+            )
 
         return PatchTSMixerForMaskPreTrainingOutput(
             prediction_logits=x_hat,  # tensor [batch_size x nvars x num_patch x patch_len]
@@ -1912,11 +1940,10 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
         self.config = config
+
         if config.loss == "mse":
-            self.loss = nn.MSELoss(reduction="mean")
             self.distribution_output = None
         else:
-            self.loss = nll
             if config.mode in ["common_channel", "mix_channel"]:
                 dim = config.forecast_len
             else:
@@ -1957,6 +1984,12 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         Returns:
 
         """
+        if self.config.loss == "mse":
+            loss = nn.MSELoss(reduction="mean")
+        elif self.config.loss == "nll":
+            loss = nll
+        else:
+            raise ValueError("Invalid loss function: Allowed values: mse and nll")
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1985,7 +2018,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                     scale=model_output.scale[..., self.config.forecast_channel_indices],
                 )
                 if target_values is not None and return_loss is True:
-                    loss_val = self.loss(
+                    loss_val = loss(
                         distribution,
                         target_values[..., self.config.forecast_channel_indices],
                     )
@@ -1997,7 +2030,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                     + model_output.loc[..., self.config.forecast_channel_indices]
                 )
                 if target_values is not None and return_loss is True:
-                    loss_val = self.loss(y_hat, target_values[..., self.config.forecast_channel_indices])
+                    loss_val = loss(y_hat, target_values[..., self.config.forecast_channel_indices])
         else:
             if self.distribution_output:
                 # if self.config.distribution_output == "negative_binomial" and torch.any(target_values < 0):
@@ -2006,12 +2039,12 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                     y_hat, loc=model_output.loc, scale=model_output.scale
                 )
                 if target_values is not None and return_loss is True:
-                    loss_val = self.loss(distribution, target_values)
+                    loss_val = loss(distribution, target_values)
                     loss_val = weighted_average(loss_val)
             else:
                 y_hat = y_hat * model_output.scale + model_output.loc
                 if target_values is not None and return_loss is True:
-                    loss_val = self.loss(y_hat, target_values)
+                    loss_val = loss(y_hat, target_values)
 
         if self.config.forecast_channel_indices is not None:
             loc = model_output.loc[..., self.config.forecast_channel_indices]
@@ -2022,7 +2055,15 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
         if not return_dict:
             return tuple(
-                v for v in [y_hat, model_output.last_hidden_state, model_output.hidden_states, loss_val, loc, scale]
+                v
+                for v in [
+                    y_hat,
+                    model_output.last_hidden_state,
+                    model_output.hidden_states,
+                    loss_val,
+                    loc,
+                    scale,
+                ]
             )
 
         return PatchTSMixerForForecastOutput(
@@ -2124,7 +2165,6 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         self.head = PatchTSMixerLinearHead(
             config=config,
         )
-        self.loss = torch.nn.CrossEntropyLoss()
 
         if config.scaling in ["std", "mean", True]:
             if config.mode == "flatten":
@@ -2154,10 +2194,15 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         Returns:
 
         """
+
+        loss = torch.nn.CrossEntropyLoss()
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         model_output = self.model(
-            past_values, output_hidden_states=output_hidden_states, return_dict=return_dict
+            past_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )  # x: [batch_size x nvars x num_patch x num_features]
         if isinstance(model_output, tuple):
             model_output = PatchTSMixerModelOutput(*model_output)
@@ -2172,12 +2217,20 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         y_hat = self.head(model_output.last_hidden_state)  # tensor [batch_size x n_labels]
 
         if target_values is not None and return_loss is True:
-            loss_val = self.loss(y_hat, target_values)
+            loss_val = loss(y_hat, target_values)
         else:
             loss_val = None
 
         if not return_dict:
-            return tuple(v for v in [y_hat, model_output.last_hidden_state, model_output.hidden_states, loss_val])
+            return tuple(
+                v
+                for v in [
+                    y_hat,
+                    model_output.last_hidden_state,
+                    model_output.hidden_states,
+                    loss_val,
+                ]
+            )
 
         return PatchTSMixerForClassificationOutput(
             prediction_logits=y_hat,  # tensor [batch_size x n_labels]
@@ -2227,11 +2280,8 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         self.model = PatchTSMixerModel(config)
         self.config = config
         if config.loss == "mse":
-            self.loss = nn.MSELoss(reduction="mean")
             self.distribution_output = None
         else:
-            self.loss = nll
-
             if config.distribution_output == "student_t":
                 self.distribution_output = StudentTOutput(dim=config.num_targets)
             elif config.distribution_output == "normal":
@@ -2284,9 +2334,19 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             `config.return_dict`=False)
 
         """
+
+        if self.config.loss == "mse":
+            loss = nn.MSELoss(reduction="mean")
+        elif self.config.loss == "nll":
+            loss = nll
+        else:
+            raise ValueError("Invalid loss function: Allowed values: mse and nll")
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         model_output = self.model(
-            past_values, output_hidden_states=output_hidden_states, return_dict=return_dict
+            past_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )  # model_output: [batch_size x nvars x num_patch x num_features]
         if isinstance(model_output, tuple):
             model_output = PatchTSMixerModelOutput(*model_output)
@@ -2305,16 +2365,24 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
                 if self.config.distribution_output == "negative_binomial" and torch.any(target_values < 0):
                     raise Exception("target_values cannot be negative for negative_binomial distribution.")
                 distribution = self.distribution_output.distribution(y_hat)
-                loss_val = self.loss(distribution, target_values)
+                loss_val = loss(distribution, target_values)
                 # take average of the loss
                 loss_val = weighted_average(loss_val)
             else:
-                loss_val = self.loss(y_hat, target_values)
+                loss_val = loss(y_hat, target_values)
         else:
             loss_val = None
 
         if not return_dict:
-            return tuple(v for v in [y_hat, model_output.last_hidden_state, model_output.hidden_states, loss_val])
+            return tuple(
+                v
+                for v in [
+                    y_hat,
+                    model_output.last_hidden_state,
+                    model_output.hidden_states,
+                    loss_val,
+                ]
+            )
 
         return PatchTSMixerForRegressionOutput(
             prediction_logits=y_hat,  # tensor [batch_size x num_targets]
