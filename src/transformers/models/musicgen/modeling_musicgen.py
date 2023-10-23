@@ -180,7 +180,20 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention
 class MusicgenAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """
+    Multi-headed attention from 'Attention Is All You Need' paper
+    
+    Args:
+        embed_dim (`int`): The dimensionality of the input embeddings,which represents the complexity of the input.
+        num_heads (`int`): The number of attention heads, which determine how the model pays attention to different parts of the input.
+        dropout (`float`, *optional*, defualts to 0.0): The dropout rate used to randomly ignore some nodes during training, preventing the model from overfitting.
+        is_decoder (`bool`, *optional*, defaults to `False`):  Whether the attention layer is used in a decoder network (used in sequence-to-sequence models).
+        bias (`bool`, *optional*, defaults to `True`): Whether to add an additional bias term to the attention projections (helps with fine-tuning the model).
+
+    Returns:
+        `torch.Tensor`: The output of the attention layer.
+
+    """
 
     def __init__(
         self,
