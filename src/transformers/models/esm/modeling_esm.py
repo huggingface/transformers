@@ -16,17 +16,23 @@
 
 import math
 from typing import List, Optional, Tuple, Union
+from dataclasses import dataclass
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
-    BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
+    ModelOutput,
     MaskedLMOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
@@ -85,7 +91,8 @@ def average_product_correct(x):
     return normalized
 
 
-class EsmProteinClassificationOutput(BaseModelOutputWithPooling):
+@dataclass
+class EsmProteinClassificationOutput(ModelOutput):
     """
     Output type of ['EsmForProteinClassification'].
 
@@ -105,6 +112,8 @@ class EsmProteinClassificationOutput(BaseModelOutputWithPooling):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
+    last_hidden_state: torch.FloatTensor = None
+    pooler_output: torch.FloatTensor = None
 
 
 class RotaryEmbedding(torch.nn.Module):
@@ -1308,11 +1317,10 @@ class EsmProteinClassificationHead(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.out_proj = nn.Linear(config.hidden_size, out_dim)
-        self.activation = nn.Relu()
 
     def forward(self, x):
         x = self.dense(x)
-        x = self.activation(x)
+        x = nn.functional.relu(x)
         x = self.out_proj(x)
         return x
 
@@ -1329,18 +1337,19 @@ class EsmForProteinClassification(EsmPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
+        self.cls_token_id = config.cls_token_id
+        self.pad_token_id = config.pad_token_id
+        self.eos_token_id = config.eos_token_id
 
         self.esm = EsmModel(config, add_pooling_layer=False)
         self.protein_head = EsmProteinClassificationHead(config)
         self.residue_head = EsmProteinClassificationHead(config)
         self.classifier = EsmProteinClassificationHead(config, out_dim=config.num_labels)
 
+        self.init_weights()
+
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=EsmProteinClassificationOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=EsmProteinClassificationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1356,6 +1365,9 @@ class EsmForProteinClassification(EsmPreTrainedModel):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the protein classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+        Returns:
+
+        Examples:
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1370,17 +1382,20 @@ class EsmForProteinClassification(EsmPreTrainedModel):
             return_dict=return_dict,
         )
 
-        residue_feature = outputs.last_hidden_state # [batch_size, seq_len, hidden_dim]
+        residue_feature = outputs.last_hidden_state  # [batch_size, seq_len, hidden_dim]
 
         # mean readout
-        is_special = (input_ids == self.cls_token_id) | (input_ids == self.eos_token_id) | (input_ids == self.pad_token_id)
+        is_special = (
+            (input_ids == self.cls_token_id) | (input_ids == self.eos_token_id) | (input_ids == self.pad_token_id)
+        )
         special_mask = (~is_special).to(torch.float32).unsqueeze(-1)
         pooled_feature = (residue_feature * special_mask).sum(1) / (special_mask.sum(1) + 1.0e-6)
 
+        logits = self.classifier(pooled_feature)
+
+        # For ProtST pretrain and zero-shot
         pooled_feature = self.protein_head(pooled_feature)
         residue_feature = self.residue_head(residue_feature)
-
-        logits = self.classifier(pooled_feature)
 
         loss = None
         if labels is not None:
@@ -1393,4 +1408,8 @@ class EsmForProteinClassification(EsmPreTrainedModel):
             output = (logits,) + (residue_feature, pooled_feature)
             return ((loss,) + output) if loss is not None else output
 
-        return BaseModelOutputWithPooling(loss=loss, logits=logits, last_hidden_state=residue_feature, pooler_output=pooled_feature)
+        # import pdb; pdb.set_trace()
+
+        return EsmProteinClassificationOutput(
+            loss=loss, logits=logits, last_hidden_state=residue_feature, pooler_output=pooled_feature
+        )
