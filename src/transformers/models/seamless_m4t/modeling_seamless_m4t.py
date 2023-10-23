@@ -1862,7 +1862,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
-                        output_attentions
+                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
