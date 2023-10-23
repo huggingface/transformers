@@ -225,6 +225,10 @@ _import_structure = {
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
+    "models.ced": [
+        "CED_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CedConfig",
+    ],
     "models.chinese_clip": [
         "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ChineseCLIPConfig",
@@ -911,6 +915,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
+    _import_structure["models.ced"].append("CedFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
 
 # Tensorflow-text-specific objects
@@ -1410,6 +1415,14 @@ else:
             "CanineModel",
             "CaninePreTrainedModel",
             "load_tf_weights_in_canine",
+        ]
+    )
+    _import_structure["models.ced"].extend(
+        [
+            "CED_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CedForAudioClassification",
+            "CedModel",
+            "CedPreTrainedModel",
         ]
     )
     _import_structure["models.chinese_clip"].extend(
@@ -4380,6 +4393,10 @@ if TYPE_CHECKING:
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
+    from .models.ced import (
+        CED_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CedConfig,
+    )
     from .models.chinese_clip import (
         CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ChineseCLIPConfig,
@@ -5014,6 +5031,7 @@ if TYPE_CHECKING:
         from .utils.dummy_speech_objects import *
     else:
         from .models.audio_spectrogram_transformer import ASTFeatureExtractor
+        from .models.ced import CedFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
 
     try:
@@ -5440,6 +5458,12 @@ if TYPE_CHECKING:
             CanineModel,
             CaninePreTrainedModel,
             load_tf_weights_in_canine,
+        )
+        from .models.ced import (
+            CED_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CedForAudioClassification,
+            CedModel,
+            CedPreTrainedModel,
         )
         from .models.chinese_clip import (
             CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
