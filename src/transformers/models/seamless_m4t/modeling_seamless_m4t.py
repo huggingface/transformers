@@ -900,7 +900,7 @@ class SeamlessM4TConformerEncoder(nn.Module):
                         return custom_forward
 
                     layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
+                        layer.forward,
                         hidden_states,
                         attention_mask,
                         relative_position_embeddings,
@@ -1547,9 +1547,10 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (SeamlessM4TDecoder, SeamlessM4TEncoder, SeamlessM4TSpeechEncoder)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
     def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
         kernel_size, stride = self.config.adaptor_kernel_size, self.config.adaptor_stride
@@ -1864,7 +1865,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
                         return custom_forward
 
                     layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
+                        encoder_layer.forward,
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
@@ -2139,7 +2140,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                    decoder_layer.forward,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
