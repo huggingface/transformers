@@ -46,6 +46,8 @@ The original code can be found [here](https://github.com/openai/whisper).
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
     - save_vocabulary
+    - batch_decode
+    - decode
 
 ## WhisperTokenizerFast
 
@@ -55,6 +57,8 @@ The original code can be found [here](https://github.com/openai/whisper).
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
     - save_vocabulary
+    - batch_decode
+    - decode
 
 ## WhisperFeatureExtractor
 
@@ -83,6 +87,7 @@ The original code can be found [here](https://github.com/openai/whisper).
 
 [[autodoc]] WhisperForConditionalGeneration
     - forward
+    - generate
 
 ## WhisperForAudioClassification
 

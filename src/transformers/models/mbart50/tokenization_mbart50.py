@@ -132,7 +132,7 @@ class MBart50Tokenizer(PreTrainedTokenizer):
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
+        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", []) or []
         kwargs["additional_special_tokens"] += [
             code for code in FAIRSEQ_LANGUAGE_CODES if code not in kwargs["additional_special_tokens"]
         ]

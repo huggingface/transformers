@@ -548,7 +548,6 @@ class PersimmonModel(PersimmonPreTrainedModel):
         config: PersimmonConfig
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel.__init__ with LLAMA->PERSIMMON,Llama->Persimmon,PersimmonRMSNorm->nn.LayerNorm,norm->final_layernorm,rms_final_layernorm_eps->layer_norm_eps
     def __init__(self, config: PersimmonConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
