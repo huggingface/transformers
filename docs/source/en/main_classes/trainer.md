@@ -20,7 +20,7 @@ The [`Trainer`] class provides an API for feature-complete training in PyTorch f
 
 <Tip>
 
-If you're looking to fine-tune a language model like Llama-2 or Mistral on a text dataset using autoregressive techniques, consider using [`trl`](https://github.com/huggingface/trl)'s [`~trl.SFTTrainer`]. This trainer is specially optimized for this particular task. On the other hand, the [`Trainer`] is a more versatile option, suitable for a broader spectrum of tasks.
+If you're looking to fine-tune a language model like Llama-2 or Mistral on a text dataset using autoregressive techniques, consider using [`trl`](https://github.com/huggingface/trl)'s [`~trl.SFTTrainer`]. This trainer is specially optimized for this particular task and supports sequence packing, LoRA, quantization, and DeepSpeed for efficient scaling to any model size. On the other hand, the [`Trainer`] is a more versatile option, suitable for a broader spectrum of tasks.
 
 </Tip>
 
