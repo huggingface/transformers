@@ -1,5 +1,5 @@
 import math
-from typing import List, Union
+from typing import List, Union, Dict
 
 import numpy as np
 
@@ -9,7 +9,14 @@ from ...image_transforms import (
     pad,
     resize,
 )
-from ...image_utils import to_numpy_array
+from ...image_utils import (
+    ChannelDimension,
+    get_image_size,
+    infer_channel_dimension_format,
+    is_scaled_image,
+    to_numpy_array,
+    make_list_of_images
+)
 from ...utils import is_torch_available, is_vision_available, logging, requires_backends
 
 
@@ -51,61 +58,131 @@ class FuyuImageProcessor(BaseImageProcessor):
     ]
 
     def __init__(
-        self, target_height=1080, target_width=1920, padding_value=1.0, padding_mode: str = "constant", **kwargs
+        self,
+        patch_size: Dict[str, int] = None,
+        target_height: int = 1080,
+        target_width: int = 1920,
+        padding_value: float = 1.0,
+        padding_mode: str = "constant",
+        **kwargs
     ):
         super().__init__(**kwargs)
         self.target_width = target_width
         self.target_height = target_height
+        self.patch_size = patch_size if patch_size is not None else {"height": 30, "width": 30}
         self.padding_value = padding_value
         self.padding_mode = padding_mode
 
-    def get_num_patches(self, img_h: int, img_w: int, patch_dim_h: int, patch_dim_w: int) -> int:
-        """Calculate number of patches required to encode an image."""
-        if img_h % patch_dim_h != 0:
-            raise ValueError(f"{img_h=} must be divisible by {patch_dim_h=}")
-        if img_w % patch_dim_w != 0:
-            raise ValueError(f"{img_w=} must be divisible by {patch_dim_w=}")
+    def _scale_to_target_aspect_ratio(self, image: np.ndarray) -> np.ndarray:
+        image_height, image_width = get_image_size(image)
+        if image_width <= self.target_width and image_height <= self.target_height:
+            return image
 
-        num_patches_per_dim_h = img_h // patch_dim_h
-        num_patches_per_dim_w = img_w // patch_dim_w
+        height_scale_factor = self.target_height / image_height
+        width_scale_factor = self.target_width / image_width
+        optimal_scale_factor = min(height_scale_factor, width_scale_factor)
+
+        new_height = int(image_height * optimal_scale_factor)
+        new_width = int(image_width * optimal_scale_factor)
+
+        scaled_image = resize(image=image, size=(new_height, new_width))
+        return np.array(scaled_image)
+
+    def _pad_to_target_size(self, image: np.ndarray) -> np.ndarray:
+        image_height, image_width, _ = image.shape
+
+        padding_top = 0
+        padding_left = 0
+        padding_bottom = self.target_height - image_height
+        padding_right = self.target_width - image_width
+        padded_image = pad(
+            image,
+            padding=((padding_top, padding_bottom), (padding_left, padding_right)),
+            mode=self.padding_mode,
+            constant_values=self.padding_value,
+        )
+        return padded_image
+
+    def scale_pad_normalize(self, image: Union[np.ndarray, PIL.Image.Image]) -> np.ndarray:
+        if isinstance(image, PIL.Image.Image):
+            image = to_numpy_array(image)
+        scaled_image = self._scale_to_target_aspect_ratio(image)
+        padded_image = self._pad_to_target_size(scaled_image)
+        normalized_padded_image = normalize(padded_image, 0.5, 0.5)
+        return normalized_padded_image
+
+    def get_num_patches(self, image_height: int, image_width: int) -> int:
+        """Calculate number of patches required to encode an image."""
+        if image_height % self.patch_size["height"] != 0:
+            raise ValueError(f'{image_height=} must be divisible by {self.patch_size["height"]}')
+        if image_width % self.patch_size["width"] != 0:
+            raise ValueError(f'{image_width=} must be divisible by {self.patch_size["width"]}')
+
+        num_patches_per_dim_h = image_height // self.patch_size["height"]
+        num_patches_per_dim_w = image_width // self.patch_size["width"]
         num_patches = num_patches_per_dim_h * num_patches_per_dim_w
 
         return num_patches
 
-    def patchify_image(self, image: "torch.Tensor", patch_dim_h: int, patch_dim_w: int) -> "torch.Tensor":
+    def patchify_image(self, image: "torch.Tensor") -> "torch.Tensor":
         """
         Convert an image into a tensor of patches.
 
         Args:
             image: Image to convert. Shape: [batch, channels, height, width]
-            patch_dim_h: Height of each patch.
-            patch_dim_w: Width of each patch.
         """
         requires_backends(self, ["torch"])
 
         # TODO refer to https://github.com/ArthurZucker/transformers/blob/0f0a3fe5ca5697ee58faeb5b53f049af720b5e98/src/transformers/models/vit_mae/modeling_vit_mae.py#L871
         # torch implementation is faster but does not handle non-squares
 
-        batch_size, channels, height, width = image.shape
-        unfolded_along_height = image.unfold(2, patch_dim_h, patch_dim_h)
-        patches = unfolded_along_height.unfold(3, patch_dim_w, patch_dim_w)
+        batch_size, channels, _, _ = image.shape
+        unfolded_along_height = image.unfold(2, self.patch_size['height'], self.patch_size['height'])
+        patches = unfolded_along_height.unfold(3, self.patch_size["width"], self.patch_size["width"])
 
-        patches_reshaped = patches.contiguous().view(batch_size, channels, -1, patch_dim_h, patch_dim_w)
+        patches_reshaped = patches.contiguous().view(
+            batch_size, channels, -1, self.patch_size['height'], self.patch_size["width"])
 
         patches_final = patches_reshaped.permute(0, 2, 3, 4, 1).reshape(
-            batch_size, -1, channels * patch_dim_h * patch_dim_w
+            batch_size, -1, channels * self.patch_size['height'] * self.patch_size["width"]
         )
 
         return patches_final
 
-    def process_images_for_model_input(
+    def preprocess(self, images):
+        """Utility function to preprocess the images and extract necessary information about original formats."""
+        batch_images = []
+        image_unpadded_heights = []
+        image_unpadded_widths = []
+        images = make_list_of_images(images)
+        for image in images:
+            image = to_numpy_array(image)
+            if not is_scaled_image(image):
+                image = image / 255.0
+            channel_dimension = infer_channel_dimension_format(image, 3)
+            if channel_dimension == ChannelDimension.FIRST:
+                width_index = 2
+                height_index = 1
+            elif channel_dimension == ChannelDimension.LAST:
+                width_index = 1
+                height_index = 0
+
+            image_unpadded_widths.append([image.shape[width_index]])
+            image_unpadded_heights.append([image.shape[height_index]])
+
+            # Reproduct adept padding sampler
+            padded_image = self.scale_pad_normalize(image)
+            tensor_img = torch.Tensor(padded_image).permute(2, 0, 1)
+            batch_images.append([tensor_img])
+
+        return batch_images, torch.Tensor(image_unpadded_heights), torch.Tensor(image_unpadded_widths)
+
+    def postprocess_with_tokenizer_info(
         self,
         image_input: "torch.Tensor",
         image_present: "torch.Tensor",
         image_unpadded_h: "torch.Tensor",
         image_unpadded_w: "torch.Tensor",
-        image_patch_dim_h: int,
-        image_patch_dim_w: int,
         image_placeholder_id: int,
         image_newline_id: int,
         variable_sized: bool,
@@ -117,10 +194,8 @@ class FuyuImageProcessor(BaseImageProcessor):
             image_present: [batch_size, subsequence_size] tensor of 1s and 0s indicating whether an image is present.
             image_unpadded_h: [batch_size, subsequence_size] tensor of unpadded image heights.
             image_unpadded_w: [batch_size, subsequence_size] tensor of unpadded image widths.
-            image_patch_dim_h: The height of the image patches.
-            image_patch_dim_w: The width of the image patches.
-            image_placeholder_id: The id of the image placeholder token.
-            image_newline_id: The id of the image newline token.
+            image_placeholder_id: The id of the image placeholder token. Comes from an associated tokenizer.
+            image_newline_id: The id of the image newline token. Comes from an associated tokenizer.
             variable_sized: Whether to process images as variable-sized.
         """
         requires_backends(self, ["torch"])
@@ -141,38 +216,37 @@ class FuyuImageProcessor(BaseImageProcessor):
                         # math.ceil(torch.tensor(300).cuda() / 30) == 11
                         new_h = min(
                             image.shape[1], math.ceil(image_unpadded_h[batch_index, subseq_index] /
-                                                      image_patch_dim_h) * image_patch_dim_h
+                                                      self.patch_size["height"]) * self.patch_size["height"]
                         )
                         new_w = min(
                             image.shape[2], math.ceil(image_unpadded_w[batch_index, subseq_index] /
-                                                      image_patch_dim_w) * image_patch_dim_w
+                                                      self.patch_size["width"]) * self.patch_size["width"]
                         )
                         image = image[:, :new_h, :new_w]
                     images[batch_index].append(image)
                     num_patches = self.get_num_patches(
-                        img_h=image.shape[1],
-                        img_w=image.shape[2],
-                        patch_dim_h=image_patch_dim_h,
-                        patch_dim_w=image_patch_dim_w,
+                        image_height=image.shape[1],
+                        image_width=image.shape[2],
                     )
-                    ids = torch.full([num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device)
+                    tensor_of_image_ids = torch.full([num_patches], image_placeholder_id,
+                                                     dtype=torch.int32, device=image_input.device)
                     patches = self.patchify_image(
-                        image=image.unsqueeze(0), patch_dim_h=image_patch_dim_h, patch_dim_w=image_patch_dim_w
+                        image=image.unsqueeze(0)
                     ).squeeze(0)
                     if variable_sized:
                         # Now terminate each line with |NEWLINE|.
-                        ids = ids.reshape(-1, new_w // image_patch_dim_w)
-                        ids = torch.cat(
+                        tensor_of_image_ids = tensor_of_image_ids.reshape(-1, new_w // self.patch_size["width"])
+                        tensor_of_image_ids = torch.cat(
                             [
-                                ids,
+                                tensor_of_image_ids,
                                 torch.full(
-                                    [ids.shape[0], 1], image_newline_id, dtype=torch.int32, device=image_input.device
+                                    [tensor_of_image_ids.shape[0], 1], image_newline_id, dtype=torch.int32, device=image_input.device
                                 ),
                             ],
                             dim=1,
                         )
-                        ids = ids.reshape(-1)
-                    image_input_ids[batch_index].append(ids)
+                        tensor_of_image_ids = tensor_of_image_ids.reshape(-1)
+                    image_input_ids[batch_index].append(tensor_of_image_ids)
                     image_patches[batch_index].append(patches)
                 else:
                     image_input_ids[batch_index].append(torch.tensor([], dtype=torch.int32, device=image_input.device))
@@ -215,42 +289,3 @@ class FuyuImageProcessor(BaseImageProcessor):
             "image_patch_indices_per_batch": image_patch_indices_per_batch,
             "image_patch_indices_per_subsequence": image_patch_indices_per_subsequence,
         }
-
-    def _scale_to_target_aspect_ratio(self, image: np.ndarray) -> np.ndarray:
-        image_height, image_width, _ = image.shape
-        if image_width <= self.target_width and image_height <= self.target_height:
-            return image
-
-        height_scale_factor = self.target_height / image_height
-        width_scale_factor = self.target_width / image_width
-        optimal_scale_factor = min(height_scale_factor, width_scale_factor)
-
-        new_height = int(image_height * optimal_scale_factor)
-        new_width = int(image_width * optimal_scale_factor)
-
-        scaled_image = resize(image=image, size=(new_width, new_height))  # (new_height, new_width))
-        return np.array(scaled_image)
-
-    def _pad_to_target_size(self, image: np.ndarray) -> np.ndarray:
-        image_height, image_width, _ = image.shape
-
-        padding_top = 0
-        padding_left = 0
-        padding_bottom = self.target_height - image_height
-        padding_right = self.target_width - image_width
-
-        padded_image = pad(
-            image,
-            ((padding_top, padding_bottom), (padding_left, padding_right)),
-            mode=self.padding_mode,
-            constant_values=self.padding_value,
-        )
-        return padded_image
-
-    def apply_transformation(self, image: Union[np.ndarray, PIL.Image.Image]) -> np.ndarray:
-        if isinstance(image, PIL.Image.Image):
-            image = to_numpy_array(image)
-        scaled_image = self._scale_to_target_aspect_ratio(image)
-        padded_image = self._pad_to_target_size(scaled_image)
-        normalized_padded_image = normalize(padded_image, 0.5, 0.5)
-        return normalized_padded_image
