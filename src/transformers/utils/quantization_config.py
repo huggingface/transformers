@@ -344,12 +344,12 @@ class GPTQConfig(QuantizationConfigMixin):
             The batch size used when processing the dataset
         pad_token_id (`int`, *optional*):
             The pad token id. Needed to prepare the dataset when `batch_size` > 1.
-        disable_exllama (`bool`, *optional*, defaults to `True`):
+        disable_exllama (`bool`, *optional*, defaults to `False`):
             Whether to use exllama backend. Only works with `bits` = 4.
         max_input_length (`int`, *optional*)
             The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
             length. It is specific to the exllama backend with act-order.
-        disable_exllamav2 (`bool`, *optional*, defaults to `False`):
+        use_exllama_v2 (`bool`, *optional*, defaults to `False`):
             Whether to use exllamav2 backend. Only works with `bits` = 4.
     """
 
