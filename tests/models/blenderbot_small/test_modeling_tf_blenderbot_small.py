@@ -214,7 +214,6 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
         pass
 
 
-
 @require_tokenizers
 @require_tf
 class TFBlenderbot90MIntegrationTests(unittest.TestCase):
