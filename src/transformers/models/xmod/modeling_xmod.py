@@ -573,7 +573,6 @@ class XmodEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 layer_outputs = self.gradient_checkpointing_func(
                     layer_module.forward,
                     hidden_states,

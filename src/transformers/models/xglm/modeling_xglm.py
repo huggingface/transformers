@@ -675,7 +675,6 @@ class XGLMModel(XGLMPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 layer_outputs = self.gradient_checkpointing_func(
                     decoder_layer.forward,
                     hidden_states,

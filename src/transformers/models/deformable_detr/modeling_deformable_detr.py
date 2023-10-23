@@ -1382,7 +1382,6 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
                 layer_outputs = self.gradient_checkpointing_func(
                     decoder_layer.forward,
                     hidden_states,
