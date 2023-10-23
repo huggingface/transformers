@@ -790,7 +790,7 @@ class PushToHubMixin:
         commit_message: Optional[str] = None,
         private: Optional[bool] = None,
         token: Optional[Union[bool, str]] = None,
-        max_shard_size: Optional[Union[int, str]] = "10GB",
+        max_shard_size: Optional[Union[int, str]] = "5GB",
         create_pr: bool = False,
         safe_serialization: bool = False,
         revision: str = None,
@@ -814,10 +814,11 @@ class PushToHubMixin:
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
                 is not specified.
-            max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+            max_shard_size (`int` or `str`, *optional*, defaults to `"5GB"`):
                 Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
                 will then be each of size lower than this size. If expressed as a string, needs to be digits followed
-                by a unit (like `"5MB"`).
+                by a unit (like `"5MB"`). We default it to `"5GB"` so that users can easily load models on free-tier
+                Google Colab instances without any CPU OOM issues.
             create_pr (`bool`, *optional*, defaults to `False`):
                 Whether or not to create a PR with the uploaded files or directly commit.
             safe_serialization (`bool`, *optional*, defaults to `False`):

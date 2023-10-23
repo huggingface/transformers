@@ -53,7 +53,7 @@ which means that tokens have less probability of being forwarded. Moreover, if a
 states (kind of like a residual connection) while they are masked in `NLLB`'s top-2 routing mechanism. 
 
 ## Generating with NLLB-MoE
-The avalable checkpoints requires around 350GB of storage. Make sure to use `accelerate` if you do not have enough RAM on your machine.
+The available checkpoints require around 350GB of storage. Make sure to use `accelerate` if you do not have enough RAM on your machine.
 
 While generating the target text set the `forced_bos_token_id` to the target language id. The following
 example shows how to translate English to French using the *facebook/nllb-200-distilled-600M* model.
