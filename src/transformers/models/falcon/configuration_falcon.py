@@ -92,7 +92,7 @@ class FalconConfig(PretrainedConfig):
 
     Example:
 
-    ```pytho
+    ```python
     >>> from transformers import FalconModel, FalconConfig
 
     >>> # Initializing a small (2-layer) Falcon configuration

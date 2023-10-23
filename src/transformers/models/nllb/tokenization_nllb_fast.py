@@ -155,7 +155,11 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, normalized=True, lstrip=True, special=True)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
         self.legacy_behaviour = legacy_behaviour
 
         _additional_special_tokens = FAIRSEQ_LANGUAGE_CODES.copy()
