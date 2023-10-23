@@ -566,6 +566,7 @@ src/transformers/models/funnel/configuration_funnel.py
 src/transformers/models/funnel/convert_funnel_original_tf_checkpoint_to_pytorch.py
 src/transformers/models/funnel/modeling_funnel.py
 src/transformers/models/funnel/modeling_tf_funnel.py
+src/transformers/models/fuyu/convert_fuyu_model_weights_to_hf.py
 src/transformers/models/git/configuration_git.py
 src/transformers/models/git/convert_git_to_pytorch.py
 src/transformers/models/glpn/configuration_glpn.py
@@ -767,6 +768,7 @@ src/transformers/models/sam/image_processing_sam.py
 src/transformers/models/sam/modeling_sam.py
 src/transformers/models/sam/modeling_tf_sam.py
 src/transformers/models/sam/processing_sam.py
+src/transformers/models/seamless_m4t/convert_fairseq2_to_hf.py
 src/transformers/models/segformer/configuration_segformer.py
 src/transformers/models/segformer/convert_segformer_original_to_pytorch.py
 src/transformers/models/sew/convert_sew_original_pytorch_checkpoint_to_pytorch.py
