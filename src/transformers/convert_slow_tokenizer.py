@@ -775,6 +775,31 @@ class NllbConverter(SpmConverter):
         )
 
 
+class SeamlessM4TConverter(SpmConverter):
+    def vocab(self, proto):
+        vocab = [
+            ("<pad>", 0.0),
+            ("<unk>", 0.0),
+            ("<s>", 0.0),
+            ("</s>", 0.0),
+        ]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        return vocab
+
+    def unk_id(self, proto):
+        return self.original_tokenizer.unk_token_id
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single="__eng__ $A </s>",
+            pair="__eng__ $A $B </s>",
+            special_tokens=[
+                ("__eng__", self.original_tokenizer.convert_tokens_to_ids("__eng__")),
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+            ],
+        )
+
+
 class XLMRobertaConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [
@@ -1278,6 +1303,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "RetriBertTokenizer": BertConverter,
     "RobertaTokenizer": RobertaConverter,
     "RoFormerTokenizer": RoFormerConverter,
+    "SeamlessM4TTokenizer": SeamlessM4TConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
     "WhisperTokenizer": WhisperConverter,
