@@ -153,6 +153,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("open-llama", "OpenLlamaModel"),
         ("openai-gpt", "OpenAIGPTModel"),
         ("opt", "OPTModel"),
+        ("owlv2", "Owlv2Model"),
         ("owlvit", "OwlViTModel"),
         ("patchtsmixer", "PatchTSMixerModel"),
         ("pegasus", "PegasusModel"),
@@ -175,6 +176,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("roformer", "RoFormerModel"),
         ("rwkv", "RwkvModel"),
         ("sam", "SamModel"),
+        ("seamless_m4t", "SeamlessM4TModel"),
         ("segformer", "SegformerModel"),
         ("sew", "SEWModel"),
         ("sew-d", "SEWDModel"),
@@ -400,6 +402,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("electra", "ElectraForCausalLM"),
         ("ernie", "ErnieForCausalLM"),
         ("falcon", "FalconForCausalLM"),
+        ("fuyu", "FuyuForCausalLM"),
         ("git", "GitForCausalLM"),
         ("gpt-sw3", "GPT2LMHeadModel"),
         ("gpt2", "GPT2LMHeadModel"),
@@ -639,7 +642,8 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Zero Shot Object Detection mapping
-        ("owlvit", "OwlViTForObjectDetection")
+        ("owlv2", "Owlv2ForObjectDetection"),
+        ("owlvit", "OwlViTForObjectDetection"),
     ]
 )
 
@@ -672,6 +676,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("pegasus_x", "PegasusXForConditionalGeneration"),
         ("plbart", "PLBartForConditionalGeneration"),
         ("prophetnet", "ProphetNetForConditionalGeneration"),
+        ("seamless_m4t", "SeamlessM4TForTextToText"),
         ("switch_transformers", "SwitchTransformersForConditionalGeneration"),
         ("t5", "T5ForConditionalGeneration"),
         ("umt5", "UMT5ForConditionalGeneration"),
@@ -682,6 +687,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
         ("pop2piano", "Pop2PianoForConditionalGeneration"),
+        ("seamless_m4t", "SeamlessM4TForSpeechToText"),
         ("speech-encoder-decoder", "SpeechEncoderDecoderModel"),
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
         ("speecht5", "SpeechT5ForSpeechToText"),
@@ -1045,6 +1051,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         # Model for Text-To-Waveform mapping
         ("bark", "BarkModel"),
         ("musicgen", "MusicgenForConditionalGeneration"),
+        ("seamless_m4t", "SeamlessM4TForTextToSpeech"),
         ("vits", "VitsModel"),
     ]
 )
