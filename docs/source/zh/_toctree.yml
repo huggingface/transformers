@@ -15,4 +15,6 @@
 - sections:
   - local: fast_tokenizers
     title: 使用 🤗 Tokenizers 中的分词器
+  - local: multilingual
+    title: 使用多语言模型进行推理
   title: 开发者指南
