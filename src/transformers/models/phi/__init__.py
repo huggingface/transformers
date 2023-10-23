@@ -41,7 +41,6 @@ else:
         "PhiForCausalLM",
         "PhiForSequenceClassification",
         "PhiForTokenClassification",
-        "PhiForQuestionAnswering",
     ]
 
 
@@ -57,7 +56,6 @@ if TYPE_CHECKING:
         from .modeling_phi import (
             PHI_PRETRAINED_MODEL_ARCHIVE_LIST,
             PhiForCausalLM,
-            PhiForQuestionAnswering,
             PhiForSequenceClassification,
             PhiForTokenClassification,
             PhiModel,

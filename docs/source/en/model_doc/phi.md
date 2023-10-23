@@ -135,8 +135,3 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 
 [[autodoc]] PhiForTokenClassification
     - forward
-
-## PhiForQuestionAnswering
-
-[[autodoc]] PhiForQuestionAnswering
-    - forward

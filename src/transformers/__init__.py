@@ -2498,7 +2498,6 @@ else:
         [
             "PHI_PRETRAINED_MODEL_ARCHIVE_LIST",
             "PhiForCausalLM",
-            "PhiForQuestionAnswering",
             "PhiForSequenceClassification",
             "PhiForTokenClassification",
             "PhiModel",
@@ -6384,7 +6383,6 @@ if TYPE_CHECKING:
         from .models.phi import (
             PHI_PRETRAINED_MODEL_ARCHIVE_LIST,
             PhiForCausalLM,
-            PhiForQuestionAnswering,
             PhiForSequenceClassification,
             PhiForTokenClassification,
             PhiModel,
