@@ -17,33 +17,16 @@
 import json
 import os
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
-from transformers.tokenization_utils import AddedToken, PreTrainedTokenizer
-from transformers.utils import logging, to_py_obj
-from transformers.tokenization_utils_base import BatchEncoding
 
-import bisect
-import itertools
-import re
-import unicodedata
-from collections import OrderedDict
-from typing import Any, Dict, List, Optional, Tuple, Union, overload
-
+from transformers.tokenization_utils import PreTrainedTokenizer
 from transformers.tokenization_utils_base import (
-    ENCODE_KWARGS_DOCSTRING,
-    ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
-    INIT_TOKENIZER_DOCSTRING,
-    AddedToken,
     BatchEncoding,
     EncodedInput,
-    EncodedInputPair,
-    PreTokenizedInput,
-    PreTokenizedInputPair,
-    PreTrainedTokenizerBase,
     TextInput,
     TextInputPair,
     TruncationStrategy,
 )
-from transformers.utils import PaddingStrategy, TensorType, add_end_docstrings, logging
+from transformers.utils import PaddingStrategy, TensorType, logging, to_py_obj
 
 
 if TYPE_CHECKING:
@@ -359,7 +342,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
 
     def _decode(
         self,
-        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
         **kwargs,
     ) -> str:
