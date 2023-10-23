@@ -263,7 +263,7 @@ class FuyuModelTester:
 @require_torch
 class FuyuModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FuyuForCausalLM,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-to-text": FuyuForCausalLM}
+    pipeline_model_mapping = {"image-to-text": FuyuForCausalLM} if is_torch_available() else {}
 
     test_head_masking = False
     test_pruning = False
