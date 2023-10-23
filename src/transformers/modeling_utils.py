@@ -1507,13 +1507,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
 
-    def _get_no_split_modules(self, device_map):
-        _no_split_modules = set()
+    def _get_no_split_modules(self, device_map: str):
+        """
+        Get the modules of the model that should not be spit when using device_map. We iterate through the modules to
+        get the underlying `_no_split_modules`.
+
+        Args:
+            device_map (`str`):
+                The device map value. Options are ["auto", "balanced", "balanced_low_0", "sequential"]
+
+        Returns:
+            `List[str]`: List of modules that should not be split
+        """
         if self._no_split_modules is None:
             raise ValueError(
                 f"{self.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
                 "class needs to implement the `_no_split_modules` attribute."
             )
+        _no_split_modules = set(self._no_split_modules)
         for module in self.modules():
             if isinstance(module, PreTrainedModel):
                 if module._no_split_modules is None:
