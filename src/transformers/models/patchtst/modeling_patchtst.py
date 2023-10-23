@@ -196,11 +196,12 @@ class PatchTSTAttention(nn.Module):
 
 
 class PatchTSTTranspose(nn.Module):
-    """
-    Parameters:
+    """    
     Transpose the tensor to the dimension defined in **dims**
-        dims (`list`): list of dimensions to be transposed contiguous (`bool`): if True, the transposed tensor is
-        contiguous
+
+    Parameters:
+        dims (`list`): list of dimensions to be transposed 
+        contiguous (`bool`, default to False): if True, the transposed tensor is contiguous
     """
 
     def __init__(self, *dims, contiguous=False):
@@ -220,6 +221,32 @@ class PatchTSTTranspose(nn.Module):
         else:
             return inputs.transpose(*self.dims)
 
+
+class PatchTSTBatchNorm(nn.Module):
+    """
+    Compute batch normalization
+    Parameters: 
+        d_model (`int`): model dimension
+    """
+    def __init__(self, d_model):
+        super().__init__()
+        self.d_model = d_model
+        self.transpose = PatchTSTTranspose(1, 2)
+        self.batchnorm = nn.BatchNorm1d(self.d_model)
+
+    def forward(self, inputs: torch.Tensor):
+        """
+        Parameters:
+            inputs (`torch.Tensor` of shape `(batch_size, sequence_length, d_model)`): 
+                input for Batch norm calculation
+        Returns:
+            `torch.Tensor`: tensor
+        """
+        output = self.transpose(inputs)         # output: (batch_size, d_model, sequence_length)
+        output = self.batchnorm(output)
+        output = self.transpose(output)         # output: (batch_size, sequence_length, d_model)
+        return output
+        
 
 def positional_encoding(position_embedding_type, learned, q_len, d_model):
     # Positional encoding
@@ -596,9 +623,7 @@ class PatchTSTEncoderLayer(nn.Module):
         # Add & Norm of the sublayer 1
         self.dropout_path1 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
         if "batch" in config.norm.lower():
-            self.norm_sublayer1 = nn.Sequential(
-                PatchTSTTranspose(1, 2), nn.BatchNorm1d(config.d_model), PatchTSTTranspose(1, 2)
-            )
+            self.norm_sublayer1 = PatchTSTBatchNorm(config.d_model)
         else:
             self.norm_sublayer1 = nn.LayerNorm(config.d_model)
 
@@ -606,9 +631,7 @@ class PatchTSTEncoderLayer(nn.Module):
         if self.channel_attention:
             self.dropout_path2 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
             if "batch" in config.norm.lower():
-                self.norm_sublayer2 = nn.Sequential(
-                    PatchTSTTranspose(1, 2), nn.BatchNorm1d(config.d_model), PatchTSTTranspose(1, 2)
-                )
+                self.norm_sublayer2 = PatchTSTBatchNorm(config.d_model)
             else:
                 self.norm_sublayer2 = nn.LayerNorm(config.d_model)
 
@@ -623,9 +646,7 @@ class PatchTSTEncoderLayer(nn.Module):
         # Add & Norm of sublayer 3
         self.dropout_path3 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
         if "batch" in config.norm.lower():
-            self.norm_sublayer3 = nn.Sequential(
-                PatchTSTTranspose(1, 2), nn.BatchNorm1d(config.d_model), PatchTSTTranspose(1, 2)
-            )
+            self.norm_sublayer3 = PatchTSTBatchNorm(config.d_model)
         else:
             self.norm_sublayer3 = nn.LayerNorm(config.d_model)
 
@@ -1476,10 +1497,6 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
 
 
 class PatchTSTClassificationHead(nn.Module):
-    """
-    Classification head
-    """
-
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
         self.use_cls_token = config.use_cls_token
