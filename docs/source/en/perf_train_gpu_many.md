@@ -37,18 +37,7 @@ PyTorch-based implementations.
 
 </Tip>
 
-
-## Concepts
-
-Let's begin by introducing the main techniques that are discussed in this guide.
-
-* **DataParallel (DP)** - the same setup is replicated multiple times, with each instance receiving a distinct data slice. The processing is done in parallel and all setups are synchronized at the end of each training step.
-* **TensorParallel (TP)** - each tensor is split up into multiple chunks, so instead of having the whole tensor reside on a single GPU, each shard of the tensor resides on its designated GPU. Shards gets processed separately and in parallel on different GPUs and the results are synced at the end of the processing step. This is what is sometimes called horizontal parallelism, as the splitting happens on horizontal level.
-* **PipelineParallel (PP)** - the model is split up vertically (layer-level) across multiple GPUs, so that only one or several layers of the model are placed on a single GPU. Each GPU processes in parallel different stages of the pipeline and working on a small chunk of the batch.
-* **Zero Redundancy Optimizer (ZeRO)** - also performs sharding of the tensors somewhat similar to TensorParallel, except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need to be modified. This method also supports various offloading techniques to compensate for limited GPU memory.
-* **Sharded DDP** - another name for the foundational ZeRO concept as used by various other implementations of ZeRO.
-
-Before diving deeper into the specifics of each concept, let's have a look at the rough decision process when training 
+Before diving deeper into the specifics of each technique, let's go over the rough decision process when training 
 large models on a large infrastructure.
 
 ## Scalability strategy
@@ -138,8 +127,9 @@ You can get a deeper understanding of these methods by reading this [article](ht
 Let's illustrate the differences between DP and DDP with an experiment. We'll benchmark the differences between DP and 
 DDP with an added context of NVLink presence:  
 
-Hardware: 2x TITAN RTX 24GB each + NVlink with 2 NVLinks (`NV2` in `nvidia-smi topo -m`)
-Software: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
+* Hardware: 2x TITAN RTX 24GB each + NVlink with 2 NVLinks (`NV2` in `nvidia-smi topo -m`).
+* Software: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`.
+
 To disable the NVLink feature on one of the benchmarks, we use `NCCL_P2P_DISABLE=1`. 
 
 Here is the benchmarking code and outputs:
@@ -581,5 +571,5 @@ So the promise is very attractive - it runs a 30min simulation on the cluster of
 strategy to utilise this specific environment. If you add/remove/replace any parts it'll run and re-optimize the plan 
 for that. And then you can train. A different setup will have its own custom optimization.
 
-🤗 Transformers status: not yet integrated. We already have our models FX-trace-able via [transformers.utils.fx](https://github.com/huggingface/transformers/blob/master/src/transformers/utils/fx.py), which is 
-a prerequisite for FlexFlow, so someone needs to figure out what needs to be done to make FlexFlow work with our models.
+🤗 Transformers status: not yet integrated. Transformers models are FX-trace-able via [transformers.utils.fx](https://github.com/huggingface/transformers/blob/master/src/transformers/utils/fx.py), 
+which is a prerequisite for FlexFlow, so someone needs to figure out what needs to be done to make FlexFlow work with our models.
