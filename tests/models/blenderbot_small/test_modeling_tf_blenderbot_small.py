@@ -218,6 +218,7 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
             return True
         return False
 
+
 @require_tokenizers
 @require_tf
 class TFBlenderbot90MIntegrationTests(unittest.TestCase):
