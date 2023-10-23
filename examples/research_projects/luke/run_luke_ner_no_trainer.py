@@ -357,7 +357,7 @@ def main():
     tokenizer_name_or_path = args.tokenizer_name if args.tokenizer_name else args.model_name_or_path
     if not tokenizer_name_or_path:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 

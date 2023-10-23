@@ -42,87 +42,87 @@ class OneFormerConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig`, *optional*, defaults to `SwinConfig`)
+        backbone_config (`PretrainedConfig`, *optional*, defaults to `SwinConfig`):
             The configuration of the backbone model.
-        ignore_value (`int`, *optional*, defaults to 255)
+        ignore_value (`int`, *optional*, defaults to 255):
             Values to be ignored in GT label while calculating loss.
-        num_queries (`int`, *optional*, defaults to 150)
+        num_queries (`int`, *optional*, defaults to 150):
             Number of object queries.
-        no_object_weight (`float`, *optional*, defaults to 0.1)
+        no_object_weight (`float`, *optional*, defaults to 0.1):
             Weight for no-object class predictions.
-        class_weight (`float`, *optional*, defaults to 2.0)
+        class_weight (`float`, *optional*, defaults to 2.0):
             Weight for Classification CE loss.
-        mask_weight (`float`, *optional*, defaults to 5.0)
+        mask_weight (`float`, *optional*, defaults to 5.0):
             Weight for binary CE loss.
-        dice_weight (`float`, *optional*, defaults to 5.0)
+        dice_weight (`float`, *optional*, defaults to 5.0):
             Weight for dice loss.
-        contrastive_weight (`float`, *optional*, defaults to 0.5)
+        contrastive_weight (`float`, *optional*, defaults to 0.5):
             Weight for contrastive loss.
-        contrastive_temperature (`float`, *optional*, defaults to 0.07)
+        contrastive_temperature (`float`, *optional*, defaults to 0.07):
             Initial value for scaling the contrastive logits.
-        train_num_points (`int`, *optional*, defaults to 12544)
+        train_num_points (`int`, *optional*, defaults to 12544):
             Number of points to sample while calculating losses on mask predictions.
-        oversample_ratio (`float`, *optional*, defaults to 3.0)
+        oversample_ratio (`float`, *optional*, defaults to 3.0):
             Ratio to decide how many points to oversample.
-        importance_sample_ratio (`float`, *optional*, defaults to 0.75)
+        importance_sample_ratio (`float`, *optional*, defaults to 0.75):
             Ratio of points that are sampled via importance sampling.
-        init_std (`float`, *optional*, defaults to 0.02)
+        init_std (`float`, *optional*, defaults to 0.02):
             Standard deviation for normal intialization.
-        init_xavier_std (`float`, *optional*, defaults to 0.02)
+        init_xavier_std (`float`, *optional*, defaults to 1.0):
             Standard deviation for xavier uniform initialization.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05)
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             Epsilon for layer normalization.
-        is_training (`bool`, *optional*, defaults to False)
+        is_training (`bool`, *optional*, defaults to `False`):
             Whether to run in training or inference mode.
-        use_auxiliary_loss (`bool`, *optional*, defaults to True)
+        use_auxiliary_loss (`bool`, *optional*, defaults to `True`):
             Whether to calculate loss using intermediate predictions from transformer decoder.
-        output_auxiliary_logits (`bool`, *optional*, defaults to True)
+        output_auxiliary_logits (`bool`, *optional*, defaults to `True`):
             Whether to return intermediate predictions from transformer decoder.
-        strides (`list`, *optional*, defaults to [4, 8, 16, 32])
+        strides (`list`, *optional*, defaults to `[4, 8, 16, 32]`):
             List containing the strides for feature maps in the encoder.
-        task_seq_len (`int`, *optional*, defaults to 77)
+        task_seq_len (`int`, *optional*, defaults to 77):
             Sequence length for tokenizing text list input.
-        text_encoder_width (`int`, *optional*, defaults to 256)
+        text_encoder_width (`int`, *optional*, defaults to 256):
             Hidden size for text encoder.
         text_encoder_context_length (`int`, *optional*, defaults to 77):
             Input sequence length for text encoder.
-        text_encoder_num_layers (`int`, *optional*, defaults to 6)
+        text_encoder_num_layers (`int`, *optional*, defaults to 6):
             Number of layers for transformer in text encoder.
-        text_encoder_vocab_size (`int`, *optional*, defaults to 49408)
+        text_encoder_vocab_size (`int`, *optional*, defaults to 49408):
             Vocabulary size for tokenizer.
-        text_encoder_proj_layers (`int`, *optional*, defaults to 2)
+        text_encoder_proj_layers (`int`, *optional*, defaults to 2):
             Number of layers in MLP for project text queries.
-        text_encoder_n_ctx (`int`, *optional*, defaults to 16)
+        text_encoder_n_ctx (`int`, *optional*, defaults to 16):
             Number of learnable text context queries.
-        conv_dim (`int`, *optional*, defaults to 256)
+        conv_dim (`int`, *optional*, defaults to 256):
             Feature map dimension to map outputs from the backbone.
-        mask_dim (`int`, *optional*, defaults to 256)
+        mask_dim (`int`, *optional*, defaults to 256):
             Dimension for feature maps in pixel decoder.
-        hidden_dim (`int`, *optional*, defaults to 256)
+        hidden_dim (`int`, *optional*, defaults to 256):
             Dimension for hidden states in transformer decoder.
-        encoder_feedforward_dim (`int`, *optional*, defaults to 1024)
+        encoder_feedforward_dim (`int`, *optional*, defaults to 1024):
             Dimension for FFN layer in pixel decoder.
-        norm (`str`, *optional*, defaults to `GN`)
+        norm (`str`, *optional*, defaults to `"GN"`):
             Type of normalization.
-        encoder_layers (`int`, *optional*, defaults to 6)
+        encoder_layers (`int`, *optional*, defaults to 6):
             Number of layers in pixel decoder.
-        decoder_layers (`int`, *optional*, defaults to 10)
+        decoder_layers (`int`, *optional*, defaults to 10):
             Number of layers in transformer decoder.
-        use_task_norm (`bool`, *optional*, defaults to `True`)
+        use_task_norm (`bool`, *optional*, defaults to `True`):
             Whether to normalize the task token.
-        num_attention_heads (`int`, *optional*, defaults to 8)
+        num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads in transformer layers in the pixel and transformer decoders.
-        dropout (`float`, *optional*, defaults to 0.1)
+        dropout (`float`, *optional*, defaults to 0.1):
             Dropout probability for pixel and transformer decoders.
-        dim_feedforward (`int`, *optional*, defaults to 2048)
+        dim_feedforward (`int`, *optional*, defaults to 2048):
             Dimension for FFN layer in transformer decoder.
-        pre_norm (`bool`, *optional*, defaults to `False`)
+        pre_norm (`bool`, *optional*, defaults to `False`):
             Whether to normalize hidden states before attention layers in transformer decoder.
-        enforce_input_proj (`bool`, *optional*, defaults to `False`)
+        enforce_input_proj (`bool`, *optional*, defaults to `False`):
             Whether to project hidden states in transformer decoder.
-        query_dec_layers (`int`, *optional*, defaults to 2)
+        query_dec_layers (`int`, *optional*, defaults to 2):
             Number of layers in query transformer.
-        common_stride (`int`, *optional*, defaults to 4)
+        common_stride (`int`, *optional*, defaults to 4):
             Common stride used for features in pixel decoder.
 
     Examples:

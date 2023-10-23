@@ -47,6 +47,7 @@ _re_configuration_file = re.compile(r"config\.(.*)\.json")
 
 
 class PretrainedConfig(PushToHubMixin):
+    # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
     methods for loading/downloading/saving configurations.
@@ -853,6 +854,9 @@ class PretrainedConfig(PushToHubMixin):
                 else self.quantization_config
             )
 
+            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            _ = serializable_config_dict.pop("_pre_quantization_dtype", None)
+
         self.dict_torch_dtype_to_str(serializable_config_dict)
 
         if "_flash_attn_2_enabled" in serializable_config_dict:
@@ -894,6 +898,9 @@ class PretrainedConfig(PushToHubMixin):
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
+
+            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            _ = output.pop("_pre_quantization_dtype", None)
 
         self.dict_torch_dtype_to_str(output)
 

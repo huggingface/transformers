@@ -942,6 +942,12 @@ SWIN_INPUTS_DOCSTRING = r"""
 @add_start_docstrings(
     "The bare Swin Model transformer outputting raw hidden-states without any specific head on top.",
     SWIN_START_DOCSTRING,
+    """
+        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+                Whether or not to apply pooling layer.
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+                Whether or not to create and apply mask tokens in the embedding layer.
+    """,
 )
 class SwinModel(SwinPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True, use_mask_token=False):

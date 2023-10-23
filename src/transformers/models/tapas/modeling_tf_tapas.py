@@ -66,8 +66,8 @@ if is_tensorflow_probability_available():
         n = tfp.distributions.Normal(loc=0.0, scale=1.0)
     except ImportError:
         logger.error(
-            "TAPAS models are not usable since `tensorflow_probability` can't be loaded."
-            "It seems you have `tensorflow_probability` installed with the wrong tensorflow version."
+            "TAPAS models are not usable since `tensorflow_probability` can't be loaded. "
+            "It seems you have `tensorflow_probability` installed with the wrong tensorflow version. "
             "Please try to reinstall it following the instructions here: https://github.com/tensorflow/probability."
         )
 
