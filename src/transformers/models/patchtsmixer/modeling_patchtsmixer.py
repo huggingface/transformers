@@ -20,8 +20,6 @@ from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint
-from torch.nn.modules.activation import MultiheadAttention
 
 from transformers.modeling_utils import PreTrainedModel
 from transformers.trainer_utils import set_seed
@@ -73,19 +71,19 @@ PATCHTSMIXER_INPUTS_DOCSTRING = r"""
             the masked portion. For a forecasting task, this denotes the history/past time series values. Similarly,
             for classification or regression tasks, it denotes the appropriate context values of the time series.
 
-            For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series, it is greater
-            than 1.
+            For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series, it is
+            greater than 1.
 
         target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
-            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target values
-            of the time series, that serve as labels for the model. The `target_values` is what the Transformer needs
-            during training to learn to output, given the `past_values`. Note that, this is NOT required for a
+            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
+            values of the time series, that serve as labels for the model. The `target_values` is what the Transformer
+            needs during training to learn to output, given the `past_values`. Note that, this is NOT required for a
             pretraining task.
 
-            For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want to forecast
-            only specific channels by setting the indices in `forecast_channel_indices` parameter, pass the target data
-            with all channels, as channel Filtering for both prediction and target will be manually applied before the
-            loss computation.
+            For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want to
+            forecast only specific channels by setting the indices in `forecast_channel_indices` parameter, pass the
+            target data with all channels, as channel Filtering for both prediction and target will be manually applied
+            before the loss computation.
 
             For a classification task, it has a shape of `(batch_size,)`.
 
@@ -293,6 +291,161 @@ class PatchTSMixerChannelFeatureMixerBlock(nn.Module):
         return out
 
 
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PatchTSMixer
+class PatchTSMixerAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
+        bias: bool = True,
+    ):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.head_dim = embed_dim // num_heads
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
+        self.scaling = self.head_dim**-0.5
+        self.is_decoder = is_decoder
+
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        key_value_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+
+        bsz, tgt_len, _ = hidden_states.size()
+
+        # get query proj
+        query_states = self.q_proj(hidden_states) * self.scaling
+        # get key, value proj
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0]
+            value_states = past_key_value[1]
+        elif is_cross_attention:
+            # cross_attentions
+            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        else:
+            # self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
+
+        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
+        key_states = key_states.reshape(*proj_shape)
+        value_states = value_states.reshape(*proj_shape)
+
+        src_len = key_states.size(1)
+        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+            raise ValueError(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
+            )
+
+        if attention_mask is not None:
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+        if layer_head_mask is not None:
+            if layer_head_mask.size() != (self.num_heads,):
+                raise ValueError(
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
+                    f" {layer_head_mask.size()}"
+                )
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+
+        if output_attentions:
+            # this operation is a bit awkward, but it's required to
+            # make sure that attn_weights keeps its gradient.
+            # In order to do so, attn_weights have to be reshaped
+            # twice and have to be reused in the following
+            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+        else:
+            attn_weights_reshaped = None
+
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+
+        attn_output = torch.bmm(attn_probs, value_states)
+
+        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+
+        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+        attn_output = attn_output.transpose(1, 2)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned across GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
+
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights_reshaped, past_key_value
+
+
 class PatchMixerBlock(nn.Module):
     """This module mixes the patch dimension.
 
@@ -327,13 +480,10 @@ class PatchMixerBlock(nn.Module):
             self.gab = PatchTSMixerGatedAttention(in_size=num_patches, out_size=num_patches)
 
         if self_attn:
-            self.self_attn_layer = MultiheadAttention(
+            self.self_attn_layer = PatchTSMixerAttention(
                 embed_dim=num_features,
                 num_heads=self_attn_heads,
                 dropout=dropout,
-                add_bias_kv=True,
-                add_zero_attn=False,
-                batch_first=True,
             )
             self.norm_attn = PatchTSMixerNormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
 
@@ -356,7 +506,7 @@ class PatchMixerBlock(nn.Module):
                 #  (batch_size, num_patches, num_features) if flatten
                 #  (batch_size, n_vars, num_patches, num_features) if common_channel
 
-            x_attn, _ = self.self_attn_layer(data_reshaped, data_reshaped, data_reshaped, need_weights=False)
+            x_attn, _, _ = self.self_attn_layer(data_reshaped, output_attentions=False)
 
             if self.mode in ["common_channel", "mix_channel"]:
                 x_attn = torch.reshape(x_attn, (data.shape[0], data.shape[1], data.shape[2], data.shape[3]))
@@ -536,8 +686,7 @@ class PatchTSMixerBlock(nn.Module):
 
 class PatchTSMixer(nn.Module):
     """
-    The entire network. It does the patching operation and
-    then applies the necessary `PatchTSMixerBlock`s.
+    The entire network. It does the patching operation and then applies the necessary `PatchTSMixerBlock`s.
 
     Args:
         config (`PatchTSMixerConfig`, *required*):
@@ -680,8 +829,8 @@ class PatchTSMixerForecastHead(nn.Module):
 
         Args:
             hidden_features (`torch.Tensor` of shape `(batch_size, num_patch, num_features)` in `flatten` mode
-                or `(batch_size, n_vars, num_patch, num_features)` in `common_channel`/`mix_channel` mode.):
-                Input hidden features.
+                or `(batch_size, n_vars, num_patch, num_features)` in `common_channel`/`mix_channel` mode.): Input
+                hidden features.
 
         Returns:
             `torch.Tensor` of shape `(batch_size, forecast_len, nvars)`.
@@ -1511,8 +1660,8 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
                 Similarly, for classification or regression tasks, it denotes the appropriate context values of the
                 time series.
 
-                For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series, it is
-                greater than 1.
+                For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series,
+                it is greater than 1.
             observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
                 Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
                 in `[0, 1]`:
@@ -1626,8 +1775,8 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
                 Similarly, for classification or regression tasks, it denotes the appropriate context values of the
                 time series.
 
-                For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series, it is
-                greater than 1.
+                For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series,
+                it is greater than 1.
 
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
