@@ -190,6 +190,7 @@ from .import_utils import (
     torch_only_method,
     torch_required,
 )
+from .nms import batched_nms, multiclass_nms
 from .peft_utils import (
     ADAPTER_CONFIG_NAME,
     ADAPTER_SAFE_WEIGHTS_NAME,
