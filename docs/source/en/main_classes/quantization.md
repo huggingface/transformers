@@ -128,15 +128,16 @@ For 4-bit model, you can use the exllama kernels in order to a faster inference 
 
 ```py
 import torch
-gptq_config = GPTQConfig(bits=4, disable_exllama=False, disable_exllamav2=True)
+gptq_config = GPTQConfig(bits=4)
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config = gptq_config)
 ```
+
 With the release of the exllamav2 kernel, you can get faster inference speed compared to the exllama kernels. You just need to 
-pass `disable_exllamav2` in [`GPTQConfig`]:
+pass `use_exllama_v2=True` in [`GPTQConfig`] and disable exllama kernels:
 
 ```py
 import torch
-gptq_config = GPTQConfig(bits=4, disable_exllamav2=False)
+gptq_config = GPTQConfig(bits=4, use_exllama_v2=True, disable_exllama=True)
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config = gptq_config)
 ```
 

@@ -99,7 +99,6 @@ class GPTQTest(unittest.TestCase):
     group_size = 128
     desc_act = False
     disable_exllama = True
-    disable_exllamav2 = True
 
     dataset = [
         "auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."
@@ -127,7 +126,6 @@ class GPTQTest(unittest.TestCase):
             group_size=cls.group_size,
             desc_act=cls.desc_act,
             disable_exllama=cls.disable_exllama,
-            disable_exllamav2=cls.disable_exllamav2,
         )
 
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -160,7 +158,6 @@ class GPTQTest(unittest.TestCase):
             group_size=self.group_size,
             bits=self.bits,
             disable_exllama=self.disable_exllama,
-            disable_exllamav2=self.disable_exllamav2,
         )
         self.assertTrue(self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__ == QuantLinear)
 
@@ -194,7 +191,7 @@ class GPTQTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            if self.disable_exllama and self.disable_exllamav2:
+            if self.disable_exllama:
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname).to(0)
             else:
                 # we need to put it directly to the gpu. Otherwise, we won't be able to initialize the exllama kernel
@@ -264,9 +261,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         """
         Setup quantized model
         """
-        cls.quantization_config = GPTQConfig(
-            bits=4, disable_exllama=False, disable_exllamav2=True, max_input_length=4028
-        )
+        cls.quantization_config = GPTQConfig(bits=4, max_input_length=4028)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             revision=cls.revision,
@@ -341,7 +336,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
         """
         Setup quantized model
         """
-        cls.quantization_config = GPTQConfig(bits=4, disable_exllamav2=False)
+        cls.quantization_config = GPTQConfig(bits=4, use_exllama_v2=True, disable_exllama=False)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             revision=cls.revision,

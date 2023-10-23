@@ -369,9 +369,9 @@ class GPTQConfig(QuantizationConfigMixin):
         module_name_preceding_first_block: Optional[List[str]] = None,
         batch_size: int = 1,
         pad_token_id: Optional[int] = None,
-        disable_exllama: bool = True,
+        disable_exllama: bool = False,
         max_input_length: Optional[int] = None,
-        disable_exllamav2: bool = False,
+        use_exllama_v2: bool = False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
@@ -391,12 +391,14 @@ class GPTQConfig(QuantizationConfigMixin):
         self.pad_token_id = pad_token_id
         self.disable_exllama = disable_exllama
         self.max_input_length = max_input_length
-        self.disable_exllamav2 = disable_exllamav2
+        self.use_exllama_v2 = use_exllama_v2
+        # needed for compatibility with optimum gptq config
+        self.disable_exllamav2 = not use_exllama_v2
         self.post_init()
 
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["disable_exllama", "disable_exllamav2", "use_cuda_fp16", "max_input_length"]
+        loading_attibutes = ["disable_exllama", "use_exllama_v2", "use_cuda_fp16", "max_input_length"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
 
@@ -422,8 +424,9 @@ class GPTQConfig(QuantizationConfigMixin):
                     f"""dataset needs to be either a list of string or a value in
                     ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
                 )
-        if not self.disable_exllamav2 and not self.disable_exllama:
+        if self.use_exllamav2 and not self.disable_exllama:
+            logger.error("You have activated both exllama and exllamav2 backend. You need to deactivate one of them.")
+        if self.disable_exllama:
             logger.warning(
-                "You have activated exllama and exllamav2 backend. Setting `disable_exllama=True` and keeping `disable_exllamav2=False`"
+                "You have activated exllama backend. Note that you can get better inference speed using exllamav2 kernel by setting `use_exllama_v2=True`"
             )
-            self.disable_exllama = True
