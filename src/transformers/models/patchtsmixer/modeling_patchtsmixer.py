@@ -606,18 +606,12 @@ class PatchTSMixerLayer(nn.Module):
         super().__init__()
         mode = config.mode
 
-        self.patch_mixer = PatchMixerBlock(
-            config=config,
-        )
-        self.feature_mixer = FeatureMixerBlock(
-            config=config,
-        )
+        self.patch_mixer = PatchMixerBlock(config=config)
+        self.feature_mixer = FeatureMixerBlock(config=config)
         # define a cross series mixer
         self.mode = mode
         if mode == "mix_channel":
-            self.channel_feature_mixer = PatchTSMixerChannelFeatureMixerBlock(
-                config=config,
-            )
+            self.channel_feature_mixer = PatchTSMixerChannelFeatureMixerBlock(config=config)
 
     def forward(self, hidden: torch.Tensor):
         """
@@ -649,14 +643,7 @@ class PatchTSMixerBlock(nn.Module):
 
         num_layers = config.num_layers
 
-        self.mixers = nn.ModuleList(
-            [
-                PatchTSMixerLayer(
-                    config=config,
-                )
-                for _ in range(num_layers)
-            ]
-        )
+        self.mixers = nn.ModuleList([PatchTSMixerLayer(config=config) for _ in range(num_layers)])
 
     def forward(self, data, output_hidden_states: bool = False):
         """
@@ -719,9 +706,7 @@ class PatchTSMixer(nn.Module):
         self.num_features = num_features
         self.num_layers = num_layers
 
-        self.mlp_mixer_encoder = PatchTSMixerBlock(
-            config=config,
-        )
+        self.mlp_mixer_encoder = PatchTSMixerBlock(config=config)
 
         if self.use_positional_encoding:
             self.position_enc = positional_encoding(
@@ -943,7 +928,7 @@ class PatchTSMixerLinearHead(nn.Module):
         if self.head_agg == "use_last":
             hidden_features = hidden_features[
                 ..., -1
-            ]  # # batch_size x num_features (flatten) or # batch_size x n_vars x num_features (common_channel)
+            ]  # batch_size x num_features (flatten) or # batch_size x n_vars x num_features (common_channel)
         elif self.head_agg == "max_pool":
             hidden_features = hidden_features.max(
                 dim=-1
