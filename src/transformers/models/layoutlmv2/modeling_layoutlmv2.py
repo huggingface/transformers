@@ -447,10 +447,11 @@ class LayoutLMv2Encoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = self.gradient_checkpointing_func(
-                    create_custom_forward(layer_module),
+                    layer_module.forward,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
+                    output_attentions,
                     rel_pos=rel_pos,
                     rel_2d_pos=rel_2d_pos,
                 )

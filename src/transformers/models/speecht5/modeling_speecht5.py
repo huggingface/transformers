@@ -520,15 +520,8 @@ class SpeechT5FeatureEncoder(nn.Module):
 
         for conv_layer in self.conv_layers:
             if self._requires_grad and self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
                 hidden_states = self.gradient_checkpointing_func(
-                    create_custom_forward(conv_layer),
+                    conv_layer.forward,
                     hidden_states,
                 )
             else:
@@ -1395,7 +1388,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
                         return custom_forward
 
                     layer_outputs = self.gradient_checkpointing_func(
-                        create_custom_forward(encoder_layer),
+                        encoder_layer.forward,
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
@@ -1725,7 +1718,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                     return custom_forward
 
                 layer_outputs = self.gradient_checkpointing_func(
-                    create_custom_forward(decoder_layer),
+                    decoder_layer.forward,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,

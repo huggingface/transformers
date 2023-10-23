@@ -551,15 +551,8 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
                 outputs = self.gradient_checkpointing_func(
-                    create_custom_forward(block),
+                    block.forward,
                     hidden_states,
                     layer_past,
                     use_cache,

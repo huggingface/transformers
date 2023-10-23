@@ -766,15 +766,8 @@ class MraEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
                 layer_outputs = self.gradient_checkpointing_func(
-                    create_custom_forward(layer_module),
+                    layer_module.forward,
                     hidden_states,
                     attention_mask,
                 )

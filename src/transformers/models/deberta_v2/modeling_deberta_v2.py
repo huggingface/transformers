@@ -501,20 +501,14 @@ class DebertaV2Encoder(nn.Module):
                 all_hidden_states = all_hidden_states + (output_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
                 output_states = self.gradient_checkpointing_func(
-                    create_custom_forward(layer_module),
+                    layer_module.forward,
                     next_kv,
                     attention_mask,
                     query_states,
                     relative_pos,
                     rel_embeddings,
+                    output_attentions,
                 )
             else:
                 output_states = layer_module(

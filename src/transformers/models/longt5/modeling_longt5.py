@@ -1511,15 +1511,8 @@ class LongT5Stack(LongT5PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return tuple(module(*inputs, use_cache, output_attentions))
-
-                    return custom_forward
-
                 layer_outputs = checkpoint(
-                    create_custom_forward(layer_module),
+                    layer_module.forward,
                     hidden_states,
                     extended_attention_mask,
                     position_bias,
@@ -1529,6 +1522,8 @@ class LongT5Stack(LongT5PreTrainedModel):
                     layer_head_mask,
                     cross_attn_layer_head_mask,
                     None,  # past_key_value is always None with gradient checkpointing
+                    use_cache,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(

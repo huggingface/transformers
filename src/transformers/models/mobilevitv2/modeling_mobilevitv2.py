@@ -582,15 +582,8 @@ class MobileViTV2Encoder(nn.Module):
 
         for i, layer_module in enumerate(self.layer):
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
                 hidden_states = self.gradient_checkpointing_func(
-                    create_custom_forward(layer_module),
+                    layer_module.forward,
                     hidden_states,
                 )
             else:

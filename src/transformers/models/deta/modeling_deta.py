@@ -1275,14 +1275,8 @@ class DetaDecoder(DetaPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
 
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
                 layer_outputs = self.gradient_checkpointing_func(
-                    create_custom_forward(decoder_layer),
+                    decoder_layer.forward,
                     hidden_states,
                     encoder_hidden_states,
                     encoder_attention_mask,

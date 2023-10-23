@@ -1944,15 +1944,8 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
                     layer_outputs = self.gradient_checkpointing_func(
-                        create_custom_forward(encoder_layer),
+                        encoder_layer.forward,
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
@@ -1961,6 +1954,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                         to_mask,
                         blocked_encoder_mask,
                         blocked_encoder_mask,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
@@ -2299,7 +2293,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
                     return custom_forward
 
                 layer_outputs = self.gradient_checkpointing_func(
-                    create_custom_forward(decoder_layer),
+                    decoder_layer.forward,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,

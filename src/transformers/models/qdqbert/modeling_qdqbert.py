@@ -581,20 +581,15 @@ class QDQBertEncoder(nn.Module):
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
                 layer_outputs = self.gradient_checkpointing_func(
-                    create_custom_forward(layer_module),
+                    layer_module.forward,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    past_key_value,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(

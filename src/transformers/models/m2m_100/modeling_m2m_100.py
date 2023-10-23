@@ -821,18 +821,12 @@ class M2M100Encoder(M2M100PreTrainedModel):
                 # under deepspeed zero3 all gpus must run in sync
 
                 if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
                     layer_outputs = self.gradient_checkpointing_func(
-                        create_custom_forward(encoder_layer),
+                        encoder_layer.forward,
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
+                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
@@ -1076,7 +1070,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
                         return custom_forward
 
                     layer_outputs = self.gradient_checkpointing_func(
-                        create_custom_forward(decoder_layer),
+                        decoder_layer.forward,
                         hidden_states,
                         combined_attention_mask,
                         encoder_hidden_states,

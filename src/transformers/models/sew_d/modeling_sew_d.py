@@ -453,15 +453,8 @@ class SEWDFeatureEncoder(nn.Module):
 
         for conv_layer in self.conv_layers:
             if self._requires_grad and self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
                 hidden_states = self.gradient_checkpointing_func(
-                    create_custom_forward(conv_layer),
+                    conv_layer.forward,
                     hidden_states,
                 )
             else:
@@ -1134,20 +1127,14 @@ class SEWDTransformerEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (output_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
                 output_states = self.gradient_checkpointing_func(
-                    create_custom_forward(layer_module),
+                    layer_module.forward,
                     next_kv,
                     attention_mask,
                     query_states,
                     relative_pos,
                     rel_embeddings,
+                    output_attentions,
                 )
             else:
                 output_states = layer_module(

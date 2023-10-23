@@ -642,20 +642,15 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for layer_past
-                        return module(*inputs, use_cache, None, output_attentions)
-
-                    return custom_forward
-
                 outputs = self.gradient_checkpointing_func(
-                    create_custom_forward(layer),
+                    layer.forward,
                     hidden_states,
                     attention_mask,
                     position_ids,
                     head_mask[i],
+                    use_cache,
+                    None,
+                    output_attentions,
                 )
             else:
                 outputs = layer(

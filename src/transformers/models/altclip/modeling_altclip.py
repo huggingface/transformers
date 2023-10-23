@@ -646,20 +646,15 @@ class AltRobertaEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
                 layer_outputs = self.gradient_checkpointing_func(
-                    create_custom_forward(layer_module),
+                    layer_module.forward,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    past_key_value,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -960,18 +955,12 @@ class AltCLIPEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
                 layer_outputs = self.gradient_checkpointing_func(
-                    create_custom_forward(encoder_layer),
+                    encoder_layer.forward,
                     hidden_states,
                     attention_mask,
                     causal_attention_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = encoder_layer(

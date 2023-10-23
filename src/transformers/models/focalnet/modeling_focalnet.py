@@ -586,15 +586,8 @@ class FocalNetEncoder(nn.Module):
 
         for i, stage_module in enumerate(self.stages):
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
                 stage_outputs = self.gradient_checkpointing_func(
-                    create_custom_forward(stage_module),
+                    stage_module.forward,
                     hidden_states,
                     input_dimensions,
                 )

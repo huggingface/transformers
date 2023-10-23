@@ -451,15 +451,8 @@ class Wav2Vec2FeatureEncoder(nn.Module):
 
         for conv_layer in self.conv_layers:
             if self._requires_grad and self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
                 hidden_states = self.gradient_checkpointing_func(
-                    create_custom_forward(conv_layer),
+                    conv_layer.forward,
                     hidden_states,
                 )
             else:
@@ -811,7 +804,7 @@ class Wav2Vec2Encoder(nn.Module):
                         return custom_forward
 
                     layer_outputs = self.gradient_checkpointing_func(
-                        create_custom_forward(layer),
+                        layer.forward,
                         hidden_states,
                         attention_mask,
                     )
@@ -900,7 +893,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
                         return custom_forward
 
                     layer_outputs = self.gradient_checkpointing_func(
-                        create_custom_forward(layer),
+                        layer.forward,
                         hidden_states,
                         attention_mask,
                     )
