@@ -397,3 +397,7 @@ class FlaxBlenderbotSmallModelTest(FlaxModelTesterMixin, unittest.TestCase, Flax
             input_ids = np.ones((1, 1)) * model.config.eos_token_id
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
+
+    @unittest.skip("Tiny random model has too few position embeddings for this.")
+    def test_pipeline_conversational(self):
+        pass

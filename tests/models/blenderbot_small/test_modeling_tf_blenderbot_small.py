@@ -244,3 +244,7 @@ class TFBlenderbot90MIntegrationTests(unittest.TestCase):
             "i'm not sure. i just feel like i've been feeling like i have to be in a certain place",
             "i'm not sure. i just feel like i've been in a bad situation.",
         )
+
+    @unittest.skip("Tiny random model has too few position embeddings for this.")
+    def test_pipeline_conversational(self):
+        pass
