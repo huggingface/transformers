@@ -28,14 +28,13 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from transformers.cache_utils import Cache, DynamicCache
-
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
     _prepare_4d_attention_mask,
     _prepare_4d_causal_attention_mask,
 )
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
@@ -288,11 +287,8 @@ class LlamaAttention(nn.Module):
     def __init__(self, config: LlamaConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
-<<<<<<< HEAD
         self.attention_dropout = config.attention_dropout
-=======
         self.layer_idx = layer_idx
->>>>>>> 1129513b3 (Address numerous PR suggestions)
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
