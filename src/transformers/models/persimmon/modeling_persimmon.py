@@ -631,32 +631,6 @@ class PersimmonFlashAttention2(PersimmonAttention):
 
         return attn_output
 
-        # Not needed for Persimmon
-        # if padding_mask is not None:
-        #     batch_size = query_states.shape[0]
-        #     query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-        #         query_states, key_states, value_states, padding_mask, query_length
-        #     )
-
-        #     cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-        #     max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
-
-        #     attn_output_unpad = flash_attn_varlen_func(
-        #         query_states,
-        #         key_states,
-        #         value_states,
-        #         cu_seqlens_q=cu_seqlens_q,
-        #         cu_seqlens_k=cu_seqlens_k,
-        #         max_seqlen_q=max_seqlen_in_batch_q,
-        #         max_seqlen_k=max_seqlen_in_batch_k,
-        #         dropout_p=dropout,
-        #         softmax_scale=softmax_scale,
-        #         causal=True,
-        #     )
-
-        #     attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
-        # else:
-
 
 class PersimmonDecoderLayer(nn.Module):
     def __init__(self, config: PersimmonConfig):
@@ -877,30 +851,6 @@ class PersimmonModel(PersimmonPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
-
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
-    # def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-    #     # create causal mask
-    #     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-    #     combined_attention_mask = None
-    #     if input_shape[-1] > 1:
-    #         combined_attention_mask = _make_causal_mask(
-    #             input_shape,
-    #             inputs_embeds.dtype,
-    #             device=inputs_embeds.device,
-    #             past_key_values_length=past_key_values_length,
-    #         )
-
-    #     if attention_mask is not None:
-    #         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-    #         expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
-    #             inputs_embeds.device
-    #         )
-    #         combined_attention_mask = (
-    #             expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-    #         )
-
-    #     return combined_attention_mask
 
     @add_start_docstrings_to_model_forward(PERSIMMON_INPUTS_DOCSTRING)
     def forward(
