@@ -3793,7 +3793,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             missing_keys = [elem for elem in missing_keys if "SCB" not in elem]
 
         if len(unexpected_keys) > 0:
-            archs = [] if config.architectures is None else config.architectures
+            archs = [] if model.config.architectures is None else model.config.architectures
             warner = logger.warning if model.__class__.__name__ in archs else logger.info
             warner(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
