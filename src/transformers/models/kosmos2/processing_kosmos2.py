@@ -327,7 +327,7 @@ class Kosmos2Processor(ProcessorMixin):
                         or (len(element) == 4 and all(isinstance(x, float) for x in element))
                     ):
                         raise ValueError(
-                            "Each element in `bboxes` (for a single text example) should be `None`, a tuple containing "
+                            "Each element in `bboxes` (for a single text example) should be either `None`, a tuple containing "
                             "2 integers or 4 float point numbers, or a list containing such tuples. Also "
                             "make sure the arguments `texts` and `bboxes` passed to `preprocess_text` are both in "
                             "batches or both for a single example."
