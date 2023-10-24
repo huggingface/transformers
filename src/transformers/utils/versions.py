@@ -47,7 +47,7 @@ def _compare_versions(
         )
 
 
-def require_version(requirement: str, hint: Optional[str] = None) -> None:
+def require_version(requirement: str, hint: Optional[str] = None):
     """
     Perform a runtime check of the dependency versions, using the exact same syntax used by pip.
 

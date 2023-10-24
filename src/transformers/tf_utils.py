@@ -148,7 +148,7 @@ def invert_attention_mask(encoder_attention_mask: tf.Tensor) -> tf.Tensor:
     return encoder_extended_attention_mask
 
 
-def check_embeddings_within_bounds(tensor: tf.Tensor, embed_dim: int, tensor_name: str = "input_ids") -> None:
+def check_embeddings_within_bounds(tensor: tf.Tensor, embed_dim: int, tensor_name: str = "input_ids"):
     """
     `tf.gather`, on which TF embedding layers are based, won't check positive out of bound indices on GPU, returning
     zeros instead. This function adds a check against that dangerous silent behavior.
@@ -168,7 +168,7 @@ def check_embeddings_within_bounds(tensor: tf.Tensor, embed_dim: int, tensor_nam
     )
 
 
-def save_attributes_to_hdf5_group(group: tf.io.gfile.GFile, name: str, data: List[str]) -> None:
+def save_attributes_to_hdf5_group(group: tf.io.gfile.GFile, name: str, data: List[str]):
     """Saves attributes (data) of the specified name into the HDF5 group.
 
     This method deals with an inherent problem of HDF5 file which is not able to store data larger than

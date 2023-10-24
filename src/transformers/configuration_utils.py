@@ -21,7 +21,7 @@ import json
 import os
 import re
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from packaging import version
 
@@ -270,7 +270,7 @@ class PretrainedConfig(PushToHubMixin):
         self.torch_dtype = kwargs.pop("torch_dtype", None)  # Only used by PyTorch models
         self.use_bfloat16: bool = kwargs.pop("use_bfloat16", False)
         self.tf_legacy_loss: bool = kwargs.pop("tf_legacy_loss", False)  # Only used by TensorFlow models
-        self.pruned_heads: Dict[Any, Any] = kwargs.pop("pruned_heads", {})
+        self.pruned_heads: Dict = kwargs.pop("pruned_heads", {})
         self.tie_word_embeddings: bool = kwargs.pop("tie_word_embeddings", True)
         # Whether input and output word embeddings should be tied for all MLM, LM and Seq2Seq models.
 
@@ -415,7 +415,7 @@ class PretrainedConfig(PushToHubMixin):
         return len(self.id2label)
 
     @num_labels.setter
-    def num_labels(self, num_labels: int) -> None:
+    def num_labels(self, num_labels: int):
         if not hasattr(self, "id2label") or self.id2label is None or len(self.id2label) != num_labels:
             self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
             self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
@@ -469,7 +469,7 @@ class PretrainedConfig(PushToHubMixin):
             )
 
     @staticmethod
-    def _set_token_in_kwargs(kwargs, token=None) -> None:
+    def _set_token_in_kwargs(kwargs, token=None):
         """Temporary method to deal with `token` and `use_auth_token`.
 
         This method is to avoid apply the same changes in all model config classes that overwrite `from_pretrained`.
@@ -917,7 +917,7 @@ class PretrainedConfig(PushToHubMixin):
             config_dict = self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True) -> None:
+    def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True):
         """
         Save this instance to a JSON file.
 
@@ -931,7 +931,7 @@ class PretrainedConfig(PushToHubMixin):
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
 
-    def update(self, config_dict: Dict[str, Any]) -> None:
+    def update(self, config_dict: Dict[str, Any]):
         """
         Updates attributes of this class with attributes from `config_dict`.
 
@@ -941,7 +941,7 @@ class PretrainedConfig(PushToHubMixin):
         for key, value in config_dict.items():
             setattr(self, key, value)
 
-    def update_from_string(self, update_str: str) -> None:
+    def update_from_string(self, update_str: str):
         """
         Updates attributes of this class with attributes from `update_str`.
 
@@ -979,7 +979,7 @@ class PretrainedConfig(PushToHubMixin):
 
             setattr(self, k, v)
 
-    def dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
+    def dict_torch_dtype_to_str(self, d: Dict[str, Any]):
         """
         Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
@@ -1049,7 +1049,7 @@ def get_configuration_file(configuration_files: List[str]) -> str:
     return configuration_file
 
 
-def recursive_diff_dict(dict_a: Dict[Any, Any], dict_b: Dict[Any, Any], config_obj: Any = None):
+def recursive_diff_dict(dict_a: Dict, dict_b: Dict, config_obj=None):
     """
     Helper function to recursively take the diff between two nested dictionaries. The resulting diff only contains the
     values from `dict_a` that are different from values in `dict_b`.

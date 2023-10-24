@@ -263,7 +263,7 @@ def load_graph_from_args(
     return pipeline(pipeline_name, model=model, tokenizer=tokenizer, framework=framework, model_kwargs=models_kwargs)
 
 
-def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format: bool) -> None:
+def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format: bool):
     """
     Export a PyTorch backed pipeline to ONNX Intermediate Representation (IR
 
@@ -318,7 +318,7 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
             )
 
 
-def convert_tensorflow(nlp: Pipeline, opset: int, output: Path) -> None:
+def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
     """
     Export a TensorFlow backed pipeline to ONNX Intermediate Representation (IR)
 
@@ -508,7 +508,7 @@ def quantize(onnx_model_path: Path) -> Path:
     return quantized_model_path
 
 
-def verify(path: Path) -> None:
+def verify(path: Path):
     from onnxruntime import InferenceSession, SessionOptions
     from onnxruntime.capi.onnxruntime_pybind11_state import RuntimeException
 

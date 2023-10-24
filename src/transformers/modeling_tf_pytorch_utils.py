@@ -22,9 +22,6 @@ from typing import Callable, List, Optional, Union
 
 import numpy
 
-from transformers.modeling_tf_utils import TFPreTrainedModel
-from transformers.modeling_utils import PreTrainedModel
-
 from .utils import ExplicitEnum, expand_dims, is_numpy_array, is_torch_tensor, logging, reshape, squeeze, tensor_size
 from .utils import transpose as transpose_func
 
@@ -165,7 +162,7 @@ def apply_transpose(
 
 
 def load_pytorch_checkpoint_in_tf2_model(
-    tf_model: TFPreTrainedModel,
+    tf_model: "TFPreTrainedModel",
     pytorch_checkpoint_path: Union[str, List[str]],
     tf_inputs: Optional[dict] = None,
     allow_missing_keys: bool = False,
@@ -209,8 +206,8 @@ def load_pytorch_checkpoint_in_tf2_model(
 
 
 def load_pytorch_model_in_tf2_model(
-    tf_model: TFPreTrainedModel,
-    pt_model: PreTrainedModel,
+    tf_model: "TFPreTrainedModel",
+    pt_model: "PreTrainedModel",
     tf_inputs: Optional[dict] = None,
     allow_missing_keys: bool = False,
 ):
@@ -431,7 +428,7 @@ def load_pytorch_state_dict_in_tf2_model(
 
 
 def load_tf2_checkpoint_in_pytorch_model(
-    pt_model: PreTrainedModel,
+    pt_model: "PreTrainedModel",
     tf_checkpoint_path: Union[str, List[str]],
     tf_inputs: Optional[dict] = None,
     allow_missing_keys: bool = False,
@@ -476,8 +473,8 @@ def load_tf2_checkpoint_in_pytorch_model(
 
 
 def load_tf2_model_in_pytorch_model(
-    pt_model: PreTrainedModel,
-    tf_model: TFPreTrainedModel,
+    pt_model: "PreTrainedModel",
+    tf_model: "TFPreTrainedModel",
     allow_missing_keys: bool = False,
     output_loading_info: bool = False,
 ):
@@ -490,8 +487,8 @@ def load_tf2_model_in_pytorch_model(
 
 
 def load_tf2_weights_in_pytorch_model(
-    pt_model: PreTrainedModel,
-    tf_model: TFPreTrainedModel,
+    pt_model: "PreTrainedModel",
+    tf_model: "TFPreTrainedModel",
     allow_missing_keys: bool = False,
     output_loading_info: bool = False,
 ):
@@ -513,8 +510,8 @@ def load_tf2_weights_in_pytorch_model(
 
 
 def load_tf2_state_dict_in_pytorch_model(
-    pt_model: PreTrainedModel,
-    tf_model: TFPreTrainedModel,
+    pt_model: "PreTrainedModel",
+    tf_model: "TFPreTrainedModel",
     allow_missing_keys: bool = False,
     output_loading_info: bool = False,
 ):

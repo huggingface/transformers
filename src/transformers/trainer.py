@@ -2552,7 +2552,7 @@ class Trainer:
         self.hp_search_backend = None
         return best_run
 
-    def log(self, logs: Dict[str, float]) -> None:
+    def log(self, logs: Dict[str, float]):
         """
         Log `logs` on the various objects watching training.
 
@@ -2868,7 +2868,7 @@ class Trainer:
                 checkpoints_sorted[i], checkpoints_sorted[i + 1] = checkpoints_sorted[i + 1], checkpoints_sorted[i]
         return checkpoints_sorted
 
-    def _rotate_checkpoints(self, use_mtime=False, output_dir=None) -> None:
+    def _rotate_checkpoints(self, use_mtime=False, output_dir=None):
         if self.args.save_total_limit is None or self.args.save_total_limit <= 0:
             return
 
@@ -3799,7 +3799,7 @@ class Trainer:
 
         return nested_numpify(tensors)
 
-    def _add_sm_patterns_to_gitignore(self) -> None:
+    def _add_sm_patterns_to_gitignore(self):
         """Add SageMaker Checkpointing patterns to .gitignore file."""
         # Make sure we only do this on the main process
         if not self.is_world_process_zero():

@@ -16,7 +16,7 @@ import warnings
 from inspect import signature
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, List, Tuple, Union
+from typing import TYPE_CHECKING, Iterable, List, Tuple, Union, Optional
 
 import numpy as np
 from packaging.version import Version, parse
@@ -284,11 +284,11 @@ def export_tensorflow(
 
 def export(
     preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin", "ProcessorMixin"],
-    model: Union["PreTrainedModel", "TFPreTrainedModel"],
+    model: Union[PreTrainedModel, TFPreTrainedModel],
     config: OnnxConfig,
     opset: int,
     output: Path,
-    tokenizer: "PreTrainedTokenizer" = None,
+    tokenizer: Optional[PreTrainedTokenizer] = None,
     device: str = "cpu",
 ) -> Tuple[List[str], List[str]]:
     """

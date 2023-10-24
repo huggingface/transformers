@@ -298,7 +298,7 @@ class ModelOutput(OrderedDict):
     </Tip>
     """
 
-    def __init_subclass__(cls) -> None:
+    def __init_subclass__(cls):
         """Register subclasses as pytree nodes.
 
         This is necessary to synchronize gradients when using `torch.nn.parallel.DistributedDataParallel` with

@@ -102,7 +102,7 @@ def find_adapter_config_file(
     return adapter_cached_filename
 
 
-def check_peft_version(min_version: str) -> None:
+def check_peft_version(min_version: str):
     r"""
     Checks if the version of PEFT is compatible.
 

@@ -122,7 +122,7 @@ def get_aligned_output_features_output_indices(
 class BackboneMixin:
     backbone_type: Optional[BackboneType] = None
 
-    def _init_timm_backbone(self, config: Optional[PretrainedConfig] = None) -> None:
+    def _init_timm_backbone(self, config: Optional[PretrainedConfig] = None):
         """
         Initialize the backbone model from timm The backbone must already be loaded to self._backbone
         """
@@ -143,7 +143,7 @@ class BackboneMixin:
         )
         self._out_features, self._out_indices = out_features, out_indices
 
-    def _init_transformers_backbone(self, config: Optional[PretrainedConfig] = None) -> None:
+    def _init_transformers_backbone(self, config: Optional[PretrainedConfig] = None):
         stage_names = getattr(config, "stage_names")
         out_features = getattr(config, "out_features", None)
         out_indices = getattr(config, "out_indices", None)
@@ -155,7 +155,7 @@ class BackboneMixin:
         # Number of channels for each stage. This is set in the transformer backbone model init
         self.num_features = None
 
-    def _init_backbone(self, config: Optional[PretrainedConfig] = None) -> None:
+    def _init_backbone(self, config: Optional[PretrainedConfig] = None):
         """
         Method to initialize the backbone. This method is called by the constructor of the base class after the
         pretrained model weights have been loaded.

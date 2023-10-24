@@ -2135,7 +2135,7 @@ class HfDoctestModule(Module):
                     source_lines,
                 )
 
-            def _find(self, tests, obj, name, module, source_lines, globs, seen) -> None:
+            def _find(self, tests, obj, name, module, source_lines, globs, seen):
                 if _is_mocked(obj):
                     return
                 with _patch_unwrap_mock_aware():

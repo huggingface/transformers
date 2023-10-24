@@ -36,7 +36,7 @@ def convert_tf_checkpoint_to_pytorch(
     is_encoder_named_decoder: bool,
     vocab_size: int,
     is_encoder: bool,
-) -> None:
+):
     # Initialise PyTorch model
     bert_config = BertConfig.from_pretrained(
         "bert-large-cased",

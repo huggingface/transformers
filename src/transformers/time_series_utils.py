@@ -63,7 +63,7 @@ class AffineTransformed(TransformedDistribution):
 class ParameterProjection(nn.Module):
     def __init__(
         self, in_features: int, args_dim: Dict[str, int], domain_map: Callable[..., Tuple[torch.Tensor]], **kwargs
-    ) -> None:
+    ):
         super().__init__(**kwargs)
         self.args_dim = args_dim
         self.proj = nn.ModuleList([nn.Linear(in_features, dim) for dim in args_dim.values()])
@@ -89,7 +89,7 @@ class DistributionOutput:
     in_features: int
     args_dim: Dict[str, int]
 
-    def __init__(self, dim: int = 1) -> None:
+    def __init__(self, dim: int = 1):
         self.dim = dim
         self.args_dim = {k: dim * self.args_dim[k] for k in self.args_dim}
 

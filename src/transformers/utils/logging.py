@@ -76,7 +76,7 @@ def _get_library_root_logger() -> logging.Logger:
     return logging.getLogger(_get_library_name())
 
 
-def _configure_library_root_logger() -> None:
+def _configure_library_root_logger():
     global _default_handler
 
     with _lock:
@@ -102,7 +102,7 @@ def _configure_library_root_logger() -> None:
         library_root_logger.propagate = False
 
 
-def _reset_library_root_logger() -> None:
+def _reset_library_root_logger():
     global _default_handler
 
     with _lock:
@@ -119,7 +119,7 @@ def get_log_levels_dict() -> dict[str, int]:
     return log_levels
 
 
-def captureWarnings(capture: bool = True) -> None:
+def captureWarnings(capture: bool = True):
     """
     Calls the `captureWarnings` method from the logging library to enable management of the warnings emitted by the
     `warnings` library.
@@ -179,7 +179,7 @@ def get_verbosity() -> int:
     return _get_library_root_logger().getEffectiveLevel()
 
 
-def set_verbosity(verbosity: int) -> None:
+def set_verbosity(verbosity: int):
     """
     Set the verbosity level for the 🤗 Transformers's root logger.
 
@@ -218,7 +218,7 @@ def set_verbosity_error():
     return set_verbosity(ERROR)
 
 
-def disable_default_handler() -> None:
+def disable_default_handler():
     """Disable the default handler of the HuggingFace Transformers's root logger."""
 
     _configure_library_root_logger()
@@ -227,7 +227,7 @@ def disable_default_handler() -> None:
     _get_library_root_logger().removeHandler(_default_handler)
 
 
-def enable_default_handler() -> None:
+def enable_default_handler():
     """Enable the default handler of the HuggingFace Transformers's root logger."""
 
     _configure_library_root_logger()
@@ -236,7 +236,7 @@ def enable_default_handler() -> None:
     _get_library_root_logger().addHandler(_default_handler)
 
 
-def add_handler(handler: logging.Handler) -> None:
+def add_handler(handler: logging.Handler):
     """adds a handler to the HuggingFace Transformers's root logger."""
 
     _configure_library_root_logger()
@@ -245,7 +245,7 @@ def add_handler(handler: logging.Handler) -> None:
     _get_library_root_logger().addHandler(handler)
 
 
-def remove_handler(handler: logging.Handler) -> None:
+def remove_handler(handler: logging.Handler):
     """removes given handler from the HuggingFace Transformers's root logger."""
 
     _configure_library_root_logger()
@@ -254,7 +254,7 @@ def remove_handler(handler: logging.Handler) -> None:
     _get_library_root_logger().removeHandler(handler)
 
 
-def disable_propagation() -> None:
+def disable_propagation():
     """
     Disable propagation of the library log outputs. Note that log propagation is disabled by default.
     """
@@ -263,7 +263,7 @@ def disable_propagation() -> None:
     _get_library_root_logger().propagate = False
 
 
-def enable_propagation() -> None:
+def enable_propagation():
     """
     Enable propagation of the library log outputs. Please disable the HuggingFace Transformers's default handler to
     prevent double logging if the root logger has been configured.
@@ -273,7 +273,7 @@ def enable_propagation() -> None:
     _get_library_root_logger().propagate = True
 
 
-def enable_explicit_format() -> None:
+def enable_explicit_format():
     """
     Enable explicit formatting for every HuggingFace Transformers's logger. The explicit formatter is as follows:
     ```
@@ -288,7 +288,7 @@ def enable_explicit_format() -> None:
         handler.setFormatter(formatter)
 
 
-def reset_format() -> None:
+def reset_format():
     """
     Resets the formatting for HuggingFace Transformers's loggers.
 
@@ -360,7 +360,7 @@ class _tqdm_cls:
         else:
             return EmptyTqdm(*args, **kwargs)
 
-    def set_lock(self, *args, **kwargs) -> None:
+    def set_lock(self, *args, **kwargs):
         self._lock = None
         if _tqdm_active:
             return tqdm_lib.tqdm.set_lock(*args, **kwargs)
@@ -379,14 +379,14 @@ def is_progress_bar_enabled() -> bool:
     return bool(_tqdm_active)
 
 
-def enable_progress_bar() -> None:
+def enable_progress_bar():
     """Enable tqdm progress bar."""
     global _tqdm_active
     _tqdm_active = True
     hf_hub_utils.enable_progress_bars()
 
 
-def disable_progress_bar() -> None:
+def disable_progress_bar():
     """Disable tqdm progress bar."""
     global _tqdm_active
     _tqdm_active = False

@@ -388,7 +388,7 @@ class TFTrainer:
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
-    def log(self, logs: Dict[str, float]) -> None:
+    def log(self, logs: Dict[str, float]):
         """
         Log `logs` on the various objects watching training.
 
@@ -472,7 +472,7 @@ class TFTrainer:
 
         return logits
 
-    def train(self) -> None:
+    def train(self):
         """
         Train method to train the model.
         """
