@@ -295,8 +295,8 @@ class Kosmos2Processor(ProcessorMixin):
             `Union[TextInput, List[TextInput]]`: The processed texts with image and patch index tokens.
         """
         # These are fake `<image>` tokens enclosed between (the actual) `<image>` token and `</image>`.
-        img_tokens = ["<image>"] * num_image_tokens
-        img_info = " ".join(["<image>"] + img_tokens + ["</image>"])
+        img_tokens = [self.boi_token] * num_image_tokens
+        img_info = " ".join([self.boi_token] + img_tokens + [self.eoi_token])
 
         def check_bboxes_for_single_text(bboxes):
             """
