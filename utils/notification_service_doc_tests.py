@@ -133,21 +133,38 @@ class Message:
 
     @property
     def category_failures(self) -> Dict:
+        MAX_ERROR_TEXT = 3000 - len("The following examples had failures:\n\n\n\n")
         line_length = 40
         category_failures = {k: v["failed"] for k, v in doc_test_results.items() if isinstance(v, dict)}
 
-        report = ""
-        for category, failures in category_failures.items():
+        def single_category_failures(category, failures, target_max_len, report):
+            text = ""
             if len(failures) == 0:
-                continue
+                return ""
 
             if report != "":
-                report += "\n\n"
+                text += "\n"
 
-            report += f"*{category} failures*:".ljust(line_length // 2).rjust(line_length // 2) + "\n"
-            report += "`"
-            report += "`\n`".join(failures)
-            report += "`"
+            text += f"*{category} failures*:".ljust(line_length // 2).rjust(line_length // 2) + "\n"
+
+            for idx, failure in enumerate(failures):
+                new_text = text
+                new_text += f"`{failure}`\n"
+                if len(new_text) > target_max_len - len("[Truncated]\n"):
+                    text = text + "[Truncated]\n"
+                    break
+                text = new_text
+
+            return text
+
+        report = ""
+        for category, failures in category_failures.items():
+            max_len = MAX_ERROR_TEXT - len(report) - len("\n[Truncated]")
+            new_text = single_category_failures(category, failures, target_max_len=max_len, report=report)
+            if len(new_text) > max_len:
+                report += "\n[Truncated]"
+                break
+            report += new_text
 
         return {
             "type": "section",
@@ -211,10 +228,19 @@ class Message:
         )
 
     def get_reply_blocks(self, job_name, job_link, failures, text):
-        failures_text = ""
+        # `text` must be less than 3001 characters in Slack SDK
+        # keep some room for adding "[Truncated]" when necessary
+        MAX_ERROR_TEXT = 3000 - len("[Truncated]")
+
+        failure_text = ""
         for key, value in failures.items():
-            value = value[:200] + " [Truncated]" if len(value) > 250 else value
-            failures_text += f"*{key}*\n_{value}_\n\n"
+            new_text = failure_text + f"*{key}*\n_{value}_\n\n"
+            if len(new_text) > MAX_ERROR_TEXT:
+                # `failure_text` here has length <= 3000
+                failure_text = failure_text + "[Truncated]"
+                break
+            # `failure_text` here has length <= MAX_ERROR_TEXT
+            failure_text = new_text
 
         title = job_name
         content = {"type": "section", "text": {"type": "mrkdwn", "text": text}}
@@ -229,7 +255,7 @@ class Message:
         return [
             {"type": "header", "text": {"type": "plain_text", "text": title.upper(), "emoji": True}},
             content,
-            {"type": "section", "text": {"type": "mrkdwn", "text": failures_text}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}},
         ]
 
     def post_reply(self):
