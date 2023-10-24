@@ -934,7 +934,7 @@ class WhisperDecoderLayer(nn.Module):
         if getattr(config, "_flash_attn_2_enabled", False):
             self.self_attn = WhisperFlashAttention2(
                 embed_dim=self.embed_dim,
-                num_heads=config.encoder_attention_heads,
+                num_heads=config.decoder_attention_heads,
                 dropout=config.attention_dropout,
                 is_decoder=True,
                 is_causal=True,
@@ -943,7 +943,7 @@ class WhisperDecoderLayer(nn.Module):
         else:
             self.self_attn = WhisperAttention(
                 embed_dim=self.embed_dim,
-                num_heads=config.encoder_attention_heads,
+                num_heads=config.decoder_attention_heads,
                 dropout=config.attention_dropout,
                 is_decoder=True,
                 is_causal=True,
@@ -957,14 +957,14 @@ class WhisperDecoderLayer(nn.Module):
         if getattr(config, "_flash_attn_2_enabled", False):
             self.encoder_attn = WhisperFlashAttention2(
                 embed_dim=self.embed_dim,
-                num_heads=config.encoder_attention_heads,
+                num_heads=config.decoder_attention_heads,
                 dropout=config.attention_dropout,
                 is_decoder=True,
             )
         else:
             self.encoder_attn = WhisperAttention(
                 embed_dim=self.embed_dim,
-                num_heads=config.encoder_attention_heads,
+                num_heads=config.decoder_attention_heads,
                 dropout=config.attention_dropout,
                 is_decoder=True,
             )
