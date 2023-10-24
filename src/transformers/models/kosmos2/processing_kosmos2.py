@@ -321,10 +321,10 @@ class Kosmos2Processor(ProcessorMixin):
                     continue
                 elif not isinstance(bbox, list):
                     bbox = [bbox]
-                for elt in bbox:
-                    if not isinstance(elt, tuple) or not (
-                        (len(elt) == 2 and all(isinstance(x, int) for x in elt))
-                        or (len(elt) == 4 and all(isinstance(x, float) for x in elt))
+                for element in bbox:
+                    if not isinstance(element, tuple) or not (
+                        (len(element) == 2 and all(isinstance(x, int) for x in element))
+                        or (len(element) == 4 and all(isinstance(x, float) for x in element))
                     ):
                         raise ValueError(
                             "Each element in `bboxes` (for a single text example) should be `None`, a tuple containing "
