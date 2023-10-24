@@ -3106,6 +3106,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
 
+        # make sure we use the model's config from since the __init__ might have copied it
+        config = model.config
+
         # Check first if we are `from_pt`
         if use_keep_in_fp32_modules:
             if is_accelerate_available():
@@ -3164,7 +3167,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 importlib.metadata.version("bitsandbytes")
             ) >= version.parse("0.37.0")
 
-            model.config.quantization_config = quantization_config
+            config.quantization_config = quantization_config
             model.is_8bit_serializable = is_8bit_serializable
 
         if load_in_8bit and torch_dtype is None:
