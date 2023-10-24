@@ -16,20 +16,14 @@ import warnings
 from inspect import signature
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, List, Tuple, Union, Optional
+from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 from packaging.version import Version, parse
 
 from ..tokenization_utils_base import PreTrainedTokenizerBase
-from ..utils import (
-    TensorType,
-    is_tf_available,
-    is_torch_available,
-    logging,
-)
+from ..utils import TensorType, is_tf_available, is_torch_available, logging
 from .config import OnnxConfig
-
 
 if is_torch_available():
     from ..modeling_utils import PreTrainedModel
