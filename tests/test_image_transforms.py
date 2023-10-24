@@ -23,17 +23,12 @@ from transformers.utils.import_utils import (
     is_flax_available,
     is_tf_available,
     is_torch_available,
-    is_torchvision_available,
     is_vision_available,
 )
 
 
-if is_torchvision_available():
-    import torchvision.transforms as transforms
-
 if is_torch_available():
     import torch
-
 if is_tf_available():
     import tensorflow as tf
 
@@ -322,46 +317,6 @@ class ImageTransformsTester(unittest.TestCase):
             np.allclose(normalize(image, mean=mean, std=std, input_data_format="channels_last"), expected_image)
         )
 
-    @parameterized.expand(
-        [
-            ((3, 224, 224), (120, 60)),
-            ((3, 223, 223), (120, 60)),
-            ((3, 224, 224), (121, 61)),
-            ((3, 223, 223), (121, 61)),
-        ]
-    )
-    @require_torchvision
-    def test_center_crop_with_torchvision(self, image_size, expected_size):
-        # Define input image size
-        image_channels = image_size[0]
-        # Define expected output size
-        expected_height = expected_size[0]
-        expected_width = expected_size[1]
-        expected_channels = image_channels
-
-        # Defining input image
-        image = np.random.randint(0, 256, image_size, np.uint8)
-        pil_image = PIL.Image.fromarray(np.transpose(image, (1, 2, 0)))
-
-        # Test that exception is raised if inputs are incorrect
-        with self.assertRaises(ValueError):
-            center_crop(image, 10)
-
-        # Use torchvision CenterCrop transformation as reference
-        transf_center_crop = transforms.CenterCrop(expected_size)
-
-        # Apply torchvision CenterCrop transformation
-        expected_output = transf_center_crop(pil_image)
-        expected_output_np = np.array(expected_output)
-
-        # Apply center_crop tranformation
-        cropped_image = center_crop(image, expected_size, data_format="channels_last")
-
-        # Test that output is correct and matches torchvision
-        self.assertIsInstance(cropped_image, np.ndarray)
-        self.assertEqual(cropped_image.shape, (expected_height, expected_width, expected_channels))
-        self.assertTrue(np.allclose(cropped_image, expected_output_np))
-
     def test_center_crop(self):
         image = np.random.randint(0, 256, (3, 224, 224))
 
@@ -389,6 +344,35 @@ class ImageTransformsTester(unittest.TestCase):
         image = np.random.randint(0, 256, (224, 224, 4))
         expected_image = image[52:172, 82:142, :]
         self.assertTrue(np.allclose(center_crop(image, (120, 60), input_data_format="channels_last"), expected_image))
+
+    @parameterized.expand(
+        [
+            ((3, 224, 224), (52, 172, 82, 142), (52, 172, 82, 142)),
+            ((3, 223, 223), (52, 172, 82, 142), (52, 172, 82, 142)),
+            ((3, 224, 224), (51, 172, 81, 142), (52, 173, 82, 143)),
+            ((3, 223, 223), (51, 172, 81, 142), (51, 172, 81, 142)),
+        ]
+    )
+    @require_torchvision
+    def test_center_crop_for_various_sizes(self, image_size, interval_to_crop, expected_interval_to_crop):
+        # Tests that function retrieves the same results obtained with torchvision CenterCrop
+        image = np.random.randint(0, 256, image_size, np.uint8)
+
+        # Defining intervals to crop the image
+        init_height, end_height, init_width, end_width = interval_to_crop
+        crop_height = end_height - init_height
+        crop_width = end_width - init_width
+        crop_size = (crop_height, crop_width)
+
+        # Get expected intervals to crop the image, obtained with torchvision CenterCrop
+        expected_init_y, expected_end_y, expected_init_x, expected_end_x = expected_interval_to_crop
+
+        # Test result is correct
+        expected_image = image[:, expected_init_y:expected_end_y, expected_init_x:expected_end_x].transpose(1, 2, 0)
+        cropped_image = center_crop(image, crop_size, data_format="channels_last")
+        self.assertIsInstance(cropped_image, np.ndarray)
+        self.assertEqual(cropped_image.shape, expected_image.shape)
+        self.assertTrue(np.allclose(cropped_image, expected_image))
 
     def test_center_to_corners_format(self):
         bbox_center = np.array([[10, 20, 4, 8], [15, 16, 3, 4]])
