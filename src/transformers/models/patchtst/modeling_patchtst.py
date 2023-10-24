@@ -196,11 +196,11 @@ class PatchTSTAttention(nn.Module):
 
 
 class PatchTSTTranspose(nn.Module):
-    """    
+    """
     Transpose the tensor to the dimension defined in **dims**
 
     Parameters:
-        dims (`list`): list of dimensions to be transposed 
+        dims (`list`): list of dimensions to be transposed
         contiguous (`bool`, default to False): if True, the transposed tensor is contiguous
     """
 
@@ -224,10 +224,11 @@ class PatchTSTTranspose(nn.Module):
 
 class PatchTSTBatchNorm(nn.Module):
     """
+    Parameters:
     Compute batch normalization
-    Parameters: 
         d_model (`int`): model dimension
     """
+
     def __init__(self, d_model):
         super().__init__()
         self.d_model = d_model
@@ -237,16 +238,16 @@ class PatchTSTBatchNorm(nn.Module):
     def forward(self, inputs: torch.Tensor):
         """
         Parameters:
-            inputs (`torch.Tensor` of shape `(batch_size, sequence_length, d_model)`): 
+            inputs (`torch.Tensor` of shape `(batch_size, sequence_length, d_model)`):
                 input for Batch norm calculation
         Returns:
             `torch.Tensor`: tensor
         """
-        output = self.transpose(inputs)         # output: (batch_size, d_model, sequence_length)
+        output = self.transpose(inputs)  # output: (batch_size, d_model, sequence_length)
         output = self.batchnorm(output)
-        output = self.transpose(output)         # output: (batch_size, sequence_length, d_model)
+        output = self.transpose(output)  # output: (batch_size, sequence_length, d_model)
         return output
-        
+
 
 def positional_encoding(position_embedding_type, learned, q_len, d_model):
     # Positional encoding
@@ -351,8 +352,8 @@ def forecast_masking(
     seed_number: Optional[int] = None,
 ):
     """Forecast masking that masks the last K patches where K is from the forecast_mask_patches list.
-    For every batch, distribute the patch lengths based on forecast_mask_ratios and ignore masks for column indices mentioned in
-    unmasked_channel_indices.
+    For every batch, distribute the patch lengths based on forecast_mask_ratios and ignore masks for column indices
+    mentioned in unmasked_channel_indices.
 
     Parameters:
         inputs (`torch.Tensor`):
@@ -361,8 +362,8 @@ def forecast_masking(
         forecast_mask_patches (`list`): [2, 4]
             List of patch lengths to mask in the end of the data.
         forecast_mask_ratios (`list`, *optional*): [0.7, 0.3]
-            List of weights to use for each patch length. For Ex. if forecast_mask_patches is [5,4] and forecast_mask_ratios is [1,1],
-            then equal weights to both patch lengths. Defaults to None.
+            List of weights to use for each patch length. For Ex. if forecast_mask_patches is [5,4] and
+            forecast_mask_ratios is [1,1], then equal weights to both patch lengths. Defaults to None.
         unmasked_channel_indices (`list`, *optional*):
             Control Variable channel indices. These channels will not be masked. Defaults to None.
         mask_value (`int`, *optional* defaults to 0):
@@ -487,8 +488,8 @@ class PatchTSTMasking(nn.Module):
         random_mask_ratio (`float`, *optional*): Mask ratio for random pretraining.
         forecast_mask_patches (`list`, *optional*): List of patch lengths to mask in the end of the data.
         forecast_mask_ratios (`list`, *optional*):
-            List of weights to use for each patch length. For Ex. if forecast_mask_patches is [5,4] and forecast_mask_ratios is [1,1],
-            then equal weights to both patch lengths. Defaults to None.
+            List of weights to use for each patch length. For Ex. if forecast_mask_patches is [5,4] and
+            forecast_mask_ratios is [1,1], then equal weights to both patch lengths. Defaults to None.
         unmasked_channel_indices (`list`, *optional*):
             Define what channels not to mask. These channels will not be masked during pretrainin. Defaults to None.
         channel_consistent_masking (`bool`, *optional*):
