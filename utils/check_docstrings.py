@@ -463,6 +463,7 @@ OBJECTS_TO_IGNORE = [
     "SEWForCTC",
     "SamConfig",
     "SamPromptEncoderConfig",
+    "SeamlessM4TConfig",  # use of unconventional markdown
     "Seq2SeqTrainingArguments",
     "SpecialTokensMixin",
     "Speech2Text2Config",
