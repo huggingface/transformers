@@ -161,7 +161,10 @@ def convert_embeddings(config, model_state_dict):
             num_patches = patches_along_spatial_dims * patches_along_time_dim
         elif modality == "audio":
             patch_size = modality_config.patch_size
-            num_patches = (modality_config.num_mel_bins // patch_size) * (modality_config.target_len // patch_size)
+            stride = modality_config.stride
+            patches_along_mel_dim = ((modality_config.num_mel_bins - patch_size) // stride) + 1
+            patches_along_frame_dim = ((modality_config.target_len - patch_size) // stride) + 1
+            num_patches = patches_along_mel_dim * patches_along_frame_dim
         else:
             num_patches = (modality_config.image_size // modality_config.patch_size) ** 2
         num_positions = num_patches + 1
