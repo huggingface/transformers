@@ -80,7 +80,7 @@ _import_structure = {
 }
 
 if TYPE_CHECKING:
-    from .awq import replace_with_bnb_linear
+    from .awq import replace_with_awq_linear
 
     from .bitsandbytes import (
         get_keys_to_not_convert,
