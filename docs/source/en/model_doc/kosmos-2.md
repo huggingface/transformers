@@ -24,8 +24,8 @@ The KOSMOS-2 model was proposed in [Kosmos-2: Grounding Multimodal Large Languag
 KOSMOS-2 is a Transformer-based causal language model and is trained using the next-word prediction task on a web-scale
 dataset of grounded image-text pairs [GRIT](https://huggingface.co/datasets/zzliang/GRIT). The spatial coordinates of
 the bounding boxes in the dataset are converted to a sequence of location tokens, which are appended to their respective
-text spans. The data format is similar to “hyperlinks” that connect the object regions in an image to their text span in
-the corresponding caption.
+entity text spans (for example, `a snowman` followed by `<patch_index_0044><patch_index_0863>`). The data format is
+similar to “hyperlinks” that connect the object regions in an image to their text span in the corresponding caption.
 
 The abstract from the paper is the following:
 
