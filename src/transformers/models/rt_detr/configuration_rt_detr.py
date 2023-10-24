@@ -184,8 +184,23 @@ class RTDetrConfig(PretrainedConfig):
         eval_idx=-1,
         eps=1e-2,
         aux_loss=True,
+        class_cost=2,
+        bbox_cost=5,
+        giou_cost=2,
+        use_focal_loss=True,
+        focal_loss_alpha=0.25,
+        focal_loss_gamma=2.,
+        num_labels=80,
+        eos_coef=1e-4,
+        weight_loss_vfl=1,
+        weight_loss_bbox=5,
+        weight_loss_giou=2,
+        eos_coefficient=0.1,
         **kwargs,
     ):
+        # num_labels: number of object categories, omitting the special no-object category
+        # eos_coef: relative classification weight applied to the no-object category
+
         self.initializer_range = initializer_range
         # backbone
         self.depth = depth
@@ -230,4 +245,17 @@ class RTDetrConfig(PretrainedConfig):
         self.eval_idx = eval_idx
         self.eps = eps
         self.aux_loss = aux_loss
+        # Loss
+        self.class_cost = class_cost
+        self.bbox_cost = bbox_cost
+        self.giou_cost = giou_cost
+        self.use_focal_loss = use_focal_loss
+        self.focal_loss_alpha = focal_loss_alpha
+        self.focal_loss_gamma = focal_loss_gamma
+        self.num_labels = num_labels
+        self.eos_coef = eos_coef
+        self.weight_loss_vfl = weight_loss_vfl
+        self.weight_loss_bbox = weight_loss_bbox
+        self.weight_loss_giou = weight_loss_giou
+        self.eos_coefficient = eos_coefficient
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

@@ -13,17 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch RT_DETR model."""
-
 import copy
 import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
-from torch import nn
+from torch import nn, Tensor
 
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
+from ..timm_backbone import TimmBackbone
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -33,12 +33,13 @@ from ...utils import (
     is_vision_available,
     logging,
     replace_return_docstrings,
+    requires_backends
 )
 from .configuration_rt_detr import RTDetrConfig
 
 
 if is_scipy_available():
-    pass
+    from scipy.optimize import linear_sum_assignment
 
 if is_timm_available():
     pass
@@ -607,6 +608,174 @@ def get_activation(activation: str, inplace: bool = True):
         activation_func.inplace = inplace
     return activation_func
 
+# Copied from transformers.models.detr.modeling_detr
+def generalized_box_iou(boxes1, boxes2):
+    """
+    Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
+
+    Returns:
+        `torch.FloatTensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
+    """
+    # degenerate boxes gives inf / nan results
+    # so do an early check
+    if not (boxes1[:, 2:] >= boxes1[:, :2]).all():
+        raise ValueError(f"boxes1 must be in [x0, y0, x1, y1] (corner) format, but got {boxes1}")
+    if not (boxes2[:, 2:] >= boxes2[:, :2]).all():
+        raise ValueError(f"boxes2 must be in [x0, y0, x1, y1] (corner) format, but got {boxes2}")
+    iou, union = box_iou(boxes1, boxes2)
+
+    top_left = torch.min(boxes1[:, None, :2], boxes2[:, :2])
+    bottom_right = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
+
+    width_height = (bottom_right - top_left).clamp(min=0)  # [N,M,2]
+    area = width_height[:, :, 0] * width_height[:, :, 1]
+
+    return iou - (area - union) / area
+
+# Copied from transformers.models.detr.modeling_detr
+def _upcast(t: Tensor) -> Tensor:
+    # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
+    if t.is_floating_point():
+        return t if t.dtype in (torch.float32, torch.float64) else t.float()
+    else:
+        return t if t.dtype in (torch.int32, torch.int64) else t.int()
+
+# Copied from transformers.models.detr.modeling_detr
+def box_area(boxes: Tensor) -> Tensor:
+    """
+    Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
+
+    Args:
+        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
+            Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
+            < x2` and `0 <= y1 < y2`.
+
+    Returns:
+        `torch.FloatTensor`: a tensor containing the area for each box.
+    """
+    boxes = _upcast(boxes)
+    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+
+# Copied from transformers.models.detr.modeling_detr
+def box_iou(boxes1, boxes2):
+    area1 = box_area(boxes1)
+    area2 = box_area(boxes2)
+
+    left_top = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
+    right_bottom = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
+
+    width_height = (right_bottom - left_top).clamp(min=0)  # [N,M,2]
+    inter = width_height[:, :, 0] * width_height[:, :, 1]  # [N,M]
+
+    union = area1[:, None] + area2 - inter
+
+    iou = inter / union
+    return iou, union
+
+def box_cxcywh_to_xyxy(box):
+    x_center, y_center, w, h = box.unbind(-1)
+    b = [(x_center - 0.5 * w), (y_center - 0.5 * h),
+         (x_center + 0.5 * w), (y_center + 0.5 * h)]
+    return torch.stack(b, dim=-1)
+
+def box_xyxy_to_cxcywh(box):
+    x, y, x_end, y_end = box.unbind(-1)
+    b = [(x + x_end) / 2, (y + y_end) / 2,
+         (x_end - x), (y_end - y)]
+    return torch.stack(b, dim=-1)
+
+def get_contrastive_denoising_training_group(targets,
+                                             num_classes,
+                                             num_queries,
+                                             class_embed,
+                                             num_denoising=100,
+                                             label_noise_ratio=0.5,
+                                             box_noise_scale=1.0,):
+    if num_denoising <= 0:
+        return None, None, None, None
+
+    num_gts = [len(t["labels"]) for t in targets]
+    device = targets[0]["labels"].device
+    
+    max_gt_num = max(num_gts)
+    if max_gt_num == 0:
+        return None, None, None, None
+
+    num_group = num_denoising // max_gt_num
+    num_group = 1 if num_group == 0 else num_group
+    # pad gt to max_num of a batch
+    batch_size = len(num_gts)
+
+    input_query_class = torch.full([batch_size, max_gt_num], num_classes, dtype=torch.int32, device=device)
+    input_query_bbox = torch.zeros([batch_size, max_gt_num, 4], device=device)
+    pad_gt_mask = torch.zeros([batch_size, max_gt_num], dtype=torch.bool, device=device)
+
+    for i in range(batch_size):
+        num_gt = num_gts[i]
+        if num_gt > 0:
+            input_query_class[i, :num_gt] = targets[i]["labels"]
+            input_query_bbox[i, :num_gt] = targets[i]["boxes"]
+            pad_gt_mask[i, :num_gt] = 1
+    # each group has positive and negative queries.
+    input_query_class = input_query_class.tile([1, 2 * num_group])
+    input_query_bbox = input_query_bbox.tile([1, 2 * num_group, 1])
+    pad_gt_mask = pad_gt_mask.tile([1, 2 * num_group])
+    # positive and negative mask
+    negative_gt_mask = torch.zeros([batch_size, max_gt_num * 2, 1], device=device)
+    negative_gt_mask[:, max_gt_num:] = 1
+    negative_gt_mask = negative_gt_mask.tile([1, num_group, 1])
+    positive_gt_mask = 1 - negative_gt_mask
+    # contrastive denoising training positive index
+    positive_gt_mask = positive_gt_mask.squeeze(-1) * pad_gt_mask
+    dn_positive_idx = torch.nonzero(positive_gt_mask)[:, 1]
+    dn_positive_idx = torch.split(dn_positive_idx, [n * num_group for n in num_gts])
+    # total denoising queries
+    num_denoising = int(max_gt_num * 2 * num_group)
+
+    if label_noise_ratio > 0:
+        mask = torch.rand_like(input_query_class, dtype=torch.float) < (label_noise_ratio * 0.5)
+        # randomly put a new one here
+        new_label = torch.randint_like(mask, 0, num_classes, dtype=input_query_class.dtype)
+        input_query_class = torch.where(mask & pad_gt_mask, new_label, input_query_class)
+
+    if box_noise_scale > 0:
+        known_bbox = box_cxcywh_to_xyxy(input_query_bbox)
+        diff = torch.tile(input_query_bbox[..., 2:] * 0.5, [1, 1, 2]) * box_noise_scale
+        rand_sign = torch.randint_like(input_query_bbox, 0, 2) * 2.0 - 1.0
+        rand_part = torch.rand_like(input_query_bbox)
+        rand_part = (rand_part + 1.0) * negative_gt_mask + rand_part * (1 - negative_gt_mask)
+        rand_part *= rand_sign
+        known_bbox += rand_part * diff
+        known_bbox.clip_(min=0.0, max=1.0)
+        input_query_bbox = box_xyxy_to_cxcywh(known_bbox)
+        input_query_bbox = inverse_sigmoid(input_query_bbox)
+
+    input_query_class = class_embed(input_query_class)
+
+    tgt_size = num_denoising + num_queries
+    # attn_mask = torch.ones([tgt_size, tgt_size], device=device) < 0
+    attn_mask = torch.full([tgt_size, tgt_size], False, dtype=torch.bool, device=device)
+    # match query cannot see the reconstruction
+    attn_mask[num_denoising:, :num_denoising] = True
+    
+    # reconstruct cannot see each other
+    for i in range(num_group):
+        if i == 0:
+            attn_mask[max_gt_num * 2 * i: max_gt_num * 2 * (i + 1), max_gt_num * 2 * (i + 1): num_denoising] = True
+        if i == num_group - 1:
+            attn_mask[max_gt_num * 2 * i: max_gt_num * 2 * (i + 1), :max_gt_num * i * 2] = True
+        else:
+            attn_mask[max_gt_num * 2 * i: max_gt_num * 2 * (i + 1), max_gt_num * 2 * (i + 1): num_denoising] = True
+            attn_mask[max_gt_num * 2 * i: max_gt_num * 2 * (i + 1), :max_gt_num * 2 * i] = True
+        
+    dn_meta = {
+        "dn_positive_idx": dn_positive_idx,
+        "dn_num_group": num_group,
+        "dn_num_split": [num_denoising, num_queries]
+    }
+
+    return input_query_class, input_query_bbox, attn_mask, dn_meta
+
 
 class ConvNormLayer(nn.Module):
     def __init__(self, channels_in, channels_out, kernel_size, stride, padding=None, bias=False, activation=None):
@@ -744,7 +913,7 @@ class Blocks(nn.Module):
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->RtDetr
-class RtDetrFrozenBatchNorm2d(nn.Module):
+class RTDetrFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
@@ -943,7 +1112,7 @@ class PResNet(nn.Module):
 
     def _freeze_norm(self, m: nn.Module):
         if isinstance(m, nn.BatchNorm2d):
-            m = RtDetrFrozenBatchNorm2d(m.num_features)
+            m = RTDetrFrozenBatchNorm2d(m.num_features)
         else:
             for name, child in m.named_children():
                 _child = self._freeze_norm(child)
@@ -1401,6 +1570,7 @@ class TransformerDecoder(nn.Module):
         self.num_layers = num_layers
         self.eval_idx = eval_idx if eval_idx >= 0 else num_layers + eval_idx
 
+    
     def forward(
         self,
         target,
@@ -1451,6 +1621,7 @@ class TransformerDecoder(nn.Module):
             ref_points_detach = inter_ref_bbox.detach() if self.training else inter_ref_bbox
 
         return torch.stack(dec_out_bboxes), torch.stack(dec_out_logits)
+
 
 
 class MLP(nn.Module):
@@ -1506,8 +1677,9 @@ class RTDetrTransformer(nn.Module):
         activation = config.act_decoder
         num_decoder_points = config.num_decoder_points
         eval_idx = config.eval_idx
+        
         # backbone feature projection
-        self._build_input_proj_layer(feat_channels)
+        self.build_input_proj_layer(feat_channels)
 
         # Transformer module
         decoder_layer = TransformerDecoderLayer(
@@ -1546,7 +1718,7 @@ class RTDetrTransformer(nn.Module):
 
         # init encoder output anchors and valid_mask
         if self.eval_spatial_size:
-            self.anchors, self.valid_mask = self._generate_anchors()
+            self.anchors, self.valid_mask = self.generate_anchors()
 
         self._reset_parameters()
 
@@ -1568,72 +1740,25 @@ class RTDetrTransformer(nn.Module):
         nn.init.xavier_uniform_(self.query_pos_head.layers[0].weight)
         nn.init.xavier_uniform_(self.query_pos_head.layers[1].weight)
 
-    def _build_input_proj_layer(self, feat_channels):
+    def build_input_proj_layer(self, feat_channels):
         self.input_proj = nn.ModuleList()
         for in_channels in feat_channels:
-            self.input_proj.append(
-                nn.Sequential(
-                    OrderedDict(
-                        [
-                            ("conv", nn.Conv2d(in_channels, self.hidden_dim, 1, bias=False)),
-                            (
-                                "norm",
-                                nn.BatchNorm2d(
-                                    self.hidden_dim,
-                                ),
-                            ),
-                        ]
-                    )
-                )
-            )
+            conv = nn.Conv2d(in_channels, self.hidden_dim, 1, bias=False)
+            norm = nn.BatchNorm2d(self.hidden_dim)
+            layer = [("conv", conv),("norm", norm)]
+            sequential_layer = nn.Sequential(OrderedDict(layer))
+            self.input_proj.append(sequential_layer)
 
         in_channels = feat_channels[-1]
 
         for _ in range(self.num_levels - len(feat_channels)):
-            self.input_proj.append(
-                nn.Sequential(
-                    OrderedDict(
-                        [
-                            ("conv", nn.Conv2d(in_channels, self.hidden_dim, 3, 2, padding=1, bias=False)),
-                            ("norm", nn.BatchNorm2d(self.hidden_dim)),
-                        ]
-                    )
-                )
-            )
+            conv = nn.Conv2d(in_channels, self.hidden_dim, 3, 2, padding=1, bias=False)
+            norm = nn.BatchNorm2d(self.hidden_dim)
+            layer = [("conv", conv), ("norm", norm)]
+            self.input_proj.append(nn.Sequential(OrderedDict(layer)))
             in_channels = self.hidden_dim
 
-    def _get_encoder_input(self, feats):
-        # get projection features
-        proj_feats = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
-        if self.num_levels > len(proj_feats):
-            len_srcs = len(proj_feats)
-            for i in range(len_srcs, self.num_levels):
-                if i == len_srcs:
-                    proj_feats.append(self.input_proj[i](feats[-1]))
-                else:
-                    proj_feats.append(self.input_proj[i](proj_feats[-1]))
-
-        # get encoder inputs
-        feat_flatten = []
-        spatial_shapes = []
-        level_start_index = [
-            0,
-        ]
-        for i, feat in enumerate(proj_feats):
-            _, _, h, w = feat.shape
-            # [b, c, h, w] -> [b, h*w, c]
-            feat_flatten.append(feat.flatten(2).permute(0, 2, 1))
-            # [num_levels, 2]
-            spatial_shapes.append([h, w])
-            # [l], start index of each level
-            level_start_index.append(h * w + level_start_index[-1])
-
-        # [b, l, c]
-        feat_flatten = torch.concat(feat_flatten, 1)
-        level_start_index.pop()
-        return (feat_flatten, spatial_shapes, level_start_index)
-
-    def _generate_anchors(self, spatial_shapes=None, grid_size=0.05, dtype=torch.float32, device="cpu"):
+    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, dtype=torch.float32, device="cpu"):
         if spatial_shapes is None:
             spatial_shapes = [
                 [int(self.eval_spatial_size[0] / s), int(self.eval_spatial_size[1] / s)] for s in self.feat_strides
@@ -1656,16 +1781,58 @@ class RTDetrTransformer(nn.Module):
 
         return anchors, valid_mask
 
-    def _get_decoder_input(self, memory, spatial_shapes, denoising_class=None, denoising_bbox_unact=None):
-        bs, _, _ = memory.shape
+    def forward(self, feats, targets=None):
+        # get projection features
+        projected_features = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
+        if self.num_levels > len(projected_features):
+            len_srcs = len(projected_features)
+            for i in range(len_srcs, self.num_levels):
+                if i == len_srcs:
+                    projected_features.append(self.input_proj[i](feats[-1]))
+                else:
+                    projected_features.append(self.input_proj[i](projected_features[-1]))
+
+        # get encoder inputs
+        feat_flatten = []
+        spatial_shapes = []
+        level_start_index = [0]
+        for feat in projected_features:
+            h, w = feat.shape[-2:]
+            # [b, c, h, w] -> [b, h*w, c]
+            feat_flatten.append(feat.flatten(2).permute(0, 2, 1))
+            # [num_levels, 2]
+            spatial_shapes.append([h, w])
+            # [l], start index of each level
+            level_start_index.append(h * w + level_start_index[-1])
+
+        # [b, l, c]
+        feat_flatten = torch.concat(feat_flatten, 1)
+        level_start_index.pop()
+        
+        # prepare denoising training
+        if self.training and self.num_denoising > 0:
+            denoising_class, denoising_bbox_unact, attn_mask, dn_meta = get_contrastive_denoising_training_group(
+                targets,
+                self.num_classes,
+                self.num_queries,
+                self.denoising_class_embed,
+                num_denoising=self.num_denoising,
+                label_noise_ratio=self.label_noise_ratio,
+                box_noise_scale=self.box_noise_scale,
+            )
+        else:
+            denoising_class, denoising_bbox_unact, attn_mask, dn_meta = None, None, None, None
+
+        batch_size = len(feat_flatten)
+        device = feat_flatten.device
+        
         # prepare input for decoder
         if self.training or self.eval_spatial_size is None:
-            anchors, valid_mask = self._generate_anchors(spatial_shapes, device=memory.device)
+            anchors, valid_mask = self.generate_anchors(spatial_shapes, device=device)
         else:
-            anchors, valid_mask = self.anchors.to(memory.device), self.valid_mask.to(memory.device)
+            anchors, valid_mask = self.anchors.to(device), self.valid_mask.to(device)
 
-        # memory = torch.where(valid_mask, memory, 0)
-        memory = valid_mask.to(memory.dtype) * memory  # TODO fix type error for onnx export
+        memory = valid_mask.to(feat_flatten.dtype) * feat_flatten  # TODO fix type error for onnx export
 
         output_memory = self.enc_output(memory)
 
@@ -1688,7 +1855,7 @@ class RTDetrTransformer(nn.Module):
 
         # extract region features
         if self.learnt_init_query:
-            target = self.tgt_embed.weight.unsqueeze(0).tile([bs, 1, 1])
+            target = self.tgt_embed.weight.unsqueeze(0).tile([batch_size, 1, 1])
         else:
             target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
             target = target.detach()
@@ -1696,35 +1863,13 @@ class RTDetrTransformer(nn.Module):
         if denoising_class is not None:
             target = torch.concat([denoising_class, target], 1)
 
-        return target, reference_points_unact.detach(), enc_topk_bboxes, enc_topk_logits
-
-    def forward(self, feats, targets=None):
-        # input projection and embedding
-        (memory, spatial_shapes, level_start_index) = self._get_encoder_input(feats)
-
-        # prepare denoising training
-        if self.training and self.num_denoising > 0:
-            denoising_class, denoising_bbox_unact, attn_mask, dn_meta = get_contrastive_denoising_training_group(
-                targets,
-                self.num_classes,
-                self.num_queries,
-                self.denoising_class_embed,
-                num_denoising=self.num_denoising,
-                label_noise_ratio=self.label_noise_ratio,
-                box_noise_scale=self.box_noise_scale,
-            )
-        else:
-            denoising_class, denoising_bbox_unact, attn_mask, dn_meta = None, None, None, None
-
-        target, init_ref_points_unact, enc_topk_bboxes, enc_topk_logits = self._get_decoder_input(
-            memory, spatial_shapes, denoising_class, denoising_bbox_unact
-        )
+        init_ref_points_unact = reference_points_unact.detach()
 
         # decoder
         out_bboxes, out_logits = self.decoder(
             target,
             init_ref_points_unact,
-            memory,
+            feat_flatten,
             spatial_shapes,
             level_start_index,
             self.dec_bbox_head,
@@ -1732,7 +1877,7 @@ class RTDetrTransformer(nn.Module):
             self.query_pos_head,
             attn_mask=attn_mask,
         )
-
+        
         if self.training and dn_meta is not None:
             dn_out_bboxes, out_bboxes = torch.split(out_bboxes, dn_meta["dn_num_split"], dim=2)
             dn_out_logits, out_logits = torch.split(out_logits, dn_meta["dn_num_split"], dim=2)
@@ -1769,7 +1914,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initalize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d, RtDetrFrozenBatchNorm2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d, RTDetrFrozenBatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1794,17 +1939,13 @@ class RTDetrModel(RTDetrPreTrainedModel):
         super().__init__(config)
 
         self.backbone = PResNet(config)
+        # backbone_name = "resnet50d" #config.backbone_name
+        # self.backbone_timm = TimmBackbone.from_pretrained(backbone_name, out_indices=[2,3,4])
         self.encoder = HybridEncoder(config)
         self.decoder = RTDetrTransformer(config)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def freeze_backbone(self):
         for _, param in self.backbone.conv_encoder.model.named_parameters():
@@ -1861,6 +2002,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # TODO: Check how other models do these individual steps:
 
         # First, sent pixel_values through Backbone to obtain the features
+        # features = self.backbone_original(pixel_values)
         features = self.backbone(pixel_values)
         # TODO: Rafael -> Remove -For the cat image
         # 0 torch.Size([1, 512, 80, 80]) 358398.75
@@ -1872,7 +2014,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             pass  # TODO
         else:
             encoder_outputs = self.encoder(features)
-        # TODO: Rafael -> Remove -For the cat image
+        # TODO: Rafael -> Remove - For the cat image
         # Expected
         # 0 torch.Size([1, 256, 80, 80]) 501037.875
         # 1 torch.Size([1, 256, 40, 40]) 103032.84375
@@ -1884,7 +2026,8 @@ class RTDetrModel(RTDetrPreTrainedModel):
             pass  # TODO
         else:
             decoder_outputs = self.decoder(encoder_outputs)
-        # TODO: Rafael -> Remove -For the cat image
+        
+        # TODO: Rafael -> Remove - For the cat image
         # Expected:
         # pred_logits torch.Size([1, 300, 80]) -160269.53125
         # pred_boxes torch.Size([1, 300, 4]) 622.9794921875
@@ -1973,6 +2116,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
 
         # RT_DETR encoder-decoder model
         self.model = RTDetrModel(config)
+        
 
         # TODO: finish this class
 #         # Object detection heads
@@ -2060,15 +2204,47 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             return_dict=return_dict,
         )
 
-        # TODO: model is already returning the logits + pred_boxes, which is wrong
-        # model should output the RTDetrModelOutput object, containing the outputs of the model, 
-        # not the predictions.
-        # The losses, logits, pred_boxes should be computed here
-        pred_boxes = outputs["pred_boxes"]
+        loss, loss_dict, auxiliary_outputs = None, None, None
+        # TODO (Rafael) Remove
+        import pickle
+        labels = pickle.load(open("/home/rafael/repos/RT-DETR/targets_gatinho.pkl", "rb"))
+        #####
+        
+        if labels is not None:
+            # TODO: model is already returning the logits + pred_boxes, which is wrong
+            # model should output the RTDetrModelOutput object, containing the outputs of the model, 
+            # not the predictions.
+            # The losses, logits, pred_boxes should be computed here
+            pred_boxes = outputs["pred_boxes"]
+            logits = outputs["pred_logits"]
+            # First: create the matcher
+            from transformers.models.detr.modeling_detr import DetrLoss
+            # TODO: Create RTDetrLoss
+            
+            matcher = RTDetrHungarianMatcher(
+                class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost, use_focal_loss=self.config.use_focal_loss, alpha=self.config.focal_loss_alpha, gamma = self.config.focal_loss_gamma
+            )
+            losses = ["labels", "boxes", "cardinality"]
+            criterion = DetrLoss(
+                matcher=matcher,
+                num_classes=self.config.num_labels,
+                eos_coef=self.config.eos_coefficient,
+                losses=losses,
+            )
+            criterion.to(self.device)
+            # Third: compute the losses, based on outputs and labels
+            outputs_loss = {}
+            outputs_loss["logits"] = logits
+            outputs_loss["pred_boxes"] = pred_boxes
+            loss_dict = criterion(outputs_loss, labels)
+            # Compute total loss, as a weighted sum of the various losses
+            weight_dict = {"loss_ce": self.config.weight_loss_vfl, "loss_bbox": self.config.weight_loss_bbox, "loss_giou": self.config.weight_loss_giou}
+            weight_loss = {v * loss_dict[k] for k, v in weight_dict.items()}
+            reduced_loss_unscaled = {f"{k}_unscaled": v for k, v in loss_dict.items()}
 
         return RTDetrObjectDetectionOutput(
             loss=None,
-            loss_dict=None,
+            loss_dict=loss_dict,
             logits=None,
             pred_boxes=pred_boxes,
             auxiliary_outputs=None,
@@ -2080,3 +2256,98 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             encoder_hidden_states=None,
             encoder_attentions=None,
         )
+
+
+class RTDetrHungarianMatcher(nn.Module):
+    """This class computes an assignment between the targets and the predictions of the network
+
+    For efficiency reasons, the targets don't include the no_object. Because of this, in general,
+    there are more predictions than targets. In this case, we do a 1-to-1 matching of the best predictions,
+    while the others are un-matched (and thus treated as non-objects).
+    
+    Args:
+    class_cost:
+        The relative weight of the classification error in the matching cost.
+    bbox_cost:
+        The relative weight of the L1 error of the bounding box coordinates in the matching cost.
+    giou_cost:
+        The relative weight of the giou loss of the bounding box in the matching cost.
+    """
+
+
+    def __init__(self, class_cost = 2, bbox_cost = 5, giou_cost = 2, use_focal_loss=False, alpha=0.25, gamma=2.0):
+        super().__init__()
+        requires_backends(self, ["scipy"])
+
+        self.cost_class = class_cost
+        self.cost_bbox = bbox_cost
+        self.cost_giou = giou_cost
+
+        self.use_focal_loss = use_focal_loss
+        self.alpha = alpha
+        self.gamma = gamma
+
+        if self.cost_class == 0 and self.cost_bbox == 0 and self.cost_giou == 0:
+            raise ValueError("All costs of the Matcher can't be 0")
+
+
+    @torch.no_grad()
+    def forward(self, outputs, targets):
+        """ Performs the matching
+
+        Params:
+            outputs: This is a dict that contains at least these entries:
+                 "pred_logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
+                 "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates
+
+            targets: This is a list of targets (len(targets) = batch_size), where each target is a dict containing:
+                 "labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
+                           objects in the target) containing the class labels
+                 "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates
+
+        Returns:
+            A list of size batch_size, containing tuples of (index_i, index_j) where:
+                - index_i is the indices of the selected predictions (in order)
+                - index_j is the indices of the corresponding selected targets (in order)
+            For each batch element, it holds:
+                len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
+        """
+        bs, num_queries = outputs["logits"].shape[:2]
+
+        # We flatten to compute the cost matrices in a batch
+        if self.use_focal_loss:
+            out_prob = F.sigmoid(outputs["logits"].flatten(0, 1))
+        else:
+            out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
+
+        out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
+
+        # Also concat the target labels and boxes
+        tgt_ids = torch.cat([v["class_labels"] for v in targets])
+        tgt_bbox = torch.cat([v["boxes"] for v in targets])
+
+        # Compute the classification cost. Contrary to the loss, we don't use the NLL,
+        # but approximate it in 1 - proba[target class].
+        # The 1 is a constant that doesn't change the matching, it can be ommitted.
+        if self.use_focal_loss:
+            out_prob = out_prob[:, tgt_ids]
+            neg_cost_class = (1 - self.alpha) * (out_prob**self.gamma) * (-(1 - out_prob + 1e-8).log())
+            pos_cost_class = self.alpha * ((1 - out_prob)**self.gamma) * (-(out_prob + 1e-8).log())
+            cost_class = pos_cost_class - neg_cost_class        
+        else:
+            cost_class = -out_prob[:, tgt_ids]
+
+        # Compute the L1 cost between boxes
+        cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
+
+        # Compute the giou cost betwen boxes
+        cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
+        
+        # Final cost matrix
+        final_cost = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
+        final_cost = final_cost.view(bs, num_queries, -1).cpu()
+
+        sizes = [len(v["boxes"]) for v in targets]
+        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(final_cost.split(sizes, -1))]
+
+        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
