@@ -3106,7 +3106,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
 
-        # make sure we use the model's config from since the __init__ might have copied it
+        # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
         # Check first if we are `from_pt`
