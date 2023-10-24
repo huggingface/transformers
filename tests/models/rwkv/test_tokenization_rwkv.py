@@ -17,14 +17,15 @@
 import os
 import unittest
 
-from transformers import RWKVWorldTokenizer
-from transformers.testing_utils import get_tests_dir, require_tokenizers
+if is_torch_available():
+    from transformers import RWKVWorldTokenizer
+    from transformers.testing_utils import get_tests_dir, require_tokenizers
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/rwkv_vocab_v20230424.json")
 
 
-@require_tokenizers
+@require_torch
 class RWKVWorldTokenizationTest(unittest.TestCase):
     def test_rwkv_world_tokenizer_encode(self):
         tokenizer = RWKVWorldTokenizer.from_pretrained(os.path.dirname(SAMPLE_VOCAB))
