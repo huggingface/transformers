@@ -351,6 +351,45 @@ def is_torch_bf16_available():
     return is_torch_bf16_gpu_available()
 
 
+@lru_cache()
+def is_torch_fp16_available_on_device(device):
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    try:
+        x = torch.zeros(2, 2, dtype=torch.float16).to(device)
+        _ = x @ x
+    except:  # noqa: E722
+        # TODO: more precise exception matching, if possible.
+        # most backends should return `RuntimeError` however this is not guaranteed.
+        return False
+
+    return True
+
+
+@lru_cache()
+def is_torch_bf16_available_on_device(device):
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    if device == "cuda":
+        return is_torch_bf16_gpu_available()
+
+    try:
+        x = torch.zeros(2, 2, dtype=torch.bfloat16).to(device)
+        _ = x @ x
+    except:  # noqa: E722
+        # TODO: more precise exception matching, if possible.
+        # most backends should return `RuntimeError` however this is not guaranteed.
+        return False
+
+    return True
+
+
 def is_torch_tf32_available():
     if not is_torch_available():
         return False
