@@ -140,7 +140,7 @@ class Kosmos2Processor(ProcessorMixin):
                 The token id that will be used for the first place of the subsequence that is reserved to store image
                 information. If unset, will default to `self.tokenizer.unk_token_id + 1`.
             add_eos_token (`bool`, defaults to `True`):
-                If to include `EOS` token id in the encoding when `add_special_tokens=True`.
+                Whether or not to include `EOS` token id in the encoding when `add_special_tokens=True`.
         """
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
