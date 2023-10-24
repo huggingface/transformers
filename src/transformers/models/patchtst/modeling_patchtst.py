@@ -22,7 +22,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2CLS
-from ...modeling_outputs import BaseModelOutputWithNoAttention
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...trainer_utils import set_seed
@@ -653,7 +653,10 @@ class PatchTSTEncoderLayer(nn.Module):
 
         self.pre_norm = config.pre_norm
 
-    def forward(self, hidden_state: torch.Tensor):
+    def forward(self,
+                hidden_states: torch.Tensor,
+                output_attentions: Optional[bool] = None
+                ):
         """
         Parameters:
             hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`, *required*):
@@ -662,23 +665,31 @@ class PatchTSTEncoderLayer(nn.Module):
             `torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`
 
         """
-        batch_size, num_input_channels, sequence_length, d_model = hidden_state.shape
+        batch_size, num_input_channels, sequence_length, d_model = hidden_states.shape
 
         # First sublayer: attention across time
-        src = hidden_state.view(
+        hidden_states = hidden_states.view(
             batch_size * num_input_channels, sequence_length, d_model
-        )  # src: [(bs*num_channels) x sequence_length x d_model]
+        )  # hidden_states: [(bs*num_channels) x sequence_length x d_model]
+
         if self.pre_norm:
             ## Norm and Multi-Head attention and Add residual connection
-            src = src + self.dropout_path1(
-                self.self_attn(self.norm_sublayer1(src))[0]
-            )  # Add: residual connection with residual dropout
+            hidden_states, attn_weights, _ = self.self_attn(
+                hidden_states=self.norm_sublayer1(hidden_states),
+                output_attentions=output_attentions
+           )
+            hidden_states = hidden_states + self.dropout_path1(hidden_states)  # Add: residual connection with residual dropout
         else:
             ## Multi-Head attention and Add residual connection and Norm - Standard Transformer from BERT
-            src = self.norm_sublayer1(
-                src + self.dropout_path1(self.self_attn(src)[0])
-            )  # src: [(bs*num_channels) x sequence_length x d_model]
-        src = src.reshape(
+            hidden_states, attn_weights, _ = self.self_attn(
+                hidden_states=hidden_states,
+                output_attentions=output_attentions
+            )
+            hidden_states = self.norm_sublayer1(
+                hidden_states + self.dropout_path1(hidden_states)
+            )  # hidden_states: [(bs*num_channels) x sequence_length x d_model]
+
+        hidden_states = hidden_states.reshape(
             batch_size, num_input_channels, sequence_length, d_model
         )  # [bs x num_channels x sequence_length x d_model]
 
@@ -686,42 +697,55 @@ class PatchTSTEncoderLayer(nn.Module):
         # [bs x num_channels x sequence_length x d_model] -> [bs x sequence_length x num_channels x d_model]
         #                                                 -> [(bs*sequence_length) x num_channels x d_model]
         if self.channel_attention:
-            src = (
-                src.transpose(2, 1).contiguous().view(batch_size * sequence_length, num_input_channels, d_model)
+            hidden_states = (
+                hidden_states.transpose(2, 1).contiguous().view(batch_size * sequence_length, num_input_channels, d_model)
             )  # [(bs*sequence_length) x num_channels x d_model]
             if self.pre_norm:
                 ## Norm and Multi-Head attention and Add residual connection
-                src = src + self.dropout_path2(
-                    self.self_attn(self.norm_sublayer2(src))[0]
-                )  # Add: residual connection with residual dropout
+                hidden_states, channel_attn_weights, _ = self.self_attn(
+                    hidden_states=self.norm_sublayer2(hidden_states),
+                    output_attentions=output_attentions
+                )
+                hidden_states = hidden_states + self.dropout_path2(hidden_states)  # Add: residual connection with residual dropout
             else:
                 ## Multi-Head attention and Add residual connection and Norm
-                src = self.norm_sublayer2(
-                    src + self.dropout_path2(self.self_attn(src)[0])
-                )  # src: [(bs*sequence_length) x num_channels x d_model]
-            src = (
-                src.reshape(batch_size, sequence_length, num_input_channels, d_model).transpose(1, 2).contiguous()
+                hidden_states, channel_attn_weights, _ = self.self_attn(
+                    hidden_states=hidden_states,
+                    output_attentions=output_attentions
+                )
+                hidden_states = self.norm_sublayer2(
+                    hidden_states + self.dropout_path2(hidden_states)
+                )  # hidden_states: [(bs*sequence_length) x num_channels x d_model]
+
+            hidden_states = (
+                hidden_states.reshape(batch_size, sequence_length, num_input_channels, d_model).transpose(1, 2).contiguous()
             )  # src: [bs x num_channels x sequence_length x d_model]
 
         # Third sublayer: mixing across hidden
-        src = src.view(
+        hidden_states = hidden_states.view(
             batch_size * num_input_channels, sequence_length, d_model
         )  # src: [(batch_size*num_channels) x sequence_length x d_model]
         if self.pre_norm:
             ## Norm and Position-wise Feed-Forward and Add residual connection
-            src = src + self.dropout_path3(
-                self.ff(self.norm_sublayer3(src))
+            hidden_states = hidden_states + self.dropout_path3(
+                self.ff(self.norm_sublayer3(hidden_states))
             )  # Add: residual connection with residual dropout
         else:
             ## Position-wise Feed-Forward and Add residual connection and Norm
-            src = self.norm_sublayer3(
-                src + self.dropout_path3(self.ff(src))
+            hidden_states = self.norm_sublayer3(
+                hidden_states + self.dropout_path3(self.ff(hidden_states))
             )  # Add: residual connection with residual dropout
-        src = src.reshape(
+
+        hidden_states = hidden_states.reshape(
             batch_size, num_input_channels, sequence_length, d_model
         )  # [bs x num_channels x sequence_length x d_model]
 
-        return src
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights, channel_attn_weights)
+
+        return outputs
 
 
 class PatchTSTPreTrainedModel(PreTrainedModel):
@@ -788,22 +812,30 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
 
         # Encoder
         self.encoder = PatchTSTEncoderBlock(config)
+        self.layers = nn.ModuleList([PatchTSTEncoderLayer(config) for i in range(config.encoder_layers)])
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def forward(
-        self, past_values: torch.Tensor, output_hidden_states: Optional[bool] = None
-    ) -> BaseModelOutputWithNoAttention:
+        self,
+        past_values: torch.Tensor,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+    ) -> BaseModelOutput:
         """
         Parameters:
             past_values (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`, *required*):
                 Past values of the time series
-            output_hidden_states (bool, optional): Indicates if hidden states should be output.
+            output_hidden_states (bool, optional): Indicates if hidden states should be outputted.
+            output_attentions (bool, optional): Indicates if attentions should be outputted.
 
         return:
-            `BaseModelOutputWithNoAttention`
+            `BaseModelOutput`
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+
         _, num_input_channels, _, _ = past_values.shape
 
         # Input encoding
@@ -822,25 +854,38 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
             # append cls token
             cls_token = self.cls_token + self.position_enc[:1, :]  # cls_token: [1 x 1 x 1 x d_model]
             cls_tokens = cls_token.expand(past_values.shape[0], -1, -1)  # get the same copy for all the batch samples
-            past_values = torch.cat(
+            hidden_states = torch.cat(
                 (cls_tokens, past_values), dim=1
             )  # x: [bs x num_channels x (num_patches+1) x d_model]
         else:
-            past_values = self.positional_dropout(
+            hidden_states = self.positional_dropout(
                 past_values + self.position_enc
             )  # x: [bs x num_channels x num_patches x d_model]
 
-        # Encoder
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        past_values, hidden_states = self.encoder(
-            past_values, output_hidden_states
-        )  # x: [bs x num_channels x num_patches x d_model]
-        # or [bs x num_channels x (num_patches+1) x d_model] if use cls_token
+        encoder_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        for encoder_layer in self.layers:
+            if output_hidden_states:
+                encoder_states = encoder_states + (hidden_states,)
+
+            layer_outputs = encoder_layer(
+                hidden_states=hidden_states,
+                output_attentions=output_attentions,
+            )
+            # get hidden state
+            hidden_states = layer_outputs[0]    # hidden_states: [bs x num_channels x num_patches x d_model]
+                                                # or [bs x num_channels x (num_patches+1) x d_model] if use cls_token
+            # append layer attention
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
 
         # return past_values, hidden_states
-        return BaseModelOutputWithNoAttention(last_hidden_state=past_values, hidden_states=hidden_states)
+        return BaseModelOutput(
+            last_hidden_state=past_values,
+            hidden_states=encoder_states,
+            attentions=all_attentions
+        )
 
 
 PATCHTST_START_DOCSTRING = r"""
@@ -1310,9 +1355,12 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         past_observed_mask: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PatchTSTModelOutputWithNoAttention]:
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         if past_observed_mask is None:
             past_observed_mask = torch.ones_like(past_values)
