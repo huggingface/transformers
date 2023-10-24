@@ -79,9 +79,6 @@ This model was contributed by [Yih-Dar SHIEH](https://huggingface.co/ydshieh). T
 
 ## Kosmos2ImageProcessor
 
-[[autodoc]] Kosmos2ImageProcessor
-    - preprocess
-
 ## Kosmos2Processor
 
 [[autodoc]] Kosmos2Processor
