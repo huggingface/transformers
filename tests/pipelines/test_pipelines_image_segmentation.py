@@ -48,6 +48,7 @@ from transformers.testing_utils import (
 
 from .test_pipelines_common import ANY
 
+
 if is_vision_available():
     from PIL import Image
 else:
