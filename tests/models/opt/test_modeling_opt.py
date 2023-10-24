@@ -22,8 +22,7 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
-from transformers.utils.import_utils import is_torch_fp16_available_on_device
+from transformers.testing_utils import require_torch, require_torch_fp16, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -287,13 +286,13 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = OPTForCausalLM(config).eval().to(torch_device)
-        if is_torch_fp16_available_on_device(torch_device):
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
