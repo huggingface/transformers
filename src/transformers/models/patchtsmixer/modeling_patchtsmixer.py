@@ -1411,7 +1411,11 @@ class PatchTSMixerMeanScaler(nn.Module):
     """
 
     def __init__(
-        self, dim: int = -1, keepdim: bool = True, default_scale: Optional[float] = None, minimum_scale: float = 1e-10
+        self,
+        dim: int = -1,
+        keepdim: bool = True,
+        default_scale: Optional[float] = None,
+        minimum_scale: float = 1e-10,
     ):
         super().__init__()
         self.dim = dim
@@ -1554,6 +1558,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PatchTSMixerEncoderOutput]:
         r"""
         Args:
@@ -1561,13 +1566,28 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
                 Patched input context.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
         """
 
         # past_values: [batch_size  x n_vars x num_patches x patch_len]
         # return: [batch_size x n_vars x num_patches x num_features]
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         last_hidden_state, hidden_states = self.encoder(past_values, output_hidden_states=output_hidden_states)
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    last_hidden_state,
+                    hidden_states,
+                ]
+            )
+
         return PatchTSMixerEncoderOutput(last_hidden_state=last_hidden_state, hidden_states=hidden_states)
 
 
@@ -1682,7 +1702,14 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
             # enc_input: [batch_size x num_input_channels x num_patch x patch_len]
             # mask: [batch_size x num_input_channels x num_patch]
 
-        encoder_output = self.encoder(enc_input, output_hidden_states=output_hidden_states)
+        encoder_output = self.encoder(
+            enc_input,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if isinstance(encoder_output, tuple):
+            encoder_output = PatchTSMixerEncoderOutput(*encoder_output)
 
         if not return_dict:
             return tuple(
