@@ -22,7 +22,7 @@ from transformers.utils import is_torch_available
 
 if is_torch_available():
     from transformers import RWKVWorldTokenizer
-    from transformers.testing_utils import require_torch, get_tests_dir, require_tokenizers
+    from transformers.testing_utils import require_torch, get_tests_dir
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/rwkv_vocab_v20230424.json")
