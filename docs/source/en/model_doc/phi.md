@@ -95,27 +95,6 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 >>> generated_code = tokenizer.batch_decode(generated_output)[0]
 ```
 
-- Example of Natural English Text generation using `Phi-1.5`
-
-```python
->>> from transformers import PhiForCausalLM, AutoTokenizer
-
->>> # define the model and tokenzier
->>> model = PhiForCausalLM.from_pretrained("susnato/phi-1_5_dev")
->>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_5_dev")
-
->>> # feel free to change the prompt to your liking.
->>> prompt = "If I were an AI that had just achieved"
-
->>> # apply the tokenizer
->>> tokens = tokenizer(prompt, return_tensors="pt")
-
->>> # use the model to generate new tokens
->>> generated_output = model.generate(**tokens, use_cache=True)
-
->>> generated_text = tokenizer.batch_decode(generated_output)[0]
-```
-
 
 ## PhiConfig
 
