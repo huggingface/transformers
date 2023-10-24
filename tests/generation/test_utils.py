@@ -1409,8 +1409,8 @@ class GenerationTesterMixin:
     def test_contrastive_generate(self):
         # check `generate()` and `contrastive_search()` are equal
         for model_class in self.all_generative_model_classes:
-            # won't fix: FSMT and Reformer have a different cache variable type (and format).
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            # won't fix: FSMT, Reformer, and NucleusX have a different cache variable type (and format).
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "nucleusx"]):
                 self.skipTest("Won't fix: old model with different cache format")
 
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
@@ -1430,8 +1430,8 @@ class GenerationTesterMixin:
 
     def test_contrastive_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
-            # won't fix: FSMT and Reformer have a different cache variable type (and format).
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            # won't fix: FSMT, Reformer, and NucleusX have a different cache variable type (and format).
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "nucleusx"]):
                 self.skipTest("Won't fix: old model with different cache format")
 
             # enable cache
@@ -1463,7 +1463,7 @@ class GenerationTesterMixin:
     def test_contrastive_generate_low_memory(self):
         # Check that choosing 'low_memory' does not change the model output
         for model_class in self.all_generative_model_classes:
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "speech2text"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "speech2text", "nucleusx"]):
                 self.skipTest("Won't fix: old model with different cache format")
             if any(model_name in model_class.__name__.lower() for model_name in ["gptbigcode"]):
                 self.skipTest("TODO: fix me")
@@ -1513,7 +1513,7 @@ class GenerationTesterMixin:
         # - assisted_decoding does not support `batch_size > 1`
 
         for model_class in self.all_generative_model_classes:
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "nucleusx"]):
                 self.skipTest("Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()
@@ -1574,7 +1574,7 @@ class GenerationTesterMixin:
         # match sample for the same seed, as the forward pass does not return the exact same logits (due to matmul with
         # different shapes, see https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535).
         for model_class in self.all_generative_model_classes:
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "nucleusx"]):
                 self.skipTest("Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()

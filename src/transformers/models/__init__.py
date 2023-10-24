@@ -154,6 +154,7 @@ from . import (
     nllb,
     nllb_moe,
     nougat,
+    nucleus_x,
     nystromformer,
     oneformer,
     openai,
