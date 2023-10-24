@@ -144,7 +144,7 @@ class PersimmonDynamicNTKScalingRotaryEmbedding(PersimmonRotaryEmbedding):
 
         if seq_len > self.max_position_embeddings:
             base = self.base * (
-                    (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
+                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
             ) ** (self.dim / (self.dim - 2))
         else:
             base = self.base
