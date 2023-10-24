@@ -904,18 +904,12 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
                     layer_outputs = self.gradient_checkpointing_func(
                         layer.forward,
                         hidden_states,
                         attention_mask,
                         relative_position_embeddings,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = layer(

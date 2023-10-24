@@ -892,14 +892,7 @@ class SeamlessM4TConformerEncoder(nn.Module):
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = self.gradient_checkpointing_func(
                         layer.forward,
                         hidden_states,
                         attention_mask,
@@ -2125,15 +2118,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     decoder_layer.forward,
                     hidden_states,
                     attention_mask,
@@ -2142,6 +2127,8 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
                     head_mask[idx] if head_mask is not None else None,
                     cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                     None,
+                    output_attentions,
+                    use_cache,
                 )
             else:
                 layer_outputs = decoder_layer(

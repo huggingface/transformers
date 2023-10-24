@@ -1421,13 +1421,6 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                             "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                         )
                         use_cache = False
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return tuple(module(*inputs, use_cache, output_attentions))
-
-                        return custom_forward
-
                     layer_outputs = checkpoint(
                         decoder_layer.forward,
                         hidden_states,
@@ -1437,6 +1430,8 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                         layer_head_mask,
                         cross_attn_layer_head_mask,
                         None,  # past_key_value is always None with gradient checkpointing
+                        use_cache,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = decoder_layer(

@@ -1158,14 +1158,6 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
-
-                    return custom_forward
-
                 layer_outputs = self.gradient_checkpointing_func(
                     decoder_layer.forward,
                     hidden_states,
@@ -1175,6 +1167,8 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
                     head_mask[idx] if head_mask is not None else None,
                     cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                     None,
+                    output_attentions,
+                    use_cache,
                 )
             else:
                 layer_outputs = decoder_layer(

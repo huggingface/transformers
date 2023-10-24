@@ -724,17 +724,11 @@ class HubertEncoder(nn.Module):
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
                     layer_outputs = self.gradient_checkpointing_func(
                         layer.forward,
                         hidden_states,
                         attention_mask,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = layer(
@@ -814,17 +808,11 @@ class HubertEncoderStableLayerNorm(nn.Module):
                 # under deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
                 if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
                     layer_outputs = self.gradient_checkpointing_func(
                         layer.forward,
                         hidden_states,
                         attention_mask,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = layer(

@@ -439,13 +439,6 @@ class LayoutLMv2Encoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
                 layer_outputs = self.gradient_checkpointing_func(
                     layer_module.forward,
                     hidden_states,
