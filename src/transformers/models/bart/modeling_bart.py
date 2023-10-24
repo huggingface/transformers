@@ -90,6 +90,143 @@ BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.llama.modeling_llama.AttnMaskConverter
+class AttnMaskConverter:
+    """
+    A utility attention mask class that allows:
+        - Create a causal 4d mask
+        - Create a causal 4d mask with slided window
+        - Convert a 2d attention mask (batch_size, query_length) to a 4d attention mask (batch_size, 1, query_length,
+          key_value_length) that can be multiplied with attention scores
+
+    Parameters:
+        is_causal (`bool`):
+            Whether the attention mask should be a uni-directional (causal) or bi-directional mask.
+
+        sliding_window (`int`, *optional*):
+            Optionally, the sliding window masks can be created if `sliding_window` is defined to a positive integer.
+    """
+
+    def __init__(self, is_causal: bool, sliding_window: Optional[int] = None):
+        self.is_causal = is_causal
+        self.sliding_window = sliding_window
+
+    def to_causal_4d(
+        self,
+        batch_size: int,
+        query_length: int,
+        key_value_length: int,
+        dtype: torch.dtype = torch.float32,
+        device: Union[torch.device, "str"] = "cpu",
+    ) -> torch.Tensor:
+        """
+        Creates a causal 4D mask of (bsz, head_dim=1, query_length, key_value_length) shape and adds large negative
+        bias to upper right hand triangular matrix (causal mask).
+        """
+        if not self.is_causal:
+            raise ValueError(f"Please use `to_causal_4d` only if {self.__class__} has `is_causal` set to True.")
+
+        # If shape is not cached, create a new causal mask and cache it
+        input_shape = (batch_size, query_length)
+        past_key_values_length = key_value_length - query_length
+
+        # create causal mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        causal_4d_mask = None
+        if input_shape[-1] > 1 or self.sliding_window is not None:
+            past_key_values_length = key_value_length - query_length
+            causal_4d_mask = self._make_causal_mask(
+                input_shape,
+                dtype,
+                device=device,
+                past_key_values_length=past_key_values_length,
+                sliding_window=self.sliding_window,
+            )
+
+        return causal_4d_mask
+
+    def to_4d(
+        self,
+        attention_mask_2d: torch.Tensor,
+        query_length: int,
+        key_value_length: int,
+        dtype: torch.dtype = torch.float32,
+    ) -> torch.Tensor:
+        """
+        Converts 2D attention mask to 4D attention mask by expanding mask to (bsz, head_dim=1, query_length,
+        key_value_length) shape and by adding a large negative bias to not-attended positions. If attention_mask is
+        causal, a causal mask will be added.
+        """
+        input_shape = (attention_mask_2d.shape[0], query_length)
+        past_key_values_length = key_value_length - query_length
+
+        # create causal mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        causal_4d_mask = None
+        if (input_shape[-1] > 1 or self.sliding_window is not None) and self.is_causal:
+            past_key_values_length = key_value_length - query_length
+            causal_4d_mask = self._make_causal_mask(
+                input_shape,
+                dtype,
+                device=attention_mask_2d.device,
+                past_key_values_length=past_key_values_length,
+                sliding_window=self.sliding_window,
+            )
+        elif self.sliding_window is not None:
+            raise NotImplementedError("Sliding window is currently only implemented for causal masking")
+
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        expanded_attn_mask = self._expand_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
+            attention_mask_2d.device
+        )
+        expanded_4d_mask = expanded_attn_mask if causal_4d_mask is None else expanded_attn_mask + causal_4d_mask
+
+        return expanded_4d_mask
+
+    def _make_causal_mask(
+        self,
+        input_ids_shape: torch.Size,
+        dtype: torch.dtype,
+        device: torch.device,
+        past_key_values_length: int = 0,
+        sliding_window: Optional[int] = None,
+    ):
+        """
+        Make causal mask used for bi-directional self-attention.
+        """
+        bsz, tgt_len = input_ids_shape
+        mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
+        mask_cond = torch.arange(mask.size(-1), device=device)
+        mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+
+        mask = mask.to(dtype)
+
+        if past_key_values_length > 0:
+            mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
+
+        # add lower triangular sliding window mask if necessary
+        if sliding_window is not None:
+            diagonal = past_key_values_length - sliding_window + 1
+
+            context_mask = 1 - torch.triu(torch.ones_like(mask, dtype=torch.int), diagonal=diagonal)
+            mask.masked_fill_(context_mask.bool(), torch.finfo(dtype).min)
+
+        return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
+    def _expand_mask(self, mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+        """
+        Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+        """
+        bsz, src_len = mask.size()
+        tgt_len = tgt_len if tgt_len is not None else src_len
+
+        expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+
+        inverted_mask = 1.0 - expanded_mask
+
+        return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+
+
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
     Shift input ids one token to the right.
@@ -104,37 +241,6 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
     return shifted_input_ids
-
-
-def _make_causal_mask(
-    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
-):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
-    mask_cond = torch.arange(mask.size(-1), device=device)
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
-
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
-
-
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 class BartLearnedPositionalEmbedding(nn.Embedding):
@@ -183,6 +289,7 @@ class BartAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
+        self.is_causal = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -200,7 +307,6 @@ class BartAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -331,7 +437,6 @@ class BartFlashAttention2(BartAttention):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # BartFlashAttention2 attention does not support output_attentions
         output_attentions = False
@@ -407,9 +512,8 @@ class BartFlashAttention2(BartAttention):
             key_states = key_states.to(torch.float16)
             value_states = value_states.to(torch.float16)
 
-        causal = self.is_decoder and not is_cross_attention
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, padding_mask, q_len, causal=causal, dropout=dropout_rate
+            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1)
@@ -420,8 +524,9 @@ class BartFlashAttention2(BartAttention):
 
         return attn_output, attn_weights, past_key_value
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, padding_mask, query_length, causal=True, dropout=0.0, softmax_scale=None
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -434,7 +539,7 @@ class BartFlashAttention2(BartAttention):
                 Input key states to be passed to Flash Attention API
             value_states (`torch.Tensor`):
                 Input value states to be passed to Flash Attention API
-            padding_mask (`torch.Tensor`):
+            attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
             dropout (`int`, *optional*):
@@ -443,10 +548,10 @@ class BartFlashAttention2(BartAttention):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
         # Contains at least one padding token in the sequence
-        if padding_mask is not None:
+        if attention_mask is not None:
             batch_size = query_states.shape[0]
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, padding_mask, query_length
+                query_states, key_states, value_states, attention_mask, query_length
             )
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
@@ -462,13 +567,13 @@ class BartFlashAttention2(BartAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=causal,
+                causal=self.is_causal,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
             )
 
         return attn_output
@@ -986,6 +1091,8 @@ class BartEncoder(BartPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
+        self.attn_mask_converter = AttnMaskConverter(is_causal=False)
+
         self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
         if embed_tokens is not None:
@@ -1081,13 +1188,15 @@ class BartEncoder(BartPreTrainedModel):
         hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            padding_mask = attention_mask if 0 in attention_mask else None
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+        if getattr(self.config, "_flash_attn_2_enabled", False):
+            # 2d mask is passed through the layers
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
-            padding_mask = None
+            # 4d mask is passed through the layers
+            if attention_mask is not None:
+                attention_mask = self.causal_attn_mask_converter.to_4d(
+                    attention_mask, input.shape[1], dtype=inputs_embeds.dtype
+                )
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1126,14 +1235,12 @@ class BartEncoder(BartPreTrainedModel):
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
-                        padding_mask
                     )
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states,
                         attention_mask,
                         layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        padding_mask=padding_mask,
                         output_attentions=output_attentions,
                     )
 
@@ -1174,6 +1281,9 @@ class BartDecoder(BartPreTrainedModel):
         if embed_tokens is not None:
             self.embed_tokens.weight = embed_tokens.weight
 
+        self.causal_attn_mask_converter = AttnMaskConverter(is_causal=True)
+        self.attn_mask_converter = AttnMaskConverter(is_causal=False)
+
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
@@ -1190,29 +1300,6 @@ class BartDecoder(BartPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
-
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape,
-                inputs_embeds.dtype,
-                device=inputs_embeds.device,
-                past_key_values_length=past_key_values_length,
-            )
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
-                inputs_embeds.device
-            )
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
 
     def forward(
         self,
@@ -1320,22 +1407,30 @@ class BartDecoder(BartPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input) * self.embed_scale
 
-        if attention_mask is None:
-            padding_mask = None
+        if getattr(self.config, "_flash_attn_2_enabled", False):
+            # 2d mask is passed through the layers
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
-            padding_mask = attention_mask if 0 in attention_mask else None
-
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
-        )
+            key_value_length = input_shape[1] + past_key_values_length
+            # 4d mask is passed through the layers
+            if attention_mask is not None:
+                attention_mask = self.causal_attn_mask_converter.to_4d(
+                    attention_mask, input_shape[1], key_value_length, dtype=inputs_embeds.dtype
+                )
+            else:
+                attention_mask = self.causal_attn_mask_converter.to_causal_4d(
+                    input_shape[0], input_shape[1], key_value_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
+                )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_padding_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
-            encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
-        else:
-            encoder_padding_mask = None
+            if getattr(self.config, "_flash_attn_2_enabled", False):
+                encoder_attention_mask = encoder_attention_mask if (encoder_attention_mask is not None and 0 in encoder_attention_mask) else None
+            else:
+                if encoder_attention_mask is not None:
+                    encoder_attention_mask = self.attn_mask_converter.to_4d(
+                        encoder_attention_mask, encoder_attention_mask.shape[1], dtype=inputs_embeds.dtype
+                    )
 
         # embed positions
         positions = self.embed_positions(input, past_key_values_length)
@@ -1397,8 +1492,6 @@ class BartDecoder(BartPreTrainedModel):
                     head_mask[idx] if head_mask is not None else None,
                     cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                     None,
-                    padding_mask,
-                    encoder_padding_mask,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1411,8 +1504,6 @@ class BartDecoder(BartPreTrainedModel):
                         cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
                     ),
                     past_key_value=past_key_value,
-                    padding_mask=padding_mask,
-                    encoder_padding_mask=encoder_padding_mask,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                 )
