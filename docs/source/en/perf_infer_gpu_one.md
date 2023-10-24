@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # GPU inference
 
-GPUs are the standard choice of hardware for machine learning, unlike CPUs, because they are optimized for memory bandwidth and parallelism. To keep up with the larger sizes of modern models or to run these large models on existing and older hardware, there are several optimizations you can use to speed up GPU inference. In this guide, you'll learn how to use FlashAttention-2 (a more memory-efficient attention mechanism), BetterTransformer (a PyTorch native fastpath execution), and bitsandbytes to quantize your model to a lower precision.
+GPUs are the standard choice of hardware for machine learning, unlike CPUs, because they are optimized for memory bandwidth and parallelism. To keep up with the larger sizes of modern models or to run these large models on existing and older hardware, there are several optimizations you can use to speed up GPU inference. In this guide, you'll learn how to use FlashAttention-2 (a more memory-efficient attention mechanism), BetterTransformer (a PyTorch native fastpath execution), and bitsandbytes to quantize your model to a lower precision. Finally, learn how to use 🤗 Optimum to accelerate inference with ONNX Runtime on Nvidia GPUs.
 
 <Tip>
 
@@ -193,14 +193,14 @@ pip3 install -U --pre torch torchvision torchaudio --index-url https://download.
 
 bitsandbytes is a quantization library that includes support for 4-bit and 8-bit quantization. Quantization reduces your model size compared to its native full precision version, making it easier to fit large models onto GPUs with limited memory.
 
-Make sure you have the following libraries installed:
+Make sure you have bitsnbytes and 🤗 Accelerate installed:
 
 ```bash
-pip install bitsandbytes>=0.39.0
+# these versions support 8-bit and 4-bit
+pip install bitsandbytes>=0.39.0 accelerate>=0.20.0
 
-# install Accelerate and Transformers from source
-pip install git+https://github.com/huggingface/accelerate.git
-pip install git+https://github.com/huggingface/transformers.git
+# install Transformers
+pip install transformers
 ```
 
 ### 4-bit
@@ -268,9 +268,43 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 
 <Tip>
 
-Feel free to try running a 11 billion parameter [[!T5 model](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1YORPWx4okIHXnjW7MSAidXN29mPVNT7F?usp=sharing) or the 3 billion parameter [[!BLOOM model](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1qOjXfQIAULfKvZqwCen8-MoWKGdSatZ4?usp=sharing) for inference on Google Colab's free tier GPUs!
+Feel free to try running a 11 billion parameter [T5 model](https://colab.research.google.com/drive/1YORPWx4okIHXnjW7MSAidXN29mPVNT7F?usp=sharing) or the 3 billion parameter [BLOOM model](https://colab.research.google.com/drive/1qOjXfQIAULfKvZqwCen8-MoWKGdSatZ4?usp=sharing) for inference on Google Colab's free tier GPUs!
 
 </Tip>
+
+## 🤗 Optimum
+
+<Tip>
+
+Learn more details about using ORT with 🤗 Optimum in the [Accelerated inference on NVIDIA GPUs](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/gpu#accelerated-inference-on-nvidia-gpus) guide. This section only provides a brief and simple example.
+
+</Tip>
+
+ONNX Runtime (ORT) is a model accelerator that supports accelerated inference on Nvidia GPUs. ORT uses optimiziation techniques like fusing common operations into a single node and constant folding to reduce the number of computations performed and speedup inference. ORT also places the most computationally intensive operations on the GPU and the rest on the CPU to intelligently distribute the workload between the two devices.
+
+ORT is supported by 🤗 Optimum which can be used in 🤗 Transformers. You'll need to use an [`~optimum.onnxruntime.ORTModel`] for the task you're solving, and specify the `provider` parameter to use `CUDAExecutionProvider`:
+
+```py
+from optimum.onnxruntime import ORTModelForSequenceClassification
+
+ort_model = ORTModelForSequenceClassification.from_pretrained(
+  "distilbert-base-uncased-finetuned-sst-2-english",
+  export=True,
+  provider="CUDAExecutionProvider",
+)
+```
+
+Now you're free to use the model for inference:
+
+```py
+from optimum.pipelines import pipeline
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+
+pipeline = pipeline(task="text-classification", model=ort_model, tokenizer=tokenizer, device="cuda:0")
+result = pipeline("Both the music and visual were astounding, not to mention the actors performance.")
+```
 
 ## Combine optimizations
 
