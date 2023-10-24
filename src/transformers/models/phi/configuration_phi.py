@@ -101,7 +101,7 @@ class PhiConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "phi"
+    model_type = "mixformer-sequential"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
