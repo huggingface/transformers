@@ -70,7 +70,7 @@ from .utils import (
     is_accelerate_available,
     is_auto_gptq_available,
     is_bitsandbytes_available,
-    is_flash_attn_available,
+    is_flash_attn_2_available,
     is_offline_mode,
     is_optimum_available,
     is_peft_available,
@@ -125,6 +125,7 @@ def is_fsdp_enabled():
         torch.distributed.is_available()
         and torch.distributed.is_initialized()
         and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
+        and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1
     )
 
 
@@ -693,7 +694,9 @@ def _load_state_dict_into_meta_model(
         if dtype is not None and torch.is_floating_point(param):
             if (
                 keep_in_fp32_modules is not None
-                and any(module_to_keep_in_fp32 in param_name for module_to_keep_in_fp32 in keep_in_fp32_modules)
+                and any(
+                    module_to_keep_in_fp32 in param_name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules
+                )
                 and dtype == torch.float16
             ):
                 param = param.to(torch.float32)
@@ -1267,7 +1270,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "request support for this architecture: https://github.com/huggingface/transformers/issues/new"
             )
 
-        if not is_flash_attn_available():
+        if not is_flash_attn_2_available():
             raise ImportError(
                 "Flash Attention 2.0 is not available. Please refer to the documentation of https://github.com/Dao-AILab/flash-attention for"
                 " installing it."
@@ -1614,7 +1617,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 new_num_tokens = old_embeddings.weight.shape[0]
             new_num_tokens = ((new_num_tokens + pad_to_multiple_of - 1) // pad_to_multiple_of) * pad_to_multiple_of
         else:
-            logger.warning(
+            logger.info(
                 "You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embedding"
                 f" dimension will be {new_num_tokens}. This might induce some performance reduction as *Tensor Cores* will not be available."
                 " For more details about this, or help on choosing the correct value for resizing, refer to this guide:"
@@ -1864,7 +1867,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         state_dict: Optional[dict] = None,
         save_function: Callable = torch.save,
         push_to_hub: bool = False,
-        max_shard_size: Union[int, str] = "10GB",
+        max_shard_size: Union[int, str] = "5GB",
         safe_serialization: bool = False,
         variant: Optional[str] = None,
         token: Optional[Union[str, bool]] = None,
@@ -1893,9 +1896,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+            max_shard_size (`int` or `str`, *optional*, defaults to `"5GB"`):
                 The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
                 lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
+                We default it to 5GB in order for models to be able to run easily on free-tier google colab instances
+                without CPU OOM issues.
 
                 <Tip warning={true}>
 
@@ -1933,15 +1938,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if token is not None:
             kwargs["token"] = token
 
+        _hf_peft_config_loaded = getattr(self, "_hf_peft_config_loaded", False)
+
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_8bit", False) and getattr(self, "is_8bit_serializable", False):
-            warnings.warn(
+        if (
+            getattr(self, "is_loaded_in_8bit", False)
+            and not getattr(self, "is_8bit_serializable", False)
+            and not _hf_peft_config_loaded
+        ):
+            raise ValueError(
                 "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
-                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed.",
-                UserWarning,
+                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed."
             )
 
-        if getattr(self, "is_loaded_in_4bit", False):
+        # If the model has adapters attached, you can save the adapters
+        if getattr(self, "is_loaded_in_4bit", False) and not _hf_peft_config_loaded:
             raise NotImplementedError(
                 "You are calling `save_pretrained` on a 4-bit converted model. This is currently not supported"
             )
@@ -1982,8 +1993,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if self._auto_class is not None:
             custom_object_save(self, save_directory, config=self.config)
 
-        _hf_peft_config_loaded = getattr(model_to_save, "_hf_peft_config_loaded", False)
-
         # Save the config
         if is_main_process:
             if not _hf_peft_config_loaded:
@@ -2006,7 +2015,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         peft_state_dict[f"base_model.model.{key}"] = value
                     state_dict = peft_state_dict
 
-                current_peft_config = self.peft_config[self.active_adapter()]
+                active_adapter = self.active_adapters()
+
+                if len(active_adapter) > 1:
+                    raise ValueError(
+                        "Multiple active adapters detected, saving multiple active adapters is not supported yet. You can save adapters separately one by one "
+                        "by iteratively calling `model.set_adapter(adapter_name)` then `model.save_pretrained(...)`"
+                    )
+                active_adapter = active_adapter[0]
+
+                current_peft_config = self.peft_config[active_adapter]
                 current_peft_config.save_pretrained(save_directory)
 
         # Save the model
@@ -2162,8 +2180,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "`.to` is not supported for `4-bit` or `8-bit` bitsandbytes models. Please use the model as it is, since the"
                 " model has already been set to the correct devices and casted to the correct `dtype`."
             )
-        else:
-            return super().to(*args, **kwargs)
+        elif getattr(self, "quantization_method", None) == QuantizationMethod.GPTQ:
+            # For GPTQ models, we prevent users from casting the model to another dytpe to restrict unwanted behaviours.
+            # the correct API should be to load the model with the desired dtype directly through `from_pretrained`.
+            dtype_present_in_args = False
+
+            if "dtype" not in kwargs:
+                for arg in args:
+                    if isinstance(arg, torch.dtype):
+                        dtype_present_in_args = True
+                        break
+            else:
+                dtype_present_in_args = True
+
+            if dtype_present_in_args:
+                raise ValueError(
+                    "You cannot cast a GPTQ model in a new `dtype`. Make sure to load the model using `from_pretrained` using the desired"
+                    " `dtype` by passing the correct `torch_dtype` argument."
+                )
+        return super().to(*args, **kwargs)
 
     def half(self, *args):
         # Checks if the model is quantized
@@ -2454,7 +2489,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
-        _adapter_model_path = kwargs.pop("_adapter_model_path", None)
+        adapter_kwargs = kwargs.pop("adapter_kwargs", {})
         adapter_name = kwargs.pop("adapter_name", "default")
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
@@ -2470,6 +2505,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
             token = use_auth_token
+
+        if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
+            adapter_kwargs["token"] = token
 
         if use_safetensors is None and not is_safetensors_available():
             use_safetensors = False
@@ -2507,6 +2545,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 commit_hash = getattr(config, "_commit_hash", None)
 
         if is_peft_available():
+            _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
+
             if _adapter_model_path is None:
                 _adapter_model_path = find_adapter_config_file(
                     pretrained_model_name_or_path,
@@ -2515,15 +2555,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     resume_download=resume_download,
                     proxies=proxies,
                     local_files_only=local_files_only,
-                    token=token,
-                    revision=revision,
-                    subfolder=subfolder,
                     _commit_hash=commit_hash,
+                    **adapter_kwargs,
                 )
             if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
                 with open(_adapter_model_path, "r", encoding="utf-8") as f:
                     _adapter_model_path = pretrained_model_name_or_path
                     pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
+        else:
+            _adapter_model_path = None
 
         # change device_map into a map if we passed an int, a str or a torch.device
         if isinstance(device_map, torch.device):
@@ -2615,8 +2655,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     raise RuntimeError("No GPU found. A GPU is needed for quantization.")
                 logger.info(
-                    "The device_map was not initialized."
-                    "Setting device_map to {'':torch.cuda.current_device()}."
+                    "The device_map was not initialized. "
+                    "Setting device_map to {'':torch.cuda.current_device()}. "
                     "If you want to use the model for inference, please set device_map ='auto' "
                 )
                 if low_cpu_mem_usage is None:
@@ -2742,8 +2782,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     else:
                         raise RuntimeError("No GPU found. A GPU is needed for quantization.")
                     logger.info(
-                        "The device_map was not initialized."
-                        "Setting device_map to {'':torch.cuda.current_device()}."
+                        "The device_map was not initialized. "
+                        "Setting device_map to {'':torch.cuda.current_device()}. "
                         "If you want to use the model for inference, please set device_map ='auto' "
                     )
                     if low_cpu_mem_usage is None:
@@ -3129,7 +3169,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if load_in_8bit and torch_dtype is None:
             logger.warning(
-                "You are loading your model in 8bit but you did not specify a `torch_dtype` attribute."
+                "You are loading your model in 8bit but you did not specify a `torch_dtype` attribute. "
                 "All non-linear modules will be loaded in full precision."
                 " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute."
             )
@@ -3143,6 +3183,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model.quantization_method = quantization_method_from_args
         if hasattr(model, "quantization_method"):
             model.is_quantized = True
+
+            # We store the original dtype for quantized models as we cannot easily retrieve it
+            # once the weights have been quantized
+            # Note that once you have loaded a quantized model, you can't change its dtype so this will
+            # remain a single source of truth
+            config._pre_quantization_dtype = torch_dtype
 
         if isinstance(device_map, str):
             special_dtypes = {}
@@ -3173,8 +3219,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     raise ValueError(
                         "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute"
-                        " the appropriate device map, you should upgrade your `accelerate` library,"
-                        "`pip install --upgrade accelerate` or install it from source to support fp4 auto device map"
+                        " the appropriate device map, you should upgrade your `accelerate` library, "
+                        "`pip install --upgrade accelerate` or install it from source to support fp4 auto device map "
                         "calculation. You may encounter unexpected behavior, or pass your own device map"
                     )
             elif load_in_8bit:
@@ -3182,7 +3228,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if model._no_split_modules is None:
                 raise ValueError(
-                    f"{model.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model"
+                    f"{model.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
                     "class needs to implement the `_no_split_modules` attribute."
                 )
             no_split_modules = model._no_split_modules
@@ -3362,8 +3408,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
-                revision=revision,
                 token=token,
+                adapter_kwargs=adapter_kwargs,
             )
 
         if output_loading_info:
@@ -3516,7 +3562,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if (
                     keep_in_fp32_modules is not None
                     and dtype == torch.float16
-                    and any(module_to_keep_in_fp32 in key for module_to_keep_in_fp32 in keep_in_fp32_modules)
+                    and any(
+                        module_to_keep_in_fp32 in key.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules
+                    )
                 ):
                     target_dtype = torch.float32
 
@@ -3543,7 +3591,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Set some modules to fp32 if any
         if keep_in_fp32_modules is not None:
             for name, param in model.named_parameters():
-                if any(module_to_keep_in_fp32 in name for module_to_keep_in_fp32 in keep_in_fp32_modules):
+                if any(module_to_keep_in_fp32 in name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules):
                     # param = param.to(torch.float32) does not work here as only in the local scope.
                     param.data = param.data.to(torch.float32)
 
