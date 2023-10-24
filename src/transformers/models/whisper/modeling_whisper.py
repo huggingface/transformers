@@ -24,6 +24,8 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from build.lib.transformers.configuration_utils import PretrainedConfig
+
 from ...activations import ACT2FN
 from ...generation.logits_process import WhisperTimeStampLogitsProcessor
 from ...modeling_outputs import (
@@ -62,10 +64,149 @@ WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.llama.modeling_llama.AttnMaskConverter
+class AttnMaskConverter:
+    """
+    A utility attention mask class that allows:
+        - Create a causal 4d mask
+        - Create a causal 4d mask with slided window
+        - Convert a 2d attention mask (batch_size, query_length) to a 4d attention mask (batch_size, 1, query_length,
+          key_value_length) that can be multiplied with attention scores
+
+    Parameters:
+        is_causal (`bool`):
+            Whether the attention mask should be a uni-directional (causal) or bi-directional mask.
+
+        sliding_window (`int`, *optional*):
+            Optionally, the sliding window masks can be created if `sliding_window` is defined to a positive integer.
+    """
+
+    def __init__(self, is_causal: bool, sliding_window: Optional[int] = None):
+        self.is_causal = is_causal
+        self.sliding_window = sliding_window
+
+    def to_causal_4d(
+        self,
+        batch_size: int,
+        query_length: int,
+        key_value_length: int,
+        dtype: torch.dtype = torch.float32,
+        device: Union[torch.device, "str"] = "cpu",
+    ) -> torch.Tensor:
+        """
+        Creates a causal 4D mask of (bsz, head_dim=1, query_length, key_value_length) shape and adds large negative
+        bias to upper right hand triangular matrix (causal mask).
+        """
+        if not self.is_causal:
+            raise ValueError(f"Please use `to_causal_4d` only if {self.__class__} has `is_causal` set to True.")
+
+        # If shape is not cached, create a new causal mask and cache it
+        input_shape = (batch_size, query_length)
+        past_key_values_length = key_value_length - query_length
+
+        # create causal mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        causal_4d_mask = None
+        if input_shape[-1] > 1 or self.sliding_window is not None:
+            past_key_values_length = key_value_length - query_length
+            causal_4d_mask = self._make_causal_mask(
+                input_shape,
+                dtype,
+                device=device,
+                past_key_values_length=past_key_values_length,
+                sliding_window=self.sliding_window,
+            )
+
+        return causal_4d_mask
+
+    def to_4d(
+        self,
+        attention_mask_2d: torch.Tensor,
+        query_length: int,
+        key_value_length: Optional[int] = None,
+        dtype: torch.dtype = torch.float32,
+    ) -> torch.Tensor:
+        """
+        Converts 2D attention mask to 4D attention mask by expanding mask to (bsz, head_dim=1, query_length,
+        key_value_length) shape and by adding a large negative bias to not-attended positions. If attention_mask is
+        causal, a causal mask will be added.
+        """
+        input_shape = (attention_mask_2d.shape[0], query_length)
+
+        # create causal mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        causal_4d_mask = None
+        if (input_shape[-1] > 1 or self.sliding_window is not None) and self.is_causal:
+            if key_value_length is None:
+                raise ValueError("This attention mask converter is causal. Make sure to pass `key_value_length` to correctly create a causal mask.")
+
+            past_key_values_length = key_value_length - query_length
+            causal_4d_mask = self._make_causal_mask(
+                input_shape,
+                dtype,
+                device=attention_mask_2d.device,
+                past_key_values_length=past_key_values_length,
+                sliding_window=self.sliding_window,
+            )
+        elif self.sliding_window is not None:
+            raise NotImplementedError("Sliding window is currently only implemented for causal masking")
+
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        expanded_attn_mask = self._expand_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
+            attention_mask_2d.device
+        )
+        expanded_4d_mask = expanded_attn_mask if causal_4d_mask is None else expanded_attn_mask + causal_4d_mask
+
+        return expanded_4d_mask
+
+    def _make_causal_mask(
+        self,
+        input_ids_shape: torch.Size,
+        dtype: torch.dtype,
+        device: torch.device,
+        past_key_values_length: int = 0,
+        sliding_window: Optional[int] = None,
+    ):
+        """
+        Make causal mask used for bi-directional self-attention.
+        """
+        bsz, tgt_len = input_ids_shape
+        mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
+        mask_cond = torch.arange(mask.size(-1), device=device)
+        mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+
+        mask = mask.to(dtype)
+
+        if past_key_values_length > 0:
+            mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
+
+        # add lower triangular sliding window mask if necessary
+        if sliding_window is not None:
+            diagonal = past_key_values_length - sliding_window + 1
+
+            context_mask = 1 - torch.triu(torch.ones_like(mask, dtype=torch.int), diagonal=diagonal)
+            mask.masked_fill_(context_mask.bool(), torch.finfo(dtype).min)
+
+        return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
+    def _expand_mask(self, mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+        """
+        Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+        """
+        bsz, src_len = mask.size()
+        tgt_len = tgt_len if tgt_len is not None else src_len
+
+        expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+
+        inverted_mask = 1.0 - expanded_mask
+
+        return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+
+
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(padding_mask):
-    seqlens_in_batch = padding_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(padding_mask.flatten(), as_tuple=False).flatten()
+def _get_unpad_data(attention_mask):
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
     return (
@@ -349,13 +490,16 @@ class WhisperAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         is_decoder: bool = False,
+        is_causal: bool = False,
         bias: bool = True,
+        config: Optional[PretrainedConfig] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.config = config
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -364,6 +508,7 @@ class WhisperAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
+        self.is_causal = is_causal
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -383,7 +528,6 @@ class WhisperAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -516,7 +660,6 @@ class WhisperFlashAttention2(WhisperAttention):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # WhisperFlashAttention2 attention does not support output_attentions
         output_attentions = False
@@ -594,7 +737,7 @@ class WhisperFlashAttention2(WhisperAttention):
 
         causal = self.is_decoder and not is_cross_attention
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, padding_mask, q_len, causal=causal, dropout=dropout_rate
+            query_states, key_states, value_states, attention_mask, q_len, causal=causal, dropout=dropout_rate
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1)
@@ -606,7 +749,7 @@ class WhisperFlashAttention2(WhisperAttention):
         return attn_output, attn_weights, past_key_value
 
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, padding_mask, query_length, causal=True, dropout=0.0, softmax_scale=None
+        self, query_states, key_states, value_states, attention_mask, query_length, causal=True, dropout=0.0, softmax_scale=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -619,7 +762,7 @@ class WhisperFlashAttention2(WhisperAttention):
                 Input key states to be passed to Flash Attention API
             value_states (`torch.Tensor`):
                 Input value states to be passed to Flash Attention API
-            padding_mask (`torch.Tensor`):
+            attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
             dropout (`int`, *optional*):
@@ -628,10 +771,10 @@ class WhisperFlashAttention2(WhisperAttention):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
         # Contains at least one padding token in the sequence
-        if padding_mask is not None:
+        if attention_mask is not None:
             batch_size = query_states.shape[0]
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, padding_mask, query_length
+                query_states, key_states, value_states, attention_mask, query_length
             )
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
@@ -647,7 +790,7 @@ class WhisperFlashAttention2(WhisperAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=causal,
+                causal=self.is_causal,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
@@ -659,8 +802,8 @@ class WhisperFlashAttention2(WhisperAttention):
         return attn_output
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
-    def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
         key_layer = index_first_axis(
@@ -685,8 +828,8 @@ class WhisperFlashAttention2(WhisperAttention):
             query_layer = query_layer.squeeze(1)
         else:
             # The -q_len: slice assumes left padding.
-            padding_mask = padding_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, padding_mask)
+            attention_mask = attention_mask[:, -query_length:]
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
 
         return (
             query_layer,
@@ -708,12 +851,14 @@ class WhisperEncoderLayer(nn.Module):
                 embed_dim=self.embed_dim,
                 num_heads=config.encoder_attention_heads,
                 dropout=config.attention_dropout,
+                config=config
             )
         else:
             self.self_attn = WhisperAttention(
                 embed_dim=self.embed_dim,
                 num_heads=config.encoder_attention_heads,
                 dropout=config.attention_dropout,
+                config=config
             )
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -787,6 +932,8 @@ class WhisperDecoderLayer(nn.Module):
                 num_heads=config.encoder_attention_heads,
                 dropout=config.attention_dropout,
                 is_decoder=True,
+                is_causal=True,
+                config=config
             )
         else:
             self.self_attn = WhisperAttention(
@@ -794,6 +941,8 @@ class WhisperDecoderLayer(nn.Module):
                 num_heads=config.encoder_attention_heads,
                 dropout=config.attention_dropout,
                 is_decoder=True,
+                is_causal=True,
+                config=config
             )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -1094,6 +1243,8 @@ class WhisperEncoder(WhisperPreTrainedModel):
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
+        self.attn_mask_converter = AttnMaskConverter(is_causal=False)
+
         self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1)
         self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
 
@@ -1244,6 +1395,9 @@ class WhisperDecoder(WhisperPreTrainedModel):
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+
+        self.causal_attn_mask_converter = AttnMaskConverter(is_causal=True)
+
         self.embed_positions = WhisperPositionalEmbedding(self.max_target_positions, config.d_model)
 
         self.layers = nn.ModuleList([WhisperDecoderLayer(config) for _ in range(config.decoder_layers)])
@@ -1377,9 +1531,20 @@ class WhisperDecoder(WhisperPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
-        )
+        if getattr(self.config, "_flash_attn_2_enabled", False):
+            # 2d mask is passed through the layers
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        else:
+            key_value_length = input_shape[-1] + past_key_values_length
+            # 4d mask is passed through the layers
+            if attention_mask is not None:
+                attention_mask = self.causal_attn_mask_converter.to_4d(
+                    attention_mask, input_shape[-1], key_value_length, dtype=inputs_embeds.dtype
+                )
+            else:
+                attention_mask = self.causal_attn_mask_converter.to_causal_4d(
+                    input_shape[0], input_shape[-1], key_value_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
+                )
 
         # embed positions
         if input_ids is not None:

@@ -24,6 +24,8 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from build.lib.transformers.configuration_utils import PretrainedConfig
+
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -278,6 +280,7 @@ class BartAttention(nn.Module):
         is_decoder: bool = False,
         is_causal: bool = False,
         bias: bool = True,
+        config: Optional[PretrainedConfig] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -298,6 +301,7 @@ class BartAttention(nn.Module):
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.config = config
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -638,12 +642,14 @@ class BartEncoderLayer(nn.Module):
                 embed_dim=self.embed_dim,
                 num_heads=config.encoder_attention_heads,
                 dropout=config.attention_dropout,
+                config=config,
             )
         else:
             self.self_attn = BartAttention(
                 embed_dim=self.embed_dim,
                 num_heads=config.encoder_attention_heads,
                 dropout=config.attention_dropout,
+                config=config,
             )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -716,6 +722,7 @@ class BartDecoderLayer(nn.Module):
                 dropout=config.attention_dropout,
                 is_decoder=True,
                 is_causal=True,
+                config=config,
             )
         else:
             self.self_attn = BartAttention(
@@ -724,6 +731,7 @@ class BartDecoderLayer(nn.Module):
                 dropout=config.attention_dropout,
                 is_decoder=True,
                 is_causal=True,
+                config=config,
             )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -736,6 +744,7 @@ class BartDecoderLayer(nn.Module):
                 num_heads=config.decoder_attention_heads,
                 dropout=config.attention_dropout,
                 is_decoder=True,
+                config=config,
             )
         else:
             self.encoder_attn = BartAttention(
@@ -743,6 +752,7 @@ class BartDecoderLayer(nn.Module):
                 num_heads=config.decoder_attention_heads,
                 dropout=config.attention_dropout,
                 is_decoder=True,
+                config=config,
             )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
@@ -2256,7 +2266,6 @@ class BartForCausalLM(BartPreTrainedModel):
         >>> list(logits.shape) == expected_shape
         True
         ```"""
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
