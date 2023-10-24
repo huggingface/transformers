@@ -772,7 +772,7 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
-    "utils.quantization_config": ["BitsAndBytesConfig", "GPTQConfig"],
+    "utils.quantization_config": ["BitsAndBytesConfig", "GPTQConfig", "AWQConfig"],
 }
 
 # sentencepiece-backed objects
@@ -4923,7 +4923,7 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import BitsAndBytesConfig, GPTQConfig
+    from .utils.quantization_config import BitsAndBytesConfig, GPTQConfig, AWQConfig
 
     try:
         if not is_sentencepiece_available():

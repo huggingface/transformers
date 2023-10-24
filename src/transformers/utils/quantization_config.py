@@ -37,6 +37,7 @@ logger = logging.get_logger(__name__)
 class QuantizationMethod(str, Enum):
     BITS_AND_BYTES = "bitsandbytes"
     GPTQ = "gptq"
+    AWQ = "awq"
 
 
 @dataclass
@@ -418,3 +419,36 @@ class GPTQConfig(QuantizationConfigMixin):
                     f"""dataset needs to be either a list of string or a value in
                     ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
                 )
+
+
+@dataclass
+class AWQConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class about all possible attributes and features that you can play with a model that has been
+    loaded using `auto-awq` library awq quantization relying on auto_awq backend.
+
+    Args:
+        w_bit (`int`):
+            The number of bits to quantize to.
+        zero_point (`bool`, *optional*, defaults to `True`):
+            Whether to use zero point quantization.
+        q_group_size (`int`, *optional*, defaults to 128):
+            The group size to use for quantization. Recommended value is 128 and -1 uses per-column quantization.
+        version (`str`, *optional*, defaults to `GEMM`):
+            The version of the quantization algorithm to use.
+    """
+
+    def __init__(
+        self,
+        w_bit: int,
+        q_group_size: int = 128,
+        zero_point: bool = True,
+        version: str = "GEMM",
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.AWQ
+
+        self.w_bit = w_bit
+        self.q_group_size = q_group_size
+        self.zero_point = zero_point
+        self.version = version
