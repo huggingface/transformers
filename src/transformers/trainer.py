@@ -1745,7 +1745,7 @@ class Trainer:
                 sampler_kinds = [RandomSampler]
                 if version.parse(accelerate_version) > version.parse("0.23.0"):
                     sampler_kinds.append(SeedableRandomSampler)
-                is_random_sampler = isinstance(sampler, sampler_kinds)
+                is_random_sampler = isinstance(sampler, tuple(sampler_kinds))
                 if is_torch_less_than_1_11 or not is_random_sampler:
                     # We just need to begin an iteration to create the randomization of the sampler.
                     for _ in train_dataloader:
