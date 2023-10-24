@@ -37,7 +37,7 @@ if is_vision_available():
 
     from transformers import (
         AutoProcessor,
-        Kosmos2ImageProcessor,
+        CLIPImageProcessor,
         Kosmos2Processor,
         PreTrainedTokenizerFast,
         XLMRobertaTokenizer,
@@ -55,7 +55,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = Kosmos2ImageProcessor()
+        image_processor = CLIPImageProcessor(use_square_size=True)
 
         # We have a SentencePiece fixture for testing
         slow_tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB)
@@ -99,7 +99,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, Kosmos2ImageProcessor)
+        self.assertIsInstance(processor.image_processor, CLIPImageProcessor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()

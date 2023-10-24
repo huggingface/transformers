@@ -42,13 +42,13 @@ class Kosmos2Processor(ProcessorMixin):
     Constructs an KOSMOS-2 processor which wraps a KOSMOS-2 image processor and a KOSMOS-2 tokenizer into a single
     processor.
 
-    [`Kosmos2Processor`] offers all the functionalities of [`Kosmos2ImageProcessor`] and some functionalities of
+    [`Kosmos2Processor`] offers all the functionalities of [`CLIPImageProcessor`] and some functionalities of
     [`XLMRobertaTokenizerFast`]. See the docstring of [`~Kosmos2Processor.__call__`] and [`~Kosmos2Processor.decode`]
     for more information.
 
     Args:
-        image_processor (`Kosmos2ImageProcessor`):
-            An instance of [`Kosmos2ImageProcessor`]. The image processor is a required input.
+        image_processor (`CLIPImageProcessor`):
+            An instance of [`CLIPImageProcessor`]. The image processor is a required input.
         tokenizer (`XLMRobertaTokenizerFast`):
             An instance of ['XLMRobertaTokenizerFast`]. The tokenizer is a required input.
         num_patch_index_tokens (`int`, *optional*, defaults to 1024):
@@ -123,7 +123,7 @@ class Kosmos2Processor(ProcessorMixin):
         **kwargs,
     ) -> BatchFeature:
         """
-        This method uses [`Kosmos2ImageProcessor.__call__`] method to prepare image(s) for the model, and
+        This method uses [`CLIPImageProcessor.__call__`] method to prepare image(s) for the model, and
         [`XLMRobertaTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
