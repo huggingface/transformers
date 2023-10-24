@@ -297,7 +297,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
         )
 
         def check(texts, bboxes, expected_texts, expected_input_ids):
-            processed_texts = processor.preprocess_text(images=None, texts=texts, bboxes=bboxes)
+            processed_texts = processor.preprocess_examples(images=None, texts=texts, bboxes=bboxes)
             assert processed_texts == expected_texts
 
             outputs = processor(images=None, text=texts, bboxes=bboxes)
@@ -326,7 +326,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
 
         # could not contain `[None]`
         with pytest.raises(ValueError):
-            _ = processor.preprocess_text(images=None, texts=texts[1], bboxes=[[None]])
+            _ = processor.preprocess_examples(images=None, texts=texts[1], bboxes=[[None]])
 
         # 2 phrase: 2 bboxes + no bbox
         check(texts[2], bboxes[2][0], expected_texts[4], expected_input_ids[4])
@@ -345,10 +345,10 @@ class Kosmos2ProcessorTest(unittest.TestCase):
 
         # could not contain `[None]`
         with pytest.raises(ValueError):
-            _ = processor.preprocess_text(images=None, texts=texts[2], bboxes=[[(79, 1016), (135, 1008)], [None]])
+            _ = processor.preprocess_examples(images=None, texts=texts[2], bboxes=[[(79, 1016), (135, 1008)], [None]])
 
         # test batch
-        outputs = processor.preprocess_text(
+        outputs = processor.preprocess_examples(
             images=None,
             texts=batch_text,
             bboxes=batch_bboxes,
@@ -405,8 +405,8 @@ class Kosmos2ProcessorTest(unittest.TestCase):
 
         # test with image
         num_image_tokens = 64
-        # (`image` type is not checked in `preprocess_text`. It works as long as it is not `None`.)
-        outputs = processor.preprocess_text(
+        # (`image` type is not checked in `preprocess_examples`. It works as long as it is not `None`.)
+        outputs = processor.preprocess_examples(
             images=image, texts=texts[0], bboxes=None, num_image_tokens=num_image_tokens
         )
         assert outputs == "".join(["<image>"] + ["<image>"] * num_image_tokens + ["</image>"] + [expected_texts[0]])
