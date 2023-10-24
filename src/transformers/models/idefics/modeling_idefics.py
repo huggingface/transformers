@@ -40,7 +40,7 @@ from ...utils import (
 )
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
-from .vision import IdeficsVisionTransformer, IdeficsVisionEncoder
+from .vision import IdeficsVisionEncoder, IdeficsVisionTransformer
 
 
 logger = logging.get_logger(__name__)
