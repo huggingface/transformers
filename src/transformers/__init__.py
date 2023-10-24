@@ -508,7 +508,7 @@ _import_structure = {
     "models.roberta_prelayernorm": ["ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaPreLayerNormConfig"],
     "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
-    "models.rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig", "RWKVWorldTokenizer"],
+    "models.rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig"],
     "models.sam": [
         "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SamConfig",
@@ -6510,7 +6510,6 @@ if TYPE_CHECKING:
             RwkvForCausalLM,
             RwkvModel,
             RwkvPreTrainedModel,
-            RWKVWorldTokenizer,
         )
         from .models.sam import (
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -18,7 +18,8 @@ import os
 import unittest
 
 from transformers import RWKVWorldTokenizer
-from transformers.testing_utils import require_tokenizers, get_tests_dir
+from transformers.testing_utils import get_tests_dir, require_tokenizers
+
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/rwkv_vocab_v20230424.json")
 
