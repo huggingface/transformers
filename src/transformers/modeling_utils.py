@@ -3402,7 +3402,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if cls.main_input_name != "input_ids":
                 raise RuntimeError("We can only quantize pure text model.")
             quantizer.quantize_model(model, quantization_config.tokenizer)
-            model.config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
+            config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
             model._is_quantized_training_enabled = True
         if quantization_method_from_config == QuantizationMethod.GPTQ:
             model = quantizer.post_init_model(model)
@@ -3793,7 +3793,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             missing_keys = [elem for elem in missing_keys if "SCB" not in elem]
 
         if len(unexpected_keys) > 0:
-            archs = [] if model.config.architectures is None else model.config.architectures
+            archs = [] if config.architectures is None else config.architectures
             warner = logger.warning if model.__class__.__name__ in archs else logger.info
             warner(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
