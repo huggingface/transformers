@@ -79,7 +79,7 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 >>> import sys
 >>> from transformers import PhiForCausalLM, AutoTokenizer
 
->>> # define the model and tokenzier
+>>> # define the model and the tokenzier
 >>> model = PhiForCausalLM.from_pretrained("susnato/phi-1_dev")
 >>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_dev")
 
