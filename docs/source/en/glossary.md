@@ -116,6 +116,7 @@ A type of layer in a neural network where the input matrix is multiplied element
 
 Parallelism technique for training on multiple GPUs where the same setup is replicated multiple times, with each instance 
 receiving a distinct data slice. The processing is done in parallel and all setups are synchronized at the end of each training step.
+Learn more about how DataParallel works [here](perf_train_gpu_many#dataparallel-vs-distributeddataparallel).
 
 ### decoder input IDs
 
@@ -349,7 +350,7 @@ For more details, see [Pipelines for inference](https://huggingface.co/docs/tran
 
 Parallelism technique in which the model is split up vertically (layer-level) across multiple GPUs, so that only one or 
 several layers of the model are placed on a single GPU. Each GPU processes in parallel different stages of the pipeline 
-and working on a small chunk of the batch.
+and working on a small chunk of the batch. Learn more about how PipelineParallel works [here](perf_train_gpu_many#from-naive-model-parallelism-to-pipeline-parallelism).
 
 ### pixel values
 
@@ -435,12 +436,13 @@ A form of model training that directly uses labeled data to correct and instruct
 
 ## T
 
-### TensorParallel (TP)
+### Tensor Parallelism (TP)
 
 Parallelism technique for training on multiple GPUs in which each tensor is split up into multiple chunks, so instead of 
 having the whole tensor reside on a single GPU, each shard of the tensor resides on its designated GPU. Shards gets 
 processed separately and in parallel on different GPUs and the results are synced at the end of the processing step. 
 This is what is sometimes called horizontal parallelism, as the splitting happens on horizontal level.
+Learn more about Tensor Parallelism [here](perf_train_gpu_many#tensor-parallelism).
 
 ### token
 
@@ -518,4 +520,5 @@ A form of model training in which data provided to the model is not labeled. Uns
 
 Parallelism technique which performs sharding of the tensors somewhat similar to [TensorParallel](#tensorparallel--tp-), 
 except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need 
-to be modified. This method also supports various offloading techniques to compensate for limited GPU memory.
+to be modified. This method also supports various offloading techniques to compensate for limited GPU memory. 
+Learn more about ZeRO [here](perf_train_gpu_many#zero-data-parallelism).

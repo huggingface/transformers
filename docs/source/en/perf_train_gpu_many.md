@@ -42,6 +42,10 @@ large models on a large infrastructure.
 
 ## Scalability strategy
 
+Begin by estimating how much vRAM is required to train your model. For models hosted on the 🤗 Hub, use our 
+[Model Memory Calculator](https://huggingface.co/spaces/hf-accelerate/model-memory-usage), which gives you 
+accurate calculations within a few percent margin.  
+
 **Parallelization strategy for a single Node / multi-GPU setup**
 
 When training a model on a single node with multiple GPUs, your choice of parallelization strategy can significantly 
@@ -235,7 +239,7 @@ x2 => GPU2
 
 The inputs are passed without modifications as if they would be processed by the original model.
 
-First, the inputs get to the layer La. What happens at this point?
+First, the inputs get to the layer `La`. What happens at this point?
 
 On GPU0: the x0 mini-batch requires the a0, a1, a2 parameters to do its forward path through the layer, but the GPU0 has only a0. 
 It will get a1 from GPU1 and a2 from GPU2, bringing all the pieces of the model together.
