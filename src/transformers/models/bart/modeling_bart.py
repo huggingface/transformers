@@ -585,7 +585,7 @@ class BartFlashAttention2(BartAttention):
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=self.is_causal
             )
 
         return attn_output
