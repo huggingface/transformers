@@ -50,6 +50,7 @@ else:
         "WhisperModel",
         "WhisperPreTrainedModel",
         "WhisperForAudioClassification",
+        "WhisperForCausalLM",
     ]
 
 try:
@@ -103,6 +104,7 @@ if TYPE_CHECKING:
             WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
             WhisperForAudioClassification,
             WhisperForConditionalGeneration,
+            WhisperForCausalLM,
             WhisperModel,
             WhisperPreTrainedModel,
         )

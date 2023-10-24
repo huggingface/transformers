@@ -4457,6 +4457,7 @@ class GenerationMixin:
                         assistant_model_outputs = assistant_model(
                             assist_inputs,
                             past_key_values=model_kwargs["assistant_past_key_values"],
+                            encoder_outputs=model_kwargs["assistant_encoder_outputs"],
                         )
                 else:
                     if assistant_model.config.is_encoder_decoder:
@@ -4465,7 +4466,7 @@ class GenerationMixin:
                             encoder_outputs=model_kwargs["assistant_encoder_outputs"],
                         )
                     else:
-                        assistant_model_outputs = assistant_model(candidate_input_ids)
+                        assistant_model_outputs = assistant_model(candidate_input_ids, encoder_outputs=model_kwargs["assistant_encoder_outputs"])
 
                 # 1.2. greedily select the next candidate token
                 model_kwargs["assistant_past_key_values"] = assistant_model_outputs.past_key_values

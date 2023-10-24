@@ -3077,6 +3077,7 @@ else:
             "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "WhisperForAudioClassification",
             "WhisperForConditionalGeneration",
+            "WhisperForCausalLM"
             "WhisperModel",
             "WhisperPreTrainedModel",
         ]
@@ -6820,6 +6821,7 @@ if TYPE_CHECKING:
             WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
             WhisperForAudioClassification,
             WhisperForConditionalGeneration,
+            WhisperForCausalLM,
             WhisperModel,
             WhisperPreTrainedModel,
         )
