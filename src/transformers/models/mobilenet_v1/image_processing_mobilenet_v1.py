@@ -149,7 +149,10 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         if "shortest_edge" not in size:
             raise ValueError(f"The `size` parameter must contain the key `shortest_edge`. Got {size.keys()}")
         output_size = get_resize_output_image_size(
-            image, size=size["shortest_edge"], default_to_square=self.use_square_size, input_data_format=input_data_format
+            image,
+            size=size["shortest_edge"],
+            default_to_square=self.use_square_size,
+            input_data_format=input_data_format,
         )
         return resize(
             image,
