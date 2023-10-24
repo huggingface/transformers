@@ -16,6 +16,7 @@ Generic utilities
 """
 
 import inspect
+import sys
 import tempfile
 from collections import OrderedDict, UserDict
 from collections.abc import MutableMapping
