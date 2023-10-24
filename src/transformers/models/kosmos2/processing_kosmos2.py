@@ -55,7 +55,7 @@ class Kosmos2Processor(ProcessorMixin):
             The number of tokens that represent patch indices.
     """
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Kosmos2ImageProcessor"
+    image_processor_class = "CLIPImageProcessor"
     tokenizer_class = ("XLMRobertaTokenizer", "XLMRobertaTokenizerFast")
 
     def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024):
