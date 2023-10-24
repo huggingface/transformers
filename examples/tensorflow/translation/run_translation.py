@@ -114,7 +114,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
         },
@@ -182,7 +182,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`. "
                 "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
                 "during ``evaluate`` and ``predict``."
             )

@@ -13,9 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
-from transformers import CamembertTokenizer, CamembertTokenizerFast
+from transformers import AddedToken, CamembertTokenizer, CamembertTokenizerFast
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 from transformers.utils import is_torch_available
 
@@ -133,3 +134,82 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             revision="3a0641d9a1aeb7e848a74299e7e4c4bca216b4cf",
             sequences=sequences,
         )
+
+    # Overwritten because we have to use from slow (online pretrained is wrong, the tokenizer.json has a whole)
+    def test_added_tokens_serialization(self):
+        self.maxDiff = None
+
+        # Utility to test the added vocab
+        def _test_added_vocab_and_eos(expected, tokenizer_class, expected_eos, temp_dir):
+            tokenizer = tokenizer_class.from_pretrained(temp_dir)
+            self.assertTrue(str(expected_eos) not in tokenizer.additional_special_tokens)
+            self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
+            self.assertEqual(tokenizer.added_tokens_decoder[tokenizer.eos_token_id], new_eos)
+            self.assertDictEqual(expected, tokenizer.added_tokens_decoder)
+            return tokenizer
+
+        new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                # Load a slow tokenizer from the hub, init with the new token for fast to also include it
+                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
+                EXPECTED_ADDED_TOKENS_DECODER = tokenizer.added_tokens_decoder
+                with self.subTest("Hub -> Slow: Test loading a slow tokenizer from the hub)"):
+                    self.assertEqual(tokenizer._eos_token, new_eos)
+                    self.assertIn(new_eos, list(tokenizer.added_tokens_decoder.values()))
+
+                with tempfile.TemporaryDirectory() as tmp_dir_2:
+                    tokenizer.save_pretrained(tmp_dir_2)
+                    with self.subTest(
+                        "Hub -> Slow -> Slow: Test saving this slow tokenizer and reloading it in the fast class"
+                    ):
+                        _test_added_vocab_and_eos(
+                            EXPECTED_ADDED_TOKENS_DECODER, self.tokenizer_class, new_eos, tmp_dir_2
+                        )
+
+                    if self.rust_tokenizer_class is not None:
+                        with self.subTest(
+                            "Hub -> Slow -> Fast: Test saving this slow tokenizer and reloading it in the fast class"
+                        ):
+                            tokenizer_fast = _test_added_vocab_and_eos(
+                                EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_2
+                            )
+                            with tempfile.TemporaryDirectory() as tmp_dir_3:
+                                tokenizer_fast.save_pretrained(tmp_dir_3)
+                                with self.subTest(
+                                    "Hub -> Slow -> Fast -> Fast: Test saving this fast tokenizer and reloading it in the fast class"
+                                ):
+                                    _test_added_vocab_and_eos(
+                                        EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_3
+                                    )
+
+                                with self.subTest(
+                                    "Hub -> Slow -> Fast -> Slow: Test saving this slow tokenizer and reloading it in the slow class"
+                                ):
+                                    _test_added_vocab_and_eos(
+                                        EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_3
+                                    )
+
+                with self.subTest("Hub -> Fast: Test loading a fast tokenizer from the hub)"):
+                    if self.rust_tokenizer_class is not None:
+                        tokenizer_fast = self.rust_tokenizer_class.from_pretrained(
+                            pretrained_name, eos_token=new_eos, from_slow=True
+                        )
+                        self.assertEqual(tokenizer_fast._eos_token, new_eos)
+                        self.assertIn(new_eos, list(tokenizer_fast.added_tokens_decoder.values()))
+                        # We can't test the following because for BC we kept the default rstrip lstrip in slow not fast. Will comment once normalization is alright
+                        with self.subTest("Hub -> Fast == Hub -> Slow: make sure slow and fast tokenizer match"):
+                            self.assertDictEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer_fast.added_tokens_decoder)
+
+                        EXPECTED_ADDED_TOKENS_DECODER = tokenizer_fast.added_tokens_decoder
+                        with tempfile.TemporaryDirectory() as tmp_dir_4:
+                            tokenizer_fast.save_pretrained(tmp_dir_4)
+                            with self.subTest("Hub -> Fast -> Fast: saving Fast1 locally and loading"):
+                                _test_added_vocab_and_eos(
+                                    EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_4
+                                )
+
+                            with self.subTest("Hub -> Fast -> Slow: saving Fast1 locally and loading"):
+                                _test_added_vocab_and_eos(
+                                    EXPECTED_ADDED_TOKENS_DECODER, self.tokenizer_class, new_eos, tmp_dir_4
+                                )

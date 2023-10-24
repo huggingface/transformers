@@ -991,7 +991,7 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
         not be updated during training.
         """
         warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
@@ -1116,7 +1116,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
         not be updated during training.
         """
         warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
@@ -1237,7 +1237,7 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
         not be updated during training.
         """
         warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
@@ -1403,7 +1403,7 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
         not be updated during training.
         """
         warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )

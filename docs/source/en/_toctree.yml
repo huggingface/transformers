@@ -71,6 +71,10 @@
       title: Zero-shot image classification
     - local: tasks/monocular_depth_estimation
       title: Depth estimation
+    - local: tasks/image_to_image
+      title: Image-to-Image
+    - local: tasks/knowledge_distillation_for_image_classification
+      title: Knowledge Distillation for Computer Vision
     title: Computer Vision
   - isExpanded: false
     sections:
@@ -92,6 +96,8 @@
     sections:
     - local: tasks/idefics
       title: Image tasks with IDEFICS
+    - local: tasks/prompting
+      title: LLM prompting guide
     title: Prompting
   title: Task Guides
 - sections:
@@ -205,6 +211,8 @@
     title: Pipelines for webserver inference
   - local: model_memory_anatomy
     title: Model training anatomy
+  - local: llm_tutorial_optimization
+    title: Getting the most out of LLMs
   title: Conceptual guides
 - sections:
   - sections:
@@ -334,6 +342,8 @@
         title: FSMT
       - local: model_doc/funnel
         title: Funnel Transformer
+      - local: model_doc/fuyu
+        title: Fuyu
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -508,7 +518,7 @@
       - local: model_doc/dinat
         title: DiNAT
       - local: model_doc/dinov2
-        title: DINO V2
+        title: DINOV2
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -604,6 +614,8 @@
         title: MusicGen
       - local: model_doc/pop2piano
         title: Pop2Piano
+      - local: model_doc/seamless_m4t
+        title: Seamless-M4T
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d
@@ -693,6 +705,8 @@
         title: OneFormer
       - local: model_doc/owlvit
         title: OWL-ViT
+      - local: model_doc/owlv2
+        title: OWLv2
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/pix2struct

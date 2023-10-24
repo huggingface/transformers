@@ -1,21 +1,11 @@
 name: Self-hosted runner AMD GPU (push)
 
 on:
-  workflow_run:
-    workflows: ["Self-hosted runner (push-caller)"]
-    branches: ["main"]
-    types: [completed]
-  push:
-    branches:
-      - ci_*
-      - ci-*
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/**"
-      - "templates/**"
-      - "utils/**"
-  repository_dispatch:
+  workflow_call:
+    inputs:
+      gpu_flavor:
+        required: true
+        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -45,8 +35,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-        gpu_flavor: [mi210]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ matrix.gpu_flavor }}']
+    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
       options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -65,8 +54,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-        gpu_flavor: [mi210]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ matrix.gpu_flavor }}']
+    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
       options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -164,8 +152,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup_gpu.outputs.matrix) }}
         machine_type: [single-gpu, multi-gpu]
-        gpu_flavor: [mi210]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ matrix.gpu_flavor }}']
+    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
       options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -321,7 +308,7 @@ jobs:
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_AMD }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-          CI_EVENT: push
+          CI_EVENT: Push CI (AMD) - ${{ inputs.gpu_flavor }}
           CI_TITLE_PUSH: ${{ github.event.head_commit.message }}
           CI_TITLE_WORKFLOW_RUN: ${{ github.event.workflow_run.head_commit.message }}
           CI_SHA: ${{ env.CI_SHA }}

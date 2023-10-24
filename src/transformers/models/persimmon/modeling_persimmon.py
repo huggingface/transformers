@@ -548,7 +548,6 @@ class PersimmonModel(PersimmonPreTrainedModel):
         config: PersimmonConfig
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel.__init__ with LLAMA->PERSIMMON,Llama->Persimmon,PersimmonRMSNorm->nn.LayerNorm,norm->final_layernorm,rms_final_layernorm_eps->layer_norm_eps
     def __init__(self, config: PersimmonConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -847,8 +846,17 @@ class PersimmonForCausalLM(PersimmonPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
-        if past_key_values:
-            input_ids = input_ids[:, -1:]
+        if past_key_values is not None:
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
@@ -856,7 +864,7 @@ class PersimmonForCausalLM(PersimmonPreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
+                position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
