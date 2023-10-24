@@ -1618,7 +1618,6 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         # Model parallel
         self.model_parallel = False
         self.device_map = None
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

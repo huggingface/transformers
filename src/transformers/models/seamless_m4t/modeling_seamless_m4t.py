@@ -1548,7 +1548,7 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
                 nn.init.uniform_(module.bias, a=-k, b=k)
 
     def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (SeamlessM4TDecoder, SeamlessM4TEncoder, SeamlessM4TSpeechEncoder)):
+        if isinstance(module, (SeamlessM4TDecoder, SeamlessM4TEncoder, SeamlessM4TConformerEncoder)):
             module.gradient_checkpointing_func = gradient_checkpointing_func
             module.gradient_checkpointing = gradient_checkpointing_func is not None
 

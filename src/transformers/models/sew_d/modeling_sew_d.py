@@ -1310,7 +1310,7 @@ class SEWDPreTrainedModel(PreTrainedModel):
         return attention_mask
 
     def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, SEWDTransformerEncoder):
+        if isinstance(module, (SEWDEncoder, SEWDFeatureEncoder, SEWDTransformerEncoder)):
             module.gradient_checkpointing_func = gradient_checkpointing_func
             module.gradient_checkpointing = gradient_checkpointing_func is not None
 

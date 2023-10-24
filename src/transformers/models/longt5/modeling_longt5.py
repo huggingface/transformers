@@ -775,7 +775,6 @@ class LongT5TransientGlobalAttention(nn.Module):
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
         self.pruned_heads = set()
-        self.gradient_checkpointing = False
 
         # Relativen attention bias & Layer norm for global attention
         if self.has_relative_attention_bias:
@@ -1340,9 +1339,8 @@ class LongT5PreTrainedModel(PreTrainedModel):
                         mean=0.0, std=factor * ((d_model) ** -0.5)
                     )
 
-    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._set_gradient_checkpointing with T5->LongT5
     def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (LongT5Attention, LongT5Stack)):
+        if isinstance(module, (LongT5Attention, LongT5Stack, LongT5LocalAttention)):
             module.gradient_checkpointing_func = gradient_checkpointing_func
             module.gradient_checkpointing = gradient_checkpointing_func is not None
 

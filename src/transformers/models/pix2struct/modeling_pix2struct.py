@@ -558,7 +558,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         self.post_init()
 
     def _set_gradient_checkpointing(self, module: Pix2StructVisionEncoder, gradient_checkpointing_func=None) -> None:
-        if isinstance(module, Pix2StructVisionEncoder):
+        if isinstance(module, (Pix2StructVisionEncoder, Pix2StructVisionAttention)):
             module.gradient_checkpointing_func = gradient_checkpointing_func
             module.gradient_checkpointing = gradient_checkpointing_func is not None
 

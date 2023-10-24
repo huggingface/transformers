@@ -1433,7 +1433,6 @@ class SpeechT5EncoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         super().__init__(config)
         self.prenet = SpeechT5SpeechEncoderPrenet(config)
         self.wrapped_encoder = SpeechT5Encoder(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1470,7 +1469,6 @@ class SpeechT5EncoderWithTextPrenet(SpeechT5PreTrainedModel):
         super().__init__(config)
         self.prenet = SpeechT5TextEncoderPrenet(config)
         self.wrapped_encoder = SpeechT5Encoder(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1513,7 +1511,6 @@ class SpeechT5EncoderWithoutPrenet(SpeechT5PreTrainedModel):
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
         self.wrapped_encoder = SpeechT5Encoder(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1782,7 +1779,6 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         super().__init__(config)
         self.prenet = SpeechT5SpeechDecoderPrenet(config)
         self.wrapped_decoder = SpeechT5Decoder(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1830,7 +1826,6 @@ class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
         super().__init__(config)
         self.prenet = SpeechT5TextDecoderPrenet(config)
         self.wrapped_decoder = SpeechT5Decoder(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1883,7 +1878,6 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
         self.wrapped_decoder = SpeechT5Decoder(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -517,7 +517,7 @@ class MBartPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (MBartDecoder, MBartDecoder)):
+        if isinstance(module, (MBartDecoder, MBartEncoder)):
             module.gradient_checkpointing_func = gradient_checkpointing_func
             module.gradient_checkpointing = gradient_checkpointing_func is not None
 

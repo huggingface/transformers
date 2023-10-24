@@ -492,7 +492,6 @@ class GroupViTStage(nn.Module):
             self.group_token = nn.Parameter(torch.zeros(1, num_group_token, config.hidden_size))
         else:
             self.group_token = None
-        self.gradient_checkpointing = False
         self.layers = nn.ModuleList([GroupViTEncoderLayer(config) for _ in range(depth)])
 
         if num_group_token > 0:
