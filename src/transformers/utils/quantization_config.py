@@ -432,10 +432,8 @@ class GPTQConfig(QuantizationConfigMixin):
                     raise ValueError(
                         f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
                     )
-                elif not self.disable_exllama:
-                    raise ValueError(
-                        "You have activated both exllama and exllamav2 backend. You need to disable one of them."
-                    )
+                self.disable_exllama = True
+                logger.warning("You have activated exllamav2 kernels. Exllama kernels will be disabled.")
             if not self.disable_exllama:
                 logger.warning(
                     "You have activated exllama backend. Note that you can get better inference speed using exllamav2 kernel by setting `use_exllama_v2=True`"

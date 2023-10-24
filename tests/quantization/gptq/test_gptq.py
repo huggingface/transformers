@@ -337,7 +337,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
         """
         Setup quantized model
         """
-        cls.quantization_config = GPTQConfig(bits=4, use_exllama_v2=True, disable_exllama=True)
+        cls.quantization_config = GPTQConfig(bits=4, use_exllama_v2=True)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             revision=cls.revision,
