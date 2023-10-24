@@ -298,8 +298,10 @@ class ImageBindVisionModelTester:
         self.scope = scope
 
         # Resolve spatiotemporal patch size
-        temporal_patch_size, spatial_patch_size, _ = patch_size
-        num_patches = (num_frames // temporal_patch_size) * (image_size // spatial_patch_size) ** 2
+        patches_along_time_dim = num_frames // patch_size[0]
+        patches_along_height_dim = ((image_size - patch_size[1]) // stride[1]) + 1
+        patches_along_width_dim = ((image_size - patch_size[2]) // stride[2]) + 1
+        num_patches = patches_along_time_dim * patches_along_height_dim * patches_along_width_dim
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         self.seq_length = num_patches + 1
 
@@ -450,9 +452,8 @@ class ImageBindAudioModelTester:
         self,
         parent,
         batch_size=12,
-        image_size=30,
-        patch_size=4,
-        stride=2,
+        patch_size=16,
+        stride=10,
         num_channels=1,
         is_training=True,
         num_mel_bins=128,
@@ -474,7 +475,6 @@ class ImageBindAudioModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.image_size = image_size
         self.patch_size = patch_size
         self.stride = stride
         self.num_channels = num_channels
@@ -497,7 +497,9 @@ class ImageBindAudioModelTester:
         self.scope = scope
 
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
+        patches_along_height_dim = ((num_mel_bins - patch_size) // stride) + 1
+        patches_along_width_dim = ((target_len - patch_size) // stride) + 1
+        num_patches = patches_along_height_dim * patches_along_width_dim
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
@@ -689,8 +691,8 @@ class ImageBindDepthModelTester:
         self.learnable_logit_scale = learnable_logit_scale
         self.scope = scope
 
+        num_patches = (((image_size - patch_size) // stride) + 1) ** 2
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
@@ -880,8 +882,8 @@ class ImageBindThermalModelTester:
         self.learnable_logit_scale = learnable_logit_scale
         self.scope = scope
 
+        num_patches = (((image_size - patch_size) // stride) + 1) ** 2
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):

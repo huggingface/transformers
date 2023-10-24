@@ -66,8 +66,8 @@ IMAGEBIND_TEST_VISION_CONFIG = {
 IMAGEBIND_TEST_AUDIO_CONFIG = {
     **IMAGEBIND_TEST_TRUNK_CONFIG,
     "image_size": 30,
-    "patch_size": 4,
-    "stride": 2,
+    "patch_size": 16,
+    "stride": 10,
     "num_channels": 1,
     "num_mel_bins": 128,
     "target_len": 204,
@@ -159,6 +159,9 @@ def convert_embeddings(config, model_state_dict):
             patches_along_time_dim = modality_config.num_frames // modality_config.patch_size[0]
             patches_along_spatial_dims = (modality_config.image_size // modality_config.patch_size[1]) ** 2
             num_patches = patches_along_spatial_dims * patches_along_time_dim
+        elif modality == "audio":
+            patch_size = modality_config.patch_size
+            num_patches = (modality_config.num_mel_bins // patch_size) * (modality_config.target_len // patch_size)
         else:
             num_patches = (modality_config.image_size // modality_config.patch_size) ** 2
         num_positions = num_patches + 1

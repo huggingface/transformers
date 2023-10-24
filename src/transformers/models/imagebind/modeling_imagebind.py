@@ -476,12 +476,14 @@ class RGBDTPatchEmbedding(nn.Module):
         self.norm_layer = norm_layer if norm_layer is not None else nn.Identity()
 
         if self.is_temporal:
-            num_patches_along_time_dim = (config.num_frames // self.patch_size[0])
-            num_patches_along_spatial_dims = (self.image_shape[-2] // self.patch_size[-2]) * (self.image_shape[-1] // self.patch_size[-1])
+            patches_along_time_dim = (config.num_frames // self.patch_size[0])
+            patches_along_height_dim = ((self.image_shape[-2] - self.patch_size[-2]) // self.stride[-2]) + 1
+            patches_along_width_dim = ((self.image_shape[-1] - self.patch_size[-1]) // self.stride[-1]) + 1
         else:
-            num_patches_along_time_dim = 1
-            num_patches_along_spatial_dims = (self.image_shape[-2] // self.patch_size) * (self.image_shape[-1] // self.patch_size)
-        self.num_patches = num_patches_along_spatial_dims * num_patches_along_time_dim
+            patches_along_time_dim = 1
+            patches_along_height_dim = ((self.image_shape[-2] - self.patch_size) // self.stride) + 1
+            patches_along_width_dim = ((self.image_shape[-1] - self.patch_size) // self.stride) + 1
+        self.num_patches = patches_along_height_dim * patches_along_width_dim * patches_along_time_dim
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
