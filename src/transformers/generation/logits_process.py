@@ -1704,8 +1704,8 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         return out
 
 
-class EarlyStoppingLogitsProcessor(LogitsProcessor):
-    r"""This processor ensures that the EOS token is sampled if its probability is greater than the `min_eos_p`.
+class BarkEOSPrioritizerLogitsWarper(LogitsWarper):
+    r"""This warper ensures that the EOS token is sampled if its probability is greater than the `min_eos_p`.
 
     Args:
         eos_token_id (`Union[int, List[int]]`):
@@ -1724,13 +1724,13 @@ class EarlyStoppingLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        logprobs = torch.nn.functional.log_softmax(scores.float(), dim=-1)
+        probs = torch.nn.functional.softmax(scores.float(), dim=-1)
         if self.min_eos_p:
             # create scores full of -inf except for the eos_token_id
             early_stop_scores = torch.ones_like(scores) * -float("inf")
             early_stop_scores[:, self.eos_token_id] = scores[:, self.eos_token_id]
 
-            do_early_stop = logprobs[:, self.eos_token_id] > np.log(self.min_eos_p)
+            do_early_stop = probs[:, self.eos_token_id] > self.min_eos_p
             scores = torch.where(do_early_stop, early_stop_scores, scores)
 
         return scores
