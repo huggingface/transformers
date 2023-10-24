@@ -15,6 +15,7 @@
 import hashlib
 import unittest
 
+from src.transformers.utils.generic import HASHLIB_KWARGS
 from transformers import MODEL_FOR_DEPTH_ESTIMATION_MAPPING, is_torch_available, is_vision_available
 from transformers.pipelines import DepthEstimationPipeline, pipeline
 from transformers.testing_utils import (
@@ -28,7 +29,6 @@ from transformers.testing_utils import (
 )
 
 from .test_pipelines_common import ANY
-
 
 if is_torch_available():
     import torch
@@ -44,7 +44,7 @@ else:
 
 
 def hashimage(image: Image) -> str:
-    m = hashlib.md5(image.tobytes())
+    m = hashlib.md5(image.tobytes(), **HASHLIB_KWARGS)
     return m.hexdigest()
 
 

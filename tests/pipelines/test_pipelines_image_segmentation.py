@@ -22,6 +22,7 @@ import numpy as np
 import requests
 from datasets import load_dataset
 
+from src.transformers.utils.generic import HASHLIB_KWARGS
 from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
     MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
@@ -47,7 +48,6 @@ from transformers.testing_utils import (
 
 from .test_pipelines_common import ANY
 
-
 if is_vision_available():
     from PIL import Image
 else:
@@ -59,7 +59,7 @@ else:
 
 
 def hashimage(image: Image) -> str:
-    m = hashlib.md5(image.tobytes())
+    m = hashlib.md5(image.tobytes(), **HASHLIB_KWARGS)
     return m.hexdigest()[:10]
 
 

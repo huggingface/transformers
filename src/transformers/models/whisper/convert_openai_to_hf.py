@@ -22,8 +22,8 @@ import torch
 from torch import nn
 from tqdm import tqdm
 
+from src.transformers.utils.generic import HASHLIB_KWARGS
 from transformers import WhisperConfig, WhisperForConditionalGeneration
-
 
 _MODELS = {
     "tiny.en": "https://openaipublic.azureedge.net/main/whisper/models/d3dd57d32accea0b295c96e26691aa14d8822fac7d9d27d5dc00b4ca2826dd03/tiny.en.pt",
@@ -102,7 +102,7 @@ def _download(url: str, root: str) -> bytes:
 
     if os.path.isfile(download_target):
         model_bytes = open(download_target, "rb").read()
-        if hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
+        if hashlib.sha256(model_bytes, **HASHLIB_KWARGS).hexdigest() == expected_sha256:
             return model_bytes
         else:
             warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
@@ -120,7 +120,7 @@ def _download(url: str, root: str) -> bytes:
                 loop.update(len(buffer))
 
     model_bytes = open(download_target, "rb").read()
-    if hashlib.sha256(model_bytes).hexdigest() != expected_sha256:
+    if hashlib.sha256(model_bytes, **HASHLIB_KWARGS).hexdigest() != expected_sha256:
         raise RuntimeError(
             "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
         )

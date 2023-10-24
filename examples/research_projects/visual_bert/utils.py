@@ -43,6 +43,7 @@ from PIL import Image
 from tqdm.auto import tqdm
 from yaml import Loader, dump, load
 
+from src.transformers.utils.generic import HASHLIB_KWARGS
 
 try:
     import torch
@@ -402,12 +403,12 @@ def get_from_cache(
 
 def url_to_filename(url, etag=None):
     url_bytes = url.encode("utf-8")
-    url_hash = sha256(url_bytes)
+    url_hash = sha256(url_bytes, **HASHLIB_KWARGS)
     filename = url_hash.hexdigest()
 
     if etag:
         etag_bytes = etag.encode("utf-8")
-        etag_hash = sha256(etag_bytes)
+        etag_hash = sha256(etag_bytes, **HASHLIB_KWARGS)
         filename += "." + etag_hash.hexdigest()
 
     if url.endswith(".h5"):

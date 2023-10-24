@@ -28,7 +28,6 @@ import numpy as np
 
 from .import_utils import is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
 
-
 if is_flax_available():
     import jax.numpy as jnp
 
@@ -673,3 +672,6 @@ def infer_framework(model_class):
             return "flax"
     else:
         raise TypeError(f"Could not infer framework from class {model_class}.")
+
+
+HASHLIB_KWARGS = {"usedforsecurity": False} if sys.version_info >= (3, 9) else {}
