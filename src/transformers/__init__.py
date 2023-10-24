@@ -6510,6 +6510,7 @@ if TYPE_CHECKING:
             RwkvForCausalLM,
             RwkvModel,
             RwkvPreTrainedModel,
+            RWKVWorldTokenizer,
         )
         from .models.sam import (
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
