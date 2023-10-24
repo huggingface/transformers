@@ -235,8 +235,7 @@ def _get_microphone_name():
 
     try:
         ffmpeg_devices = subprocess.run(command, text=True, stderr=subprocess.PIPE)
-        device_lines = ffmpeg_devices.stderr.splitlines()
-        microphone_lines = [line for line in device_lines if "(audio)" in line]
+        microphone_lines = [line for line in ffmpeg_devices.stderr.splitlines() if "(audio)" in line]
         if microphone_lines:
             microphone_name = microphone_lines[0].split('"')[1]
             return f"audio={microphone_name}"
