@@ -437,7 +437,8 @@ class Kosmos2Processor(ProcessorMixin):
                 bbox = [bbox]
             patch_index_strings = []
             # A phrase could have multiple bboxes
-            assert all(box is not None for box in bbox)
+            if not all(box is not None for box in bbox):
+                raise ValueError("The multiple bounding boxes for a single phrase should not contain any `None` value.")
             for box in bbox:
                 patch_index_1, patch_index_2 = self._convert_bbox_to_patch_index_tokens(box)
                 patch_index_strings.append(f"{patch_index_1} {patch_index_2}")
