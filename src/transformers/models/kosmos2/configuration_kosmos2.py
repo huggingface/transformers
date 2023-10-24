@@ -14,7 +14,6 @@
 # limitations under the License.
 """ KOSMOS-2 model configuration"""
 
-import copy
 import os
 from typing import Union
 
