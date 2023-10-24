@@ -11,8 +11,8 @@ from ...image_utils import (
     to_numpy_array,
 )
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
-from ...utils import is_torch_available, is_vision_available, logging, requires_backends, is_torch_device
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TruncationStrategy
+from ...utils import is_torch_available, is_vision_available, logging, requires_backends, is_torch_device, TensorType
 
 
 if is_torch_available() and is_vision_available():
@@ -423,7 +423,7 @@ class FuyuProcessor(ProcessorMixin):
         self.dummy_image_index = -1
         self.image_processor = FuyuImageProcessor()
 
-    def left_pad_inputs_with_attention_mask(self, model_inputs, return_attention_mask: bool = True):
+    def left_pad_inputs_with_attention_mask(self, model_inputs: List[Dict], return_attention_mask: bool):
         max_length_input_ids = max(entry['input_ids'].shape[1] for entry in model_inputs)
         max_length_image_patch_indices = max(entry['image_patches_indices'].shape[1] for entry in model_inputs)
 
@@ -455,8 +455,10 @@ class FuyuProcessor(ProcessorMixin):
                     padded_indices = torch.cat([torch.full((tensor.shape[0], num_padding_indices),
                                                            self.dummy_image_index, dtype=torch.long), tensor], dim=1)
                     batched_inputs[key].append(padded_indices)
-
-        for key in ['input_ids', 'attention_mask', 'image_patches_indices']:
+        batched_keys = ['input_ids', 'image_patches_indices']
+        if return_attention_mask:
+            batched_keys.append('attention_mask')
+        for key in batched_keys:
             batched_inputs[key] = torch.cat(batched_inputs[key], dim=0)
 
         return batched_inputs
@@ -533,11 +535,30 @@ class FuyuProcessor(ProcessorMixin):
 
         return batch_encoding
 
-    def __call__(self, text=None, images=None, return_attention_mask: bool = True, *args, **kwargs) -> BatchEncoding:
+    def __call__(
+            self,
+            text=None,
+            images=None,
+            add_special_tokens: bool = True,
+            return_attention_mask: bool = True,
+            padding: Union[bool, str, PaddingStrategy] = False,
+            truncation: Union[bool, str, TruncationStrategy] = None,
+            max_length: Optional[int] = None,
+            stride: int = 0,
+            pad_to_multiple_of: Optional[int] = None,
+            return_overflowing_tokens: bool = False,
+            return_special_tokens_mask: bool = False,
+            return_offsets_mapping: bool = False,
+            return_token_type_ids: bool = False,
+            return_length: bool = False,
+            verbose: bool = True,
+            return_tensors: Optional[Union[str, TensorType]] = None,
+            **kwargs
+    ) -> FuyuBatchEncoding:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to
-        encode the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        encode the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         FuyuImageProcessor's [`~FuyuImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
 
@@ -568,8 +589,30 @@ class FuyuProcessor(ProcessorMixin):
             raise ValueError("You have to specify either text or images. Both cannot be None.")
         if text is not None and images is None:
             logger.warning("You are processing a text with no associated image. Make sure it is intended.")
+            self.current_processor = self.tokenizer
+            text_encoding = self.tokenizer(
+                text=text,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_token_type_ids=return_token_type_ids,
+                return_length=return_length,
+                verbose=verbose,
+                return_tensors=return_tensors,
+                **kwargs,
+            )
+            return text_encoding
+
         if text is None and images is not None:
             logger.warning("You are processing an image with no associated text. Make sure it is intended.")
+            prompts = [[""]]
         if text is not None and images is not None:
             if isinstance(text, str):
                 prompts = [[text]]
@@ -607,7 +650,7 @@ class FuyuProcessor(ProcessorMixin):
             return_attention_mask=return_attention_mask
         )
 
-        return FuyuBatchEncoding(data=batch_encoding, *args, **kwargs)
+        return FuyuBatchEncoding(data=batch_encoding)
 
     def batch_decode(self, *args, **kwargs):
         """
