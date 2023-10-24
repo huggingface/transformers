@@ -892,7 +892,6 @@ else:
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
-    _import_structure["models.rwkv"].append("RWKVWorldTokenizer")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
 
 

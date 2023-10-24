@@ -42,6 +42,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_rwkv import RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP, RwkvConfig, RwkvOnnxConfig
+    from .tokenization_rwkv import RWKVWorldTokenizer
 
     try:
         if not is_torch_available():
@@ -55,7 +56,6 @@ if TYPE_CHECKING:
             RwkvModel,
             RwkvPreTrainedModel,
         )
-        from .tokenization_rwkv import RWKVWorldTokenizer
 else:
     import sys
 

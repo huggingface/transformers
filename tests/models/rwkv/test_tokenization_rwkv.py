@@ -14,8 +14,8 @@
 # limitations under the License.
 
 
-import os
 import unittest
+import os
 
 from transformers import RWKVWorldTokenizer
 from transformers.testing_utils import require_tokenizers, get_tests_dir
