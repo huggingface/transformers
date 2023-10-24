@@ -24,8 +24,6 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from build.lib.transformers.configuration_utils import PretrainedConfig
-
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -280,7 +278,7 @@ class BartAttention(nn.Module):
         is_decoder: bool = False,
         is_causal: bool = False,
         bias: bool = True,
-        config: Optional[PretrainedConfig] = None,
+        config: Optional[BartConfig] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -908,18 +906,18 @@ class BartPreTrainedModel(PreTrainedModel):
         return dummy_inputs
 
 
-class PretrainedBartModel(BartPreTrainedModel):
+class BartModel(BartPreTrainedModel):
     def __init_subclass__(self):
         warnings.warn(
-            "The class `PretrainedBartModel` has been depreciated, please use `BartPreTrainedModel` instead.",
+            "The class `BartModel` has been depreciated, please use `BartPreTrainedModel` instead.",
             FutureWarning,
         )
 
 
-class BartPretrainedModel(BartPreTrainedModel):
+class BartModel(BartPreTrainedModel):
     def __init_subclass__(self):
         warnings.warn(
-            "The class `PretrainedBartModel` has been depreciated, please use `BartPreTrainedModel` instead.",
+            "The class `BartModel` has been depreciated, please use `BartPreTrainedModel` instead.",
             FutureWarning,
         )
 
