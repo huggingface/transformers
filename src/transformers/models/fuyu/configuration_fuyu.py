@@ -72,8 +72,8 @@ class FuyuConfig(PretrainedConfig):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be an float greater than 1. The expected format
-            is `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
+            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
+            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
             these scaling strategies behave:
             https://www.reddit.com/r/LocalFuyu/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
@@ -189,6 +189,7 @@ class FuyuConfig(PretrainedConfig):
             **kwargs,
         )
 
+    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
@@ -208,4 +209,4 @@ class FuyuConfig(PretrainedConfig):
                 f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")
+            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
