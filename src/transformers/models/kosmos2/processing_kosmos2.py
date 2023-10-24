@@ -152,7 +152,7 @@ class Kosmos2Processor(ProcessorMixin):
             encoding.update(image_encoding)
 
         if text is not None:
-            text = self.preprocess_text(text, images, bboxes, num_image_tokens=num_image_tokens)
+            text = self.preprocess_examples(text, images, bboxes, num_image_tokens=num_image_tokens)
 
             if add_special_tokens and not add_eos_token:
                 if isinstance(text, str):
@@ -273,7 +273,54 @@ class Kosmos2Processor(ProcessorMixin):
 
         return encoding
 
-    def preprocess_text(
+    def _check_bboxes_for_single_text(self, bboxes):
+        """
+        Check `bboxes` for a single text example. It could be
+            - `None`: no bounding box associated to a text.
+            - A list with each element being the bounding boxes associated to one `<phrase> ... </phrase>` pair found
+              in a text. This could be:
+                  - `None`: no bounding box associated to a `<phrase> ... </phrase>` pair.
+                  - A tuple of 2 integers: A single bounding box specified by patch indices.
+                  - A tuple of 4 float point number: A single bounding box specified by (normalized) coordinates.
+                  - A list containing the above 2 tuple types: Multiple bounding boxes for a
+                   `<phrase> ... </phrase>` pair.
+        """
+        if bboxes is None:
+            return
+        elif not isinstance(bboxes, list):
+            raise ValueError("`bboxes` (for a single text example) should be `None` or a list.")
+
+        # `bbox` is the bounding boxes for a single <phrase> </phrase> pair
+        for bbox in bboxes:
+            if bbox is None:
+                continue
+            elif not isinstance(bbox, list):
+                bbox = [bbox]
+            for element in bbox:
+                if not isinstance(element, tuple) or not (
+                    (len(element) == 2 and all(isinstance(x, int) for x in element))
+                    or (len(element) == 4 and all(isinstance(x, float) for x in element))
+                ):
+                    raise ValueError(
+                        "Each element in `bboxes` (for a single text example) should be either `None`, a tuple containing "
+                        "2 integers or 4 float point numbers, or a list containing such tuples. Also "
+                        "make sure the arguments `texts` and `bboxes` passed to `preprocess_text` are both in "
+                        "batches or both for a single example."
+                    )
+
+    def _preprocess_single_example(self, text, image, bboxes, img_info_tokens):
+        """A"""
+        text = text.strip()
+        if image is not None:
+            # Add `<image> ... (fake) image tokens ... </image>`
+            text = f"{img_info_tokens} {text}"
+
+        # Add `<object> <patch_idx_xxxx> <patch_idx_yyy> </object>` after `<phrase> phrase text </phrase>`
+        text = self._insert_patch_index_tokens(text, bboxes)
+        text = self._add_remove_spaces_around_tag_tokens(text)
+        return text
+
+    def preprocess_examples(
         self,
         texts: Union[TextInput, List[TextInput]],
         images: ImageInput = None,
@@ -296,53 +343,7 @@ class Kosmos2Processor(ProcessorMixin):
         """
         # These are fake `<image>` tokens enclosed between (the actual) `<image>` token and `</image>`.
         img_tokens = [self.boi_token] * num_image_tokens
-        img_info = " ".join([self.boi_token] + img_tokens + [self.eoi_token])
-
-        def check_bboxes_for_single_text(bboxes):
-            """
-            Check `bboxes` for a single text example. It could be
-                - `None`: no bounding box associated to a text.
-                - A list with each element being the bounding boxes associated to one `<phrase> ... </phrase>` pair
-                  found in a text. This could be:
-                      - `None`: no bounding box associated to a `<phrase> ... </phrase>` pair.
-                      - A tuple of 2 integers: A single bounding box specified by patch indices.
-                      - A tuple of 4 float point number: A single bounding box specified by (normalized) coordinates.
-                      - A list containing the above 2 tuple types: Multiple bounding boxes for a
-                       `<phrase> ... </phrase>` pair.
-            """
-            if bboxes is None:
-                return
-            elif not isinstance(bboxes, list):
-                raise ValueError("`bboxes` (for a single text example) should be `None` or a list.")
-
-            # `bbox` is the bounding boxes for a single <phrase> </phrase> pair
-            for bbox in bboxes:
-                if bbox is None:
-                    continue
-                elif not isinstance(bbox, list):
-                    bbox = [bbox]
-                for element in bbox:
-                    if not isinstance(element, tuple) or not (
-                        (len(element) == 2 and all(isinstance(x, int) for x in element))
-                        or (len(element) == 4 and all(isinstance(x, float) for x in element))
-                    ):
-                        raise ValueError(
-                            "Each element in `bboxes` (for a single text example) should be either `None`, a tuple containing "
-                            "2 integers or 4 float point numbers, or a list containing such tuples. Also "
-                            "make sure the arguments `texts` and `bboxes` passed to `preprocess_text` are both in "
-                            "batches or both for a single example."
-                        )
-
-        def preprocess_single(text, image, bboxes):
-            text = text.strip()
-            if image is not None:
-                # Add `<image> ... (fake) image tokens ... </image>`
-                text = f"{img_info} {text}"
-
-            # Add `<object> <patch_idx_xxxx> <patch_idx_yyy> </object>` after `<phrase> phrase text </phrase>`
-            text = self._insert_patch_index_tokens(text, bboxes)
-            text = self._add_remove_spaces_around_tag_tokens(text)
-            return text
+        img_info_tokens = " ".join([self.boi_token] + img_tokens + [self.eoi_token])
 
         # make batch to simplify processing logic
         batched = True
@@ -360,13 +361,13 @@ class Kosmos2Processor(ProcessorMixin):
             )
 
         if not batched:
-            check_bboxes_for_single_text(bboxes)
+            self._check_bboxes_for_single_text(bboxes)
             bboxes = [bboxes]
         elif bboxes is not None:
             if not isinstance(bboxes, list):
                 raise ValueError("`bboxes` should be `None` or a list (as a batch) when `texts` is passed as a batch.")
             for x in bboxes:
-                check_bboxes_for_single_text(x)
+                self._check_bboxes_for_single_text(x)
         else:
             bboxes = [None] * len(texts)
 
@@ -375,7 +376,10 @@ class Kosmos2Processor(ProcessorMixin):
                 f"The number of examples in `texts` and `bboxes` should be the same. Got {len(texts)} v.s. {len(bboxes)} instead."
             )
 
-        result = [preprocess_single(text, image, bbox) for text, image, bbox in zip(texts, images, bboxes)]
+        result = [
+            self._preprocess_single_example(text, image, bbox, img_info_tokens)
+            for text, image, bbox in zip(texts, images, bboxes)
+        ]
         # un-batch if necessary
         if not batched:
             result = result[0]
@@ -438,7 +442,9 @@ class Kosmos2Processor(ProcessorMixin):
             patch_index_strings = []
             # A phrase could have multiple bboxes
             if not all(box is not None for box in bbox):
-                raise ValueError("The multiple bounding boxes for a single phrase should not contain any `None` value.")
+                raise ValueError(
+                    "The multiple bounding boxes for a single phrase should not contain any `None` value."
+                )
             for box in bbox:
                 patch_index_1, patch_index_2 = self._convert_bbox_to_patch_index_tokens(box)
                 patch_index_strings.append(f"{patch_index_1} {patch_index_2}")
@@ -643,11 +649,31 @@ def remove_special_fields(text):
 
 
 def adjust_entity_positions(entity, text):
+    """Adjust the positions of the entities in `text` to be relative to the text with special fields removed."""
     entity_name, (start, end) = entity
     adjusted_start = len(remove_special_fields(text[:start]))
     adjusted_end = len(remove_special_fields(text[:end]))
     adjusted_entity = (entity_name, (adjusted_start, adjusted_end))
     return adjusted_entity
+
+
+def _cleanup_spaces(text, entities):
+    """Remove the spaces around the text and the entities in it."""
+    new_text = text.strip()
+    leading_spaces = len(text) - len(text.lstrip())
+
+    new_entities = []
+    for entity_name, (start, end), bboxes in entities:
+        entity_name_leading_spaces = len(entity_name) - len(entity_name.lstrip())
+        entity_name_trailing_spaces = len(entity_name) - len(entity_name.rstrip())
+
+        start = start - leading_spaces + entity_name_leading_spaces
+        end = end - leading_spaces - entity_name_trailing_spaces
+        entity_name = entity_name.strip()
+
+        new_entities.append((entity_name, (start, end), bboxes))
+
+    return new_text, new_entities
 
 
 # copied from https://github.com/microsoft/unilm/blob/97e4923e97d3ee10b57e97013556e3fd0d207a9b/kosmos-2/demo/decode_string.py#L77-L87
@@ -677,21 +703,4 @@ def clean_text_and_extract_entities_with_bboxes(text, num_patches_per_side=32):
 
         entities.append(adjusted_entity + (bboxes_in_coords,))
 
-    def cleanup_spaces(text, entities):
-        new_text = text.strip()
-        leading_spaces = len(text) - len(text.lstrip())
-
-        new_entities = []
-        for entity_name, (start, end), bboxes in entities:
-            entity_name_leading_spaces = len(entity_name) - len(entity_name.lstrip())
-            entity_name_trailing_spaces = len(entity_name) - len(entity_name.rstrip())
-
-            start = start - leading_spaces + entity_name_leading_spaces
-            end = end - leading_spaces - entity_name_trailing_spaces
-            entity_name = entity_name.strip()
-
-            new_entities.append((entity_name, (start, end), bboxes))
-
-        return new_text, new_entities
-
-    return cleanup_spaces(processed_text, entities)
+    return _cleanup_spaces(processed_text, entities)
