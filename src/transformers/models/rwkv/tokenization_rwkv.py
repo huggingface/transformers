@@ -23,7 +23,6 @@ from transformers.tokenization_utils_base import (
     BatchEncoding,
     EncodedInput,
     TextInput,
-    TextInputPair,
     TruncationStrategy,
 )
 from transformers.utils import PaddingStrategy, TensorType, logging, to_py_obj
