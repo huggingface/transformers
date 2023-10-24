@@ -47,12 +47,14 @@ IMAGEBIND_TEST_TRUNK_CONFIG = {
 IMAGEBIND_TEST_TEXT_CONFIG = {
     **IMAGEBIND_TEST_TRUNK_CONFIG,
     "vocab_size": 99,
+    "max_position_embeddings": 512,
     "logit_scale_init_value": 14.2857,
     "learnable_logit_scale": True,
 }
 
 IMAGEBIND_TEST_VISION_CONFIG = {
     **IMAGEBIND_TEST_TRUNK_CONFIG,
+    "image_size": 30,
     "patch_size": (2, 2, 2),
     "stride": (2, 2, 2),
     "num_channels": 3,
@@ -63,6 +65,7 @@ IMAGEBIND_TEST_VISION_CONFIG = {
 
 IMAGEBIND_TEST_AUDIO_CONFIG = {
     **IMAGEBIND_TEST_TRUNK_CONFIG,
+    "image_size": 30,
     "patch_size": 4,
     "stride": 2,
     "num_channels": 1,
@@ -76,6 +79,7 @@ IMAGEBIND_TEST_AUDIO_CONFIG = {
 
 IMAGEBIND_TEST_DEPTH_CONFIG = {
     **IMAGEBIND_TEST_TRUNK_CONFIG,
+    "image_size": 30,
     "patch_size": 2,
     "stride": 2,
     "num_channels": 1,
@@ -86,6 +90,7 @@ IMAGEBIND_TEST_DEPTH_CONFIG = {
 
 IMAGEBIND_TEST_THERMAL_CONFIG = {
     **IMAGEBIND_TEST_TRUNK_CONFIG,
+    "image_size": 30,
     "patch_size": 2,
     "stride": 2,
     "num_channels": 1,
