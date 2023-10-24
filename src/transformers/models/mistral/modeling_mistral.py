@@ -351,7 +351,7 @@ class MistralFlashAttention2(MistralAttention):
 
         use_sliding_windows = (
             _flash_supports_window_size
-            and hasattr(self.config, "sliding_window") is not None
+            and hasattr(self.config, "sliding_window")
             and kv_seq_len > self.config.sliding_window
         )
 
