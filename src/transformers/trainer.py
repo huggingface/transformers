@@ -508,7 +508,7 @@ class Trainer:
             self.optimizer is not None or self.lr_scheduler is not None
         ):
             raise RuntimeError(
-                "Passing `optimizers` is not allowed if Deepspeed or PyTorch FSDP is enabled."
+                "Passing `optimizers` is not allowed if Deepspeed or PyTorch FSDP is enabled. "
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
@@ -563,8 +563,8 @@ class Trainer:
                 # When there's mismatch between SMP config and trainer argument, use SMP config as truth
                 if args.fp16 != smp.state.cfg.fp16:
                     logger.warning(
-                        f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16},"
-                        f"but FP16 provided in trainer argument is {args.fp16},"
+                        f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
+                        f"but FP16 provided in trainer argument is {args.fp16}, "
                         f"setting to {smp.state.cfg.fp16}"
                     )
                     args.fp16 = smp.state.cfg.fp16
@@ -2862,7 +2862,10 @@ class Trainer:
         checkpoints_sorted = sorted(ordering_and_checkpoint_path)
         checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
         # Make sure we don't delete the best model.
-        if self.state.best_model_checkpoint is not None:
+        if (
+            self.state.best_model_checkpoint is not None
+            and str(Path(self.state.best_model_checkpoint)) in checkpoints_sorted
+        ):
             best_model_index = checkpoints_sorted.index(str(Path(self.state.best_model_checkpoint)))
             for i in range(best_model_index, len(checkpoints_sorted) - 2):
                 checkpoints_sorted[i], checkpoints_sorted[i + 1] = checkpoints_sorted[i + 1], checkpoints_sorted[i]

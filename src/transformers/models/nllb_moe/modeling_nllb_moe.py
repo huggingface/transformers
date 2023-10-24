@@ -417,7 +417,7 @@ class NllbMoeDenseActDense(nn.Module):
         if (
             isinstance(self.fc2.weight, torch.Tensor)
             and hidden_states.dtype != self.fc2.weight.dtype
-            and self.fc2.weight.dtype != torch.int8
+            and (self.fc2.weight.dtype != torch.int8 and self.fc2.weight.dtype != torch.uint8)
         ):
             hidden_states = hidden_states.to(self.fc2.weight.dtype)
         hidden_states = self.fc2(hidden_states)
@@ -1808,7 +1808,16 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
     ):
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed

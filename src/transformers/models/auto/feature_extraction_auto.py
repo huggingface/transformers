@@ -76,6 +76,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("pop2piano", "Pop2PianoFeatureExtractor"),
         ("regnet", "ConvNextFeatureExtractor"),
         ("resnet", "ConvNextFeatureExtractor"),
+        ("seamless_m4t", "SeamlessM4TFeatureExtractor"),
         ("segformer", "SegformerFeatureExtractor"),
         ("sew", "Wav2Vec2FeatureExtractor"),
         ("sew-d", "Wav2Vec2FeatureExtractor"),
