@@ -334,7 +334,7 @@ def main():
         size = (image_processor.size["height"], image_processor.size["width"])
     normalize = (
         Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
-        if hasattr(image_processor, "image_mean")
+        if hasattr(image_processor, "image_mean") and hasattr(image_processor, "image_std")
         else Lambda(lambda x: x)
     )
     train_transforms = Compose(
