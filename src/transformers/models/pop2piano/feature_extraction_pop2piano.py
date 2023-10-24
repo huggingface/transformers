@@ -407,9 +407,9 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                     )
                 else:
                     warnings.warn(
-                        f"The sampling_rate of the provided audio is different from the target sampling_rate"
+                        f"The sampling_rate of the provided audio is different from the target sampling_rate "
                         f"of the Feature Extractor, {self.sampling_rate} vs {single_sampling_rate}. "
-                        f"In these cases it is recommended to use `resample=True` in the `__call__` method to"
+                        f"In these cases it is recommended to use `resample=True` in the `__call__` method to "
                         f"get the optimal behaviour."
                     )
 
