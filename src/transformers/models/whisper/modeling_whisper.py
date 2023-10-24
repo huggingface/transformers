@@ -642,11 +642,10 @@ class WhisperAttention(nn.Module):
 # Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->Whisper
 class WhisperFlashAttention2(WhisperAttention):
     """
-    Whisper flash attention module. This module inherits from `WhisperAttention` as the weights of the module stays
+    Bart flash attention module. This module inherits from `BartAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
-
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
 
@@ -659,7 +658,7 @@ class WhisperFlashAttention2(WhisperAttention):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # WhisperFlashAttention2 attention does not support output_attentions
+        # BartFlashAttention2 attention does not support output_attentions
         output_attentions = False
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -711,31 +710,37 @@ class WhisperFlashAttention2(WhisperAttention):
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
 
-        # TODO: Whisper does not have dropout in the config??
+        # TODO: Bart does not have dropout in the config??
         # It is recommended to use dropout with FA according to the docs
         # when training.
         dropout_rate = 0.0  # if not self.training else self.attn_dropout
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 just to be sure everything works as expected.
+        # cast them back in the correct dtype just to be sure everything works as expected.
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32. (LlamaRMSNorm handles it correctly)
+
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
+            # Handle the case where the model is quantized
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
             logger.warning_once(
-                "The input hidden states seems to be silently casted in float32, this might be related to"
-                " the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                " float16."
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
             )
 
-            query_states = query_states.to(torch.float16)
-            key_states = key_states.to(torch.float16)
-            value_states = value_states.to(torch.float16)
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
 
-        causal = self.is_decoder and not is_cross_attention
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, causal=causal, dropout=dropout_rate
+            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1)
@@ -746,8 +751,9 @@ class WhisperFlashAttention2(WhisperAttention):
 
         return attn_output, attn_weights, past_key_value
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, causal=True, dropout=0.0, softmax_scale=None
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -794,7 +800,7 @@ class WhisperFlashAttention2(WhisperAttention):
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal,
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
             )
 
         return attn_output
