@@ -16,6 +16,7 @@ from minhash_deduplication import deduplicate_dataset
 from src.transformers.utils.generic import HASHLIB_KWARGS
 from transformers import AutoTokenizer, HfArgumentParser
 
+
 PATTERN = re.compile(r"\s+")
 
 
