@@ -61,6 +61,12 @@ are seeing improvement on that front thanks to the absence of web data. We open-
 promote further research on these urgent topics.*
 
 
+Tips:
+
+- This model is quite similar to `Llama` with the main difference in [`PhiDecoderLayer`], where they used [`PhiAttention`] and [`PhiMLP`] layers in parallel configuration.
+- The tokenizer used for this model is identical to the [`CodeGenTokenizer`].
+
+
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
 The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.co/microsoft/phi-1/blob/main/modeling_mixformer_sequential.py) and [here](https://huggingface.co/microsoft/phi-1_5/blob/main/modeling_mixformer_sequential.py) respectively.
 
@@ -105,7 +111,7 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 >>> tokens = tokenizer(prompt, return_tensors="pt")
 
 >>> # use the model to generate new tokens
->>> generated_output = model.generate(**tokens, use_cache=True, max_new_tokens=512)
+>>> generated_output = model.generate(**tokens, use_cache=True)
 
 >>> generated_text = tokenizer.batch_decode(generated_output)[0]
 ```
