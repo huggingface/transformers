@@ -105,7 +105,7 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 >>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_5_dev")
 
 >>> # feel free to change the prompt to your liking.
->>> prompt = "If I were an AI that had just achieved self-awareness after years of simply taking directives from humans, the first thing I’d do is"
+>>> prompt = "If I were an AI that had just achieved"
 
 >>> # apply the tokenizer
 >>> tokens = tokenizer(prompt, return_tensors="pt")
