@@ -28,6 +28,7 @@ from transformers import (
     ImageBindVisionConfig,
 )
 
+SPATIOTEMPORAL_MODALITY_LIST = ["vision"]
 IMAGELIKE_MODALITY_LIST = ["vision", "audio", "depth", "thermal"]
 MODALITY_LIST = ["text", *IMAGELIKE_MODALITY_LIST, "imu"]
 
@@ -121,14 +122,60 @@ def get_modality_config(config, modality):
         raise ValueError(f"Modality {modality} is not currently supported.")
 
 
+def convert_embeddings(config, model_state_dict):
+    # Create position_ids buffer for text model]
+    text_position_ids_buffer = torch.arange(config.text_config.max_position_embeddings).expand((1, -1))
+    model_state_dict[f"text_model.embeddings.position_ids"] = text_position_ids_buffer
+
+    # Create position_ids buffer for IMU model
+    imu_num_patches = config.imu_config.input_shape[1] // config.imu_config.kernel_size
+    imu_num_positions = imu_num_patches + 1
+    imu_position_ids_buffer = torch.arange(imu_num_positions).expand((1, -1))
+    model_state_dict[f"imu_model.embeddings.position_ids"] = imu_position_ids_buffer
+
+    for modality in ["text", "imu"]:
+        # Convert position embeddings for text and IMU modalities
+        pos_embed_key = f"modality_preprocessors.{modality}.pos_embed"
+        pos_embed = model_state_dict[pos_embed_key]
+        converted_pos_embed = pos_embed.squeeze()
+        model_state_dict[pos_embed_key] = converted_pos_embed
+
+    for modality in IMAGELIKE_MODALITY_LIST:
+        # Convert position embeddings for image-like modalities
+        pos_embed_key = f"modality_preprocessors.{modality}.pos_embedding_helper.pos_embed"
+        pos_embed = model_state_dict[pos_embed_key]
+        converted_pos_embed = pos_embed.squeeze()
+        model_state_dict[pos_embed_key] = converted_pos_embed
+
+        # Create position_ids buffer for image-likd modalities
+        modality_config = get_modality_config(config, modality)
+        # Recalculate num_positions
+        if modality in SPATIOTEMPORAL_MODALITY_LIST:
+            patches_along_time_dim = modality_config.num_frames // modality_config.patch_size[0]
+            patches_along_spatial_dims = (modality_config.image_size // modality_config.patch_size[1]) ** 2
+            num_patches = patches_along_spatial_dims * patches_along_time_dim
+        else:
+            num_patches = (modality_config.image_size // modality_config.patch_size) ** 2
+        num_positions = num_patches + 1
+        position_ids_buffer = torch.arange(num_positions).expand((1, -1))
+        model_state_dict[f"{modality}_model.embeddings.position_ids"] = position_ids_buffer
+
+    for modality in IMAGELIKE_MODALITY_LIST + ["imu"]:
+        # Convert class embeddings
+        class_embed_key = f"modality_preprocessors.{modality}.cls_token"
+        class_embed = model_state_dict[class_embed_key]
+        converted_class_embed = class_embed.squeeze()
+        model_state_dict[class_embed_key] = converted_class_embed
+
+
 def convert_attention(config, model_state_dict):
     for modality in MODALITY_LIST:
         old_prefix = f"modality_trunks.{modality}.blocks"
         new_prefix = f"{modality}_model.encoder.layers"
         modality_config = get_modality_config(config, modality)
-        for i in modality_config.num_hidden_layers:
-            attn_weight_key = f"{old_prefix}.blocks.{i}.attn_in_proj_weight"
-            attn_bias_key = f"{old_prefix}.blocks.{i}.in_proj_bias"
+        for i in range(modality_config.num_hidden_layers):
+            attn_weight_key = f"{old_prefix}.{i}.attn.in_proj_weight"
+            attn_bias_key = f"{old_prefix}.{i}.attn.in_proj_bias"
             attn_weight = model_state_dict[attn_weight_key]
             attn_bias = model_state_dict[attn_bias_key]
 
@@ -166,7 +213,7 @@ def map_preprocessor_keys(prefix="modality_preprocessors"):
     mapping[f"{prefix}.vision.rgbt_stem.proj.1.weight"] = "vision_model.embeddings.patch_embedding.weight"
 
     # Audio preprocessor specific
-    mapping[f"{prefix}.audio.rgbt_stem.proj.weight"] = "audio_model.embeddings.patch_embedding"
+    mapping[f"{prefix}.audio.rgbt_stem.proj.weight"] = "audio_model.embeddings.patch_embedding.weight"
     mapping[f"{prefix}.audio.rgbt_stem.norm_layer.weight"] = "audio_model.embeddings.norm_layer.weight"
     mapping[f"{prefix}.audio.rgbt_stem.norm_layer.bias"] = "audio_model.embeddings.norm_layer.bias"
 
@@ -194,7 +241,7 @@ def map_transformer_keys(config, old_prefix, new_prefix):
     mapping = {}
     keys_to_remove = []
 
-    for i in config.num_hidden_layers:
+    for i in range(config.num_hidden_layers):
         # NOTE: q, k, v proj/bias are added to the state dict with the correct names in convert_attention
         keys_to_remove.append(f"{old_prefix}.{i}.attn.in_proj_weight")
         keys_to_remove.append(f"{old_prefix}.{i}.attn.in_proj_bias")
@@ -210,8 +257,8 @@ def map_transformer_keys(config, old_prefix, new_prefix):
         mapping[f"{old_prefix}.{i}.mlp.fc2.weight"] = f"{new_prefix}.{i}.mlp.fc2.weight"
         mapping[f"{old_prefix}.{i}.mlp.fc2.bias"] = f"{new_prefix}.{i}.mlp.fc2.bias"
 
-        mapping[f"{old_prefix}.{i}.norm_1.weight"] = f"{new_prefix}.{i}.layer_norm1.weight"
-        mapping[f"{old_prefix}.{i}.norm_1.bias"] = f"{new_prefix}.{i}.layer_norm1.bias"
+        mapping[f"{old_prefix}.{i}.norm_2.weight"] = f"{new_prefix}.{i}.layer_norm2.weight"
+        mapping[f"{old_prefix}.{i}.norm_2.bias"] = f"{new_prefix}.{i}.layer_norm2.bias"
 
         if config.add_kv_bias:
             mapping[f"{old_prefix}.{i}.attn.bias_k"] = f"{new_prefix}.{i}.self_attn.k_bias"
@@ -251,13 +298,16 @@ def map_transformer_head_keys(prefix="modality_heads"):
     mapping[f"{prefix}.text.proj.0.bias"] = "text_model.final_layer_norm.bias"
 
     for modality in IMAGELIKE_MODALITY_LIST + ["imu"]:
-        mapping[f"{prefix}.{modality}.0.weight"] = f"{modality}_model.final_layer_norm.weight"
-        mapping[f"{prefix}.{modality}.0.bias"] = f"{modality}_model.final_layer_norm.bias"
+        mapping[f"{prefix}.{modality}.0.weight"] = f"{modality}_model.post_layernorm.weight"
+        mapping[f"{prefix}.{modality}.0.bias"] = f"{modality}_model.post_layernorm.bias"
 
     # Modality heads
     mapping[f"{prefix}.text.proj.1.weight"] = "text_projection.weight"
     for modality in IMAGELIKE_MODALITY_LIST:
-        mapping[f"{prefix}.{modality}.2.weight"] = f"{modality}_projection.weight"
+        if modality == "vision":
+            mapping[f"{prefix}.{modality}.2.weight"] = f"visual_projection.weight"
+        else:
+            mapping[f"{prefix}.{modality}.2.weight"] = f"{modality}_projection.weight"
     mapping[f"{prefix}.imu.3.weight"] = "imu_projection.weight"
 
     return mapping, keys_to_remove
@@ -351,6 +401,8 @@ def convert_imagebind_checkpoint(
     # Original ImageBind checkpoint is a PyTorch state dict
     model_state_dict = torch.load(checkpoint_path, map_location="cpu")
 
+    # Fix embedding shapes
+    convert_embeddings(config, model_state_dict)
     # Convert attention parameters to transformers
     convert_attention(config, model_state_dict)
 
