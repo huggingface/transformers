@@ -14,15 +14,200 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Semantic segmentation
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+
+# Image Segmentation
 
 [[open-in-colab]]
 
 <Youtube id="dKE8SIt9C-w"/>
 
-Semantic segmentation assigns a label or class to each individual pixel of an image. There are several types of segmentation, and in the case of semantic segmentation, no distinction is made between unique instances of the same object. Both objects are given the same label (for example, "car" instead of "car-1" and "car-2"). Common real-world applications of semantic segmentation include training self-driving cars to identify pedestrians and important traffic information, identifying cells and abnormalities in medical imagery, and monitoring environmental changes from satellite imagery.
+Image segmentation models divide images into segments consisting of different objects. These models segment images by assigning a label to each pixel. It has three different types: semantic segmentation, instance segmentation and panoptic segmentation.
 
-This guide will show you how to:
+In this guide, we will:
+1. Take a look at different types of segmentation,
+2. Go through each of them to illustrate the differences in depth,
+3. Have an end-to-end fine-tuning example for semantic segmentation. 
+
+Before you begin, make sure you have all the necessary libraries installed:
+
+```bash
+pip install -q datasets transformers evaluate
+```
+
+We encourage you to log in to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to log in:
+
+```py
+>>> from huggingface_hub import notebook_login
+
+>>> notebook_login()
+```
+
+Semantic segmentation assigns a label or class to every single pixel in an image. Let's take a look at a semantic segmentation model output. It will assign the same class to every instance it comes across in an image, for example, all cats will be labeled as cat instead of "cat-1", "cat-2".
+We can use transformers' image segmentation pipeline to quickly infer a semantic segmentation model. Let's take a look at the example image.
+
+```python
+from transformers import pipeline
+from PIL import Image
+import requests
+
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/segmentation_input.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+image
+```
+
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/segmentation_input.jpg" alt="Segmentation Input"/>
+</div>
+
+We will use [nvidia/segformer-b1-finetuned-cityscapes-1024-1024](https://huggingface.co/nvidia/segformer-b1-finetuned-cityscapes-1024-1024). 
+
+```python
+semantic_segmentation = pipeline("image-segmentation", "nvidia/segformer-b1-finetuned-cityscapes-1024-1024")
+results = semantic_segmentation(image)
+results
+```
+
+The segmentation pipeline output includes a mask for every predicted class. 
+```bash
+[{'score': None,
+  'label': 'road',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': None,
+  'label': 'sidewalk',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': None,
+  'label': 'building',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': None,
+  'label': 'wall',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': None,
+  'label': 'pole',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': None,
+  'label': 'traffic sign',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': None,
+  'label': 'vegetation',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': None,
+  'label': 'terrain',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': None,
+  'label': 'sky',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': None,
+  'label': 'car',
+  'mask': <PIL.Image.Image image mode=L size=612x415>}]
+```
+
+Taking a look at the mask for car class, we can see every car is classified in one mask.
+
+```python
+results[-1]["mask"]
+```
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/semantic_segmentation_output.png" alt="Semantic Segmentation Output"/>
+</div>
+
+In instance segmentation, the goal is not classifying every pixel, but predicting a mask for **every instance of an object** in a given image. We will use [facebook/mask2former-swin-large-cityscapes-instance](https://huggingface.co/facebook/mask2former-swin-large-cityscapes-instance) for this.
+
+```python
+instance_segmentation = pipeline("image-segmentation", "facebook/mask2former-swin-large-cityscapes-instance")
+results = instance_segmentation(Image.open(image))
+results
+```
+
+As you can see below, there are multiple cars classified, and there's no classification for pixels other than pixels that belong to car and person instances.
+
+```bash
+[{'score': 0.999944,
+  'label': 'car',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': 0.999945,
+  'label': 'car',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': 0.999652,
+  'label': 'car',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': 0.903529,
+  'label': 'person',
+  'mask': <PIL.Image.Image image mode=L size=612x415>}]
+```
+Checking out one of the car masks below.
+
+```python
+results[2]["mask"]
+```
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/instance_segmentation_output.png" alt="Semantic Segmentation Output"/>
+</div>
+
+Panoptic segmentation combines semantic segmentation and instance segmentation, where every pixel is classified, and there are multiple masks for each instance of a class. We can use [facebook/mask2former-swin-large-cityscapes-panoptic](https://huggingface.co/facebook/mask2former-swin-large-cityscapes-panoptic) for this.
+
+```python
+panoptic_segmentation = pipeline("image-segmentation", "facebook/mask2former-swin-large-cityscapes-panoptic")
+results = panoptic_segmentation(Image.open(image))
+results
+```
+As you can see below, every pixel gets classified and there are multiple instances for car again.
+
+```bash
+[{'score': 0.999981,
+  'label': 'car',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': 0.999958,
+  'label': 'car',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': 0.99997,
+  'label': 'vegetation',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': 0.999575,
+  'label': 'pole',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': 0.999958,
+  'label': 'building',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': 0.999634,
+  'label': 'road',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': 0.996092,
+  'label': 'sidewalk',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': 0.999221,
+  'label': 'car',
+  'mask': <PIL.Image.Image image mode=L size=612x415>},
+ {'score': 0.99987,
+  'label': 'sky',
+  'mask': <PIL.Image.Image image mode=L size=612x415>}]
+```
+
+Let's have a side by side comparison for all types of segmentation.
+
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/segmentation-comparison.png" alt="Segmentation Maps Compared"/>
+</div>
+
+Seeing all types of segmentation, let's have a deep dive on fine-tuning a model for semantic segmentation.
+
+Common real-world applications of semantic segmentation include training self-driving cars to identify pedestrians and important traffic information, identifying cells and abnormalities in medical imagery, and monitoring environmental changes from satellite imagery.
+
+We will now:
 
 1. Finetune [SegFormer](https://huggingface.co/docs/transformers/main/en/model_doc/segformer#segformer) on the [SceneParse150](https://huggingface.co/datasets/scene_parse_150) dataset.
 2. Use your finetuned model for inference.

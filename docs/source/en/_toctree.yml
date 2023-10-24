@@ -59,8 +59,8 @@
     sections:
     - local: tasks/image_classification
       title: Image classification
-    - local: tasks/semantic_segmentation
-      title: Semantic segmentation
+    - local: tasks/image_segmentation
+      title: Image segmentation
     - local: tasks/video_classification
       title: Video classification
     - local: tasks/object_detection
