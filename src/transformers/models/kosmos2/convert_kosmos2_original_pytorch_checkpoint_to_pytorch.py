@@ -66,9 +66,6 @@ def convert_kosmos2_checkpoint_to_pytorch(checkpoint_path, pytorch_dump_folder_p
         renamed_key = rename_key(key)
         converted_state_dict[renamed_key] = state_dict[key]
 
-    # all HF model keys should be in the renamed keys from the original checkpoint
-    assert set(model.state_dict().keys()) == set(converted_state_dict.keys())
-
     # check weight loading
     model.load_state_dict(converted_state_dict, strict=True)
 
