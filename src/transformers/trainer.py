@@ -203,6 +203,7 @@ if is_accelerate_available():
     DATA_SAMPLERS = [RandomSampler]
     if version.parse(accelerate_version) > version.parse("0.23.0"):
         from accelerate.data_loader import SeedableRandomSampler
+
         DATA_SAMPLERS += [SeedableRandomSampler]
 
     if is_deepspeed_available():
