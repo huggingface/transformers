@@ -41,16 +41,8 @@ The original code can be found [here](https://github.com/RicherMans/CED).
 
 >>> config = CedConfig("ced-mini")
 >>> front_end = CedFeatureExtractor()
->>> model = CedForAudioClassification(config).from_pretrained(model_saved_path).eval()
 
->>> import torchaudio
-
->>> wavpath = './JeD5V5aaaoI_931_932.wav'  # downloaded from https://github.com/RicherMans/CED/raw/main/resources/JeD5V5aaaoI_931_932.wav 
->>> wave, _ = torchaudio.load(wavpath)
-
->>> output = model(front_end(wave)['input_values'])  # forward pass
->>> output.shape
-[1, 527]  # scores of 527 audio classes. See http://storage.googleapis.com/us_audioset/youtube_corpus/v1/csv/class_labels_indices.csv
+TODO: complete this example
 ```
 
 
