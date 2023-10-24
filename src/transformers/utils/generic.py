@@ -674,4 +674,5 @@ def infer_framework(model_class):
         raise TypeError(f"Could not infer framework from class {model_class}.")
 
 
+# Defining a hashlib kwarg specified from 3.9+. This is to avoid usage of algorithms like md5, with a "usedforsecurity" kwarg set to True.
 HASHLIB_KWARGS = {"usedforsecurity": False} if sys.version_info >= (3, 9) else {}
