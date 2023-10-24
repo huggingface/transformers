@@ -58,9 +58,9 @@ _CONFIG_FOR_DOC = "BartConfig"
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(padding_mask):
-    seqlens_in_batch = padding_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(padding_mask.flatten(), as_tuple=False).flatten()
+def _get_unpad_data(attention_mask):
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero( attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
     return (
@@ -149,7 +149,7 @@ class AttnMaskConverter:
         self,
         attention_mask_2d: torch.Tensor,
         query_length: int,
-        key_value_length: int,
+        key_value_length: Optional[int] = None,
         dtype: torch.dtype = torch.float32,
     ) -> torch.Tensor:
         """
@@ -158,12 +158,14 @@ class AttnMaskConverter:
         causal, a causal mask will be added.
         """
         input_shape = (attention_mask_2d.shape[0], query_length)
-        past_key_values_length = key_value_length - query_length
 
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         causal_4d_mask = None
         if (input_shape[-1] > 1 or self.sliding_window is not None) and self.is_causal:
+            if key_value_length is None:
+                raise ValueError("This attention mask converter is causal. Make sure to pass `key_value_length` to correctly create a causal mask.")
+
             past_key_values_length = key_value_length - query_length
             causal_4d_mask = self._make_causal_mask(
                 input_shape,
@@ -274,6 +276,7 @@ class BartAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         is_decoder: bool = False,
+        is_causal: bool = False,
         bias: bool = True,
     ):
         super().__init__()
@@ -289,7 +292,7 @@ class BartAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
-        self.is_causal = is_decoder
+        self.is_causal = is_causal
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -579,8 +582,8 @@ class BartFlashAttention2(BartAttention):
         return attn_output
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
-    def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
         key_layer = index_first_axis(
@@ -605,8 +608,8 @@ class BartFlashAttention2(BartAttention):
             query_layer = query_layer.squeeze(1)
         else:
             # The -q_len: slice assumes left padding.
-            padding_mask = padding_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, padding_mask)
+            attention_mask = attention_mask[:, -query_length:]
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
 
         return (
             query_layer,
@@ -648,7 +651,6 @@ class BartEncoderLayer(nn.Module):
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
         layer_head_mask: torch.FloatTensor,
-        padding_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         """
@@ -668,7 +670,6 @@ class BartEncoderLayer(nn.Module):
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
-            padding_mask=padding_mask,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -701,18 +702,13 @@ class BartDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = BartAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-        )
         if getattr(config, "_flash_attn_2_enabled", False):
             self.self_attn = BartFlashAttention2(
                 embed_dim=self.embed_dim,
                 num_heads=config.decoder_attention_heads,
                 dropout=config.attention_dropout,
                 is_decoder=True,
+                is_causal=True,
             )
         else:
             self.self_attn = BartAttention(
@@ -720,6 +716,7 @@ class BartDecoderLayer(nn.Module):
                 num_heads=config.decoder_attention_heads,
                 dropout=config.attention_dropout,
                 is_decoder=True,
+                is_causal=True,
             )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -754,8 +751,6 @@ class BartDecoderLayer(nn.Module):
         layer_head_mask: Optional[torch.Tensor] = None,
         cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        padding_mask: Optional[torch.Tensor] = None,
-        encoder_padding_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
@@ -789,7 +784,6 @@ class BartDecoderLayer(nn.Module):
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
-            padding_mask=padding_mask,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -810,7 +804,6 @@ class BartDecoderLayer(nn.Module):
                 layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
-                padding_mask=encoder_padding_mask,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
