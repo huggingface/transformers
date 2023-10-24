@@ -40,14 +40,14 @@ from ...utils import (
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_available,
+    is_flash_attn_2_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_bart import BartConfig
 
 
-if is_flash_attn_available():
+if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
@@ -500,20 +500,27 @@ class BartFlashAttention2(BartAttention):
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 just to be sure everything works as expected.
+        # cast them back in the correct dtype just to be sure everything works as expected.
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32. (LlamaRMSNorm handles it correctly)
+
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
+            # Handle the case where the model is quantized
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
             logger.warning_once(
-                "The input hidden states seems to be silently casted in float32, this might be related to"
-                " the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                " float16."
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
             )
 
-            query_states = query_states.to(torch.float16)
-            key_states = key_states.to(torch.float16)
-            value_states = value_states.to(torch.float16)
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
             query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
@@ -1187,7 +1194,7 @@ class BartEncoder(BartPreTrainedModel):
         else:
             # 4d mask is passed through the layers
             if attention_mask is not None:
-                attention_mask = self.causal_attn_mask_converter.to_4d(
+                attention_mask = self.attn_mask_converter.to_4d(
                     attention_mask, input.shape[1], dtype=inputs_embeds.dtype
                 )
 
@@ -1404,15 +1411,15 @@ class BartDecoder(BartPreTrainedModel):
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
-            key_value_length = input_shape[1] + past_key_values_length
+            key_value_length = input_shape[-1] + past_key_values_length
             # 4d mask is passed through the layers
             if attention_mask is not None:
                 attention_mask = self.causal_attn_mask_converter.to_4d(
-                    attention_mask, input_shape[1], key_value_length, dtype=inputs_embeds.dtype
+                    attention_mask, input_shape[-1], key_value_length, dtype=inputs_embeds.dtype
                 )
             else:
                 attention_mask = self.causal_attn_mask_converter.to_causal_4d(
-                    input_shape[0], input_shape[1], key_value_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
+                    input_shape[0], input_shape[-1], key_value_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
                 )
 
         # expand encoder attention mask
@@ -1422,7 +1429,7 @@ class BartDecoder(BartPreTrainedModel):
             else:
                 if encoder_attention_mask is not None:
                     encoder_attention_mask = self.attn_mask_converter.to_4d(
-                        encoder_attention_mask, encoder_attention_mask.shape[1], dtype=inputs_embeds.dtype
+                        encoder_attention_mask, input_shape[-1], encoder_attention_mask.shape[1], dtype=inputs_embeds.dtype
                     )
 
         # embed positions
