@@ -15,7 +15,7 @@
 
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -447,12 +447,13 @@ class RGBDTPatchEmbedding(nn.Module):
     def __init__(
         self,
         config: Union[ImageBindAudioConfig, ImageBindDepthConfig, ImageBindThermalConfig, ImageBindVisionConfig],
+        image_shape: Union[List[int], Tuple[int]],
         norm_layer: Optional[nn.Module] = None,
     ):
         super().__init__()
         self.config = config
+        self.image_shape = image_shape
         self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
         self.patch_size = config.patch_size
         self.stride = config.stride
         self.num_frames = config.num_frames if hasattr(config, "num_frames") else None
@@ -466,7 +467,7 @@ class RGBDTPatchEmbedding(nn.Module):
             patch_embedding_cls = nn.Conv2d
         
         self.patch_embedding = patch_embedding_cls(
-            in_channels=config.num_channels,
+            in_channels=image_shape[0],
             out_channels=self.embed_dim,
             kernel_size=self.patch_size,
             stride=self.stride,
@@ -475,13 +476,12 @@ class RGBDTPatchEmbedding(nn.Module):
         self.norm_layer = norm_layer if norm_layer is not None else nn.Identity()
 
         if self.is_temporal:
-            self.time_patch_size = self.patch_size[0]
-            self.spatial_patch_size = self.patch_size[1]
-            self.num_patches = (config.num_frames // self.time_patch_size) * (self.image_size // self.spatial_patch_size) ** 2
+            num_patches_along_time_dim = (config.num_frames // self.patch_size[0])
+            num_patches_along_spatial_dims = (self.image_shape[-2] // self.patch_size[-2]) * (self.image_shape[-1] // self.patch_size[-1])
         else:
-            self.time_patch_size = None
-            self.spatial_patch_size = self.patch_size
-            self.num_patches = (self.image_size // self.patch_size) ** 2
+            num_patches_along_time_dim = 1
+            num_patches_along_spatial_dims = (self.image_shape[-2] // self.patch_size) * (self.image_shape[-1] // self.patch_size)
+        self.num_patches = num_patches_along_spatial_dims * num_patches_along_time_dim
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
@@ -531,13 +531,15 @@ class RGBDTPatchEmbedding(nn.Module):
 
 class ImageBindVisionEmbeddings(RGBDTPatchEmbedding):
     def __init__(self, config: ImageBindVisionConfig):
-        super().__init__(config, norm_layer=None)
+        image_shape = (config.num_channels, config.image_size, config.image_size)
+        super().__init__(config, image_shape, norm_layer=None)
 
 
 class ImageBindAudioEmbeddings(RGBDTPatchEmbedding):
     def __init__(self, config: ImageBindAudioConfig):
+        image_shape = (config.num_channels, config.num_mel_bins, config.target_len)
         layer_norm = nn.LayerNorm(config.hidden_size)
-        super().__init__(config, norm_layer=layer_norm)
+        super().__init__(config, image_shape, norm_layer=layer_norm)
     
     def forward(self, audio: torch.FloatTensor) -> torch.Tensor:
         super().forward(pixel_values=audio)
@@ -545,8 +547,9 @@ class ImageBindAudioEmbeddings(RGBDTPatchEmbedding):
 
 class ImageBindDepthEmbeddings(RGBDTPatchEmbedding):
     def __init__(self, config: ImageBindDepthConfig):
+        image_shape = (config.num_channels, config.image_size, config.image_size)
         layer_norm = nn.LayerNorm(config.hidden_size)
-        super().__init__(config, norm_layer=layer_norm)
+        super().__init__(config, image_shape, norm_layer=layer_norm)
     
     def forward(self, depth: torch.FloatTensor) -> torch.Tensor:
         super().forward(pixel_values=depth)
@@ -554,8 +557,9 @@ class ImageBindDepthEmbeddings(RGBDTPatchEmbedding):
 
 class ImageBindThermalEmbeddings(RGBDTPatchEmbedding):
     def __init__(self, config: ImageBindThermalConfig):
+        image_shape = (config.num_channels, config.image_size, config.image_size)
         layer_norm = nn.LayerNorm(config.hidden_size)
-        super().__init__(config, norm_layer=layer_norm)
+        super().__init__(config, image_shape, norm_layer=layer_norm)
     
     def forward(self, thermal: torch.FloatTensor) -> torch.Tensor:
         super().forward(pixel_values=thermal)

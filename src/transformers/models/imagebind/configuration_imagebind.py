@@ -328,8 +328,6 @@ class ImageBindAudioConfig(PretrainedConfig):
             TODO
         num_channels (`int`, *optional*, defaults to 1):
             The number of channels in the input audio data.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each spectrogram, interpreted as a 2D image.
         patch_size (`int`, *optional*, defaults to 16):
             The kernel size of the patch embedding 2D convolution layer.
         stride (`int`, *optional*, defaults to 10):
@@ -380,7 +378,6 @@ class ImageBindAudioConfig(PretrainedConfig):
         num_mel_bins=128,
         target_len=204,
         num_channels=1,
-        image_size=224,
         patch_size=16,
         stride=10,
         hidden_act="quick_gelu",
@@ -404,7 +401,6 @@ class ImageBindAudioConfig(PretrainedConfig):
         self.num_mel_bins = num_mel_bins
         self.target_len = target_len
         self.num_channels = num_channels
-        self.image_size = image_size
         self.patch_size = patch_size
         self.stride = stride
         self.initializer_range = initializer_range
