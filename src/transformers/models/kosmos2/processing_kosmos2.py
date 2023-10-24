@@ -98,7 +98,7 @@ class Kosmos2Processor(ProcessorMixin):
 
         tokens_to_add = []
         for token in self.tag_tokens + patch_index_tokens:
-            tokens_to_add.append(AddedToken(token, lstrip=True, rstrip=False))
+            tokens_to_add.append(AddedToken(token, lstrip=True, rstrip=False, normalized=False))
         tokenizer.add_tokens(tokens_to_add)
 
         super().__init__(image_processor, tokenizer)
