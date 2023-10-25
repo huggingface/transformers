@@ -376,6 +376,22 @@ class NucleusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         self.assertTrue(logit_success and cache_success)
 
+    def test_nucleus_x_parallel_chunkwise(self):
+        logit_success = False
+        for _ in range(10):
+            config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.groupnorm_eps = 1e-16
+            input_ids = input_dict["input_ids"]
+            model = NucleusXForCausalLM(config)
+            model.to(torch_device)
+            model.eval()
+            parallel_result = model(input_ids, forward_mode="parallel")
+            chunkwise_result = model(input_ids, forward_mode="chunkwise", recurrent_chunk_size=2)
+            logit_success = torch.allclose(parallel_result.logits, chunkwise_result.logits, atol=1e-5)
+            if not logit_success:
+                break
+        self.assertTrue(logit_success)
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

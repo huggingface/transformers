@@ -106,6 +106,8 @@ class NucleusXConfig(PretrainedConfig):
             SubLN (https://arxiv.org/abs/2210.06423). Enables `decoder_normalize_before` and disables `deepnorm`.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
+        groupnorm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the group_norm layer in NucleusXMultiScaleRetention.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
 
@@ -161,6 +163,7 @@ class NucleusXConfig(PretrainedConfig):
         deepnorm: bool = False,
         subln: bool = True,
         rms_norm_eps: float = 1e-6,
+        groupnorm_eps: float = 1e-6,
         tie_word_embeddings: bool = False,
         **kwargs,
     ):
@@ -188,6 +191,7 @@ class NucleusXConfig(PretrainedConfig):
         self.deepnorm = deepnorm
         self.subln = subln
         self.rms_norm_eps = rms_norm_eps
+        self.groupnorm_eps = groupnorm_eps
         self.z_loss_coeff = z_loss_coeff
 
         if self.deepnorm:

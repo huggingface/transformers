@@ -260,7 +260,7 @@ class NucleusXMultiScaleRetention(nn.Module):
 
         self.out_proj = nn.Linear(self.value_dim, self.embed_dim, bias=False)
 
-        self.group_norm = build_rms_norm(self.head_dim, eps=config.rms_norm_eps, elementwise_affine=False)
+        self.group_norm = build_rms_norm(self.head_dim, eps=config.groupnorm_eps, elementwise_affine=False)
 
     def reset_parameters(self, gain=2**-2.5):
         nn.init.xavier_uniform_(self.q_proj.weight, gain=gain)
