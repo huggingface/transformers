@@ -811,7 +811,7 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
         )
 
         # Encoder
-        self.encoder = PatchTSTEncoderBlock(config)
+        # self.encoder = PatchTSTEncoderBlock(config)
         self.layers = nn.ModuleList([PatchTSTEncoderLayer(config) for i in range(config.encoder_layers)])
 
         # Initialize weights and apply final processing
@@ -1374,7 +1374,10 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
             masked_values, mask = self.masking(patched_values)
         else:
             masked_values, mask = self.masking(patched_values), None
-        encoder_output = self.encoder(masked_values, output_hidden_states=output_hidden_states)
+        encoder_output = self.encoder(masked_values,
+                                      output_hidden_states=output_hidden_states,
+                                      output_attentions=output_attentions
+                                      )
 
         hidden_states = encoder_output.last_hidden_state
         encoder_states = encoder_output.hidden_states
