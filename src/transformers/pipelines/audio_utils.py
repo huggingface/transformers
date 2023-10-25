@@ -227,6 +227,7 @@ def _ffmpeg_stream(ffmpeg_command, buflen: int):
     except FileNotFoundError as error:
         raise ValueError("ffmpeg was not found but is required to stream audio files from filename") from error
 
+
 def _get_microphone_name():
     """
     Retrieve the microphone name in Windows .
@@ -241,5 +242,5 @@ def _get_microphone_name():
             return f"audio={microphone_name}"
     except FileNotFoundError:
         print("ffmpeg was not found. Please install it or make sure it is in your system PATH.")
-    
+
     return "default"
