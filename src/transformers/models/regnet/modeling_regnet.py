@@ -293,9 +293,10 @@ class RegNetPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.weight, 1)
             nn.init.constant_(module.bias, 0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, RegNetModel):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 REGNET_START_DOCSTRING = r"""

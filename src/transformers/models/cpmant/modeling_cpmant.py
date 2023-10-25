@@ -556,9 +556,10 @@ class CpmAntPreTrainedModel(PreTrainedModel):
         elif isinstance(module, CpmAntSegmentPositionEmbedding):
             module.relative_attention_bias.data.normal_(mean=0.0, std=self.config.init_std)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, CpmAntEncoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 CPMANT_START_DOCSTRING = r"""
