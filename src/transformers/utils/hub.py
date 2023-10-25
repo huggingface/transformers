@@ -90,7 +90,7 @@ if (
     and "TRANSFORMERS_CACHE" not in os.environ
 ):
     logger.warning(
-        "In Transformers v4.0.0, the default path to cache downloaded models changed from"
+        "In Transformers v4.22.0, the default path to cache downloaded models changed from"
         " '~/.cache/torch/transformers' to '~/.cache/huggingface/hub'. Since you don't seem to have"
         " overridden and '~/.cache/torch/transformers' is a directory that exists, we're moving it to"
         " '~/.cache/huggingface/hub' to avoid redownloading models you have already in the cache. You should"
