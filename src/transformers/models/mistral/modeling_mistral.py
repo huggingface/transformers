@@ -650,7 +650,7 @@ class MistralFlashAttention2(MistralAttention):
         else:
             if not use_sliding_windows:
                 attn_output = flash_attn_func(
-                    query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
+                    query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=self.is_causal,
                 )
             else:
                 attn_output = flash_attn_func(
@@ -659,7 +659,7 @@ class MistralFlashAttention2(MistralAttention):
                     value_states,
                     dropout,
                     softmax_scale=softmax_scale,
-                    causal=True,
+                    causal=self.is_causal,
                     window_size=(self.config.sliding_window, self.config.sliding_window),
                 )
 
@@ -908,8 +908,6 @@ class MistralModel(MistralPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        # create attention mask cache that trickles down to each attention layer
-        # so that the attention_mask cache can be shared among layers
         self.attn_mask_converter = AttnMaskConverter(is_causal=True, sliding_window=config.sliding_window)
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)

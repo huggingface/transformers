@@ -1159,8 +1159,6 @@ class FalconModel(FalconPreTrainedModel):
         # Embedding + LN Embedding
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
 
-        # create attention mask cache that trickles down to each attention layer
-        # so that the attention_mask cache can be shared among layers
         self.attn_mask_converter = AttnMaskConverter(is_causal=True)
 
         # Transformer blocks
