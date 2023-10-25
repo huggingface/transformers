@@ -435,10 +435,10 @@ class AWQConfig(QuantizationConfigMixin):
     Args:
         w_bit (`int`):
             The number of bits to quantize to.
-        zero_point (`bool`, *optional*, defaults to `True`):
-            Whether to use zero point quantization.
         q_group_size (`int`, *optional*, defaults to 128):
             The group size to use for quantization. Recommended value is 128 and -1 uses per-column quantization.
+        zero_point (`bool`, *optional*, defaults to `True`):
+            Whether to use zero point quantization.
         version (`str`, *optional*, defaults to `GEMM`):
             The version of the quantization algorithm to use.
     """
