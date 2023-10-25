@@ -458,7 +458,7 @@ class DebertaEncoder(nn.Module):
 
             if self.gradient_checkpointing and self.training:
                 hidden_states = self.gradient_checkpointing_func(
-                    layer_module.forward,
+                    layer_module.__call__,
                     next_kv,
                     attention_mask,
                     query_states,

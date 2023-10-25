@@ -689,7 +689,7 @@ class MaskFormerSwinEncoder(nn.Module):
 
             if self.gradient_checkpointing and self.training:
                 layer_hidden_states, output_dimensions, layer_all_hidden_states = self.gradient_checkpointing_func(
-                    layer_module.forward,
+                    layer_module.__call__,
                     hidden_states,
                     layer_head_mask,
                     output_attentions,

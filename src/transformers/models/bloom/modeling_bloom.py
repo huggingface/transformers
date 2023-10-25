@@ -763,7 +763,7 @@ class BloomModel(BloomPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 outputs = self.gradient_checkpointing_func(
-                    block.forward,
+                    block.__call__,
                     hidden_states,
                     alibi,
                     causal_mask,

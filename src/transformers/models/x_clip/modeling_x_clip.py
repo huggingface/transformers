@@ -705,7 +705,7 @@ class XCLIPEncoder(nn.Module):
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self.gradient_checkpointing_func(
-                    encoder_layer.forward,
+                    encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     causal_attention_mask,
@@ -946,7 +946,7 @@ class XCLIPVisionEncoder(nn.Module):
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self.gradient_checkpointing_func(
-                    encoder_layer.forward,
+                    encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     causal_attention_mask,

@@ -347,7 +347,7 @@ class HubertFeatureEncoder(nn.Module):
         for conv_layer in self.conv_layers:
             if self._requires_grad and self.gradient_checkpointing and self.training:
                 hidden_states = self.gradient_checkpointing_func(
-                    conv_layer.forward,
+                    conv_layer.__call__,
                     hidden_states,
                 )
             else:
@@ -725,7 +725,7 @@ class HubertEncoder(nn.Module):
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self.gradient_checkpointing_func(
-                        layer.forward,
+                        layer.__call__,
                         hidden_states,
                         attention_mask,
                         output_attentions,
@@ -809,7 +809,7 @@ class HubertEncoderStableLayerNorm(nn.Module):
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self.gradient_checkpointing_func(
-                        layer.forward,
+                        layer.__call__,
                         hidden_states,
                         attention_mask,
                         output_attentions,

@@ -545,7 +545,7 @@ class {{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self.gradient_checkpointing_func(
-                    layer_module.forward,
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
@@ -2311,7 +2311,7 @@ class {{cookiecutter.camelcase_modelname}}Encoder({{cookiecutter.camelcase_model
             else:
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self.gradient_checkpointing_func(
-                        encoder_layer.forward,
+                        encoder_layer.__call__,
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
@@ -2544,7 +2544,7 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self.gradient_checkpointing_func(
-                    decoder_layer.forward,
+                    decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,

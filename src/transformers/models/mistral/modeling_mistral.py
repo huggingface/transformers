@@ -1021,7 +1021,7 @@ class MistralModel(MistralPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self.gradient_checkpointing_func(
-                    decoder_layer.forward,
+                    decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     position_ids,

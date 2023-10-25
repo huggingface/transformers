@@ -493,7 +493,7 @@ class YolosEncoder(nn.Module):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self.gradient_checkpointing_func(
-                    layer_module.forward,
+                    layer_module.__call__,
                     hidden_states,
                     layer_head_mask,
                     output_attentions,

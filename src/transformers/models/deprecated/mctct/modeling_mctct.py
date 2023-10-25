@@ -618,7 +618,7 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self.gradient_checkpointing_func(
-                        encoder_layer.forward,
+                        encoder_layer.__call__,
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),

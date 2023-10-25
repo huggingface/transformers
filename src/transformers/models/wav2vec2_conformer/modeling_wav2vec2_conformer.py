@@ -519,7 +519,7 @@ class Wav2Vec2ConformerFeatureEncoder(nn.Module):
         for conv_layer in self.conv_layers:
             if self._requires_grad and self.gradient_checkpointing and self.training:
                 hidden_states = self.gradient_checkpointing_func(
-                    conv_layer.forward,
+                    conv_layer.__call__,
                     hidden_states,
                 )
             else:
@@ -905,7 +905,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self.gradient_checkpointing_func(
-                        layer.forward,
+                        layer.__call__,
                         hidden_states,
                         attention_mask,
                         relative_position_embeddings,

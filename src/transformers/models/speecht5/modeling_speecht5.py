@@ -521,7 +521,7 @@ class SpeechT5FeatureEncoder(nn.Module):
         for conv_layer in self.conv_layers:
             if self._requires_grad and self.gradient_checkpointing and self.training:
                 hidden_states = self.gradient_checkpointing_func(
-                    conv_layer.forward,
+                    conv_layer.__call__,
                     hidden_states,
                 )
             else:
@@ -1381,7 +1381,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self.gradient_checkpointing_func(
-                        encoder_layer.forward,
+                        encoder_layer.__call__,
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
@@ -1701,7 +1701,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self.gradient_checkpointing_func(
-                    decoder_layer.forward,
+                    decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,

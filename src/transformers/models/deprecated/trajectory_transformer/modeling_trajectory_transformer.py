@@ -552,7 +552,7 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 outputs = self.gradient_checkpointing_func(
-                    block.forward,
+                    block.__call__,
                     hidden_states,
                     layer_past,
                     use_cache,

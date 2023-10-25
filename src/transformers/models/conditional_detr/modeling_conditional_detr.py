@@ -1520,7 +1520,7 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
             query_sine_embed = query_sine_embed_before_transformation * pos_transformation
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self.gradient_checkpointing_func(
-                    decoder_layer.forward,
+                    decoder_layer.__call__,
                     hidden_states,
                     combined_attention_mask,
                     object_queries,

@@ -627,7 +627,7 @@ class MobileViTEncoder(nn.Module):
         for i, layer_module in enumerate(self.layer):
             if self.gradient_checkpointing and self.training:
                 hidden_states = self.gradient_checkpointing_func(
-                    layer_module.forward,
+                    layer_module.__call__,
                     hidden_states,
                 )
             else:

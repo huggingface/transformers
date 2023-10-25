@@ -643,7 +643,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 outputs = self.gradient_checkpointing_func(
-                    layer.forward,
+                    layer.__call__,
                     hidden_states,
                     attention_mask,
                     position_ids,

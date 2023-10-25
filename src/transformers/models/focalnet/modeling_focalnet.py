@@ -587,7 +587,7 @@ class FocalNetEncoder(nn.Module):
         for i, stage_module in enumerate(self.stages):
             if self.gradient_checkpointing and self.training:
                 stage_outputs = self.gradient_checkpointing_func(
-                    stage_module.forward,
+                    stage_module.__call__,
                     hidden_states,
                     input_dimensions,
                 )
