@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 如果你要编写全新的模型，从头开始可能更容易。在本教程中，我们将向你展示如何编写自定义模型及其配置，以便可以在 Transformers 中使用它；以及如何与社区共享它（及其依赖的代码），以便任何人都可以使用，即使它不在 🤗 Transformers 库中。
 
-我们将以 ResNet 模型为例，通过将 [timm 库](https://github.com/rwightman/pytorch-image-models) 的 ResNet 类封装到 [PreTrainedModel] 中来进行说明。
+我们将以 ResNet 模型为例，通过将 [timm 库](https://github.com/rwightman/pytorch-image-models) 的 ResNet 类封装到 [`PreTrainedModel`] 中来进行说明。
 
 ## 编写自定义配置
 
