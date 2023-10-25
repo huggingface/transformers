@@ -270,7 +270,7 @@ class Kosmos2ModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = Kosmos2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Kosmos2Config, hidden_size=37)
 
-    # overwrite from test_modeling_common to skip `image_to_text_projection.latent_query`
+    # overwrite from common to skip `image_to_text_projection.latent_query`
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -304,7 +304,7 @@ class Kosmos2ModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    # over... from common
+    # overwrite from common in order to use `self.model_tester.text_model_tester.num_hidden_layers`
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
