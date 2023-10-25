@@ -1097,9 +1097,10 @@ class FalconPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     # Copied from transformers.models.bloom.modeling_bloom.BloomPreTrainedModel._set_gradient_checkpointing with BloomModel->FalconModel
-    def _set_gradient_checkpointing(self, module: nn.Module, value: bool = False):
+    def _set_gradient_checkpointing(self, module: nn.Module, gradient_checkpointing_func=None):
         if isinstance(module, FalconModel):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
     @staticmethod
     def _convert_cache_to_standard_format(
@@ -1278,21 +1279,16 @@ class FalconModel(FalconPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, use_cache=use_cache, output_attentions=output_attentions)
-
-                    return custom_forward
-
-                outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
+                outputs = self.gradient_checkpointing_func(
+                    block.__call__,
                     hidden_states,
                     alibi,
                     attention_mask,
                     position_ids,
                     head_mask[i],
+                    layer_past,
+                    use_cache,
+                    output_attentions,
                 )
             else:
                 outputs = block(
