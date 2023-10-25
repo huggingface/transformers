@@ -91,9 +91,9 @@ if (
 ):
     logger.warning(
         "In Transformers v4.0.0, the default path to cache downloaded models changed from"
-        " '~/.cache/torch/transformers' to '~/.cache/huggingface/transformers'. Since you don't seem to have"
+        " '~/.cache/torch/transformers' to '~/.cache/huggingface/hub'. Since you don't seem to have"
         " overridden and '~/.cache/torch/transformers' is a directory that exists, we're moving it to"
-        " '~/.cache/huggingface/transformers' to avoid redownloading models you have already in the cache. You should"
+        " '~/.cache/huggingface/hub' to avoid redownloading models you have already in the cache. You should"
         " only see this message once."
     )
     shutil.move(old_default_cache_path, default_cache_path)
