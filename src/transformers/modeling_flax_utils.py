@@ -1184,7 +1184,7 @@ if FlaxPreTrainedModel.push_to_hub.__doc__ is not None:
     )
 
 
-def overwrite_call_docstring(model_class: Union[FlaxPreTrainedModel, "FlaxModuleWithState"], docstring: str):
+def overwrite_call_docstring(model_class: Union[FlaxPreTrainedModel, "FlaxModuleWithState"], docstring: str):  # noqa: F821
     # copy __call__ function to be sure docstring is changed only for this function
     model_class.__call__ = copy_func(model_class.__call__)
     # delete existing docstring
