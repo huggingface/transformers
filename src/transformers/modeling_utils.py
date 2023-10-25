@@ -2813,6 +2813,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         "You are attempting to load an AWQ model with a device_map that contains a CPU or disk device."
                         " This is not supported. Please remove the CPU or disk device from the device_map."
                     )
+
+            if torch_dtype is None:
+                torch_dtype = torch.float16
+            else:
+                logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with AWQ.")
+
+            # Force-set to `True` for more mem efficiency
+            if low_cpu_mem_usage is None:
+                low_cpu_mem_usage = True
+
         if (
             is_8bit_serializable
             and quantization_method_from_args == QuantizationMethod.BITS_AND_BYTES
