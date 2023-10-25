@@ -183,15 +183,16 @@ class RTDetrConfig(PretrainedConfig):
         eval_spatial_size=None,
         eval_idx=-1,
         eps=1e-2,
-        aux_loss=True,
-        class_cost=2,
-        bbox_cost=5,
-        giou_cost=2,
+        # Loss
+        matcher_alpha=0.25,
+        matcher_gamma=2.,
+        matcher_class_cost=2,
+        matcher_bbox_cost=5,
+        matcher_giou_cost=2,
         use_focal_loss=True,
-        focal_loss_alpha=0.25,
+        aux_loss=True,
+        focal_loss_alpha=0.75,
         focal_loss_gamma=2.,
-        num_labels=80,
-        eos_coef=1e-4,
         weight_loss_vfl=1,
         weight_loss_bbox=5,
         weight_loss_giou=2,
@@ -246,14 +247,14 @@ class RTDetrConfig(PretrainedConfig):
         self.eps = eps
         self.aux_loss = aux_loss
         # Loss
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
+        self.matcher_alpha = matcher_alpha
+        self.matcher_gamma = matcher_gamma
+        self.matcher_class_cost = matcher_class_cost
+        self.matcher_bbox_cost = matcher_bbox_cost
+        self.matcher_giou_cost = matcher_giou_cost
         self.use_focal_loss = use_focal_loss
         self.focal_loss_alpha = focal_loss_alpha
         self.focal_loss_gamma = focal_loss_gamma
-        self.num_labels = num_labels
-        self.eos_coef = eos_coef
         self.weight_loss_vfl = weight_loss_vfl
         self.weight_loss_bbox = weight_loss_bbox
         self.weight_loss_giou = weight_loss_giou
