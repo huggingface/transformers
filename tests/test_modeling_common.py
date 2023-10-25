@@ -29,6 +29,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 from pytest import mark
+from safetensors.torch import save_file as safe_save_file
 
 import transformers
 from transformers import (
@@ -1708,8 +1709,8 @@ class ModelTesterMixin:
 
                 # We are nuking ALL weights on file, so every parameter should
                 # yell on load. We're going to detect if we yell too much, or too little.
-                with open(os.path.join(tmp_dir, "pytorch_model.bin"), "wb") as f:
-                    torch.save({}, f)
+                placeholder_dict = {"tensor": torch.tensor([1, 2])}
+                safe_save_file(placeholder_dict, os.path.join(tmp_dir, "model.safetensors"), metadata={"format": "pt"})
                 model_reloaded, infos = model_class.from_pretrained(tmp_dir, output_loading_info=True)
 
                 prefix = f"{model_reloaded.base_model_prefix}."
