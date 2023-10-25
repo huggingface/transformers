@@ -171,6 +171,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
           models, `pixel_values` for vision models and `input_values` for speech models).
     """
+
     config_class = None
     base_model_prefix = ""
     main_input_name = "input_ids"
@@ -1184,7 +1185,9 @@ if FlaxPreTrainedModel.push_to_hub.__doc__ is not None:
     )
 
 
-def overwrite_call_docstring(model_class: Union[FlaxPreTrainedModel, "FlaxModuleWithState"], docstring: str):  # noqa: F821
+def overwrite_call_docstring(
+    model_class: Union[FlaxPreTrainedModel, "FlaxModuleWithState"], docstring: str
+):  # noqa: F821
     # copy __call__ function to be sure docstring is changed only for this function
     model_class.__call__ = copy_func(model_class.__call__)
     # delete existing docstring
