@@ -23,7 +23,6 @@ from typing import Any, List, Optional, Tuple, Union
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -1504,7 +1503,7 @@ class LongT5Stack(LongT5PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     layer_module.forward,
                     hidden_states,
                     extended_attention_mask,

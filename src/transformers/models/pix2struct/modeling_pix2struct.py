@@ -20,7 +20,6 @@ from typing import Dict, List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -1481,7 +1480,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
-                layer_outputs = checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     layer_module.forward,
                     hidden_states,
                     extended_attention_mask,

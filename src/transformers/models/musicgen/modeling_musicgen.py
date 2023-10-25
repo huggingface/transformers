@@ -23,7 +23,6 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
-from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...generation.configuration_utils import GenerationConfig
@@ -822,7 +821,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     decoder_layer.forward,
                     hidden_states,
                     attention_mask,

@@ -21,7 +21,6 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
-from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
@@ -1416,7 +1415,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                             "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                         )
                         use_cache = False
-                    layer_outputs = checkpoint(
+                    layer_outputs = self.gradient_checkpointing_func(
                         decoder_layer.forward,
                         hidden_states,
                         combined_attention_mask,
