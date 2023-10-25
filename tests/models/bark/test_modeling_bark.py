@@ -917,7 +917,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
                 temperature=1.0,
                 semantic_generation_config=self.semantic_generation_config,
             )
-        self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist()[-1], expected_output_ids[-1])
+        self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
     @slow
     def test_generate_semantic_early_stop(self):
@@ -937,7 +937,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
                 semantic_generation_config=self.semantic_generation_config,
                 min_eos_p=0.01,
             )
-        self.assertLessEqual(len(output_ids.tolist()), len(expected_output_ids))
+        self.assertLess(len(output_ids.tolist()), len(expected_output_ids))
 
         # Should be able to read min_eos_p from the semantic generation config
         self.semantic_generation_config.min_eos_p = 0.01
@@ -948,7 +948,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
                 temperature=1.0,
                 semantic_generation_config=self.semantic_generation_config,
             )
-        self.assertLessEqual(len(output_ids.tolist()), len(expected_output_ids))
+        self.assertLess(len(output_ids.tolist()), len(expected_output_ids))
 
     @slow
     def test_generate_coarse(self):
