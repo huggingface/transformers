@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from ..utils import is_accelerate_available, is_auto_awq_available
 from ..utils.quantization_config import AWQLinearVersion
 
@@ -46,7 +47,9 @@ def replace_with_awq_linear(
                     in_features = module.in_features
                     out_features = module.out_features
 
-                    target_cls = WQLinear_GEMM if quantization_config.version == AWQLinearVersion.GEMM else WQLinear_GEMV
+                    target_cls = (
+                        WQLinear_GEMM if quantization_config.version == AWQLinearVersion.GEMM else WQLinear_GEMV
+                    )
 
                     model._modules[name] = target_cls(
                         w_bit=quantization_config.w_bit,
