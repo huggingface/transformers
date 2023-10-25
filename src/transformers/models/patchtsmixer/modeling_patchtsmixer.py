@@ -449,25 +449,11 @@ class PatchMixerBlock(nn.Module):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
 
-        # num_patches = config.num_patches
-        # num_features = config.num_features
-        # expansion_factor = config.expansion_factor
-        # dropout = config.dropout
-        # mode = config.mode
-        # gated_attn = config.gated_attn
-        # self_attn = config.self_attn
-        # self_attn_heads = config.self_attn_heads
-        # norm_mlp = config.norm_mlp
-        # self.norm_mlp = config.norm_mlp
-        # self.mode = config.mode
-
         self.norm = PatchTSMixerNormLayer(config)
         self.config = config
-        # self.self_attn = self_attn
 
         self.mlp = PatchTSMixerMLP(config.num_patches, config.num_patches, config.expansion_factor, config.dropout)
 
-        # self.gated_attn = gated_attn
         if config.gated_attn:
             self.gating_block = PatchTSMixerGatedAttention(in_size=config.num_patches, out_size=config.num_patches)
 
@@ -536,18 +522,9 @@ class FeatureMixerBlock(nn.Module):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
 
-        # num_features = config.num_features
-        # expansion_factor = config.expansion_factor
-        # dropout = config.dropout
-        # gated_attn = config.gated_attn
-        # mode = config.mode
-        # norm_mlp = config.norm_mlp
-
         self.norm = PatchTSMixerNormLayer(config)
         self.config = config
         self.mlp = PatchTSMixerMLP(config.num_features, config.num_features, config.expansion_factor, config.dropout)
-
-        # self.gated_attn = gated_attn
 
         if config.gated_attn:
             self.gating_block = PatchTSMixerGatedAttention(in_size=config.num_features, out_size=config.num_features)
@@ -584,12 +561,10 @@ class PatchTSMixerLayer(nn.Module):
 
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
-        # mode = config.mode
 
         self.patch_mixer = PatchMixerBlock(config=config)
         self.feature_mixer = FeatureMixerBlock(config=config)
-        # define a cross series mixer
-        # self.mode = mode
+
         self.config = config
         if config.mode == "mix_channel":
             self.channel_feature_mixer = PatchTSMixerChannelFeatureMixerBlock(config=config)
@@ -652,74 +627,6 @@ class PatchTSMixerBlock(nn.Module):
             return embedding, None
 
 
-class PatchTSMixer(nn.Module):
-    """
-    The entire network. It does the patching operation and then applies the necessary `PatchTSMixerBlock`s.
-
-    Args:
-        config (`PatchTSMixerConfig`, *required*):
-            Configuration.
-    """
-
-    # @get_class_params
-    def __init__(self, config: PatchTSMixerConfig):
-        super().__init__()
-
-        # num_patches = config.num_patches
-        # patch_len = config.patch_len
-        # num_input_channels = config.num_input_channels
-        # num_features = config.num_features
-        # num_layers = config.num_layers
-        # mode = config.mode
-
-        # self.mode = mode
-        self.config = config
-
-        self.use_positional_encoding = config.use_positional_encoding
-
-        self.patcher = nn.Linear(config.patch_len, config.num_features)
-
-        # self.num_patches = num_patches
-        # self.patch_len = patch_len
-        # self.num_input_channels = num_input_channels
-        # self.num_features = num_features
-        # self.num_layers = num_layers
-
-        self.mlp_mixer_encoder = PatchTSMixerBlock(config=config)
-
-        if self.use_positional_encoding:
-            self.position_enc = positional_encoding(
-                config.positional_encoding,
-                config.learn_positional_encoding,
-                config.num_patches,
-                config.num_features,
-            )
-
-    def forward(self, input_ts, output_hidden_states: bool = False):
-        """
-        Args:
-            input_ts (`torch.Tensor` of shape `(batch_size, num_vars, num_patch, patch_len)`):
-                The patch input.
-            output_hidden_states (`bool`, *optional*, defaults to False.):
-                Whether to output the hidden states as well.
-
-        Returns:
-            `torch.Tensor`: The embedding. `list`: List of all hidden states if `output_hidden_states` is set to
-            `True`.
-        """
-
-        patches = self.patcher(
-            input_ts
-        )  # flatten: [bs x num_patch x num_features]   common_channel/mix_channel: [bs x n_vars x num_patch x num_features]
-
-        if self.use_positional_encoding:
-            patches = patches + self.position_enc
-
-        embedding, all_hidden_states = self.mlp_mixer_encoder(patches, output_hidden_states=output_hidden_states)
-
-        return embedding, all_hidden_states
-
-
 class PatchTSMixerForecastHead(nn.Module):
     """Forecasting Head.
 
@@ -736,27 +643,8 @@ class PatchTSMixerForecastHead(nn.Module):
 
         self.config = config
 
-        # num_patches = config.num_patches
-        # num_input_channels = config.num_input_channels
-        # patch_len = config.patch_len
-        # num_features = config.num_features
-        # forecast_len = config.forecast_len
-        # head_dropout = config.head_dropout
-        # mode = config.mode
-        # forecast_channel_indices = config.forecast_channel_indices
-
-        # self.forecast_len = forecast_len
-        # self.nvars = num_input_channels
-        # self.num_features = num_features
-        # self.num_input_channels = num_input_channels
-        # self.patch_len = patch_len
-        # self.num_patches = num_patches
-        # self.forecast_channel_indices = forecast_channel_indices
-
         if self.config.forecast_channel_indices is not None:
             self.config.forecast_channel_indices.sort()
-
-        # self.mode = mode
 
         if distribution_output is None:
             self.base_forecast_block = nn.Sequential(
@@ -815,26 +703,6 @@ class PatchTSMixerLinearHead(nn.Module):
         distribution_output=None,
     ):
         super().__init__()
-
-        # num_patches = config.num_patches
-        # num_input_channels = config.num_input_channels
-        # num_features = config.num_features
-        # head_dropout = config.head_dropout
-        # output_dim = config.num_targets
-        # output_range = config.output_range
-        # head_agg = config.head_agg
-        # mode = config.mode
-
-        # self.nvars = num_input_channels
-        # self.num_features = num_features
-        # self.num_input_channels = num_input_channels
-        # self.head_dropout = head_dropout
-        # self.output_dim = output_dim
-        # self.mode = mode
-        # self.head_agg = head_agg
-        # self.output_range = output_range
-        # self.num_patches = num_patches
-        # self.distribution_output = distribution_output
 
         self.config = config
 
@@ -930,17 +798,6 @@ class PatchTSMixerPretrainHead(nn.Module):
 
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
-
-        # num_patches = config.num_patches
-        # num_features = config.num_features
-        # num_input_channels = config.num_input_channels
-        # patch_len = config.patch_len
-        # head_dropout = config.head_dropout
-        # mode = config.mode
-        # self.mode = mode
-        # self.patch_len = patch_len
-        # self.num_input_channels = num_input_channels
-        # self.num_patches = num_patches
 
         self.base_pt_block = nn.Sequential(
             nn.Dropout(config.head_dropout),
@@ -1458,7 +1315,21 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
 
-        self.encoder = PatchTSMixer(config=config)
+        self.config = config
+
+        self.use_positional_encoding = config.use_positional_encoding
+
+        self.patcher = nn.Linear(config.patch_len, config.num_features)
+
+        self.mlp_mixer_encoder = PatchTSMixerBlock(config=config)
+
+        if self.use_positional_encoding:
+            self.position_enc = positional_encoding(
+                config.positional_encoding,
+                config.learn_positional_encoding,
+                config.num_patches,
+                config.num_features,
+            )
 
         # Initialize weights and apply final processing
         if config.post_init:
@@ -1488,7 +1359,14 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        last_hidden_state, hidden_states = self.encoder(past_values, output_hidden_states=output_hidden_states)
+        patches = self.patcher(
+            past_values
+        )  # flatten: [bs x num_patch x num_features]   common_channel/mix_channel: [bs x n_vars x num_patch x num_features]
+
+        if self.use_positional_encoding:
+            patches = patches + self.position_enc
+
+        last_hidden_state, hidden_states = self.mlp_mixer_encoder(patches, output_hidden_states=output_hidden_states)
 
         if not return_dict:
             return tuple(
