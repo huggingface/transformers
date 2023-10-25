@@ -52,14 +52,15 @@ class DPTModelTester:
         use_labels=True,
         num_labels=3,
         is_training=True,
-        hidden_size=32,
-        num_hidden_layers=12,
-        num_attention_heads=4,
-        intermediate_size=37,
-        out_features=["stage2", "stage4", "stage6", "stage8"],
+        hidden_size=4,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        intermediate_size=8,
+        out_features=["stage1", "stage2"],
         apply_layernorm=False,
         reshape_hidden_states=True,
-        neck_hidden_sizes=[48, 96, 192, 384],
+        neck_hidden_sizes=[2, 2],
+        fusion_hidden_size=6,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -77,6 +78,7 @@ class DPTModelTester:
         self.num_labels = num_labels
         self.is_training = is_training
         self.neck_hidden_sizes = neck_hidden_sizes
+        self.fusion_hidden_size = fusion_hidden_size
         # DPT's sequence length
         self.seq_length = (self.image_size // self.patch_size) ** 2 + 1
 
@@ -95,6 +97,7 @@ class DPTModelTester:
         return DPTConfig(
             backbone_config=self.get_backbone_config(),
             neck_hidden_sizes=self.neck_hidden_sizes,
+            fusion_hidden_size=self.fusion_hidden_size,
         )
 
     def get_backbone_config(self):
@@ -133,7 +136,13 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (DPTForDepthEstimation,) if is_torch_available() else ()
-    pipeline_model_mapping = {"depth-estimation": DPTForDepthEstimation,} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {
+            "depth-estimation": DPTForDepthEstimation,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     test_pruning = False
     test_resize_embeddings = False
