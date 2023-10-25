@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch Clvp model. """
 
 
-import copy
 import gc
 import tempfile
 import unittest
@@ -23,7 +22,7 @@ import unittest
 import datasets
 import numpy as np
 
-from transformers import AdaptiveEmbedding, ClvpConfig, ClvpDecoderConfig, ClvpEncoderConfig
+from transformers import ClvpConfig, ClvpDecoderConfig, ClvpEncoderConfig
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -484,40 +483,13 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    @unittest.skip(reason="ClvpModelForConditionalGeneration does not have get_input_embeddings")
     def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        pass
 
-        model = ClvpModelForConditionalGeneration(config)
-        model.to(torch_device)
-        model.eval()
-
-        inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, ClvpModelForConditionalGeneration))
-
-        input_ids = inputs["input_ids"]
-        del inputs["input_ids"]
-
-        conditioning_encoder_wte = model.get_conditioning_encoder_input_embeddings()
-        text_encoder_wte = model.get_text_encoder_input_embeddings()
-
-        inputs["conditioning_encoder_inputs_embeds"] = conditioning_encoder_wte(input_ids)
-        inputs["text_encoder_inputs_embeds"] = text_encoder_wte(input_ids)
-
-        with torch.no_grad():
-            model(**inputs)[0]
-
+    @unittest.skip(reason="ClvpModelForConditionalGeneration does not have get_input_embeddings")
     def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        model = ClvpModelForConditionalGeneration(config)
-        self.assertIsInstance(
-            model.get_conditioning_encoder_input_embeddings(), (torch.nn.Embedding, AdaptiveEmbedding)
-        )
-        self.assertIsInstance(model.get_text_encoder_input_embeddings(), (torch.nn.Embedding, AdaptiveEmbedding))
-        self.assertIsInstance(model.get_speech_encoder_input_embeddings(), (torch.nn.Embedding, AdaptiveEmbedding))
-
-        model.set_conditioning_encoder_input_embeddings(torch.nn.Embedding(10, 10))
-        model.set_text_encoder_input_embeddings(torch.nn.Embedding(10, 10))
-        model.set_speech_encoder_input_embeddings(torch.nn.Embedding(10, 10))
+        pass
 
     # override as the `logit_scale` parameter initilization is different for Clvp
     def test_initialization(self):
@@ -530,16 +502,22 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
                 if param.requires_grad:
                     # check if `logit_scale` is initilized as per the original implementation
                     if name == "logit_scale":
+                        expected_value = np.log(1 / 0.07)
+                        returned_value = param.data.item()
+
                         self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
+                            returned_value,
+                            expected_value,
                             delta=1e-3,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
+                        expected_range = [0.0, 1.0]
+                        returned_range = ((param.data.mean() * 1e9).round() / 1e9).item()
+
                         self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
+                            returned_range,
+                            expected_range,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 

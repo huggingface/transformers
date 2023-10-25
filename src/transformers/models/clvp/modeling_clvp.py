@@ -16,6 +16,7 @@
 """ PyTorch CLVP model."""
 
 
+import copy
 import math
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple, Union
@@ -265,13 +266,9 @@ class ClvpSelfAttention(nn.Module):
 
         if hasattr(config, "max_position_embeddings"):
             max_positions = config.max_position_embeddings
-            self.register_buffer(
-                "bias",
-                torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
-                    1, 1, max_positions, max_positions
-                ),
-                persistent=False,
-            )
+            bias = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool))
+            bias = bias.view(1, 1, max_positions, max_positions)
+            self.register_buffer("bias", bias, persistent=False)
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
@@ -956,15 +953,8 @@ class ClvpEncoder(ClvpPreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
+                    encoder_layer.__call__,
                     hidden_states,
                     rotary_pos_emb,
                     attention_mask,
@@ -1160,16 +1150,8 @@ class ClvpDecoder(ClvpPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, use_cache, output_attentions)
-
-                    return custom_forward
-
                 outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
+                    block.__call__,
                     hidden_states,
                     None,
                     attention_mask,
@@ -1553,24 +1535,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_conditioning_encoder_input_embeddings(self):
-        return self.conditioning_encoder.text_token_embedding
-
-    def set_conditioning_encoder_input_embeddings(self, new_embeddings):
-        self.conditioning_encoder.text_token_embedding = new_embeddings
-
-    def get_text_encoder_input_embeddings(self):
-        return self.text_encoder_model.token_embedding
-
-    def set_text_encoder_input_embeddings(self, new_embeddings):
-        self.text_encoder_model.token_embedding = new_embeddings
-
-    def get_speech_encoder_input_embeddings(self):
-        return self.speech_encoder_model.token_embedding
-
-    def set_speech_encoder_input_embeddings(self, new_embeddings):
-        self.speech_encoder_model.token_embedding = new_embeddings
-
     # taken from the original repo,
     # link : https://github.com/neonbjb/tortoise-tts/blob/4003544b6ff4b68c09856e04d3eff9da26d023c2/tortoise/api.py#L117
     def fix_speech_decoder_output(self, speech_ids: torch.LongTensor) -> torch.LongTensor:
@@ -1928,10 +1892,13 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             `ClvpOutput` or tuple: A `ClvpOutput` (if `return_dict_in_generate=True` or when
             `config.return_dict_in_generate=True`) or a tuple.
         """
-
         if generation_config is None:
             generation_config = self.generation_config
-        generation_config.update(**kwargs)
+
+        generation_config = copy.deepcopy(generation_config)
+        model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+        generation_config.validate()
+        self._validate_model_kwargs(model_kwargs.copy())
 
         conditioning_embeds = self.conditioning_encoder(
             input_features=input_features,

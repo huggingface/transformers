@@ -340,16 +340,10 @@ class ClvpTokenizer(PreTrainedTokenizer):
 
     def clean_up_tokenization(self, text):
         text = "".join(text)
-        text = (
-            text.replace("[SPACE]", " ")
-            if "[SPACE]" in list(self.encoder.keys()) + list(self.added_tokens_encoder.keys())
-            else text
-        )
-        text = (
-            text.replace("[STOP]", " ")
-            if "[STOP]" in list(self.encoder.keys()) + list(self.added_tokens_encoder.keys())
-            else text
-        )
+        vocab_tokens = list(self.encoder.keys()) + list(self.added_tokens_encoder.keys())
+
+        text = text.replace("[SPACE]", " ") if "[SPACE]" in vocab_tokens else text
+        text = text.replace("[STOP]", " ") if "[STOP]" in vocab_tokens else text
 
         text = text.replace(self.unk_token, "").replace("   ", " ").replace("  ", " ")
         return text
