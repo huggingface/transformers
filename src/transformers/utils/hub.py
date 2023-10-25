@@ -1150,7 +1150,7 @@ def move_cache(cache_dir=None, new_cache_dir=None, token=None):
     if new_cache_dir is None:
         new_cache_dir = TRANSFORMERS_CACHE
     if cache_dir is None:
-        # Migrate from old cache in .cache/huggingface/hub
+        # Migrate from old cache in .cache/huggingface/transformers
         old_cache = Path(TRANSFORMERS_CACHE).parent / "transformers"
         if os.path.isdir(str(old_cache)):
             cache_dir = str(old_cache)
