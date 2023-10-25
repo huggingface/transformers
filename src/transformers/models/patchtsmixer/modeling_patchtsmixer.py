@@ -604,10 +604,10 @@ class PatchTSMixerBlock(nn.Module):
 
         for mod in self.mixers:
             embedding = mod(embedding)
-            if output_hidden_states is True:
+            if output_hidden_states:
                 all_hidden_states.append(embedding)
 
-        if output_hidden_states is True:
+        if output_hidden_states:
             return embedding, all_hidden_states
         else:
             return embedding, None
@@ -723,21 +723,18 @@ class PatchTSMixerLinearHead(nn.Module):
         Returns:
             `torch.Tensor` of shape `(batch_size x num_targets)`.
         """
-        hidden_features = hidden_features.transpose(
-            -1, -2
-        )  # batch_size x num_features x num_patch or batch_size x n_vars x num_features x num_patch
+
+        # batch_size x num_features x num_patch or batch_size x n_vars x num_features x num_patch
+        hidden_features = hidden_features.transpose(-1, -2)
         if self.config.head_agg == "use_last":
-            hidden_features = hidden_features[
-                ..., -1
-            ]  # batch_size x num_features (flatten) or # batch_size x n_vars x num_features (common_channel)
+            # batch_size x num_features (flatten) or # batch_size x n_vars x num_features (common_channel)
+            hidden_features = hidden_features[..., -1]
         elif self.config.head_agg == "max_pool":
-            hidden_features = hidden_features.max(
-                dim=-1
-            ).values  # batch_size x n_vars x num_features or batch_size x num_features
+            # batch_size x n_vars x num_features or batch_size x num_features
+            hidden_features = hidden_features.max(dim=-1).values
         elif self.config.head_agg == "avg_pool":
-            hidden_features = hidden_features.mean(
-                dim=-1
-            )  # batch_size x n_vars x num_features or batch_size x num_features
+            # batch_size x n_vars x num_features or batch_size x num_features
+            hidden_features = hidden_features.mean(dim=-1)
 
         if self.flatten:
             hidden_features = self.flatten(hidden_features)
