@@ -1136,9 +1136,7 @@ class ModelPushToHubTester(unittest.TestCase):
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(
-                tmp_dir, push_to_hub=True, token=self._token, repo_id="valid_org/test-model-org"
-            )
+            model.save_pretrained(tmp_dir, push_to_hub=True, token=self._token, repo_id="valid_org/test-model-org")
 
         new_model = BertModel.from_pretrained("valid_org/test-model-org")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):

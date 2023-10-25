@@ -614,9 +614,7 @@ class TFModelPushToHubTester(unittest.TestCase):
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(
-                tmp_dir, push_to_hub=True, token=self._token, repo_id="valid_org/test-model-tf-org"
-            )
+            model.save_pretrained(tmp_dir, push_to_hub=True, token=self._token, repo_id="valid_org/test-model-tf-org")
 
         new_model = TFBertModel.from_pretrained("valid_org/test-model-tf-org")
         models_equal = True
