@@ -569,41 +569,6 @@ class PatchTSTMasking(nn.Module):
         return masked_input, mask
 
 
-class PatchTSTEncoderBlock(nn.Module):
-    """
-    PatchTST encoder block
-    """
-
-    def __init__(self, config: PatchTSTConfig):
-        super().__init__()
-
-        self.layers = nn.ModuleList([PatchTSTEncoderLayer(config) for i in range(config.encoder_layers)])
-
-    def forward(self, hidden_state: torch.Tensor, output_hidden_states: bool = False):
-        """
-        Parameters:
-            hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`, *required*):
-                Past values of the time series
-            output_hidden_states (`bool`, *optional*, default to False):
-                output hidden state option
-        Return:
-            hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`)
-
-            all_hidden_states (*optional*, returned when `output_hidden_states` is set to True, tuple of `torch.Tensor`
-            of shapes `(batch_size, num_channels, sequence_length, d_model)`)
-
-        """
-        all_hidden_states = []
-
-        for mod in self.layers:
-            hidden_state = mod(hidden_state)
-            if output_hidden_states:
-                all_hidden_states.append(hidden_state)
-        if output_hidden_states is False:
-            return hidden_state, None
-        return hidden_state, all_hidden_states
-
-
 class PatchTSTEncoderLayer(nn.Module):
     """
     PatchTST encoder layer
