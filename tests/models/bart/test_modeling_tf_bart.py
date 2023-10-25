@@ -21,17 +21,9 @@ import unittest
 
 import numpy as np
 
-from transformers import (
-    TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-    BartConfig,
-    BartTokenizer,
-    TFAutoModel,
-    TFAutoModelForSequenceClassification,
-    is_tf_available,
-)
-from transformers.models.auto import get_values
-from transformers.testing_utils import CaptureLogger, require_tf, slow
-from transformers.utils import cached_property, logging
+from transformers import BartConfig, BartTokenizer, is_tf_available
+from transformers.testing_utils import require_tf, slow
+from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor

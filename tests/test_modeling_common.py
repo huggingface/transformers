@@ -29,7 +29,6 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 from pytest import mark
-from safetensors.torch import save_file as safe_save_file
 
 import transformers
 from transformers import (
@@ -92,6 +91,7 @@ if is_accelerate_available():
 
 if is_torch_available():
     import torch
+    from safetensors.torch import save_file as safe_save_file
     from torch import nn
 
     from transformers import MODEL_MAPPING, AdaptiveEmbedding
@@ -2689,7 +2689,6 @@ class ModelTesterMixin:
                     loss.backward()
 
     def test_load_with_mismatched_shapes(self):
-        print("OK")
         if not self.test_mismatched_shapes:
             return
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import copy
 import glob
 import json
 import os
@@ -65,6 +65,7 @@ from test_module.custom_configuration import CustomConfig, NoSuperInitConfig  # 
 
 if is_torch_available():
     import torch
+    from safetensors.torch import save_file as safe_save_file
     from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from torch import nn
 
@@ -418,13 +419,13 @@ class ModelUtilsTest(TestCasePlus):
                 },
             )
 
-    def test_checkpoint_sharding_local(self):
+    def test_checkpoint_sharding_local_bin(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             # We use the same folder for various sizes to make sure a new save erases the old checkpoint.
             for max_size in ["50kB", "50kiB", "100kB", "100kiB", "200kB", "200kiB"]:
-                model.save_pretrained(tmp_dir, max_shard_size=max_size)
+                model.save_pretrained(tmp_dir, max_shard_size=max_size, safe_serialization=False)
 
                 # Get each shard file and its size
                 shard_to_size = {}
@@ -470,11 +471,11 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), ref_model.parameters()):
             self.assertTrue(torch.allclose(p1, p2))
 
-    def test_checkpoint_variant_local(self):
+    def test_checkpoint_variant_local_bin(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, variant="v2")
+            model.save_pretrained(tmp_dir, variant="v2", safe_serialization=True)
 
             weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["bin"])
 
@@ -490,11 +491,11 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.allclose(p1, p2))
 
-    def test_checkpoint_variant_local_sharded(self):
+    def test_checkpoint_variant_local_sharded_bin(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, variant="v2", max_shard_size="50kB")
+            model.save_pretrained(tmp_dir, variant="v2", max_shard_size="50kB", safe_serialization=True)
 
             weights_index_name = ".".join(WEIGHTS_INDEX_NAME.split(".")[:-1] + ["v2"] + ["json"])
             weights_index_file = os.path.join(tmp_dir, weights_index_name)
@@ -602,14 +603,14 @@ class ModelUtilsTest(TestCasePlus):
             )
         self.assertIsNotNone(model)
 
-    def test_checkpoint_variant_save_load(self):
+    def test_checkpoint_variant_save_load_bin(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             model = BertModel.from_pretrained(
                 "hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir, variant="v2"
             )
             weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["bin"])
 
-            model.save_pretrained(tmp_dir, variant="v2")
+            model.save_pretrained(tmp_dir, variant="v2", safe_serialization=True)
             # saving will create a variant checkpoint
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
 
@@ -872,7 +873,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_base_model_to_head_model_load(self):
         base_model = BaseModel(PretrainedConfig())
         with tempfile.TemporaryDirectory() as tmp_dir:
-            base_model.save_pretrained(tmp_dir)
+            base_model.save_pretrained(tmp_dir, safe_serialization=False)
 
             # Can load a base model in a model with head
             model = ModelWithHead.from_pretrained(tmp_dir)
@@ -884,7 +885,7 @@ class ModelUtilsTest(TestCasePlus):
             head_state_dict = model.state_dict()
             base_state_dict["linear2.weight"] = head_state_dict["linear2.weight"]
             base_state_dict["linear2.bias"] = head_state_dict["linear2.bias"]
-            torch.save(base_state_dict, os.path.join(tmp_dir, WEIGHTS_NAME))
+            safe_save_file(base_state_dict, os.path.join(tmp_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"})
 
             with self.assertRaisesRegex(
                 ValueError, "The state dictionary of the model you are trying to load is corrupted."
@@ -932,8 +933,8 @@ class ModelUtilsTest(TestCasePlus):
 
             # Loading the model with the same class, we do get a warning for unexpected weights
             state_dict = model.state_dict()
-            state_dict["added_key"] = state_dict["linear.weight"]
-            torch.save(state_dict, os.path.join(tmp_dir, WEIGHTS_NAME))
+            state_dict["added_key"] = copy.deepcopy(state_dict["linear.weight"])
+            safe_save_file(state_dict, os.path.join(tmp_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"})
             with CaptureLogger(logger) as cl:
                 _, loading_info = ModelWithHead.from_pretrained(tmp_dir, output_loading_info=True)
             self.assertIn("were not used when initializing ModelWithHead: ['added_key']", cl.out)
