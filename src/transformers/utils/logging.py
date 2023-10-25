@@ -118,7 +118,7 @@ def _reset_library_root_logger():
         _default_handler = None
 
 
-def get_log_levels_dict() -> Dict[str, int]:
+def get_log_levels_dict() -> dict[str, int]:
     return log_levels
 
 
