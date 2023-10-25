@@ -42,6 +42,7 @@ from ...utils import (
 )
 from .configuration_persimmon import PersimmonConfig
 
+
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
@@ -585,7 +586,7 @@ class PersimmonFlashAttention2(PersimmonAttention):
             query_states = query_states.to(target_dtype)
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
-            
+
         attn_dropout = self.attention_dropout if self.training else 0.0
 
         # [batch_size, num_heads, seq_length, head_dim] -> [batch_size, seq_length, num_heads, head_dim]
@@ -935,7 +936,6 @@ class PersimmonModel(PersimmonPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-
 
         if getattr(self.config, "_flash_attn_2_enabled", False):
             # 2d mask is passed through the layers
