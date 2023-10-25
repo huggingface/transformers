@@ -556,25 +556,34 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         )
 
         # fmt: off
-        assert generated_ids.to("cpu").numpy().tolist() == [
+        self.assertListEqual(
+            generated_ids.to("cpu").numpy().tolist(),
             [
-                0, 64003, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
-                29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
-                55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 64004, 64012, 712, 1648, 9, 64007, 10, 43867, 64008,
-                64009, 64057, 64876, 64010, 5950, 597, 32, 64007, 10, 646, 64008, 64009, 64018, 64924, 64010, 4, 2
-            ]
-        ]
+               [
+                    0, 64003, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+                    29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
+                    55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 64004, 64012, 712, 1648, 9, 64007, 10, 43867, 64008,
+                    64009, 64057, 64876, 64010, 5950, 597, 32, 64007, 10, 646, 64008, 64009, 64018, 64924, 64010, 4, 2
+               ]
+            ],
+        )
         # fmt: on
 
-        assert processed_text == (
-            "<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863></object> "
-            "warming himself by<phrase> a fire</phrase><object><patch_index_0005><patch_index_0911></object>."
+        self.assertEqual(
+            processed_text,
+            (
+                "<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863></object> "
+                "warming himself by<phrase> a fire</phrase><object><patch_index_0005><patch_index_0911></object>."
+            ),
         )
-        assert final_text == "An image of a snowman warming himself by a fire."
-        assert entities == [
-            ("a snowman", (12, 21), [(0.390625, 0.046875, 0.984375, 0.828125)]),
-            ("a fire", (41, 47), [(0.171875, 0.015625, 0.484375, 0.890625)]),
-        ]
+        self.assertEqual(final_text, "An image of a snowman warming himself by a fire.")
+        self.assertListEqual(
+            entities,
+            [
+                ("a snowman", (12, 21), [(0.390625, 0.046875, 0.984375, 0.828125)]),
+                ("a fire", (41, 47), [(0.171875, 0.015625, 0.484375, 0.890625)]),
+            ],
+        )
 
         prompt = "<grounding>Describe this image in detail:"
         scores, generated_ids, generated_text, processed_text, final_text_with_entities = self.run_example(
@@ -607,45 +616,57 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         )
 
         # fmt: off
-        assert generated_ids.to("cpu").numpy().tolist() == [
+        self.assertListEqual(
+            generated_ids.to("cpu").numpy().tolist(),
             [
-                0, 64003, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
-                29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
-                55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 64004, 64012, 34645, 247, 38, 1648, 12, 3391, 55,
-                24, 1648, 1338, 10, 43867, 1280, 32, 64007, 10, 30879, 64008, 64009, 64018, 65020, 64010, 12, 5, 1842,
-                4, 71, 17, 1679, 64007, 10, 3958, 64008, 64009, 64061, 64263, 64010, 6, 64007, 15719, 64008, 64009,
-                64253, 64617, 64010, 6, 8, 64007, 9626, 64008, 64009, 64413, 64545, 64010, 6, 23, 64007, 10, 4363,
-                64008, 64009, 64623, 64885, 64010, 2255, 8, 64007, 10, 3486, 64008, 64009, 64809, 65036, 64010, 1560,
-                2255, 4, 24, 43867, 1684, 7, 27, 3774, 5, 10356, 9, 5, 646, 6, 8, 22, 1684, 7, 30, 10, 2007, 8, 16239,
-                4337, 4, 2
-            ]
-        ]
+                [
+                    0, 64003, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+                    29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
+                    55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 64004, 64012, 34645, 247, 38, 1648, 12, 3391, 55,
+                    24, 1648, 1338, 10, 43867, 1280, 32, 64007, 10, 30879, 64008, 64009, 64018, 65020, 64010, 12, 5, 1842,
+                    4, 71, 17, 1679, 64007, 10, 3958, 64008, 64009, 64061, 64263, 64010, 6, 64007, 15719, 64008, 64009,
+                    64253, 64617, 64010, 6, 8, 64007, 9626, 64008, 64009, 64413, 64545, 64010, 6, 23, 64007, 10, 4363,
+                    64008, 64009, 64623, 64885, 64010, 2255, 8, 64007, 10, 3486, 64008, 64009, 64809, 65036, 64010, 1560,
+                    2255, 4, 24, 43867, 1684, 7, 27, 3774, 5, 10356, 9, 5, 646, 6, 8, 22, 1684, 7, 30, 10, 2007, 8, 16239,
+                    4337, 4, 2
+                ]
+            ],
+        )
         # fmt: on
 
-        assert processed_text == (
-            "<grounding> Describe this image in detail: The image features a snowman sitting by<phrase> a campfire"
-            "</phrase><object><patch_index_0005><patch_index_1007></object> in the snow. He is wearing<phrase> a hat"
-            "</phrase><object><patch_index_0048><patch_index_0250></object>,<phrase> scarf</phrase><object>"
-            "<patch_index_0240><patch_index_0604></object>, and<phrase> gloves</phrase><object><patch_index_0400>"
-            "<patch_index_0532></object>, with<phrase> a pot</phrase><object><patch_index_0610><patch_index_0872>"
-            "</object> nearby and<phrase> a cup</phrase><object><patch_index_0796><patch_index_1023></object> placed "
-            "nearby. The snowman appears to be enjoying the warmth of the fire, and it appears to have a warm and cozy "
-            "atmosphere."
+        self.assertEqual(
+            processed_text,
+            (
+                "<grounding> Describe this image in detail: The image features a snowman sitting by<phrase> a campfire"
+                "</phrase><object><patch_index_0005><patch_index_1007></object> in the snow. He is wearing<phrase> a hat"
+                "</phrase><object><patch_index_0048><patch_index_0250></object>,<phrase> scarf</phrase><object>"
+                "<patch_index_0240><patch_index_0604></object>, and<phrase> gloves</phrase><object><patch_index_0400>"
+                "<patch_index_0532></object>, with<phrase> a pot</phrase><object><patch_index_0610><patch_index_0872>"
+                "</object> nearby and<phrase> a cup</phrase><object><patch_index_0796><patch_index_1023></object> placed "
+                "nearby. The snowman appears to be enjoying the warmth of the fire, and it appears to have a warm and cozy "
+                "atmosphere."
+            ),
         )
-        assert final_text == (
-            "Describe this image in detail: The image features a snowman sitting by a campfire in the snow. He is "
-            "wearing a hat, scarf, and gloves, with a pot nearby and a cup placed nearby. The snowman appears to be "
-            "enjoying the warmth of the fire, and it appears to have a warm and cozy atmosphere."
+        self.assertEqual(
+            final_text,
+            (
+                "Describe this image in detail: The image features a snowman sitting by a campfire in the snow. He is "
+                "wearing a hat, scarf, and gloves, with a pot nearby and a cup placed nearby. The snowman appears to be "
+                "enjoying the warmth of the fire, and it appears to have a warm and cozy atmosphere."
+            ),
         )
 
-        assert entities == [
-            ("a campfire", (71, 81), [(0.171875, 0.015625, 0.484375, 0.984375)]),
-            ("a hat", (109, 114), [(0.515625, 0.046875, 0.828125, 0.234375)]),
-            ("scarf", (116, 121), [(0.515625, 0.234375, 0.890625, 0.578125)]),
-            ("gloves", (127, 133), [(0.515625, 0.390625, 0.640625, 0.515625)]),
-            ("a pot", (140, 145), [(0.078125, 0.609375, 0.265625, 0.859375)]),
-            ("a cup", (157, 162), [(0.890625, 0.765625, 0.984375, 0.984375)]),
-        ]
+        self.assertListEqual(
+            entities,
+            [
+                ("a campfire", (71, 81), [(0.171875, 0.015625, 0.484375, 0.984375)]),
+                ("a hat", (109, 114), [(0.515625, 0.046875, 0.828125, 0.234375)]),
+                ("scarf", (116, 121), [(0.515625, 0.234375, 0.890625, 0.578125)]),
+                ("gloves", (127, 133), [(0.515625, 0.390625, 0.640625, 0.515625)]),
+                ("a pot", (140, 145), [(0.078125, 0.609375, 0.265625, 0.859375)]),
+                ("a cup", (157, 162), [(0.890625, 0.765625, 0.984375, 0.984375)]),
+            ],
+        )
 
     def test_snowman_image_captioning_batch(self):
         url = "https://huggingface.co/ydshieh/temp-testing-kosmos-2-rename-001/resolve/main/snowman.png"
@@ -682,7 +703,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             "nearby. The snowman appears to be enjoying the warmth of the fire, and it appears to have a warm and cozy "
             "atmosphere."
         )
-        assert processed_text == [EXPECTED_PROCESSED_TEXT_0, EXPECTED_PROCESSED_TEXT_1]
+        self.assertListEqual(processed_text, [EXPECTED_PROCESSED_TEXT_0, EXPECTED_PROCESSED_TEXT_1])
 
         EXPECTED_FINAL_TEXT_0 = "An image of a snowman warming himself by a fire."
         EXPECTED_FINAL_TEXT_1 = (
@@ -690,7 +711,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             "wearing a hat, scarf, and gloves, with a pot nearby and a cup placed nearby. The snowman appears to be "
             "enjoying the warmth of the fire, and it appears to have a warm and cozy atmosphere."
         )
-        assert all_final_text == [EXPECTED_FINAL_TEXT_0, EXPECTED_FINAL_TEXT_1]
+        self.assertListEqual(all_final_text, [EXPECTED_FINAL_TEXT_0, EXPECTED_FINAL_TEXT_1])
 
         EXPECTED_ENTITIES_0 = [
             ("a snowman", (12, 21), [(0.390625, 0.046875, 0.984375, 0.828125)]),
@@ -704,7 +725,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             ("a pot", (140, 145), [(0.078125, 0.609375, 0.265625, 0.859375)]),
             ("a cup", (157, 162), [(0.890625, 0.765625, 0.984375, 0.984375)]),
         ]
-        assert all_entities == [EXPECTED_ENTITIES_0, EXPECTED_ENTITIES_1]
+        self.assertListEqual(all_entities, [EXPECTED_ENTITIES_0, EXPECTED_ENTITIES_1])
 
         # right padding
         processor = AutoProcessor.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001")
@@ -716,6 +737,6 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         all_entities = [x[1] for x in final_text_with_entities]
 
         # For right padding, only the non-padded sequences will give the same results as non-padding
-        assert processed_text[1] == EXPECTED_PROCESSED_TEXT_1
-        assert all_final_text[1] == EXPECTED_FINAL_TEXT_1
-        assert all_entities[1] == EXPECTED_ENTITIES_1
+        self.assertEqual(processed_text[1], EXPECTED_PROCESSED_TEXT_1)
+        self.assertEqual(all_final_text[1], EXPECTED_FINAL_TEXT_1)
+        self.assertListEqual(all_entities[1], EXPECTED_ENTITIES_1)
