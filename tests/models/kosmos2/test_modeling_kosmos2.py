@@ -342,6 +342,7 @@ class Kosmos2ModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    # overwrite from common in order to use `config.text_config.vocab_size` instead of `config.vocab_size`
     def test_tie_model_weights(self):
         if not self.test_torchscript:
             return
