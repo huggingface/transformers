@@ -6,3 +6,6 @@ optax>=0.0.8
 torch>=1.9.0
 jiwer
 evaluate
+git+https://github.com/huggingface/transformers.git
+accelerate
+tokenizers
