@@ -13,13 +13,14 @@
 # limitations under the License.
 from ..utils import is_accelerate_available, is_auto_awq_available
 
+
 if is_auto_awq_available():
     import torch.nn as nn
-
     from awq.modules.linear import WQLinear_GEMM
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
+
 
 def replace_with_awq_linear(
     model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, has_been_replaced=False

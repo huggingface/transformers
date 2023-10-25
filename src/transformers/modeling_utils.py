@@ -69,8 +69,8 @@ from .utils import (
     extract_commit_hash,
     has_file,
     is_accelerate_available,
-    is_auto_gptq_available,
     is_auto_awq_available,
+    is_auto_gptq_available,
     is_bitsandbytes_available,
     is_flash_attn_2_available,
     is_offline_mode,
@@ -90,7 +90,7 @@ from .utils.import_utils import (
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
 )
-from .utils.quantization_config import BitsAndBytesConfig, GPTQConfig, QuantizationMethod, AWQConfig
+from .utils.quantization_config import AWQConfig, BitsAndBytesConfig, GPTQConfig, QuantizationMethod
 from .utils.versions import require_version_core
 
 
@@ -2788,17 +2788,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with GPTQ.")
 
             quantizer = GPTQQuantizer.from_dict(quantization_config.to_dict())
-        elif (
-            quantization_method_from_config == QuantizationMethod.AWQ
-        ):
+        elif quantization_method_from_config == QuantizationMethod.AWQ:
             if not torch.cuda.is_available():
                 raise RuntimeError("GPU is required to run AWQ quantized model.")
 
             if not is_auto_awq_available():
-                raise ImportError(
-                    "Loading an AWQ quantized model requires auto-awq library (`pip install autoawq`)"
-                )
-        
+                raise ImportError("Loading an AWQ quantized model requires auto-awq library (`pip install autoawq`)")
 
         if (
             is_8bit_serializable
@@ -3242,7 +3237,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if quantization_config is None:
                 quantization_config = AWQConfig.from_dict(config.quantization_config)
 
-            model, _ = replace_with_awq_linear(model, quantization_config=quantization_config, modules_to_not_convert=["lm_head"])
+            model, _ = replace_with_awq_linear(
+                model, quantization_config=quantization_config, modules_to_not_convert=["lm_head"]
+            )
 
         if quantization_method_from_config is not None:
             model.quantization_method = quantization_method_from_config
