@@ -876,10 +876,10 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
         image_hidden_states: Optional[torch.Tensor] = None,
         image_attention_mask: Optional[torch.Tensor] = None,
         cross_attention_gate: Optional[torch.Tensor] = None,
-        no_images: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        no_images: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -891,7 +891,6 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
             cross_attention_gate (`torch.FloatTensor`, *optional*):
                 gate of size `(batch, seq_len, 1)` used to zero-out cross-attention output for tokens attending no
                 images.
-            no_images (`bool`, *optional*, defaults to `False`): If `True` the vision part is ignored
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -899,6 +898,7 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            no_images (`bool`, *optional*, defaults to `False`): If `True` the vision part is ignored
         """
         if image_hidden_states is None:
             raise ValueError(
