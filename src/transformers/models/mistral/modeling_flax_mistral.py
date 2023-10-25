@@ -296,10 +296,8 @@ class FlaxMistralAttention(nn.Module):
         hidden_states: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
-        past_key_value: Optional[Tuple[jnp.ndarray]] = None,
         output_attentions: bool = False,
         init_cache: bool = False,
-        padding_mask: Optional[jnp.ndarray] = None,
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
@@ -379,10 +377,8 @@ class FlaxMistralDecoderLayer(nn.Module):
         hidden_states: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
-        past_key_value: Optional[Tuple[jnp.ndarray]] = None,
         output_attentions: Optional[bool] = False,
         init_cache: Optional[bool] = False,
-        padding_mask: Optional[jnp.ndarray] = None,
     ) -> Tuple[jnp.ndarray, Optional[Tuple[jnp.ndarray, jnp.ndarray]]]:
         """
         Args:
@@ -407,10 +403,8 @@ class FlaxMistralDecoderLayer(nn.Module):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
             output_attentions=output_attentions,
             init_cache=init_cache,
-            padding_mask=padding_mask,
         )
         # residual connection
         attn_output = outputs[0]
