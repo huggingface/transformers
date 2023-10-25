@@ -527,7 +527,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             for encoding in encodings
         ]
 
-        # Convert the output to have dict[list] from list[dict] and remove the additional overflows dimension
+        # Convert the output to have Dict[list] from list[dict] and remove the additional overflows dimension
         # From (variable) shape (batch, overflows, sequence length) to ~ (batch * overflows, sequence length)
         # (we say ~ because the number of overflow varies with the example in the batch)
         #

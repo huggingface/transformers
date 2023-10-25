@@ -39,7 +39,7 @@ import warnings
 from collections import OrderedDict
 from difflib import get_close_matches
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Set, Tuple, Union
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
 from transformers.models.auto import get_values
@@ -374,7 +374,7 @@ def check_model_list():
 
 # If some modeling modules should be ignored for all checks, they should be added in the nested list
 # _ignore_modules of this function.
-def get_model_modules() -> List[str]:
+def get_model_modules() -> List[types.ModuleType]:
     """Get all the model modules inside the transformers library (except deprecated models)."""
     _ignore_modules = [
         "modeling_auto",
@@ -452,6 +452,7 @@ def is_building_block(model: str) -> bool:
         return True
     if model.endswith("Prenet"):
         return True
+    return False
 
 
 def is_a_private_model(model: str) -> bool:
@@ -519,7 +520,7 @@ def get_model_test_files() -> List[str]:
 
 # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the tester class
 # for the all_model_classes variable.
-def find_tested_models(test_file: str) -> List[str]:
+def find_tested_models(test_file: str) -> Union[List[str], None]:
     """
     Parse the content of test_file to detect what's in `all_model_classes`. This detects the models that inherit from
     the common test class.
@@ -543,6 +544,7 @@ def find_tested_models(test_file: str) -> List[str]:
                 if len(name) > 0:
                     model_tested.append(name)
         return model_tested
+    return None
 
 
 def should_be_tested(model_name: str) -> bool:
@@ -554,7 +556,7 @@ def should_be_tested(model_name: str) -> bool:
     return not is_building_block(model_name)
 
 
-def check_models_are_tested(module: types.ModuleType, test_file: str) -> List[str]:
+def check_models_are_tested(module: types.ModuleType, test_file: str) -> Union[List[str], None]:
     """Check models defined in a module are all tested in a given file.
 
     Args:
@@ -569,7 +571,7 @@ def check_models_are_tested(module: types.ModuleType, test_file: str) -> List[st
     tested_models = find_tested_models(test_file)
     if tested_models is None:
         if test_file.replace(os.path.sep, "/") in TEST_FILES_WITH_NO_COMMON_TESTS:
-            return
+            return None
         return [
             f"{test_file} should define `all_model_classes` to apply common tests to the models it tests. "
             + "If this intentional, add the test filename to `TEST_FILES_WITH_NO_COMMON_TESTS` in the file "
@@ -610,7 +612,7 @@ def check_all_models_are_tested():
 
 def get_all_auto_configured_models() -> List[str]:
     """Return the list of all models in at least one auto class."""
-    result = set()  # To avoid duplicates we concatenate all model classes in a set.
+    result: Set[str] = set()  # To avoid duplicates we concatenate all model classes in a set.
     if is_torch_available():
         for attr_name in dir(transformers.models.auto.modeling_auto):
             if attr_name.startswith("MODEL_") and attr_name.endswith("MAPPING_NAMES"):
@@ -837,7 +839,7 @@ def check_decorator_order(filename: str) -> List[int]:
     with open(filename, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
     decorator_before = None
-    errors = []
+    errors: List[int] = []
     for i, line in enumerate(lines):
         search = _re_decorator.search(line)
         if search is not None:
@@ -1065,7 +1067,7 @@ _re_double_backquotes = re.compile(r"(^|[^`])``([^`]+)``([^`]|$)")
 _re_rst_example = re.compile(r"^\s*Example.*::\s*$", flags=re.MULTILINE)
 
 
-def is_rst_docstring(docstring: str) -> True:
+def is_rst_docstring(docstring: str) -> bool:
     """
     Returns `True` if `docstring` is written in rst.
     """

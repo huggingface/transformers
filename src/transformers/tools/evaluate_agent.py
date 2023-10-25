@@ -111,7 +111,7 @@ class Problem:
         task (`str` ou `list[str]`):
             One or several descriptions of the task to perform. If a list, it should contain variations on the
             phrasing, but for the same task.
-        inputs (`list[str]` or `dict[str, str]`):
+        inputs (`list[str]` or `Dict[str, str]`):
             The inputs that will be fed to the tools. For this testing environment, only strings are accepted as
             values. Pass along a dictionary when you want to specify the values of each inputs, or just the list of
             inputs expected (the value used will be `<<input_name>>` in this case).
