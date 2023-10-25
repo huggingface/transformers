@@ -144,7 +144,9 @@ class AttnMaskConverter:
         causal_4d_mask = None
         if (input_shape[-1] > 1 or self.sliding_window is not None) and self.is_causal:
             if key_value_length is None:
-                raise ValueError("This attention mask converter is causal. Make sure to pass `key_value_length` to correctly create a causal mask.")
+                raise ValueError(
+                    "This attention mask converter is causal. Make sure to pass `key_value_length` to correctly create a causal mask."
+                )
 
             past_key_values_length = key_value_length - query_length
             causal_4d_mask = self._make_causal_mask(
@@ -750,7 +752,8 @@ class LlamaDecoderLayer(nn.Module):
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1, query_sequence_length, key_sequence_length)` if default attention is used.
+                `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1, query_sequence_length,
+                key_sequence_length)` if default attention is used.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
