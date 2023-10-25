@@ -2751,7 +2751,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if not is_auto_awq_available():
                 raise ImportError(
-                    "Loading an AWQ quantized model requires auto-awq library (`pip install auto-awq`)"
+                    "Loading an AWQ quantized model requires auto-awq library (`pip install autoawq`)"
                 )
         
 
