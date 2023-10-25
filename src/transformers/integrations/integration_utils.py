@@ -858,6 +858,15 @@ class WandbCallback(TrainerCallback):
             artifact.add_dir(artifact_path)
             self._wandb.log_artifact(artifact, aliases=[f"checkpoint-{state.global_step}"])
 
+    def on_predict(self, args, state, control, metrics, **kwargs):
+        if self._wandb is None:
+            return
+        if not self._initialized:
+            self.setup(args, state, **kwargs)
+        if state.is_world_process_zero:
+            metrics = rewrite_logs(metrics)
+            self._wandb.log(metrics)
+
 
 class CometCallback(TrainerCallback):
     """
