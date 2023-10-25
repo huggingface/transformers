@@ -19,14 +19,12 @@ import math
 import re
 from typing import List, Optional, Tuple, Union
 
-import numpy as np
-
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, is_batched
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import AddedToken
-from ...tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
-from ...utils import TensorType, is_torch_available
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
+from ...utils import TensorType
 
 
 BboxInput = Union[
@@ -236,19 +234,17 @@ class Kosmos2Processor(ProcessorMixin):
                         image_embeds_position_mask = [
                             x + [0] * (max_len_padded - len(x)) for x in image_embeds_position_mask
                         ]
-                        if "attention_mask" in encoding:
-                            encoding["attention_mask"] = [
-                                x + [0] * (max_len_padded - len(x)) for x in encoding["attention_mask"]
-                            ]
+                        encoding["attention_mask"] = [
+                            x + [0] * (max_len_padded - len(x)) for x in encoding["attention_mask"]
+                        ]
                     elif self.tokenizer.padding_side == "left":
                         input_ids = [[self.tokenizer.pad_token_id] * (max_len_padded - len(x)) + x for x in input_ids]
                         image_embeds_position_mask = [
                             [0] * (max_len_padded - len(x)) + x for x in image_embeds_position_mask
                         ]
-                        if "attention_mask" in encoding:
-                            encoding["attention_mask"] = [
-                                [0] * (max_len_padded - len(x)) + x for x in encoding["attention_mask"]
-                            ]
+                        encoding["attention_mask"] = [
+                            [0] * (max_len_padded - len(x)) + x for x in encoding["attention_mask"]
+                        ]
 
             # un-batch if necessary
             if isinstance(text, str) and return_tensors is None:
@@ -256,20 +252,17 @@ class Kosmos2Processor(ProcessorMixin):
                 encoding["attention_mask"] = encoding["attention_mask"][0]
                 image_embeds_position_mask = image_embeds_position_mask[0]
 
-            # to the target tensor type
-            if return_tensors == "pt":
-                if not is_torch_available():
-                    raise RuntimeError("return_tensors set to 'pt' but PyTorch can't be imported")
-                import torch
-
-                input_ids = torch.from_numpy(np.array(input_ids))
-                image_embeds_position_mask = torch.from_numpy(np.array(image_embeds_position_mask))
-                encoding["attention_mask"] = torch.from_numpy(np.array(encoding["attention_mask"]))
-            elif return_tensors is not None:
-                raise ValueError("return_tensors should be one of 'None' or 'pt'")
-
-            encoding["input_ids"] = input_ids
-            encoding["image_embeds_position_mask"] = image_embeds_position_mask
+            # update (with the target tensor type if specified)
+            encoding.update(
+                BatchEncoding(
+                    data={
+                        "input_ids": input_ids,
+                        "attention_mask": encoding["attention_mask"],
+                        "image_embeds_position_mask": image_embeds_position_mask,
+                    },
+                    tensor_type=return_tensors,
+                )
+            )
 
         return encoding
 

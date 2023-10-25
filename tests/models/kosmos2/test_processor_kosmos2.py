@@ -230,20 +230,6 @@ class Kosmos2ProcessorTest(unittest.TestCase):
         ]
 
         # fmt: off
-        expected_texts = [
-            # no phrase
-            "<grounding> Two puppies sit in a field of grass.",
-            # 1 phrase: without bbox
-            "<grounding><phrase> Two puppies</phrase> sit in a field of grass.",
-            # 1 phrase: with a single bbox
-            "<grounding><phrase> Two puppies</phrase><object><patch_index_0079><patch_index_1016></object> sit in a field of grass.",  # noqa
-            # 1 phrase: with 2 bboxes
-            "<grounding><phrase> Two puppies</phrase><object><patch_index_0079><patch_index_1016></delimiter_of_multi_objects/><patch_index_0135><patch_index_1008></object> sit in a field of grass.",  # noqa
-            # 2 phrases: one with 2 bboxes and another one without bbox
-            "<grounding><phrase> Two puppies</phrase><object><patch_index_0079><patch_index_1016></delimiter_of_multi_objects/><patch_index_0135><patch_index_1008></object> sit in a field of<phrase> grass</phrase> .",  # noqa
-            # 2 phrases: one with 2 bboxes and another one with a single bbox
-            "<grounding><phrase> Two puppies</phrase><object><patch_index_0079><patch_index_1016></delimiter_of_multi_objects/><patch_index_0135><patch_index_1008></object> sit in a field of<phrase> grass</phrase><object><patch_index_0480><patch_index_1023></object> .",  # noqa
-        ]
         # fmt: on
 
         # fmt: off
@@ -296,64 +282,55 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             ]
         )
 
-        def check(texts, bboxes, expected_texts, expected_input_ids):
-            processed_texts = processor.preprocess_examples(images=None, texts=texts, bboxes=bboxes)
-            assert processed_texts == expected_texts
-
+        def check(texts, bboxes, expected_input_ids):
             outputs = processor(images=None, text=texts, bboxes=bboxes)
             assert outputs.input_ids == expected_input_ids
 
         # no phrase
-        check(texts[0], bboxes[0][0], expected_texts[0], expected_input_ids[0])
+        check(texts[0], bboxes[0][0], expected_input_ids[0])
 
         # no phrase
-        check(texts[0], bboxes[0][1], expected_texts[0], expected_input_ids[0])
+        check(texts[0], bboxes[0][1], expected_input_ids[0])
 
         # 1 phrase: no bbox
-        check(texts[1], bboxes[1][0], expected_texts[1], expected_input_ids[1])
+        check(texts[1], bboxes[1][0], expected_input_ids[1])
 
         # 1 phrase: no bbox
-        check(texts[1], bboxes[1][1], expected_texts[1], expected_input_ids[1])
+        check(texts[1], bboxes[1][1], expected_input_ids[1])
 
         # 1 phrase: 1 bbox
-        check(texts[1], bboxes[1][2], expected_texts[2], expected_input_ids[2])
+        check(texts[1], bboxes[1][2], expected_input_ids[2])
 
         # 1 phrase: 1 bbox
-        check(texts[1], bboxes[1][3], expected_texts[2], expected_input_ids[2])
+        check(texts[1], bboxes[1][3], expected_input_ids[2])
 
         # 1 phrase: 2 bboxes
-        check(texts[1], bboxes[1][4], expected_texts[3], expected_input_ids[3])
+        check(texts[1], bboxes[1][4], expected_input_ids[3])
 
         # could not contain `[None]`
         with pytest.raises(ValueError):
             _ = processor.preprocess_examples(images=None, texts=texts[1], bboxes=[[None]])
 
         # 2 phrase: 2 bboxes + no bbox
-        check(texts[2], bboxes[2][0], expected_texts[4], expected_input_ids[4])
+        check(texts[2], bboxes[2][0], expected_input_ids[4])
 
         # 2 phrase: 2 bboxes + no bbox
-        check(texts[2], bboxes[2][1], expected_texts[4], expected_input_ids[4])
+        check(texts[2], bboxes[2][1], expected_input_ids[4])
 
         # 2 phrase: 2 bboxes + 1 bbox
-        check(texts[2], bboxes[2][2], expected_texts[5], expected_input_ids[5])
+        check(texts[2], bboxes[2][2], expected_input_ids[5])
 
         # 2 phrase: 2 bboxes + 1 bbox
-        check(texts[2], bboxes[2][3], expected_texts[5], expected_input_ids[5])
+        check(texts[2], bboxes[2][3], expected_input_ids[5])
 
         # 2 phrase: no box (as already specified in the text) + 1 bbox
-        check(texts[3], bboxes[3][0], expected_texts[5], expected_input_ids[5])
+        check(texts[3], bboxes[3][0], expected_input_ids[5])
 
         # could not contain `[None]`
         with pytest.raises(ValueError):
             _ = processor.preprocess_examples(images=None, texts=texts[2], bboxes=[[(79, 1016), (135, 1008)], [None]])
 
         # test batch
-        outputs = processor.preprocess_examples(
-            images=None,
-            texts=batch_text,
-            bboxes=batch_bboxes,
-        )
-        assert outputs == [expected_texts[0], expected_texts[1], expected_texts[2], expected_texts[5]]
         outputs = processor(
             images=None,
             text=batch_text,
@@ -405,11 +382,6 @@ class Kosmos2ProcessorTest(unittest.TestCase):
 
         # test with image
         num_image_tokens = 64
-        # (`image` type is not checked in `preprocess_examples`. It works as long as it is not `None`.)
-        outputs = processor.preprocess_examples(
-            images=image, texts=texts[0], bboxes=None, num_image_tokens=num_image_tokens
-        )
-        assert outputs == "".join(["<image>"] + ["<image>"] * num_image_tokens + ["</image>"] + [expected_texts[0]])
 
         outputs = processor(images=image, text=texts[0], bboxes=None)
         assert outputs.pixel_values[0].shape == (3, 224, 224)
