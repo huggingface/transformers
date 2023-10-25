@@ -439,16 +439,10 @@ class TimesformerEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self.gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, output_attentions)
@@ -494,9 +488,10 @@ class TimesformerPreTrainedModel(PreTrainedModel):
             nn.init.trunc_normal_(module.position_embeddings, std=self.config.initializer_range)
             module.patch_embeddings.apply(self._init_weights)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, TimesformerEncoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 TIMESFORMER_START_DOCSTRING = r"""

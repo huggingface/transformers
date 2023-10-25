@@ -466,9 +466,10 @@ class RwkvPreTrainedModel(PreTrainedModel):
                 module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
                 module.time_mix_receptance.data = torch.pow(time_weight, ratio_1_to_almost0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, RwkvModel):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 @dataclass
@@ -676,16 +677,8 @@ class RwkvModel(RwkvPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         for idx, block in enumerate(self.blocks):
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, use_cache=use_cache, output_attentions=output_attentions)
-
-                    return custom_forward
-
-                hidden_states, state, attentions = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block), hidden_states, state
+                hidden_states, state, attentions = self.gradient_checkpointing_func(
+                    block.__call__, hidden_states, state, use_cache, output_attentions
                 )
             else:
                 hidden_states, state, attentions = block(

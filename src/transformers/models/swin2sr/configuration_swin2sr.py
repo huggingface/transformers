@@ -44,6 +44,8 @@ class Swin2SRConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
+        num_channels_out (`int`, *optional*, defaults to `num_channels`):
+            The number of output channels. If not set, it will be set to `num_channels`.
         embed_dim (`int`, *optional*, defaults to 180):
             Dimensionality of patch embedding.
         depths (`list(int)`, *optional*, defaults to `[6, 6, 6, 6, 6, 6]`):
@@ -108,6 +110,7 @@ class Swin2SRConfig(PretrainedConfig):
         image_size=64,
         patch_size=1,
         num_channels=3,
+        num_channels_out=None,
         embed_dim=180,
         depths=[6, 6, 6, 6, 6, 6],
         num_heads=[6, 6, 6, 6, 6, 6],
@@ -132,6 +135,7 @@ class Swin2SRConfig(PretrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
+        self.num_channels_out = num_channels if num_channels_out is None else num_channels_out
         self.embed_dim = embed_dim
         self.depths = depths
         self.num_layers = len(depths)

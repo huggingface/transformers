@@ -438,6 +438,9 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     # Hubert cannot be TorchScripted because of torch.nn.utils.weight_norm
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
+        # TODO: fix it
+        self.skipTest("torch 2.1 breaks torch fx tests for wav2vec2/hubert.")
+
         if not is_torch_fx_available() or not self.fx_compatible:
             return
 

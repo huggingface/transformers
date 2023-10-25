@@ -109,11 +109,11 @@ _deps = [
     "diffusers",
     "dill<0.3.5",
     "evaluate>=0.2.0",
-    "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
     "filelock",
     "flax>=0.4.1,<=0.7.0",
+    "fsspec<2023.10.0",
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
@@ -126,6 +126,8 @@ _deps = [
     "jaxlib>=0.4.1,<=0.4.13",
     "jieba",
     "kenlm",
+    # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
+    "keras<2.15",
     "keras-nlp>=0.3.1",
     "librosa",
     "nltk",
@@ -275,7 +277,6 @@ extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
-extras["fairscale"] = deps_list("fairscale")
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
 extras["sigopt"] = deps_list("sigopt")
