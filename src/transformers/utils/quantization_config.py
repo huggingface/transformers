@@ -40,6 +40,10 @@ class QuantizationMethod(str, Enum):
     AWQ = "awq"
 
 
+class AWQLinearVersion(str, Enum):
+    GEMM = "GEMM"
+    GEMV = "GEMV"
+
 @dataclass
 class QuantizationConfigMixin:
     """
