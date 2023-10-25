@@ -1704,8 +1704,8 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         return out
 
 
-class BarkEOSPrioritizerLogitsWarper(LogitsWarper):
-    r"""This warper ensures that the EOS token is sampled if its probability is greater than the `min_eos_p`.
+class BarkEOSPrioritizerLogitsProcessor(LogitsProcessor):
+    r"""This processor ensures that the EOS token is selected if its probability is greater than the `min_eos_p`.
 
     Args:
         eos_token_id (`Union[int, List[int]]`):

@@ -23,7 +23,7 @@ from torch.nn import functional as F
 
 from ...generation.logits_process import (
     AlternatingCodebooksLogitsProcessor,
-    BarkEOSPrioritizerLogitsWarper,
+    BarkEOSPrioritizerLogitsProcessor,
     SuppressTokensLogitsProcessor,
 )
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
@@ -799,7 +799,7 @@ class BarkSemanticModel(BarkCausalModel):
         suppress_tokens_logits_processor = SuppressTokensLogitsProcessor(tokens_to_suppress)
 
         min_eos_p = kwargs.get("min_eos_p", semantic_generation_config.min_eos_p)
-        early_stopping_logits_processor = BarkEOSPrioritizerLogitsWarper(
+        early_stopping_logits_processor = BarkEOSPrioritizerLogitsProcessor(
             eos_token_id=semantic_generation_config.eos_token_id, min_eos_p=min_eos_p
         )
 

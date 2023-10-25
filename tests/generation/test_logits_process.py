@@ -53,7 +53,7 @@ if is_torch_available():
         TypicalLogitsWarper,
         UnbatchedClassifierFreeGuidanceLogitsProcessor,
     )
-    from transformers.generation.logits_process import BarkEOSPrioritizerLogitsWarper
+    from transformers.generation.logits_process import BarkEOSPrioritizerLogitsProcessor
 
 
 @require_torch
@@ -810,7 +810,7 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(2, 4)
         scores[0][eos_token_id] = -6  ## less than log(min_eos_p)
 
-        esp = BarkEOSPrioritizerLogitsWarper(eos_token_id=eos_token_id, min_eos_p=min_eos_p)
+        esp = BarkEOSPrioritizerLogitsProcessor(eos_token_id=eos_token_id, min_eos_p=min_eos_p)
         actual_scores = esp(input_ids, scores)
         expected_scores_list = [
             scores[0].tolist(),
