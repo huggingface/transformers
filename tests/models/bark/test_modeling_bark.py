@@ -928,7 +928,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
         expected_output_ids = [7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927,]
         # fmt: on
 
-        # Should be aboe to read min_eos_p from kwargs
+        # Should be able to read min_eos_p from kwargs
         with torch.no_grad():
             output_ids = self.model.semantic.generate(
                 **input_ids,

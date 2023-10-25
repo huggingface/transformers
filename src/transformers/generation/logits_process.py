@@ -1704,7 +1704,7 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         return out
 
 
-class BarkEOSPrioritizerLogitsProcessor(LogitsProcessor):
+class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
     r"""This processor ensures that the EOS token is selected if its probability is greater than the `min_eos_p`.
 
     Args:
@@ -1724,8 +1724,8 @@ class BarkEOSPrioritizerLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        probs = torch.nn.functional.softmax(scores.float(), dim=-1)
         if self.min_eos_p:
+            probs = torch.nn.functional.softmax(scores.float(), dim=-1)
             # create scores full of -inf except for the eos_token_id
             early_stop_scores = torch.ones_like(scores) * -float("inf")
             early_stop_scores[:, self.eos_token_id] = scores[:, self.eos_token_id]
