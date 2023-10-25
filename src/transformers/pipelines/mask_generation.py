@@ -49,9 +49,9 @@ class MaskGenerationPipeline(ChunkPipeline):
                 - image_processor.postprocess_masks_for_amg applies the NSM on the mask to only keep relevant ones.
 
     Arguments:
-        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model ([`PreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
+            [`PreTrainedModel`].
         tokenizer ([`PreTrainedTokenizer`]):
             The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
             [`PreTrainedTokenizer`].
