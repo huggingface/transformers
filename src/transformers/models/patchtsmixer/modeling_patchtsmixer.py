@@ -1812,8 +1812,6 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         loss_val = None
         if self.config.forecast_channel_indices is not None:
             if self.distribution_output:
-                # if self.config.distribution_output == "negative_binomial" and torch.any(target_values < 0):
-                #     raise Exception("target_values cannot be negative for negative_binomial distribution.")
                 distribution = self.distribution_output.distribution(
                     y_hat,
                     loc=model_output.loc[..., self.config.forecast_channel_indices],
@@ -1835,8 +1833,6 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                     loss_val = loss(y_hat, target_values[..., self.config.forecast_channel_indices])
         else:
             if self.distribution_output:
-                # if self.config.distribution_output == "negative_binomial" and torch.any(target_values < 0):
-                #     raise Exception("target_values cannot be negative for negative_binomial distribution.")
                 distribution = self.distribution_output.distribution(
                     y_hat, loc=model_output.loc, scale=model_output.scale
                 )
