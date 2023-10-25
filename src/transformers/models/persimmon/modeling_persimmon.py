@@ -43,7 +43,7 @@ from ...utils import (
 from .configuration_persimmon import PersimmonConfig
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
@@ -584,6 +584,30 @@ class PersimmonFlashAttention2(PersimmonAttention):
             key_states = key_states.to(torch.float16)
             value_states = value_states.to(torch.float16)
 
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32. (LlamaRMSNorm handles it correctly)
+
+        # input_dtype = query_states.dtype
+        # if input_dtype == torch.float32:
+        #     # Handle the case where the model is quantized
+        #     if hasattr(self.config, "_pre_quantization_dtype"):
+        #         target_dtype = self.config._pre_quantization_dtype
+        #     else:
+        #         target_dtype = self.q_proj.weight.dtype
+
+        #     logger.warning_once(
+        #         f"The input hidden states seems to be silently casted in float32, this might be related to"
+        #         f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+        #         f" {target_dtype}."
+        #     )
+
+        #     query_states = query_states.to(target_dtype)
+        #     key_states = key_states.to(target_dtype)
+        #     value_states = value_states.to(target_dtype)
+            
         attn_dropout = self.attention_dropout if self.training else 0.0
 
         # [batch_size, num_heads, seq_length, head_dim] -> [batch_size, seq_length, num_heads, head_dim]
@@ -604,7 +628,7 @@ class PersimmonFlashAttention2(PersimmonAttention):
         return attn_output, attn_weights, past_key_value
 
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, padding_mask, query_length, dropout=0.0, softmax_scale=None
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -617,7 +641,7 @@ class PersimmonFlashAttention2(PersimmonAttention):
                 Input key states to be passed to Flash Attention API
             value_states (`torch.Tensor`):
                 Input value states to be passed to Flash Attention API
-            padding_mask (`torch.Tensor`):
+            attention mask(`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
             dropout (`int`, *optional*):
@@ -625,9 +649,39 @@ class PersimmonFlashAttention2(PersimmonAttention):
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
-        attn_output = flash_attn_func(
-            query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
-        )
+
+        if attention_mask is not None:
+            batch_size = query_states.shape[0]
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+                query_states, key_states, value_states, attention_mask, query_length
+            )
+
+            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+            attn_output_unpad = flash_attn_varlen_func(
+                query_states,
+                key_states,
+                value_states,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_in_batch_q,
+                max_seqlen_k=max_seqlen_in_batch_k,
+                dropout_p=dropout,
+                softmax_scale=softmax_scale,
+                causal=self.is_causal,
+            )
+
+            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+        else:
+            attn_output = flash_attn_func(
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
+            )
+
+        # attn_output = flash_attn_func(
+        #     query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
+        # )
+        
 
         return attn_output
 
