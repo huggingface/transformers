@@ -40,22 +40,22 @@ The original code can be found [here](https://github.com/openai/whisper).
 Here is a step-by-step guide to transcribing an audio sample using a pre-trained Whisper model:
 
 ```python
->>> import torchaudio
+>>> from datasets import load_dataset
 >>> from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
->>> # Select an audio file:
->>> audio_path = "https://huggingface.co/datasets/sanchit-gandhi/librispeech_long/resolve/main/audio.wav"
+>>> # Select an audio file and read it:
+>>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+>>> audio_sample = ds[0]["audio"]
+>>> waveform = audio_sample["array"]
+>>> sampling_rate = audio_sample["sampling_rate"]
 
 >>> # Load the Whisper model in Hugging Face format:
 >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
 >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
 
->>> # Select an audio file:
->>> waveform, sampling_rate = torchaudio.load(audio_path)
-
 >>> # Use the model and processor to transcribe the audio:
 >>> input_features = processor(
-...     waveform.squeeze().numpy(), sampling_rate=sampling_rate, return_tensors="pt"
+...     waveform, sampling_rate=sampling_rate, return_tensors="pt"
 ... ).input_features
 
 >>> # Generate token ids
@@ -65,7 +65,7 @@ Here is a step-by-step guide to transcribing an audio sample using a pre-trained
 >>> transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
 
 >>> transcription[0]
-' Chapter 16.'
+' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
 ```
 
 ## WhisperConfig
