@@ -1913,10 +1913,9 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             outputs.prediction_logits, loc=outputs.loc, scale=outputs.scale
         )
 
-        # get samples
-        samples = [
-            distribution.sample() for _ in range(num_parallel_samples)
-        ]  # samples: list of [batch_size x forecast_len x num_channels]
+        # get samples: list of [batch_size x forecast_len x num_channels]
+        samples = [distribution.sample() for _ in range(num_parallel_samples)]
+
         # stack tensors
         samples = torch.stack(samples, dim=1)  # [batch_size x num_samples x forecast_len x num_channels]
         return SamplePatchTSMixerForecastOutput(sequences=samples)
