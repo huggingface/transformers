@@ -1339,7 +1339,7 @@ class _LazyModule(ModuleType):
                 result.append(attr)
         return result
 
-    def __getattr__(self, name: str) -> Any:
+    def __getattr__(self, name: str):
         if name in self._objects:
             return self._objects[name]
         if name in self._modules:

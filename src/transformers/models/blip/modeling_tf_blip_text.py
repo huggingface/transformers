@@ -679,7 +679,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         encoder_attention_mask: tf.Tensor | None = None,
         past_key_values: Tuple[Tuple[tf.Tensor]] | None = None,
         use_cache: Union[bool, None] = None,
-        output_attentions: Union[bool, None] None] = None,
+        output_attentions: Union[bool, None] = None,
         output_hidden_states: Union[bool, None] = None,
         return_dict: Union[bool, None] = None,
         is_decoder: bool = False,
@@ -741,13 +741,13 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if encoder_hidden_states is not None:
-            if type(encoder_hidden_states) == list:
+            if isinstance(encoder_hidden_states, list):
                 encoder_batch_size, encoder_sequence_length, _ = shape_list(encoder_hidden_states[0])
             else:
                 encoder_batch_size, encoder_sequence_length, _ = shape_list(encoder_hidden_states)
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
 
-            if type(encoder_attention_mask) == list:
+            if isinstance(encoder_attention_mask, list):
                 encoder_extended_attention_mask = [invert_attention_mask(mask) for mask in encoder_attention_mask]
             elif encoder_attention_mask is None:
                 encoder_attention_mask = tf.ones(encoder_hidden_shape)
@@ -805,8 +805,8 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L811
 class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_unexpected = ["pooler"]
+    _keys_to_ignore_on_load_missing = ["position_ids", "predictions.decoder.bias"]
 
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
