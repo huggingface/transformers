@@ -178,34 +178,31 @@ class PatchTSMixerNormLayer(nn.Module):
             `torch.Tensor` of shape `((batch_size, num_channels, num_patches, num_features))`
         """
         if "batch" in self.norm_mlp.lower():
-            if self.mode in ["common_channel", "mix_channel"]:
-                # reshape the data
-                inputs_reshaped = torch.reshape(
-                    inputs,
-                    (
-                        inputs.shape[0] * inputs.shape[1],
-                        inputs.shape[2],
-                        inputs.shape[3],
-                    ),
-                )  # inputs_reshaped: [batch_size*num_channels, num_patches, num_features]
-            else:
-                inputs_reshaped = inputs
+            # reshape the data
+            inputs_reshaped = torch.reshape(
+                inputs,
+                (
+                    inputs.shape[0] * inputs.shape[1],
+                    inputs.shape[2],
+                    inputs.shape[3],
+                ),
+            )  # inputs_reshaped: [batch_size*num_channels, num_patches, num_features]
+
             inputs_reshaped = self.norm(
                 inputs_reshaped
             )  # inputs_reshaped: [batch_size*num_channels, num_patches, num_features]
             # put back data to the original shape
-            if self.mode in ["common_channel", "mix_channel"]:
-                inputs = torch.reshape(
-                    inputs_reshaped,
-                    (
-                        inputs.shape[0],
-                        inputs.shape[1],
-                        inputs.shape[2],
-                        inputs.shape[3],
-                    ),
-                )
-            else:
-                inputs = inputs_reshaped
+
+            inputs = torch.reshape(
+                inputs_reshaped,
+                (
+                    inputs.shape[0],
+                    inputs.shape[1],
+                    inputs.shape[2],
+                    inputs.shape[3],
+                ),
+            )
+
         else:
             inputs = self.norm(inputs)
 
@@ -501,27 +498,16 @@ class PatchMixerBlock(nn.Module):
 
         if self.self_attn:
             data_reshaped = data
-            if self.mode in ["common_channel", "mix_channel"]:
-                data_reshaped = torch.reshape(data, (data.shape[0] * data.shape[1], data.shape[2], data.shape[3]))
-                #  (batch_size, num_patches, num_features) if flatten
-                #  (batch_size, n_vars, num_patches, num_features) if common_channel
+            data_reshaped = torch.reshape(data, (data.shape[0] * data.shape[1], data.shape[2], data.shape[3]))
+            #  (batch_size, n_vars, num_patches, num_features)
 
             x_attn, _, _ = self.self_attn_layer(data_reshaped, output_attentions=False)
 
-            if self.mode in ["common_channel", "mix_channel"]:
-                x_attn = torch.reshape(x_attn, (data.shape[0], data.shape[1], data.shape[2], data.shape[3]))
-                #  (batch_size, num_patches, num_features) if flatten
-                #  (batch_size, n_vars, num_patches, num_features) if common_channel
+            x_attn = torch.reshape(x_attn, (data.shape[0], data.shape[1], data.shape[2], data.shape[3]))
+            #  (batch_size, n_vars, num_patches, num_features) if common_channel
 
         # Transpose so that num_patches is the last dimension
-        if self.mode == "flatten":
-            data = data.transpose(1, 2)
-        elif self.mode in ["common_channel", "mix_channel"]:
-            data = data.transpose(2, 3)
-        else:
-            raise ValueError(
-                f"self.mode has to be one of ['flatten', 'common_channel', 'mix_channel'], but is {self.mode}."
-            )
+        data = data.transpose(2, 3)
 
         data = self.mlp(data)
 
@@ -529,14 +515,7 @@ class PatchMixerBlock(nn.Module):
             data = self.gab(data)
 
         # Transpose back
-        if self.mode == "flatten":
-            data = data.transpose(1, 2)
-        elif self.mode in ["common_channel", "mix_channel"]:
-            data = data.transpose(2, 3)
-        else:
-            raise ValueError(
-                f"self.mode has to be one of ['flatten', 'common_channel', 'mix_channel'], but is {self.mode}."
-            )
+        data = data.transpose(2, 3)
 
         if self.self_attn:
             data = self.norm_attn(data + x_attn)
@@ -694,11 +673,7 @@ class PatchTSMixer(nn.Module):
         self.mode = mode
         self.use_positional_encoding = config.use_positional_encoding
 
-        if mode == "flatten":
-            self.patcher = nn.Linear(num_input_channels * patch_len, num_features)
-
-        elif mode in ["common_channel", "mix_channel"]:
-            self.patcher = nn.Linear(patch_len, num_features)
+        self.patcher = nn.Linear(patch_len, num_features)
 
         self.num_patches = num_patches
         self.patch_len = patch_len
@@ -728,18 +703,6 @@ class PatchTSMixer(nn.Module):
             `torch.Tensor`: The embedding. `list`: List of all hidden states if `output_hidden_states` is set to
             `True`.
         """
-        batch_size = input_ts.shape[0]
-
-        if self.mode == "flatten":
-            input_ts = input_ts.permute(0, 2, 1, 3)  # input_ts: [bs  x num_patch x n_vars  x patch_len]
-            input_ts = torch.reshape(
-                input_ts,
-                (
-                    batch_size,
-                    self.num_patches,
-                    self.num_input_channels * self.patch_len,
-                ),
-            )  # input_ts: [bs x num_patch x patch_len * n_vars]
 
         patches = self.patcher(
             input_ts
@@ -788,33 +751,19 @@ class PatchTSMixerForecastHead(nn.Module):
             self.forecast_channel_indices.sort()
         self.mode = mode
         self.distribution_output = distribution_output
-        if self.mode in ["common_channel", "mix_channel"]:
-            if distribution_output is None:
-                self.base_forecast_block = nn.Sequential(
-                    nn.Dropout(head_dropout),
-                    nn.Linear((num_patches * num_features), forecast_len),
-                )
-            else:
-                self.base_forecast_block = nn.Sequential(
-                    nn.Dropout(head_dropout),
-                    distribution_output.get_parameter_projection(num_patches * num_features),
-                )
 
-            self.flatten = nn.Flatten(start_dim=-2)
-
+        if distribution_output is None:
+            self.base_forecast_block = nn.Sequential(
+                nn.Dropout(head_dropout),
+                nn.Linear((num_patches * num_features), forecast_len),
+            )
         else:
-            if distribution_output is None:
-                self.base_forecast_block = nn.Sequential(
-                    nn.Dropout(head_dropout),
-                    nn.Linear((num_patches * num_features), forecast_len * num_input_channels),
-                )
-            else:
-                self.base_forecast_block = nn.Sequential(
-                    nn.Dropout(head_dropout),
-                    distribution_output.get_parameter_projection(num_patches * num_features),
-                )
+            self.base_forecast_block = nn.Sequential(
+                nn.Dropout(head_dropout),
+                distribution_output.get_parameter_projection(num_patches * num_features),
+            )
 
-            self.flatten = nn.Flatten(start_dim=1)
+        self.flatten = nn.Flatten(start_dim=-2)
 
     def forward(self, hidden_features):
         """
@@ -828,23 +777,14 @@ class PatchTSMixerForecastHead(nn.Module):
             `torch.Tensor` of shape `(batch_size, forecast_len, nvars)`.
 
         """
-        if self.mode in ["common_channel", "mix_channel"]:
-            hidden_features = self.flatten(hidden_features)  # [batch_size x n_vars x num_patch * num_features]
 
-            forecast = self.base_forecast_block(hidden_features)  # [batch_size x n_vars x forecast_len]
-            if isinstance(forecast, tuple):
-                forecast = tuple(z.transpose(-1, -2) for z in forecast)
-            else:
-                forecast = forecast.transpose(-1, -2)  # [batch_size x forecast_len x n_vars]
+        hidden_features = self.flatten(hidden_features)  # [batch_size x n_vars x num_patch * num_features]
 
+        forecast = self.base_forecast_block(hidden_features)  # [batch_size x n_vars x forecast_len]
+        if isinstance(forecast, tuple):
+            forecast = tuple(z.transpose(-1, -2) for z in forecast)
         else:
-            hidden_features = self.flatten(hidden_features)  # hidden_features: [batch_size x num_patches*num_features]
-            forecast = self.base_forecast_block(hidden_features)  # [batch_size x forecast_len * nvars]
-
-            if isinstance(forecast, tuple):
-                forecast = tuple(z.reshape(-1, self.forecast_len, self.nvars) for z in forecast)
-            else:
-                forecast = forecast.reshape(-1, self.forecast_len, self.nvars)  # [batch_size x forecast_len x n_vars]
+            forecast = forecast.transpose(-1, -2)  # [batch_size x forecast_len x n_vars]
 
         if self.forecast_channel_indices is not None:
             if isinstance(forecast, tuple):
@@ -894,28 +834,17 @@ class PatchTSMixerLinearHead(nn.Module):
         else:
             mul_factor = 1
 
-        if mode != "flatten":
-            if distribution_output is None:
-                self.projection = nn.Linear(num_features * num_input_channels * mul_factor, output_dim)
-            else:
-                self.projection = distribution_output.get_parameter_projection(
-                    num_features * num_input_channels * mul_factor
-                )
-
-            if self.head_agg is None:
-                self.flatten = nn.Flatten(start_dim=-3)
-            else:
-                self.flatten = nn.Flatten(start_dim=-2)
+        if distribution_output is None:
+            self.projection = nn.Linear(num_features * num_input_channels * mul_factor, output_dim)
         else:
-            if distribution_output is None:
-                self.projection = nn.Linear(num_features * mul_factor, output_dim)
-            else:
-                self.projection = distribution_output.get_parameter_projection(num_features * mul_factor)
+            self.projection = distribution_output.get_parameter_projection(
+                num_features * num_input_channels * mul_factor
+            )
 
-            if self.head_agg is None:
-                self.flatten = nn.Flatten(start_dim=-2)
-            else:
-                self.flatten = None
+        if self.head_agg is None:
+            self.flatten = nn.Flatten(start_dim=-3)
+        else:
+            self.flatten = nn.Flatten(start_dim=-2)
 
         self.dropout = nn.Dropout(head_dropout)
 
@@ -1001,16 +930,10 @@ class PatchTSMixerPretrainHead(nn.Module):
         self.num_input_channels = num_input_channels
         self.num_patches = num_patches
 
-        if self.mode in ["common_channel", "mix_channel"]:
-            self.base_pt_block = nn.Sequential(
-                nn.Dropout(head_dropout),
-                nn.Linear(num_features, patch_len),
-            )
-        else:
-            self.base_pt_block = nn.Sequential(
-                nn.Dropout(head_dropout),
-                nn.Linear(num_features, patch_len * num_input_channels),
-            )
+        self.base_pt_block = nn.Sequential(
+            nn.Dropout(head_dropout),
+            nn.Linear(num_features, patch_len),
+        )
 
     def forward(self, hidden_features):
         """
@@ -1023,28 +946,8 @@ class PatchTSMixerPretrainHead(nn.Module):
             `torch.Tensor` of shape `(batch_size x n_vars x num_patch x patch_len)`.
         """
 
-        if self.mode == "flatten":
-            hidden_features = self.base_pt_block(
-                hidden_features
-            )  # hidden_features: [batch_size x num_patch x n_vars*patch_len]
-            hidden_features = torch.reshape(
-                hidden_features,
-                (
-                    hidden_features.shape[0],
-                    hidden_features.shape[1],
-                    self.patch_len,
-                    self.num_input_channels,
-                ),
-            )  # [batch_size x num_patch x patch_len x n_vars]
-            hidden_features = hidden_features.permute(0, 3, 1, 2)  # [batch_size x nvars x num_patch  x patch_len]
-            return hidden_features
-        elif self.mode in ["common_channel", "mix_channel"]:
-            forecast = self.base_pt_block(hidden_features)  # [batch_size x n_vars x num_patch x patch_len]
-            return forecast
-        else:
-            raise ValueError(
-                f"self.mode has to be one of ['flatten', 'common_channel', 'mix_channel'], but is {self.mode}."
-            )
+        forecast = self.base_pt_block(hidden_features)  # [batch_size x n_vars x num_patch x patch_len]
+        return forecast
 
 
 # TODO: add copied from after PatchTST master merge
@@ -1963,11 +1866,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         if config.loss == "mse":
             self.distribution_output = None
         else:
-            if config.mode in ["common_channel", "mix_channel"]:
-                dim = config.forecast_len
-            else:
-                dim = config.forecast_len * config.num_input_channels
-
+            dim = config.forecast_len
             if config.distribution_output == "student_t":
                 self.distribution_output = StudentTOutput(dim=dim)
             elif config.distribution_output == "normal":
@@ -2186,8 +2085,6 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         )
 
         if config.scaling in ["std", "mean", True]:
-            if config.mode == "flatten":
-                raise ValueError("Scaling is not supported for classification task when mode == flatten")
             self.inject_scale = InjectScalerStatistics4D(
                 num_features=config.num_features, num_patches=config.num_patches
             )
@@ -2311,8 +2208,6 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
         if config.scaling in ["std", "mean", True]:
-            if config.mode == "flatten":
-                raise ValueError("Scaling is not supported for classification task when mode == flatten")
             self.inject_scale = InjectScalerStatistics4D(
                 num_features=config.num_features, num_patches=config.num_patches
             )

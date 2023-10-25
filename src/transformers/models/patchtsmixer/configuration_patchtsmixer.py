@@ -66,12 +66,11 @@ class PatchTSMixerConfig(PretrainedConfig):
         dropout (`float`, *optional*, defaults to 0.2):
             The dropout probability the `PatchTSMixer` backbone. Recommended range is 0.2-0.7
         mode (`str`, *optional*, defaults to `"common_channel"`):
-            Mixer Mode. Determines how to process the channels. Allowed values: "flatten", "common_channel",
-            "mix_channel". In "flatten" mode, patch embedding encodes the patch information across all channels. (not a
-            preferred approach) In "common_channel" mode, we follow Channel-independent modelling with no explicit
-            channel-mixing. Channel mixing happens in an implict manner via shared weights across channels. (preferred
-            first approach) In "mix_channel" mode, we follow explicit channel-mixing in addition to patch and feature
-            mixer. (preferred approach when channel correlations are very important to model)
+            Mixer Mode. Determines how to process the channels. Allowed values: "common_channel", "mix_channel". In
+            "common_channel" mode, we follow Channel-independent modelling with no explicit channel-mixing. Channel
+            mixing happens in an implict manner via shared weights across channels. (preferred first approach) In
+            "mix_channel" mode, we follow explicit channel-mixing in addition to patch and feature mixer. (preferred
+            approach when channel correlations are very important to model)
         gated_attn (`bool`, *optional*, defaults to `True`):
             Enable Gated Attention.
         norm_mlp (`str`, *optional*, defaults to `"LayerNorm"`):

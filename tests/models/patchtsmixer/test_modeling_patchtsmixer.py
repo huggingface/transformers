@@ -520,7 +520,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             expansion_factor=2,
             num_layers=3,
             dropout=0.2,
-            mode="common_channel",  # common_channel, flatten, mix_channel
+            mode="common_channel",  # common_channel,  mix_channel
             gated_attn=True,
             norm_mlp="LayerNorm",
             mask_type="random",
@@ -689,10 +689,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         else:
             print("invalid task")
 
-        if config.mode == "flatten":
-            enc_output = self.__class__.flat_enc_output
-        else:
-            enc_output = self.__class__.enc_output
+        enc_output = self.__class__.enc_output
 
         if target_input is None:
             output = mdl(self.__class__.data, output_hidden_states=output_hidden_states)
@@ -724,7 +721,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             self.assertEqual(samples.sequences.shape, ref_samples.shape)
 
     def test_forecast(self):
-        for mode in ["flatten", "common_channel", "mix_channel"]:
+        for mode in ["common_channel", "mix_channel"]:
             for self_attn in [True, False]:
                 for scaling in [True, False, "mean", "std"]:
                     for gated_attn in [True, False]:
@@ -743,13 +740,11 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
                                 self.check_module(task="forecast", params=params)
 
     def test_classification(self):
-        for mode in ["common_channel", "mix_channel", "flatten"]:
+        for mode in ["common_channel", "mix_channel"]:
             for self_attn in [True, False]:
                 for scaling in [True, False, "mean", "std"]:
                     for gated_attn in [True, False]:
                         for head_agg in ["max_pool", "avg_pool"]:
-                            if mode == "flatten" and scaling in ["mean", "std", True]:
-                                continue
                             params = self.__class__.params.copy()
                             params.update(
                                 mode=mode,
@@ -763,18 +758,12 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
                             self.check_module(task="classification", params=params)
 
     def test_regression(self):
-        for mode in ["common_channel", "mix_channel", "flatten"]:
+        for mode in ["common_channel", "mix_channel"]:
             for self_attn in [True, False]:
                 for scaling in [True, False, "mean", "std"]:
                     for gated_attn in [True, False]:
                         for head_agg in ["max_pool", "avg_pool"]:
                             for loss in ["mse", "nll"]:
-                                if mode == "flatten" and scaling in [
-                                    "mean",
-                                    "std",
-                                    True,
-                                ]:
-                                    continue
                                 params = self.__class__.params.copy()
                                 params.update(
                                     mode=mode,
@@ -789,7 +778,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
                                 self.check_module(task="regression", params=params)
 
     def test_pretrain(self):
-        for mode in ["common_channel", "mix_channel", "flatten"]:
+        for mode in ["common_channel", "mix_channel"]:
             for self_attn in [True, False]:
                 for scaling in [True, False, "mean", "std"]:
                     for gated_attn in [True, False]:
@@ -829,10 +818,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         if config.forecast_channel_indices is not None:
             target_val = self.__class__.correct_sel_forecast_output
 
-        if config.mode == "flatten":
-            enc_output = self.__class__.flat_enc_output
-        else:
-            enc_output = self.__class__.enc_output
+        enc_output = self.__class__.enc_output
 
         output = mdl(
             self.__class__.data,
@@ -884,7 +870,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
     def test_forecast_full_3(self):
         params = self.__class__.params.copy()
         params.update(
-            mode="flatten",
+            mode="mix_channel",
         )
         self.forecast_full_module(params, output_hidden_states=True)
 
@@ -920,7 +906,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
     def test_forecast_full_distributional_2(self):
         params = self.__class__.params.copy()
         params.update(
-            mode="flatten",
+            mode="mix_channel",
             forecast_channel_indices=[0, 2],
             loss="nll",
             # distribution_output = "normal",
@@ -940,7 +926,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
     def test_forecast_full_distributional_4(self):
         params = self.__class__.params.copy()
         params.update(
-            mode="flatten",
+            mode="mix_channel",
             # forecast_channel_indices=[0, 2],
             loss="nll",
             distribution_output="normal",
