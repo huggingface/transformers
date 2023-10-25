@@ -49,7 +49,6 @@ Here is a step-by-step guide to transcribing an audio sample using a pre-trained
 >>> # Load the Whisper model in Hugging Face format:
 >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
 >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
->>> model.config.forced_decoder_ids = None
 
 >>> # Select an audio file:
 >>> waveform, sampling_rate = torchaudio.load(audio_path)
@@ -95,7 +94,6 @@ Now can test it by doing inference with an audio file:
 >>> # Load the newly converted model:
 >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
 >>> model = WhisperForConditionalGeneration.from_pretrained("whisper-tiny.en-hf")
->>> model.config.forced_decoder_ids = None
 
 >>> # Select an audio file:
 >>> waveform, sampling_rate = torchaudio.load(audio_path)
