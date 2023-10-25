@@ -16,6 +16,15 @@ rendered properly in your Markdown viewer.
 
 # Quantize 🤗 Transformers models
 
+## `AutoAWQ` integration
+
+TODO: @younesbelkada add a description of the integration
+TOOD: @younesbelkada point to tools in the ecosystem to quantize models with AWQ algorithm
+
+### AWQConfig
+
+[[autodoc]] AWQConfig
+
 ## `AutoGPTQ` Integration
 
 🤗 Transformers has integrated `optimum` API to perform GPTQ quantization on language models. You can load and quantize your model in 8, 4, 3 or even 2 bits without a big drop of performance and faster inference speed! This is supported by most GPU hardwares.
