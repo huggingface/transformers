@@ -626,15 +626,8 @@ class MobileViTEncoder(nn.Module):
 
         for i, layer_module in enumerate(self.layer):
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                hidden_states = self.gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                 )
             else:
@@ -672,9 +665,10 @@ class MobileViTPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, MobileViTEncoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 MOBILEVIT_START_DOCSTRING = r"""

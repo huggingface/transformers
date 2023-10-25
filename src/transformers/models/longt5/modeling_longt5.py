@@ -775,7 +775,6 @@ class LongT5TransientGlobalAttention(nn.Module):
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
         self.pruned_heads = set()
-        self.gradient_checkpointing = False
 
         # Relativen attention bias & Layer norm for global attention
         if self.has_relative_attention_bias:
@@ -1340,10 +1339,10 @@ class LongT5PreTrainedModel(PreTrainedModel):
                         mean=0.0, std=factor * ((d_model) ** -0.5)
                     )
 
-    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._set_gradient_checkpointing with T5->LongT5
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (LongT5Attention, LongT5Stack)):
-            module.gradient_checkpointing = value
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
+        if isinstance(module, (LongT5Attention, LongT5Stack, LongT5LocalAttention)):
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right with T5->LongT5
     def _shift_right(self, input_ids):
@@ -1510,15 +1509,8 @@ class LongT5Stack(LongT5PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return tuple(module(*inputs, use_cache, output_attentions))
-
-                    return custom_forward
-
                 layer_outputs = checkpoint(
-                    create_custom_forward(layer_module),
+                    layer_module.forward,
                     hidden_states,
                     extended_attention_mask,
                     position_bias,
@@ -1528,6 +1520,8 @@ class LongT5Stack(LongT5PreTrainedModel):
                     layer_head_mask,
                     cross_attn_layer_head_mask,
                     None,  # past_key_value is always None with gradient checkpointing
+                    use_cache,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
