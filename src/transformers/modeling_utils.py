@@ -1856,8 +1856,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
         activations".
 
-        We pass the `__call__` method of the modules instead of `forward` because `__call__` attaches all the hooks
-        of the module. https://discuss.pytorch.org/t/any-different-between-model-input-and-model-forward-input/3690/2
+        We pass the `__call__` method of the modules instead of `forward` because `__call__` attaches all the hooks of
+        the module. https://discuss.pytorch.org/t/any-different-between-model-input-and-model-forward-input/3690/2
 
         Args:
             gradient_checkpointing_kwargs (dict, *optional*):
