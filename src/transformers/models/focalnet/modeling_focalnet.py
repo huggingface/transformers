@@ -586,15 +586,8 @@ class FocalNetEncoder(nn.Module):
 
         for i, stage_module in enumerate(self.stages):
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                stage_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(stage_module),
+                stage_outputs = self.gradient_checkpointing_func(
+                    stage_module.__call__,
                     hidden_states,
                     input_dimensions,
                 )
@@ -659,9 +652,10 @@ class FocalNetPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, FocalNetEncoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 FOCALNET_START_DOCSTRING = r"""
