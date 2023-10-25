@@ -317,7 +317,6 @@ class Kosmos2Processor(ProcessorMixin):
 
         # Add `<object> <patch_idx_xxxx> <patch_idx_yyy> </object>` after `<phrase> phrase text </phrase>`
         text = self._insert_patch_index_tokens(text, bboxes)
-        text = self._add_remove_spaces_around_tag_tokens(text)
         return text
 
     def preprocess_examples(
@@ -476,38 +475,6 @@ class Kosmos2Processor(ProcessorMixin):
         token_2 = f"<patch_index_{str(idx_2).zfill(4)}>"
 
         return token_1, token_2
-
-    def _add_remove_spaces_around_tag_tokens(self, text):
-        """
-        Remove spaces before tag tokens (e.g. `<x>`). Also ensure a space after a tag token, if it is not followed by
-        another tag token (this is not technically necessary, but good for a standard/consistent format). This avoids
-        the inconsistency of tokenization results between kosmos-2 slow and fast tokenizers.
-        """
-
-        tag_tokens = set(
-            self.tag_tokens + [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.num_patch_index_tokens)]
-        )
-        pattern = "|".join(tag_tokens)
-        splits = re.split(rf"({pattern})", text)
-        # Don't keep the leading and trailing space if any
-        splits = [split for idx, split in enumerate(splits) if not (idx in [0, len(splits) - 1] and split == "")]
-
-        output = ""
-        prev_str_in_targets = False
-        for split in splits:
-            if split in tag_tokens:
-                prev_str_in_targets = True
-                output = output.rstrip() + split
-            else:
-                # we don't need to ensure a space before a normal token that is after a tag token. But having it and
-                # keeps a standard format is good anyway.
-                if prev_str_in_targets and not split.startswith(" "):
-                    output += " " + split
-                else:
-                    output += split
-                prev_str_in_targets = False
-
-        return output
 
 
 def coordinate_to_patch_index(bbox: Tuple[float, float, float, float], num_patches_per_side: int) -> Tuple[int, int]:
