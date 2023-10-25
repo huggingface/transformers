@@ -637,7 +637,7 @@ class DPTReassembleStage(nn.Module):
         for i, hidden_state in enumerate(hidden_states):
             if i not in self.neck_ignore_stages:
                 if hidden_state.ndim == 3:
-                    # reshape to (B, C, H, W)
+                    # reshape to (batch_size, num_channels, height, width)
                     hidden_state, cls_token = hidden_state[:, 1:], hidden_state[:, 0]
                     batch_size, sequence_length, num_channels = hidden_state.shape
                     size = int(math.sqrt(sequence_length))
@@ -649,12 +649,12 @@ class DPTReassembleStage(nn.Module):
 
                 feature_shape = hidden_state.shape
                 if self.config.readout_type == "project":
-                    # reshape to (B, H*W, C)
+                    # reshape to (batch_size, height*width, num_channels)
                     hidden_state = hidden_state.flatten(2).permute((0, 2, 1))
                     readout = cls_token.unsqueeze(1).expand_as(hidden_state)
                     # concatenate the readout token to the hidden states and project
                     hidden_state = self.readout_projects[i](torch.cat((hidden_state, readout), -1))
-                    # reshape back to (B, C, H, W)
+                    # reshape back to (batch_size, num_channels, height, width)
                     hidden_state = hidden_state.permute(0, 2, 1).reshape(feature_shape)
                 elif self.config.readout_type == "add":
                     hidden_state = hidden_state.flatten(2) + cls_token.unsqueeze(-1)
@@ -665,14 +665,18 @@ class DPTReassembleStage(nn.Module):
         return out
 
 
+def _get_backbone_hidden_size(config):
+    if config.backbone_config is not None and config.is_hybrid is False:
+        return config.backbone_config.hidden_size
+    else:
+        return config.hidden_size
+
+
 class DPTReassembleLayer(nn.Module):
     def __init__(self, config, channels, factor):
         super().__init__()
         # projection
-        if config.backbone_config is not None and config.is_hybrid is False:
-            hidden_size = config.backbone_config.hidden_size
-        else:
-            hidden_size = config.hidden_size
+        hidden_size = _get_backbone_hidden_size(config)
         self.projection = nn.Conv2d(in_channels=hidden_size, out_channels=channels, kernel_size=1)
 
         # up/down sampling depending on factor

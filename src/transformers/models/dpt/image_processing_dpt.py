@@ -231,7 +231,7 @@ class DPTImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to pad.
-            size_divisibility (`int`, *optional*, defaults to 32):
+            size_divisibility (`int`):
                 The width and height of the image will be padded to a multiple of this number.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
