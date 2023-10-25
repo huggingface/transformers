@@ -489,9 +489,10 @@ class PvtPreTrainedModel(PreTrainedModel):
                     std=self.config.initializer_range,
                 )
 
-    def _set_gradient_checkpointing(self, module: PvtEncoder, value: bool = False):
+    def _set_gradient_checkpointing(self, module: PvtEncoder, gradient_checkpointing_func=None):
         if isinstance(module, PvtEncoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 PVT_START_DOCSTRING = r"""

@@ -520,15 +520,8 @@ class SpeechT5FeatureEncoder(nn.Module):
 
         for conv_layer in self.conv_layers:
             if self._requires_grad and self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(conv_layer),
+                hidden_states = self.gradient_checkpointing_func(
+                    conv_layer.__call__,
                     hidden_states,
                 )
             else:
@@ -1281,9 +1274,10 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (SpeechT5Encoder, SpeechT5Decoder, SpeechT5FeatureEncoder)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 class SpeechT5Encoder(SpeechT5PreTrainedModel):
@@ -1386,19 +1380,13 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
+                    layer_outputs = self.gradient_checkpointing_func(
+                        encoder_layer.__call__,
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
                         position_bias,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
@@ -1439,7 +1427,6 @@ class SpeechT5EncoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         super().__init__(config)
         self.prenet = SpeechT5SpeechEncoderPrenet(config)
         self.wrapped_encoder = SpeechT5Encoder(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1476,7 +1463,6 @@ class SpeechT5EncoderWithTextPrenet(SpeechT5PreTrainedModel):
         super().__init__(config)
         self.prenet = SpeechT5TextEncoderPrenet(config)
         self.wrapped_encoder = SpeechT5Encoder(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1519,7 +1505,6 @@ class SpeechT5EncoderWithoutPrenet(SpeechT5PreTrainedModel):
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
         self.wrapped_encoder = SpeechT5Encoder(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1715,16 +1700,8 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self.gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
@@ -1732,6 +1709,8 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                     head_mask[idx] if head_mask is not None else None,
                     cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                     None,
+                    output_attentions,
+                    use_cache,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1788,7 +1767,6 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         super().__init__(config)
         self.prenet = SpeechT5SpeechDecoderPrenet(config)
         self.wrapped_decoder = SpeechT5Decoder(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1836,7 +1814,6 @@ class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
         super().__init__(config)
         self.prenet = SpeechT5TextDecoderPrenet(config)
         self.wrapped_decoder = SpeechT5Decoder(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1889,7 +1866,6 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
         self.wrapped_decoder = SpeechT5Decoder(config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

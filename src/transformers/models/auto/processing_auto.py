@@ -71,6 +71,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("pix2struct", "Pix2StructProcessor"),
         ("pop2piano", "Pop2PianoProcessor"),
         ("sam", "SamProcessor"),
+        ("seamless_m4t", "SeamlessM4TProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
         ("speech_to_text", "Speech2TextProcessor"),

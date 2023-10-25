@@ -20,6 +20,7 @@ deps = {
     "fastapi": "fastapi",
     "filelock": "filelock",
     "flax": "flax>=0.4.1,<=0.7.0",
+    "fsspec": "fsspec<2023.10.0",
     "ftfy": "ftfy",
     "fugashi": "fugashi>=1.0",
     "GitPython": "GitPython<3.1.19",
