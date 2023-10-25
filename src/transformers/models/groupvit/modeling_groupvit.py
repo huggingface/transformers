@@ -492,7 +492,6 @@ class GroupViTStage(nn.Module):
             self.group_token = nn.Parameter(torch.zeros(1, num_group_token, config.hidden_size))
         else:
             self.group_token = None
-        self.gradient_checkpointing = False
         self.layers = nn.ModuleList([GroupViTEncoderLayer(config) for _ in range(depth)])
 
         if num_group_token > 0:
@@ -805,9 +804,10 @@ class GroupViTPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (GroupViTTextEncoder, GroupViTVisionEncoder)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 GROUPVIT_START_DOCSTRING = r"""
@@ -1031,18 +1031,12 @@ class GroupViTTextEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
+                layer_outputs = self.gradient_checkpointing_func(
+                    encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     causal_attention_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = encoder_layer(
