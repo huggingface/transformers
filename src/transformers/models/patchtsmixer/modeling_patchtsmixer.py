@@ -479,43 +479,48 @@ class PatchMixerBlock(nn.Module):
             )
             self.norm_attn = PatchTSMixerNormLayer(config)
 
-    def forward(self, data):
+    def forward(self, hidden_state):
         """
         Args:
-            data (`torch.Tensor`): Input tensor.
+            hidden_state (`torch.Tensor`): Input tensor.
 
         Returns:
             `torch.Tensor`: Transformed tensor.
         """
-        residual = data
+        residual = hidden_state
 
-        data = self.norm(data)
+        hidden_state = self.norm(hidden_state)
 
         if self.config.self_attn:
-            data_reshaped = data
-            data_reshaped = torch.reshape(data, (data.shape[0] * data.shape[1], data.shape[2], data.shape[3]))
+            hidden_state_reshaped = hidden_state
+            hidden_state_reshaped = torch.reshape(
+                hidden_state,
+                (hidden_state.shape[0] * hidden_state.shape[1], hidden_state.shape[2], hidden_state.shape[3]),
+            )
             #  (batch_size, n_vars, num_patches, num_features)
 
-            x_attn, _, _ = self.self_attn_layer(data_reshaped, output_attentions=False)
+            x_attn, _, _ = self.self_attn_layer(hidden_state_reshaped, output_attentions=False)
 
-            x_attn = torch.reshape(x_attn, (data.shape[0], data.shape[1], data.shape[2], data.shape[3]))
+            x_attn = torch.reshape(
+                x_attn, (hidden_state.shape[0], hidden_state.shape[1], hidden_state.shape[2], hidden_state.shape[3])
+            )
             #  (batch_size, n_vars, num_patches, num_features) if common_channel
 
         # Transpose so that num_patches is the last dimension
-        data = data.transpose(2, 3)
+        hidden_state = hidden_state.transpose(2, 3)
 
-        data = self.mlp(data)
+        hidden_state = self.mlp(hidden_state)
 
         if self.config.gated_attn:
-            data = self.gating_block(data)
+            hidden_state = self.gating_block(hidden_state)
 
         # Transpose back
-        data = data.transpose(2, 3)
+        hidden_state = hidden_state.transpose(2, 3)
 
         if self.config.self_attn:
-            data = self.norm_attn(data + x_attn)
+            hidden_state = self.norm_attn(hidden_state + x_attn)
 
-        out = data + residual
+        out = hidden_state + residual
         return out
 
 
@@ -621,10 +626,10 @@ class PatchTSMixerBlock(nn.Module):
 
         self.mixers = nn.ModuleList([PatchTSMixerLayer(config=config) for _ in range(num_layers)])
 
-    def forward(self, data, output_hidden_states: bool = False):
+    def forward(self, hidden_state, output_hidden_states: bool = False):
         """
         Args:
-            data (`torch.Tensor`): The input tensor.
+            hidden_state (`torch.Tensor`): The input tensor.
             output_hidden_states (`bool`, *optional*, defaults to False.):
                 Whether to output the hidden states as well.
 
@@ -634,7 +639,7 @@ class PatchTSMixerBlock(nn.Module):
         """
         all_hidden_states = []
 
-        embedding = data
+        embedding = hidden_state
 
         for mod in self.mixers:
             embedding = mod(embedding)
