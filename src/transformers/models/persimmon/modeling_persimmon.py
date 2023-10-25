@@ -568,28 +568,6 @@ class PersimmonFlashAttention2(PersimmonAttention):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 just to be sure everything works as expected.
-
-        # input_dtype = query_states.dtype
-        # if input_dtype == torch.float32:
-        #     logger.warning_once(
-        #         "The input hidden states seems to be silently casted in float32, this might be related to"
-        #         " the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-        #         " float16."
-        #     )
-
-        #     query_states = query_states.to(torch.float16)
-        #     key_states = key_states.to(torch.float16)
-        #     value_states = value_states.to(torch.float16)
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in the correct dtype just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32
-
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
             # Handle the case where the model is quantized
@@ -958,14 +936,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        # embed positions
-        # if attention_mask is None:
-        #     attention_mask = torch.ones(
-        #         (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
-        #     )
-        # attention_mask = self._prepare_decoder_attention_mask(
-        #     attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-        # )
+
         if getattr(self.config, "_flash_attn_2_enabled", False):
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
