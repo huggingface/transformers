@@ -888,8 +888,9 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             image_attention_mask (`torch.FloatTensor`, *optional*): image attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            cross_attention_gate (`torch.FloatTensor`, *optional*): gate used to zero-out cross-attention output
-                for tokens attending no images.
+            cross_attention_gate (`torch.FloatTensor`, *optional*):
+                gate of size `(batch, seq_len, 1)` used to zero-out cross-attention output for tokens attending no
+                images.
             no_images (`bool`, *optional*, defaults to `False`): If `True` the vision part is ignored
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -1266,6 +1267,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         # For any tokens attending to no images, the hidden_states comming out of the cross-attention should be zeroed-out.
         # image_attention_mask has shape [bsz, 1, num_images, hidden_size] with elements equal to either 0.0 or a very negative number.
         # If any of the elements are 0.0, then the token is attending to at least one image and the gate value is 1. Otherwise the gate value is 0.
+        # cross_attention_gate has shape [bsz, seq_len, 1] with elements equal to either 0.0 or 1.0.
         cross_attention_gate = (((image_attention_mask == 0.0).any(dim=-1)).to(dtype=self.dtype)).permute(0, 2, 1)
 
         if inputs_embeds is None:
