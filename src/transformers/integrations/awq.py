@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ..utils import is_accelerate_available, is_auto_awq_available
+from ..utils.quantization_config import AWQLinearVersion
 
 
 if is_auto_awq_available():
     import torch.nn as nn
-    from awq.modules.linear import WQLinear_GEMM
+    from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
@@ -45,7 +46,9 @@ def replace_with_awq_linear(
                     in_features = module.in_features
                     out_features = module.out_features
 
-                    model._modules[name] = WQLinear_GEMM(
+                    target_cls = WQLinear_GEMM if quantization_config.version == AWQLinearVersion.GEMM else WQLinear_GEMV
+
+                    model._modules[name] = target_cls(
                         w_bit=quantization_config.w_bit,
                         group_size=quantization_config.q_group_size,
                         in_features=in_features,
@@ -55,8 +58,6 @@ def replace_with_awq_linear(
                     )
                     has_been_replaced = True
 
-                    # Store the module class in case we need to transpose the weight later
-                    model._modules[name].source_cls = type(module)
                     # Force requires grad to False to avoid unexpected errors
                     model._modules[name].requires_grad_(False)
         if len(list(module.children())) > 0:
