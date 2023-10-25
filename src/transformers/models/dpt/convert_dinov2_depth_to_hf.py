@@ -226,7 +226,7 @@ def get_original_pixel_values(image):
 
 
 @torch.no_grad()
-def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
+def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, verify_logits):
     """
     Copy/paste/tweak model's weights to our DPT structure.
     """
@@ -298,15 +298,18 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     print("First values of predicted depth:", predicted_depth[0, :3, :3])
 
     # assert logits
-    if model_name == "dpt-dinov2-small-nyu":
-        expected_shape = torch.Size([1, 576, 736])
-        expected_slice = torch.tensor([[3.3576, 3.4741, 3.4345], [3.4324, 3.5012, 3.2775], [3.2560, 3.3563, 3.2354]])
-    else:
-        raise NotImplementedError("Model not yet supported")
+    if verify_logits:
+        if model_name == "dpt-dinov2-small-nyu":
+            expected_shape = torch.Size([1, 576, 736])
+            expected_slice = torch.tensor(
+                [[3.3576, 3.4741, 3.4345], [3.4324, 3.5012, 3.2775], [3.2560, 3.3563, 3.2354]]
+            )
+        else:
+            raise NotImplementedError("Model not yet supported")
 
-    assert predicted_depth.shape == torch.Size(expected_shape)
-    assert torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-5)
-    print("Looks ok!")
+        assert predicted_depth.shape == torch.Size(expected_shape)
+        assert torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-5)
+        print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
@@ -341,6 +344,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Whether to push the model to the hub after conversion.",
     )
+    parser.add_argument(
+        "--verify_logits",
+        action="store_false",
+        required=False,
+        help="Path to the output PyTorch model directory.",
+    )
 
     args = parser.parse_args()
-    convert_dpt_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_dpt_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.verify_logits)
