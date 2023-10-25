@@ -876,13 +876,11 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
 
-        print("Number of feature maps:", len(feature_maps))
-
         if not return_dict:
             if output_hidden_states:
-                output = (feature_maps,) + (cls_tokens,) + outputs[1:]
+                output = (feature_maps, cls_tokens) + outputs[1:]
             else:
-                output = (feature_maps,) + (cls_tokens,) + outputs[2:]
+                output = (feature_maps, cls_tokens) + outputs[2:]
             return output
 
         return Dinov2BackboneOutput(
