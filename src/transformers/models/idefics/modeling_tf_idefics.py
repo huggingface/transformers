@@ -17,52 +17,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# TODO:
-# 1. torch.arrange -> TF ?
-# 2.
-# 3.
-#
-""" TF 2.0 Idefics model."""
+""" TF 2.0 Idefics model. """
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import numpy as np
 import tensorflow as tf
 
-from ...modeling_tf_utils import (
-    TFPreTrainedModel,
-    TFModelInputType,
-
-)
-
-# TFModelOutput doesn't exist, i think i can use ModelOutput?
-from ...modeling_outputs import ModelOutput
-#from ...modeling_tf_outputs import (
-#    TFModelOutput,
-#
-#)
-from ...modeling_utils import PretrainedConfig
-from ...modeling_tf_utils import (
-    TFPretrainedConfig,
-)
-
-#from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-
+from ... import TFPreTrainedModel
 from ...activations_tf import get_tf_activation
-
-from ...modeling_tf_outputs import TFModelOutput
-
-# OK for TF
+from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PretrainedConfig
+from ...modeling_tf_utils import shape_list
+#from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
 )
-# OK for TF
 from .configuration_idefics import IdeficsConfig
-from .perceiver import IdeficsPerceiverResampler
-from .vision import IdeficsVisionTransformer
+from .perceiver_tf import TFIdeficsPerceiverResampler
+from .vision_tf import TFIdeficsVisionTransformer
 
 
 logger = logging.get_logger(__name__)
@@ -171,10 +146,8 @@ def expand_inputs_for_generation(
     encoder_outputs=None,
     **model_kwargs,
 ):
-    expanded_return_idx = (
-        torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
-    )
-    input_ids = input_ids.index_select(0, expanded_return_idx)
+    expanded_return_idx = tf.reshape(tf.repeat(tf.range(tf.shape(input_ids)[0]), expand_size), [-1])
+    input_ids = tf.gather(input_ids, expanded_return_idx)
     model_kwargs["pixel_values"] = model_kwargs.get("pixel_values", None)
     model_kwargs["image_encoder_embeddings"] = model_kwargs.get("image_encoder_embeddings", None)
     model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings", None)
@@ -182,28 +155,24 @@ def expand_inputs_for_generation(
 
     if "token_type_ids" in model_kwargs:
         token_type_ids = model_kwargs["token_type_ids"]
-        model_kwargs["token_type_ids"] = token_type_ids.index_select(0, expanded_return_idx)
+        model_kwargs["token_type_ids"] = tf.gather(token_type_ids, expanded_return_idx)
 
     if attention_mask is not None:
-        model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
+        model_kwargs["attention_mask"] = tf.gather(attention_mask, expanded_return_idx)
 
     if model_kwargs["image_attention_mask"] is not None:
-        model_kwargs["image_attention_mask"] = model_kwargs["image_attention_mask"].index_select(
-            0, expanded_return_idx
-        )
+        model_kwargs["image_attention_mask"] = tf.gather(model_kwargs["image_attention_mask"], expanded_return_idx)
 
     if model_kwargs["pixel_values"] is not None:
-        model_kwargs["pixel_values"] = model_kwargs["pixel_values"].index_select(0, expanded_return_idx)
+        model_kwargs["pixel_values"] = tf.gather(model_kwargs["pixel_values"], expanded_return_idx)
 
     elif model_kwargs["image_encoder_embeddings"] is not None:
-        model_kwargs["image_encoder_embeddings"] = model_kwargs["image_encoder_embeddings"].index_select(
-            0, expanded_return_idx
+        model_kwargs["image_encoder_embeddings"] = tf.gather(
+            model_kwargs["image_encoder_embeddings"], expanded_return_idx
         )
 
     elif model_kwargs["perceiver_embeddings"] is not None:
-        model_kwargs["perceiver_embeddings"] = model_kwargs["perceiver_embeddings"].index_select(
-            0, expanded_return_idx
-        )
+        model_kwargs["perceiver_embeddings"] = tf.gather(model_kwargs["perceiver_embeddings"], expanded_return_idx)
 
     return input_ids, model_kwargs
 
@@ -218,16 +187,17 @@ def update_model_kwargs_for_generation(outputs, model_kwargs):
     # update token_type_ids with last value
     if "token_type_ids" in model_kwargs:
         token_type_ids = model_kwargs["token_type_ids"]
-        model_kwargs["token_type_ids"] = tf.concat([token_type_ids, token_type_ids[:, -1].unsqueeze(-1)], axis=-1)
+        model_kwargs["token_type_ids"] = tf.concat([token_type_ids, token_type_ids[:, -1:, ...]], axis=-1)
 
     # update attention masks
     if "attention_mask" in model_kwargs:
         attention_mask = model_kwargs["attention_mask"]
         model_kwargs["attention_mask"] = tf.concat(
-            [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], axis=-1)
+            [attention_mask, tf.ones_like(attention_mask[:, -1:, ...])], axis=-1
+        )
     if "image_attention_mask" in model_kwargs:
         image_attention_mask = model_kwargs["image_attention_mask"]
-        last_mask = image_attention_mask[:, -1, :].unsqueeze(1)
+        last_mask = image_attention_mask[:, -1:, ...]
         model_kwargs["image_attention_mask"] = last_mask
 
     # Get the precomputed image_hidden_states
@@ -239,20 +209,20 @@ def update_model_kwargs_for_generation(outputs, model_kwargs):
 def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
     token_type_ids = kwargs.get("token_type_ids", None)
     # only last token for inputs_ids if past is defined in kwargs
-    if past_key_values:
-        input_ids = input_ids[:, -1].unsqueeze(-1)
+    if past_key_values is not None:
+        input_ids = input_ids[:, -1:]
         if token_type_ids is not None:
-            token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
+            token_type_ids = token_type_ids[:, -1:]
 
     attention_mask = kwargs.get("attention_mask", None)
     position_ids = kwargs.get("position_ids", None)
 
     if attention_mask is not None and position_ids is None:
         # create position_ids on the fly for batch generation
-        position_ids = attention_mask.long().cumsum(-1) - 1
-        position_ids.masked_fill_(attention_mask == 0, 1)
-        if past_key_values:
-            position_ids = position_ids[:, -1].unsqueeze(-1)
+        position_ids = tf.math.cumsum(tf.cast(attention_mask, dtype=tf.int64), axis=-1) - 1
+        position_ids = tf.where(attention_mask == 0, 1, position_ids)
+        if past_key_values is not None:
+            position_ids = position_ids[:, -1:]
 
     pixel_values = kwargs.get("pixel_values", None)
     image_encoder_embeddings = kwargs.get("image_encoder_embeddings", None)
@@ -277,26 +247,25 @@ def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
 
 def freeze_model(model, module_exceptions=[]):
     mapping = {
-        "LayerNorm": tf.keras.layers.LayerNormalize,
-        "Linear": tf.keras.layers.Dense,
+        "LayerNorm": tf.keras.layers.LayerNormalization,
+        "Dense": tf.keras.layers.Dense,
         "Embedding": tf.keras.layers.Embedding,
     }
     module_exceptions_mapped = [mapping[m] for m in module_exceptions]
-    for module in model.modules():
-        if module_exceptions and any(isinstance(module, t) for t in module_exceptions_mapped):
-            module.requires_grad_(True)  # Explicitely setting it to true to avoid any mistakes
+    for layer in model.layers:
+        if module_exceptions and any(isinstance(layer, t) for t in module_exceptions_mapped):
+            layer.trainable = True  # Explicitly setting it to true to avoid any mistakes
         else:
-            module.requires_grad_(False)
+            layer.trainable = False
     return model
 
 
-class TFIdeficsDecoupledEmbedding(nn.Embedding):
-    # Derived from https://pytorch.org/docs/stable/_modules/torch/nn/modules/sparse.html#Embedding
+class TFIdeficsDecoupledEmbedding(tf.keras.layers.Embedding):
     """
     Implements a decoupling of parameters to allow freezing (or not) a subset of the embeddings. In practise, the
     regular `weight` can be trained or frozen (i.e. `partially_freeze=True`), and if `num_additional_embeddings` > 0,
     then it will create `num_additional_embeddings` additional parameters that are always trained. If
-    `num_additional_embeddings=0`, then the module defaults back to the regular behavior of `nn.Embedding`.
+    `num_additional_embeddings=0`, then the module defaults back to the regular behavior of `tf.keras.layers.Embedding`.
     """
 
     def __init__(
@@ -305,9 +274,7 @@ class TFIdeficsDecoupledEmbedding(nn.Embedding):
         num_additional_embeddings,
         embedding_dim,
         partially_freeze: Optional[bool] = False,
-        device=None,
         dtype=None,
-        padding_idx=None,
         **kwargs,
     ) -> None:
         """
@@ -320,39 +287,31 @@ class TFIdeficsDecoupledEmbedding(nn.Embedding):
                 The size of each embedding vector
             partially_freeze: (`bool`, *optional*, defaults to `False`):
                 If `True`, the regular `weight` will be frozen. `additional_weight` is never frozen.
-            padding_idx (`int`, *optional*):
-                The padding index (needs to be less than num_embeddings)
 
-        Note: there are a lot of other parameters to initialize a standard `nn.Embedding` such as `padding_idx`,
-        `max_norm` or `norm_type`. We are not supporting these.
+        Note: there are a lot of other parameters to initialize a standard `tf.keras.layers.Embedding` such as `mask_zero`,
+        `input_length` or `embeddings_initializer`. We are not supporting these.
         """
-        if padding_idx is not None and padding_idx > num_embeddings:
-            raise ValueError(f"padding_idx must be within num_embeddings. Got {padding_idx} and {num_embeddings}")
         super().__init__(
-            num_embeddings=num_embeddings,
-            embedding_dim=embedding_dim,
-            device=device,
+            input_dim=num_embeddings,
+            output_dim=embedding_dim,
             dtype=dtype,
-            padding_idx=padding_idx,
             **kwargs,
         )
         self.num_embeddings = num_embeddings
-        self.padding_idx = padding_idx
         self.num_additional_embeddings = num_additional_embeddings
         self.partially_freeze = partially_freeze
 
         if partially_freeze:
-            self.weight.requires_grad_(False)
+            self.trainable = False
 
         if self.num_additional_embeddings > 0:
-            self.additional_embedding = nn.Embedding(
-                num_embeddings=self.num_additional_embeddings,
-                embedding_dim=embedding_dim,
-                device=device,
+            self.additional_embedding = tf.keras.layers.Embedding(
+                input_dim=self.num_additional_embeddings,
+                output_dim=embedding_dim,
                 dtype=dtype,
             )
 
-    def forward(self, input_ids):
+    def call(self, input_ids):
         """
         we have 2 embeddings, with different indices - one pretrained self.weight and another
         self.additional_embedding.weight that is being trained.
@@ -374,20 +333,22 @@ class TFIdeficsDecoupledEmbedding(nn.Embedding):
 
         """
         if self.num_additional_embeddings == 0:
-            return F.embedding(input_ids, self.weight)
+            return super().call(input_ids)
 
         # Clone so that we don't modify the original input_ids later on
-        input_ids = input_ids.clone()
+        input_ids = tf.identity(input_ids)
         additional_vocab_indices = tf.where(input_ids >= self.num_embeddings)
-        input_ids_additional_vocab = input_ids[additional_vocab_indices]
+        input_ids_additional_vocab = tf.gather_nd(input_ids, additional_vocab_indices)
         additional_embeddings = self.additional_embedding(input_ids_additional_vocab - self.num_embeddings)
 
         # for successful lookup replace input_ids with 0, the results of these will be discarded anyway
-        input_ids[additional_vocab_indices] = 0
-        full_vector = F.embedding(input_ids, self.weight)
+        input_ids = tf.tensor_scatter_nd_update(
+            input_ids, additional_vocab_indices, tf.zeros_like(additional_vocab_indices)
+        )
+        full_vector = super().call(input_ids)
 
         # overwrite the records with high indices
-        full_vector[additional_vocab_indices] = additional_embeddings
+        full_vector = tf.tensor_scatter_nd_update(full_vector, additional_vocab_indices, additional_embeddings)
 
         return full_vector
 
@@ -395,18 +356,17 @@ class TFIdeficsDecoupledEmbedding(nn.Embedding):
         return "num_embeddings={}, num_additional_embeddings={}, embedding_dim={}, partially_freeze={}".format(
             self.num_embeddings,
             self.num_additional_embeddings,
-            self.embedding_dim,
+            self.output_dim,
             self.partially_freeze,
         )
 
 
-class TFIdeficsDecoupledLinear(nn.Linear):
-    # Derived from https://pytorch.org/docs/stable/_modules/torch/nn/modules/linear.html#Linear
+class TFIdeficsDecoupledLinear(tf.keras.layers.Layer):
     """
     Implements a decoupling of parameters to allow freezing (or not) a subset of the parameters. In practise, the
     regular `weight` can be trained or frozen (i.e. `partially_freeze=True`), and if `out_additional_features` > 0,
     then it will create `out_additional_features * in_features` additional parameters that are always trained. If
-    `out_additional_features=0`, then the module defaults back to the regular behavior of `nn.Linear`.
+    `out_additional_features=0`, then the module defaults back to the regular behavior of `tf.keras.layers.Dense`.
     """
 
     def __init__(
@@ -416,145 +376,149 @@ class TFIdeficsDecoupledLinear(nn.Linear):
         out_additional_features: int = 0,
         bias: bool = True,
         partially_freeze: bool = True,
-        device=None,
-        dtype=None,
+        **kwargs,
     ) -> None:
         """
         out_additional_features: int. Number of additional trainable dimensions. Only makes sense when
         `partially_freeze=True`. partially_freeze: bool. If True, the regular `weight` will be frozen and extra
-        parameters (if any) will be trainable. If False, default to the regular behavior of nn.Linear.
+        parameters (if any) will be trainable. If False, default to the regular behavior of tf.keras.layers.Dense.
         """
-        super().__init__(in_features, out_features, bias, device, dtype)
+        super().__init__(**kwargs)
         self.out_additional_features = out_additional_features
         self.partially_freeze = partially_freeze
 
         self.in_features = in_features
         self.out_features = out_features
 
-        if partially_freeze:
-            self.weight.requires_grad_(False)
-            if bias:
-                self.bias.requires_grad_(False)
+        self.weight = self.add_weight(shape=(in_features, out_features), trainable=not partially_freeze, name="weight")
+        if bias:
+            self.bias = self.add_weight(shape=(out_features,), trainable=not partially_freeze, name="bias")
+        else:
+            self.bias = None
 
         if out_additional_features > 0:
-            self.additional_fc = nn.Linear(
-                in_features=in_features,
-                out_features=out_additional_features,
-                bias=bias,
-                device=device,
-                dtype=dtype,
+            self.additional_fc = tf.keras.layers.Dense(
+                units=out_additional_features, use_bias=bias, name="additional_fc"
             )
 
-    def forward(self, input: tf.Tensor) -> tf.Tensor:
-        output = F.linear(input, self.weight, self.bias)
+    def call(self, inputs: tf.Tensor) -> tf.Tensor:
+        output = tf.linalg.matmul(inputs, self.weight)
+        if self.bias is not None:
+            output = tf.nn.bias_add(output, self.bias)
 
         if self.out_additional_features > 0:
-            additional_features = self.additional_fc(input)
-            output = tf.concat((output, additional_features), axis=-1)
+            additional_features = self.additional_fc(inputs)
+            output = tf.concat([output, additional_features], axis=-1)
 
         return output
 
-    def extra_repr(self) -> str:
-        """Overwriting `nn.Linear.extra_repr` to include new parameters."""
-        return "in_features={}, out_features={}, out_additional_features={}, bias={}, partially_freeze={}".format(
-            self.in_features,
-            self.out_features,
-            self.out_additional_features,
-            self.bias is not None,
-            self.partially_freeze,
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "in_features": self.in_features,
+                "out_features": self.out_features,
+                "out_additional_features": self.out_additional_features,
+                "bias": self.bias is not None,
+                "partially_freeze": self.partially_freeze,
+            }
         )
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
 
 
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(
-    input_ids_shape: tf.size, dtype: tf.dtype, device: tf.device, past_key_values_length: int = 0
-):
+def _make_causal_mask(self, input_ids_shape, dtype, past_key_values_length=0):
     """
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
-    mask_cond = torch.arange(mask.size(-1), device=device)
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
+    mask = tf.fill((tgt_len, tgt_len), tf.dtypes.as_dtype(dtype).min)
+    mask_cond = tf.range(mask.shape[-1])
+    mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (mask.shape[-1], 1)), 0, mask)
+    mask = tf.cast(mask, dtype)
 
     if past_key_values_length > 0:
-        mask = tf.concat([tf.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], axis=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+        mask = tf.concat([tf.zeros((tgt_len, past_key_values_length), dtype=dtype), mask], axis=-1)
+    return tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
 
 
-def _expand_mask(mask: tf.Tensor, dtype: tf.dtype, tgt_len: Optional[int] = None):
+def _expand_mask(mask, dtype, tgt_len=None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
-    bsz, src_len = mask.size()
+    bsz, src_len = shape_list(mask)
     tgt_len = tgt_len if tgt_len is not None else src_len
 
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+    expanded_mask = tf.expand_dims(tf.expand_dims(mask, 1), 1)
+    expanded_mask = tf.broadcast_to(expanded_mask, [bsz, 1, tgt_len, src_len])
 
-    inverted_mask = 1.0 - expanded_mask
+    inverted_mask = 1.0 - tf.cast(expanded_mask, dtype)
 
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+    return tf.where(
+        tf.cast(inverted_mask, bool), tf.fill(dims=shape_list(inverted_mask), value=tf.float32.min), inverted_mask
+    )
 
 
-# this was adapted from LlamaRMSNorm
-class TFIdeficsRMSNorm(tf.keras.layers.layer):
-    def __init__(self, hidden_size, eps=1e-6):
+class TFIdeficsRMSNorm(tf.keras.layers.Layer):
+    def __init__(self, hidden_size, eps=1e-6, **kwargs):
         """
-        IdeficsRMSNorm is equivalent to T5LayerNorm
+        TFIdeficsRMSNorm is equivalent to T5LayerNorm
         """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
-        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+    def build(self, input_shape):
+        self.weight = self.add_weight(name="weight", shape=[self.hidden_size], initializer="ones")
+
+    def call(self, hidden_states):
+        variance = tf.math.reduce_mean(tf.math.square(tf.cast(hidden_states, tf.float32)), axis=-1, keepdims=True)
+        hidden_states = hidden_states * tf.math.rsqrt(variance + self.variance_epsilon)
 
         # convert into half-precision if necessary
-        if self.weight.dtype in [torch.float16, torch.bfloat16]:
-            hidden_states = hidden_states.to(self.weight.dtype)
+        if self.weight.dtype in [tf.float16, tf.bfloat16]:
+            hidden_states = tf.cast(hidden_states, self.weight.dtype)
 
         return self.weight * hidden_states
 
 
-ALL_LAYERNORM_LAYERS.append(IdeficsRMSNorm)
+#ALL_LAYERNORM_LAYERS.append(TFIdeficsRMSNorm)
 
 
-# this was adapted from LlamaRotaryEmbedding
-class TFIdeficsEmbedding(tf.keras.layers.layer):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
-        super().__init__()
+class TFIdeficsEmbedding(tf.keras.layers.Layer):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, **kwargs):
+        super().__init__(**kwargs)
 
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        inv_freq = 1.0 / (self.base ** (tf.range(0, self.dim, 2, dtype=tf.float32) / self.dim))
+        self.inv_freq = tf.constant(inv_freq, dtype=tf.float32)
 
-        # Build here to make `torch.jit.trace` work.
-        self._set_cos_sin_cache(
-            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
-        )
+        # Build here to make `tf.function` work.
+        self._set_cos_sin_cache(seq_len=max_position_embeddings, dtype=tf.float32)
 
-    def _set_cos_sin_cache(self, seq_len, device, dtype):
+    def _set_cos_sin_cache(self, seq_len, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = tf.range(self.max_seq_len_cached, dtype=self.inv_freq.dtype)
 
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        freqs = tf.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = tf.concat((freqs, freqs), axis=-1)
-        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+        emb = tf.concat([freqs, freqs], axis=-1)
+        self.cos_cached = tf.math.cos(emb)
+        self.sin_cached = tf.math.sin(emb)
 
-    def forward(self, x, seq_len=None):
+    def call(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+            self._set_cos_sin_cache(seq_len=seq_len, dtype=x.dtype)
 
         return (
-            self.cos_cached[:seq_len].to(dtype=x.dtype),
-            self.sin_cached[:seq_len].to(dtype=x.dtype),
+            self.cos_cached[:seq_len],
+            self.sin_cached[:seq_len],
         )
 
 
@@ -565,35 +529,35 @@ def rotate_half(x):
     return tf.concat((-x2, x1), axis=-1)
 
 
-# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
-    cos = cos[position_ids].unsqueeze(1)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
-    sin = sin[position_ids].unsqueeze(1)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
+def apply_rotary_pos_emb(self, q, k, cos, sin, position_ids):
+    cos = tf.gather(cos, position_ids)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
+    sin = tf.gather(sin, position_ids)
+    cos = tf.expand_dims(cos, 1)
+    sin = tf.expand_dims(sin, 1)
+    q_embed = (q * cos) + (self.rotate_half(q) * sin)
+    k_embed = (k * cos) + (self.rotate_half(k) * sin)
     return q_embed, k_embed
 
 
-# this was adapted from LlamaMLP
-class TFIdeficsMLP(tf.keras.layers.layer):
+class TFIdeficsMLP(tf.keras.layers.Layer):
     def __init__(
         self,
         hidden_size: int,
         intermediate_size: int,
         hidden_act: str,
+        **kwargs,
     ):
-        super().__init__()
-        self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
-        self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
-        self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
-        self.act_fn = ACT2FN[hidden_act]
+        super().__init__(**kwargs)
+        self.gate_proj = tf.keras.layers.Dense(intermediate_size, use_bias=False, name="gate_proj")
+        self.down_proj = tf.keras.layers.Dense(hidden_size, use_bias=False, name="down_proj")
+        self.up_proj = tf.keras.layers.Dense(intermediate_size, use_bias=False, name="up_proj")
+        self.act_fn = get_tf_activation(hidden_act)
 
-    def forward(self, x):
+    def call(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
-# this was adapted from LlamaAttention
-class TFIdeficsAttention(tf.keras.layers.layer):
+class TFIdeficsAttention(tf.keras.layers.Layer):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -604,8 +568,9 @@ class TFIdeficsAttention(tf.keras.layers.layer):
         is_cross_attention: bool = False,
         config: PretrainedConfig = None,
         qk_layer_norms: bool = False,
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
@@ -619,56 +584,57 @@ class TFIdeficsAttention(tf.keras.layers.layer):
 
         self.is_cross_attention = is_cross_attention
 
-        if not hasattr(nn.functional, "scaled_dot_product_attention"):
-            raise ValueError("this model requires pytorch 2.0 or higher")
-
         if self.is_cross_attention:
             kv_input_dim = (
                 self.hidden_size if not hasattr(config.vision_config, "embed_dim") else config.vision_config.embed_dim
             )
-            self.q_proj = nn.Linear(
-                self.hidden_size,
+            self.q_proj = tf.keras.layers.Dense(
                 num_heads * self.head_dim,
-                bias=False,
+                use_bias=False,
+                name="q_proj",
             )
-            self.k_proj = nn.Linear(kv_input_dim, num_heads * self.head_dim, bias=False)
-            self.v_proj = nn.Linear(
-                kv_input_dim,
+            self.k_proj = tf.keras.layers.Dense(
                 num_heads * self.head_dim,
-                bias=False,
+                use_bias=False,
+                name="k_proj",
+            )
+            self.v_proj = tf.keras.layers.Dense(
+                num_heads * self.head_dim,
+                use_bias=False,
+                name="v_proj",
             )
         else:
-            self.q_proj = nn.Linear(
-                self.hidden_size,
+            self.q_proj = tf.keras.layers.Dense(
                 num_heads * self.head_dim,
-                bias=False,
+                use_bias=False,
+                name="q_proj",
             )
-            self.k_proj = nn.Linear(
-                self.hidden_size,
+            self.k_proj = tf.keras.layers.Dense(
                 num_heads * self.head_dim,
-                bias=False,
+                use_bias=False,
+                name="k_proj",
             )
-            self.v_proj = nn.Linear(
-                self.hidden_size,
+            self.v_proj = tf.keras.layers.Dense(
                 num_heads * self.head_dim,
-                bias=False,
+                use_bias=False,
+                name="v_proj",
             )
-        self.o_proj = nn.Linear(
-            num_heads * self.head_dim,
+        self.o_proj = tf.keras.layers.Dense(
             hidden_size,
-            bias=False,
+            use_bias=False,
+            name="o_proj",
         )
-        self.rotary_emb = IdeficsEmbedding(self.head_dim)
+        self.rotary_emb = TFIdeficsEmbedding(self.head_dim)
 
         self.qk_layer_norms = qk_layer_norms
         if self.qk_layer_norms:
-            self.q_layer_norm = IdeficsRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.k_layer_norm = IdeficsRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.q_layer_norm = TFIdeficsRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.k_layer_norm = TFIdeficsRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), perm=[0, 2, 1, 3])
 
-    def forward(
+    def call(
         self,
         hidden_states: tf.Tensor,
         key_value_states: Optional[tf.Tensor] = None,
@@ -681,22 +647,20 @@ class TFIdeficsAttention(tf.keras.layers.layer):
         # if key_value_states are provided this layer is used as a cross-attention layer
         is_cross_attention = self.is_cross_attention or key_value_states is not None
 
-        bsz, q_len, _ = hidden_states.size()
+        bsz, q_len, _ = shape_list(hidden_states)
 
-        query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = self._shape(self.q_proj(hidden_states), q_len, bsz)
         if not is_cross_attention:
-            key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+            key_states = self._shape(self.k_proj(hidden_states), q_len, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), q_len, bsz)
         else:
-            _, kv_len, _ = key_value_states.size()  # Note that, in this case, `kv_len` == `kv_seq_len`
-            key_states = self.k_proj(key_value_states).view(bsz, kv_len, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = (
-                self.v_proj(key_value_states).view(bsz, kv_len, self.num_heads, self.head_dim).transpose(1, 2)
-            )
+            _, kv_len, _ = shape_list(key_value_states)  # Note that, in this case, `kv_len` == `kv_seq_len`
+            key_states = self._shape(self.k_proj(key_value_states), kv_len, bsz)
+            value_states = self._shape(self.v_proj(key_value_states), kv_len, bsz)
 
-        kv_seq_len = key_states.shape[-2]
+        kv_seq_len = shape_list(key_states)[-2]
         if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
+            kv_seq_len += shape_list(past_key_value[0])[-2]
         if not is_cross_attention:
             cos, sin = self.rotary_emb(value_states, seq_len=max(kv_seq_len, q_len))
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
@@ -714,27 +678,23 @@ class TFIdeficsAttention(tf.keras.layers.layer):
             key_states = self.k_layer_norm(key_states)
 
         if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+            if attention_mask.shape != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
+                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.shape}"
                 )
 
-        attn_output = nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=attention_mask,
-            dropout_p=self.dropout,
-        )
+        attn_output = tf.keras.layers.Attention(
+            use_scale=True,
+            dropout=self.dropout,
+        )([query_states, value_states, key_states], mask=attention_mask)
 
-        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
+        if attn_output.shape != (bsz, self.num_heads, q_len, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
+                f" {attn_output.shape}"
             )
 
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+        attn_output = tf.reshape(tf.transpose(attn_output, perm=[0, 2, 1, 3]), (bsz, q_len, self.hidden_size))
 
         attn_output = self.o_proj(attn_output)
 
@@ -747,27 +707,30 @@ class TFIdeficsAttention(tf.keras.layers.layer):
         return attn_output, attn_weights, past_key_value
 
 
-# this was adapted from LlamaDecoderLayer
-class TFIdeficsDecoderLayer(tf.keras.layers.layer):
-    def __init__(self, config: IdeficsConfig):
-        super().__init__()
+class TFIdeficsDecoderLayer(tf.keras.layers.Layer):
+    def __init__(self, config: IdeficsConfig, **kwargs):
+        super().__init__(**kwargs)
         self.hidden_size = config.hidden_size
-        self.self_attn = IdeficsAttention(
+        self.self_attn = TFIdeficsAttention(
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.dropout,
             config=config,
+            name="self_attn",
         )
-        self.mlp = IdeficsMLP(
+        self.mlp = TFIdeficsMLP(
             hidden_size=self.hidden_size,
             intermediate_size=config.intermediate_size,
             hidden_act=config.hidden_act,
+            name="mlp",
         )
-        self.input_layernorm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = TFIdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="input_layernorm")
+        self.post_attention_layernorm = TFIdeficsRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps, name="post_attention_layernorm"
+        )
         self.dropout = config.dropout
 
-    def forward(
+    def call(
         self,
         hidden_states: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
@@ -775,6 +738,7 @@ class TFIdeficsDecoderLayer(tf.keras.layers.layer):
         past_key_value: Optional[Tuple[tf.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
+        training=False,
     ) -> Tuple[tf.Tensor, Optional[Tuple[tf.Tensor, tf.Tensor]]]:
         """
         Args:
@@ -803,14 +767,14 @@ class TFIdeficsDecoderLayer(tf.keras.layers.layer):
             output_attentions=output_attentions,
             use_cache=use_cache,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = tf.nn.dropout(hidden_states, rate=self.dropout, training=training)
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = tf.nn.dropout(hidden_states, rate=self.dropout, training=training)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -824,11 +788,11 @@ class TFIdeficsDecoderLayer(tf.keras.layers.layer):
         return outputs
 
 
-class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.layer):
-    def __init__(self, config: IdeficsConfig):
-        super().__init__()
+class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
+    def __init__(self, config: IdeficsConfig, **kwargs):
+        super().__init__(**kwargs)
         self.hidden_size = config.hidden_size
-        self.cross_attn = IdeficsAttention(
+        self.cross_attn = TFIdeficsAttention(
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
             is_cross_attention=True,
@@ -836,61 +800,82 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.layer):
             config=config,
             qk_layer_norms=config.qk_layer_norms,
         )
-        self.mlp = IdeficsMLP(
+        self.mlp = TFIdeficsMLP(
             hidden_size=self.hidden_size,
             intermediate_size=config.intermediate_size,
             hidden_act=config.hidden_act,
         )
-        self.input_layernorm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = TFIdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = TFIdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.config = config.dropout
 
-        self.act_cross_attn = nn.Tanh()
-        self.act_dense = nn.Tanh()
+        self.act_cross_attn = tf.keras.activations.tanh
+        self.act_dense = tf.keras.activations.tanh
 
-        if config.alpha_initializer == "zeros":
-            if config.alpha_type == "vector":
-                self.alpha_cross_attn = nn.Parameter(tf.zeros(1, 1, self.hidden_size))
-                self.alpha_dense = nn.Parameter(tf.zeros(1, 1, self.hidden_size))
-            elif config.alpha_type == "float":
-                self.alpha_cross_attn = nn.Parameter(tf.zeros(1))
-                self.alpha_dense = nn.Parameter(tf.zeros(1))
-            else:
-                raise ValueError(f"Unknown value for `alpha_type` ({config.alpha_type})")
+        self.alpha_initializer = config.alpha_initializer
+        self.alpha_type = config.alpha_type
+        self.alphas_initializer_range = config.alphas_initializer_range
 
-        elif config.alpha_initializer == "ones":
-            if config.alpha_type == "vector":
-                self.alpha_cross_attn = nn.Parameter(torch.ones(1, 1, self.hidden_size))
-                self.alpha_dense = nn.Parameter(torch.ones(1, 1, self.hidden_size))
-            elif config.alpha_type == "float":
-                self.alpha_cross_attn = nn.Parameter(torch.ones(1))
-                self.alpha_dense = nn.Parameter(torch.ones(1))
+    def build(self, input_shape):
+        if self.alpha_initializer == "zeros":
+            if self.alpha_type == "vector":
+                self.alpha_cross_attn = self.add_weight(
+                    shape=(1, 1, self.hidden_size), initializer="zeros", trainable=True
+                )
+                self.alpha_dense = self.add_weight(shape=(1, 1, self.hidden_size), initializer="zeros", trainable=True)
+            elif self.alpha_type == "float":
+                self.alpha_cross_attn = self.add_weight(shape=(1,), initializer="zeros", trainable=True)
+                self.alpha_dense = self.add_weight(shape=(1,), initializer="zeros", trainable=True)
             else:
-                raise ValueError(f"Unknown value for `alpha_type` ({config.alpha_type})")
+                raise ValueError(f"Unknown value for `alpha_type` ({self.alpha_type})")
 
-        elif config.alpha_initializer in {"normal", "gaussian", "random"}:
-            if config.alpha_type == "vector":
-                self.alpha_cross_attn = nn.Parameter(
-                    torch.normal(mean=0.0, std=config.alphas_initializer_range, size=(1, 1, self.hidden_size))
+        elif self.alpha_initializer == "ones":
+            if self.alpha_type == "vector":
+                self.alpha_cross_attn = self.add_weight(
+                    shape=(1, 1, self.hidden_size), initializer="ones", trainable=True
                 )
-                self.alpha_dense = nn.Parameter(
-                    torch.normal(mean=0.0, std=config.alphas_initializer_range, size=(1, 1, self.hidden_size))
-                )
-            elif config.alpha_type == "float":
-                self.alpha_cross_attn = nn.Parameter(
-                    torch.normal(mean=0.0, std=config.alphas_initializer_range, size=(1))
-                )
-                self.alpha_dense = nn.Parameter(torch.normal(mean=0.0, std=config.alphas_initializer_range, size=(1)))
+                self.alpha_dense = self.add_weight(shape=(1, 1, self.hidden_size), initializer="ones", trainable=True)
+            elif self.alpha_type == "float":
+                self.alpha_cross_attn = self.add_weight(shape=(1,), initializer="ones", trainable=True)
+                self.alpha_dense = self.add_weight(shape=(1,), initializer="ones", trainable=True)
             else:
-                raise ValueError(f"Unknown value for `alpha_type` ({config.alpha_type})")
+                raise ValueError(f"Unknown value for `alpha_type` ({self.alpha_type})")
+
+        elif self.alpha_initializer in {"normal", "gaussian", "random"}:
+            if self.alpha_type == "vector":
+                self.alpha_cross_attn = self.add_weight(
+                    shape=(1, 1, self.hidden_size),
+                    initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=self.alphas_initializer_range),
+                    trainable=True,
+                )
+                self.alpha_dense = self.add_weight(
+                    shape=(1, 1, self.hidden_size),
+                    initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=self.alphas_initializer_range),
+                    trainable=True,
+                )
+            elif self.alpha_type == "float":
+                self.alpha_cross_attn = self.add_weight(
+                    shape=(1,),
+                    initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=self.alphas_initializer_range),
+                    trainable=True,
+                )
+                self.alpha_dense = self.add_weight(
+                    shape=(1,),
+                    initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=self.alphas_initializer_range),
+                    trainable=True,
+                )
+            else:
+                raise ValueError(f"Unknown value for `alpha_type` ({self.alpha_type})")
 
         else:
-            raise NotImplementedError(f"Alpha initialization scheme {config.alpha_initializer} not yet implemented!")
+            raise NotImplementedError(f"Alpha initialization scheme {self.alpha_initializer} not yet implemented!")
 
         if not (hasattr(self, "alpha_cross_attn") and hasattr(self, "alpha_dense")):
             raise ValueError("Alpha parameters not initialized correctly!")
 
-    def forward(
+        super().build(input_shape)
+
+    def call(
         self,
         hidden_states: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
@@ -935,7 +920,7 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.layer):
             attention_mask=image_attention_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.config, training=self.training)
+        hidden_states = tf.nn.dropout(hidden_states, rate=self.config)
         # when there are no images the model is used in pure language mode
         gate = 0 if no_images else 1
         hidden_states = residual + gate * self.act_cross_attn(self.alpha_cross_attn) * hidden_states
@@ -944,7 +929,7 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.layer):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.config, training=self.training)
+        hidden_states = tf.nn.dropout(hidden_states, rate=self.config)
         hidden_states = residual + self.act_dense(self.alpha_dense) * hidden_states
 
         outputs = (hidden_states,)
@@ -963,6 +948,10 @@ LLAMA_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
+    This model is also a TensorFlow [tf.keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer) subclass.
+    Use it as a regular TensorFlow Layer and refer to the TensorFlow documentation for all matter related to general usage
+    and behavior.
+
     Parameters:
         config ([`IdeficsConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
@@ -975,34 +964,32 @@ LLAMA_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
-class TFIdeficsPreTrainedModel(PreTrainedModel):
+class TFIdeficsPreTrainedModel(TFPreTrainedModel):
     config_class = IdeficsConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
+    _no_split_modules = ["TFIdeficsDecoderLayer", "TFIdeficsGatedCrossAttentionLayer"]
 
     def _init_weights(self, module):
         # important: this ported version of Idefics isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the m4 code
         # base should be used for training from scratch and it contains the correct code.
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+        if isinstance(module, tf.keras.layers.Dense):
+            module.kernel = tf.random.normal(shape=module.kernel.shape, mean=0.0, stddev=std)
             if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                module.bias = tf.zeros_like(module.bias)
+        elif isinstance(module, tf.keras.layers.Embedding):
+            module.embeddings = tf.random.normal(shape=module.embeddings.shape, mean=0.0, stddev=std)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, IdeficsModel):
+        if isinstance(module, TFIdeficsModel):
             module.gradient_checkpointing = value
 
 
 LLAMA_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
@@ -1010,7 +997,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -1030,7 +1017,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        position_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
         past_key_values (`tuple(tuple(tf.Tensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -1066,7 +1053,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
-class TFIdeficsModel(IdeficsPreTrainedModel):
+class TFIdeficsModel(TFIdeficsPreTrainedModel):
     """
     Transformer decoder consisting of `config.num_hidden_layers` layers. Each layer is a [`IdeficsDecoderLayer`]
 
@@ -1074,44 +1061,48 @@ class TFIdeficsModel(IdeficsPreTrainedModel):
         config: IdeficsConfig
     """
 
-    def __init__(self, config: IdeficsConfig):
-        super().__init__(config)
+    def __init__(self, config: IdeficsConfig, **kwargs):
+        super().__init__(config, **kwargs)
         self.config = config
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = IdeficsDecoupledEmbedding(
+        self.embed_tokens = TFIdeficsDecoupledEmbedding(
             num_embeddings=config.vocab_size,
             num_additional_embeddings=config.additional_vocab_size,
             embedding_dim=config.hidden_size,
             partially_freeze=config.freeze_text_layers,
-            padding_idx=self.padding_idx,
+            name="embed_tokens",
         )
 
         self.image_size = config.vision_config.image_size
         self.vision_config = config.vision_config
-        self.vision_model = IdeficsVisionTransformer(config.vision_config)
+        self.vision_model = TFIdeficsVisionTransformer(config.vision_config, name="vision_model")
 
         # Perceiver Resampler
         if config.use_resampler:
             perceiver_config = config.perceiver_config
-            self.perceiver_resampler = IdeficsPerceiverResampler(
+            self.perceiver_resampler = TFIdeficsPerceiverResampler(
                 config,
                 config.vision_config.embed_dim,
                 perceiver_config.resampler_depth,
                 perceiver_config.resampler_n_heads,
                 perceiver_config.resampler_head_dim,
                 perceiver_config.resampler_n_latents,
+                name="perceiver_resampler",
             )
 
-        self.layers = [TFIdeficsDecoderLayer(config) for _ in range(config.num_hidden_layers)]
+        self.layers = [TFIdeficsDecoderLayer(config, name=f"layers_{i}") for i in range(config.num_hidden_layers)]
 
         self.cross_layer_interval = config.cross_layer_interval
         num_cross_layers = config.num_hidden_layers // self.cross_layer_interval
-        self.gated_cross_attn_layers = [TFIdeficsGatedCrossAttentionLayer(config) for _ in range(num_cross_layers)]
+        self.gated_cross_attn_layers = [
+            TFIdeficsGatedCrossAttentionLayer(config, name=f"gated_cross_attn_layers_{i}")
+            for i in range(num_cross_layers)
+        ]
         self.gradient_checkpointing = False
 
-        self.norm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = TFIdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="norm")
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1142,7 +1133,7 @@ class TFIdeficsModel(IdeficsPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartDecoder._prepare_decoder_attention_mask
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1151,15 +1142,12 @@ class TFIdeficsModel(IdeficsPreTrainedModel):
             combined_attention_mask = _make_causal_mask(
                 input_shape,
                 inputs_embeds.dtype,
-                device=inputs_embeds.device,
                 past_key_values_length=past_key_values_length,
             )
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
-                inputs_embeds.device
-            )
+            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
@@ -1167,7 +1155,7 @@ class TFIdeficsModel(IdeficsPreTrainedModel):
         return combined_attention_mask
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
-    def forward(
+    def call(
         self,
         input_ids: tf.Tensor = None,
         attention_mask: Optional[tf.Tensor] = None,
@@ -1183,9 +1171,8 @@ class TFIdeficsModel(IdeficsPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, IdeficsBaseModelOutputWithPast]:
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
+        training: Optional[bool] = None,
+    ) -> Union[Tuple, TFIdeficsBaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1198,9 +1185,9 @@ class TFIdeficsModel(IdeficsPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
-            batch_size, seq_length = input_ids.shape
+            batch_size, seq_length = shape_list(input_ids)
         elif inputs_embeds is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
+            batch_size, seq_length, _ = shape_list(inputs_embeds)
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
@@ -1208,19 +1195,16 @@ class TFIdeficsModel(IdeficsPreTrainedModel):
         past_key_values_length = 0
 
         if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
+            past_key_values_length = shape_list(past_key_values[0][0])[2]
             seq_length_with_past = seq_length_with_past + past_key_values_length
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
+            position_ids = tf.math.cumsum(tf.cast(attention_mask, dtype=tf.int32), axis=-1) - 1
+            position_ids = tf.where(attention_mask == 0, 1, position_ids)
         elif position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
-            )
-            position_ids = position_ids.unsqueeze(0)
+            position_ids = tf.range(past_key_values_length, seq_length + past_key_values_length, dtype=tf.int32)
+            position_ids = tf.expand_dims(position_ids, 0)
 
         no_images = False
         if (pixel_values, image_encoder_embeddings, perceiver_embeddings).count(None) != 2:
@@ -1229,10 +1213,10 @@ class TFIdeficsModel(IdeficsPreTrainedModel):
             )
 
         elif pixel_values is not None:
-            no_images = len(torch.nonzero(pixel_values)) == 0
-            pixel_values = pixel_values.to(dtype=self.dtype, device=device)  # fp16 compatibility
-            batch_size, num_images = pixel_values.shape[:2]
-            pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
+            no_images = tf.reduce_sum(tf.cast(pixel_values, dtype=tf.int32)) == 0
+            pixel_values = tf.cast(pixel_values, dtype=self.dtype)  # fp16 compatibility
+            batch_size, num_images = shape_list(pixel_values)[:2]
+            pixel_values = tf.reshape(pixel_values, (batch_size * num_images, *shape_list(pixel_values)[2:]))
 
             # Get sequence from the vision encoder
             image_hidden_states = self.vision_model(
@@ -1240,36 +1224,40 @@ class TFIdeficsModel(IdeficsPreTrainedModel):
             ).last_hidden_state
 
         elif image_encoder_embeddings is not None:
-            batch_size, num_images, image_seq_len, image_hidden_size = image_encoder_embeddings.size()
-            image_hidden_states = image_encoder_embeddings.to(dtype=self.dtype, device=input_ids.device)
-            image_hidden_states = image_hidden_states.view(batch_size * num_images, image_seq_len, image_hidden_size)
+            batch_size, num_images, image_seq_len, image_hidden_size = shape_list(image_encoder_embeddings)
+            image_hidden_states = tf.cast(image_encoder_embeddings, dtype=self.dtype)
+            image_hidden_states = tf.reshape(
+                image_hidden_states, (batch_size * num_images, image_seq_len, image_hidden_size)
+            )
 
         if self.config.use_resampler:
             if perceiver_embeddings is None:
                 perceiver_embeddings = self.perceiver_resampler(image_hidden_states)
-                image_seq_len, image_hidden_size = perceiver_embeddings.size(1), perceiver_embeddings.size(2)
+                image_seq_len, image_hidden_size = shape_list(perceiver_embeddings)[1:3]
             else:
-                batch_size, num_images, image_seq_len, image_hidden_size = perceiver_embeddings.size()
+                batch_size, num_images, image_seq_len, image_hidden_size = shape_list(perceiver_embeddings)
             image_hidden_states = perceiver_embeddings
         elif perceiver_embeddings is None:
-            image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
+            image_seq_len, image_hidden_size = shape_list(image_hidden_states)[1:3]
         else:
             raise ValueError("If `perceiver_embeddings` are passed, use_resampler should be True")
 
-        image_hidden_states = image_hidden_states.view(batch_size, num_images * image_seq_len, image_hidden_size)
+        image_hidden_states = tf.reshape(
+            image_hidden_states, (batch_size, num_images * image_seq_len, image_hidden_size)
+        )
         # # Hack to use the model in full language modeling mode
-        # image_attention_mask = torch.zeros(batch_size, seq_length, 1, dtype=torch.long, device=image_hidden_states.device)
+        # image_attention_mask = tf.zeros((batch_size, seq_length, 1), dtype=tf.int32)
         # Make image_attention_mask compatible with hidden states
-        text_seq_len = image_attention_mask.size(1)
-        image_attention_mask = image_attention_mask.unsqueeze(-1)
-        image_attention_mask = image_attention_mask.repeat(1, 1, 1, image_seq_len)
-        image_attention_mask = image_attention_mask.view(batch_size, text_seq_len, num_images * image_seq_len)
+        text_seq_len = shape_list(image_attention_mask)[1]
+        image_attention_mask = tf.expand_dims(image_attention_mask, -1)
+        image_attention_mask = tf.repeat(image_attention_mask, repeats=[1, 1, 1, image_seq_len])
+        image_attention_mask = tf.reshape(image_attention_mask, (batch_size, text_seq_len, num_images * image_seq_len))
 
         if image_hidden_states is not None:
-            image_batch_size, image_sequence_length, _ = image_hidden_states.size()
+            image_batch_size, image_sequence_length, _ = shape_list(image_hidden_states)
             image_hidden_shape = (image_batch_size, image_sequence_length)
             if image_attention_mask is None:
-                image_attention_mask = torch.ones(image_hidden_shape, device=device)
+                image_attention_mask = tf.ones(image_hidden_shape, dtype=tf.int32)
             image_attention_mask = self.invert_attention_mask(image_attention_mask)
         else:
             image_attention_mask = None
@@ -1278,16 +1266,14 @@ class TFIdeficsModel(IdeficsPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
         # embed positions
         if attention_mask is None:
-            attention_mask = torch.ones(
-                (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
-            )
+            attention_mask = tf.ones((batch_size, seq_length_with_past), dtype=tf.bool)
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
         )
 
         hidden_states = inputs_embeds
 
-        if self.gradient_checkpointing and self.training:
+        if self.gradient_checkpointing and training:
             if use_cache:
                 logger.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1346,7 +1332,7 @@ class TFIdeficsModel(IdeficsPreTrainedModel):
 
                 return layer_outputs
 
-            if self.gradient_checkpointing and self.training:
+            if self.gradient_checkpointing and training:
                 past_key_value = None
                 if use_cache:
                     logger.warning_once(
@@ -1354,7 +1340,7 @@ class TFIdeficsModel(IdeficsPreTrainedModel):
                     )
                     use_cache = False
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = tf.recompute_grad(
                     vblock,
                     decoder_layer,
                     hidden_states,
@@ -1402,14 +1388,16 @@ class TFIdeficsModel(IdeficsPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
-        image_hidden_states = image_hidden_states.view(batch_size, num_images, image_seq_len, image_hidden_size)
+        image_hidden_states = tf.reshape(
+            image_hidden_states, (batch_size, num_images, image_seq_len, image_hidden_size)
+        )
         if not return_dict:
             return tuple(
                 v
                 for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, image_hidden_states]
                 if v is not None
             )
-        return IdeficsBaseModelOutputWithPast(
+        return TFIdeficsBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
@@ -1418,18 +1406,18 @@ class TFIdeficsModel(IdeficsPreTrainedModel):
         )
 
 
-class TFIdeficsForVisionText2Text(IdeficsPreTrainedModel):
+class TFIdeficsForVisionText2Text(TFPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
 
-    def __init__(self, config, vision_model=None):
-        super().__init__(config)
-        self.model = IdeficsModel(config)
+    def __init__(self, config, vision_model=None, **kwargs):
+        super().__init__(config, **kwargs)
+        self.model = TFIdeficsModel(config)
 
-        self.lm_head = IdeficsDecoupledLinear(
-            in_features=config.hidden_size,
-            out_features=config.vocab_size,
-            out_additional_features=config.additional_vocab_size,
+        self.lm_head = TFIdeficsDecoupledLinear(
+            config.hidden_size,
+            config.vocab_size,
+            config.additional_vocab_size,
             bias=False,
             partially_freeze=config.freeze_lm_head,
         )
@@ -1477,8 +1465,8 @@ class TFIdeficsForVisionText2Text(IdeficsPreTrainedModel):
                 output_embeddings.out_additional_features = input_embeddings.num_additional_embeddings
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=IdeficsCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    def forward(
+    @replace_return_docstrings(output_type=TFIdeficsCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    def call(
         self,
         input_ids: tf.Tensor = None,
         attention_mask: Optional[tf.Tensor] = None,
@@ -1495,10 +1483,11 @@ class TFIdeficsForVisionText2Text(IdeficsPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, IdeficsCausalLMOutputWithPast]:
+        training=False,
+    ) -> Union[Tuple, TFIdeficsCausalLMOutputWithPast]:
         r"""
         Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
@@ -1508,13 +1497,13 @@ class TFIdeficsForVisionText2Text(IdeficsPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, IdeficsForVisionText2Text
+        >>> from transformers import AutoTokenizer, TFIdeficsForVisionText2Text
 
-        >>> model = IdeficsForVisionText2Text.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = TFIdeficsForVisionText2Text.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
+        >>> inputs = tokenizer(prompt, return_tensors="tf")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
@@ -1544,6 +1533,7 @@ class TFIdeficsForVisionText2Text(IdeficsPreTrainedModel):
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
+            training=training,
         )
 
         hidden_states = outputs[0]
@@ -1554,20 +1544,22 @@ class TFIdeficsForVisionText2Text(IdeficsPreTrainedModel):
             # Shift so that tokens < n predict n
             if attention_mask is not None:
                 shift_attention_mask = attention_mask[..., 1:]
-                shift_logits = logits[..., :-1, :][shift_attention_mask != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask != 0].contiguous()
+                shift_logits = logits[..., :-1, :][shift_attention_mask != 0]
+                shift_labels = labels[..., 1:][shift_attention_mask != 0]
             else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
+                shift_logits = logits[..., :-1, :]
+                shift_labels = labels[..., 1:]
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+            loss = loss_fct(
+                y_true=tf.reshape(shift_labels, [-1]), y_pred=tf.reshape(shift_logits, [-1, shift_logits.shape[-1]])
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return IdeficsCausalLMOutputWithPast(
+        return TFIdeficsCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -1605,5 +1597,5 @@ class TFIdeficsForVisionText2Text(IdeficsPreTrainedModel):
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+            reordered_past += (tuple(tf.gather(past_state, beam_idx) for past_state in layer_past),)
         return reordered_past
