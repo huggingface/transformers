@@ -2330,7 +2330,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         signatures=None,
         max_shard_size: Union[int, str] = "10GB",
         create_pr: bool = False,
-        safe_serialization: bool = False,
+        safe_serialization: bool = True,
         token: Optional[Union[str, bool]] = None,
         **kwargs,
     ):
@@ -2366,7 +2366,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
             create_pr (`bool`, *optional*, defaults to `False`):
                 Whether or not to create a PR with the uploaded files or directly commit.
-            safe_serialization (`bool`, *optional*, defaults to `False`):
+            safe_serialization (`bool`, *optional*, defaults to `True`):
                 Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use

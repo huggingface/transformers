@@ -1897,7 +1897,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         save_function: Callable = torch.save,
         push_to_hub: bool = False,
         max_shard_size: Union[int, str] = "5GB",
-        safe_serialization: bool = False,
+        safe_serialization: bool = True,
         variant: Optional[str] = None,
         token: Optional[Union[str, bool]] = None,
         save_peft_format: bool = True,
@@ -1938,7 +1938,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 </Tip>
 
-            safe_serialization (`bool`, *optional*, defaults to `False`):
+            safe_serialization (`bool`, *optional*, defaults to `True`):
                 Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
             variant (`str`, *optional*):
                 If specified, weights are saved in the format pytorch_model.<variant>.bin.
