@@ -500,11 +500,6 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, EfficientNetBlock):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
 
 @add_start_docstrings(
     "The bare EfficientNet model outputting raw features without any specific head on top.",

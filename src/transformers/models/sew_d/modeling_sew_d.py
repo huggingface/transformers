@@ -1309,11 +1309,6 @@ class SEWDPreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (SEWDEncoder, SEWDFeatureEncoder, SEWDTransformerEncoder)):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
 
 SEWD_START_DOCSTRING = r"""
     SEW-D was proposed in [Performance-Efficiency Trade-offs in Unsupervised Pre-training for Speech

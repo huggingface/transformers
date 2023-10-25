@@ -1873,7 +1873,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             torch.utils.checkpoint.checkpoint, **gradient_checkpointing_kwargs
         )
 
-        self.apply(partial(self._set_gradient_checkpointing, gradient_checkpointing_func=gradient_checkpointing_func))
+        self._set_gradient_checkpointing(gradient_checkpointing_func=gradient_checkpointing_func)
 
         if getattr(self, "_hf_peft_config_loaded", False):
             # When using PEFT + gradient checkpointing + Trainer we need to make sure the input has requires_grad=True
@@ -1881,6 +1881,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # When training with PEFT, only LoRA layers will have requires grad set to True, but the output of frozen layers need to propagate
             # the gradients to make sure the gradient flows.
             self.enable_input_require_grads()
+
+    def _set_gradient_checkpointing(self, gradient_checkpointing_func=None):
+        for module in self.modules():
+            if hasattr(module, "gradient_checkpointing"):
+                module.gradient_checkpointing_func = gradient_checkpointing_func
+                module.gradient_checkpointing = gradient_checkpointing_func is not None
 
     def gradient_checkpointing_disable(self):
         """
@@ -1890,7 +1896,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         activations".
         """
         if self.supports_gradient_checkpointing:
-            self.apply(partial(self._set_gradient_checkpointing, gradient_checkpointing_func=None))
+            self._set_gradient_checkpointing(gradient_checkpointing_func=None)
 
         if getattr(self, "_hf_peft_config_loaded", False):
             self.disable_input_require_grads()

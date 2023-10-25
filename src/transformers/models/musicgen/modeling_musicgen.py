@@ -475,11 +475,6 @@ class MusicgenPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, MusicgenDecoder):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
 
 MUSICGEN_START_DOCSTRING = r"""
 
@@ -1556,11 +1551,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             self._tie_encoder_decoder_weights(
                 self.text_encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
             )
-
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        # call both encoder and decoder function on gradient checkpointing
-        self.text_encoder._set_gradient_checkpointing(module, gradient_checkpointing_func=gradient_checkpointing_func)
-        self.decoder._set_gradient_checkpointing(module, gradient_checkpointing_func=gradient_checkpointing_func)
 
     def get_audio_encoder(self):
         return self.audio_encoder

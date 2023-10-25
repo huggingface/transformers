@@ -163,11 +163,6 @@ class TrajectoryTransformerPreTrainedModel(PreTrainedModel):
     main_input_name = "trajectories"
     supports_gradient_checkpointing = True
 
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, TrajectoryTransformerModel):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Embedding)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)

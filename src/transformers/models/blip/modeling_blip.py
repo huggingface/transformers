@@ -34,7 +34,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_blip import BlipConfig, BlipTextConfig, BlipVisionConfig
-from .modeling_blip_text import BlipTextEncoder, BlipTextLMHeadModel, BlipTextModel
+from .modeling_blip_text import BlipTextLMHeadModel, BlipTextModel
 
 
 logger = logging.get_logger(__name__)
@@ -460,11 +460,6 @@ class BlipPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
-
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (BlipEncoder, BlipTextEncoder)):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 BLIP_START_DOCSTRING = r"""

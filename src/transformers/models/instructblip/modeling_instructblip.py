@@ -304,15 +304,6 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (InstructBlipEncoder, InstructBlipQFormerEncoder)):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
-        # Enable / disable GC for the language model as well
-        if hasattr(self, "language_model") and hasattr(self.language_model, "_set_gradient_checkpointing"):
-            self.language_model._set_gradient_checkpointing(module, gradient_checkpointing_func)
-
 
 INSTRUCTBLIP_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the

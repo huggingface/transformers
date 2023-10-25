@@ -608,11 +608,6 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
             if hasattr(module, "weight") and module.weight is not None:
                 module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, Data2VecTextEncoder):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
 
 DATA2VECTEXT_START_DOCSTRING = r"""
     Data2VecText was proposed in [data2vec: A General Framework for Self-supervised Learning in Speech, Vision and

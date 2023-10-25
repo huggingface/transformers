@@ -473,11 +473,6 @@ class EncodecPreTrainedModel(PreTrainedModel):
                 elif "bias" in name:
                     nn.init.constant_(param, 0.0)
 
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (EncodecEncoder, EncodecDecoder)):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
 
 ENCODEC_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the

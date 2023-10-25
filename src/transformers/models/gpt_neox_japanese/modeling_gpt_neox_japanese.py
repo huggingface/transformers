@@ -66,11 +66,6 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, GPTNeoXJapaneseModel):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
 
 class GPTNeoXJapaneseAttention(nn.Module):
     def __init__(self, config, use_bias=False):

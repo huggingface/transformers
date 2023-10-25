@@ -748,11 +748,6 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (Data2VecAudioEncoder, Data2VecAudioFeatureEncoder)):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
 
 DATA2VEC_AUDIO_START_DOCSTRING = r"""
     Data2VecAudio was proposed in [data2vec: A General Framework for Self-supervised Learning in Speech, Vision and
