@@ -52,18 +52,18 @@ Example :
 >>> import datasets
 >>> from transformers import ClvpProcessor, ClvpModelForConditionalGeneration
 
->>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library)
+>>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library).
 >>> text = "This is an example text."
 
 >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
 >>> sample = ds[0]["audio"]
 
->>> # Define processor and model
+>>> # Define processor and model.
 >>> processor = ClvpProcessor.from_pretrained("susnato/clvp_dev")
 >>> model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev")
 
->>> # Generate processor output and model output 
+>>> # Generate processor output and model output.
 >>> processor_output = processor(raw_speech=sample["array"], sampling_rate=sample["sampling_rate"], text=text, return_tensors="pt")
 >>> generated_output = model.generate(**processor_output)
 ```
