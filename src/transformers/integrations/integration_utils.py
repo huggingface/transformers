@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Dict, Optional
 
 import numpy as np
 
-from .. import __version__ as version
+from .. import __version__ as version, TFPreTrainedModel, PreTrainedModel
 from ..utils import flatten_dict, is_datasets_available, is_pandas_available, is_torch_available, logging
 
 
@@ -754,6 +754,10 @@ class WandbCallback(TrainerCallback):
                 self._wandb.watch(model, log=_watch_model, log_freq=max(100, state.logging_steps))
             self._wandb.run._label(code="transformers_trainer")
 
+            # add number of model parameters to wandb config
+            if isinstance(model, (PreTrainedModel, TFPreTrainedModel)):
+                self._wandb.config["model/num_parameters"] = model.num_parameters()
+
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if self._wandb is None:
             return
@@ -784,6 +788,7 @@ class WandbCallback(TrainerCallback):
                     else {
                         f"eval/{args.metric_for_best_model}": state.best_metric,
                         "train/total_floss": state.total_flos,
+                        "model/num_parameters": self._wandb.config["model/num_parameters"],
                     }
                 )
                 logger.info("Logging model artifacts. ...")
@@ -815,6 +820,7 @@ class WandbCallback(TrainerCallback):
                 for k, v in dict(self._wandb.summary).items()
                 if isinstance(v, numbers.Number) and not k.startswith("_")
             }
+            checkpoint_metadata["model/num_parameters"] = self._wandb.config["model/num_parameters"]
 
             ckpt_dir = f"checkpoint-{state.global_step}"
             artifact_path = os.path.join(args.output_dir, ckpt_dir)
