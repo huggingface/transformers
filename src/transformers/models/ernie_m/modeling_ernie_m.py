@@ -411,7 +411,6 @@ class ErnieMPreTrainedModel(PreTrainedModel):
 
     config_class = ErnieMConfig
     base_model_prefix = "ernie_m"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""

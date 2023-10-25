@@ -536,7 +536,6 @@ class CpmAntPreTrainedModel(PreTrainedModel):
 
     config_class = CpmAntConfig
     base_model_prefix = "cpmant"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""

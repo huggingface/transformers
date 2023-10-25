@@ -48,7 +48,6 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
 
     config_class = GPTNeoXJapaneseConfig
     base_model_prefix = "gpt_neox_japanese"
-    supports_gradient_checkpointing = True
     _no_split_modules = ["GPTNeoXJapaneseLayer"]
     _skip_keys_device_placement = "past_key_values"
 

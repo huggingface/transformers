@@ -446,7 +446,6 @@ class EncodecPreTrainedModel(PreTrainedModel):
     config_class = EncodecConfig
     base_model_prefix = "encodec"
     main_input_name = "input_values"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""

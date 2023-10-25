@@ -1326,6 +1326,7 @@ class AlignTextModel(AlignPreTrainedModel):
 class AlignVisionModel(AlignPreTrainedModel):
     config_class = AlignVisionConfig
     main_input_name = "pixel_values"
+    supports_gradient_checkpointing = False
 
     def __init__(self, config: AlignVisionConfig):
         super().__init__(config)

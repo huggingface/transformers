@@ -298,7 +298,6 @@ class UperNetPreTrainedModel(PreTrainedModel):
 
     config_class = UperNetConfig
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         if isinstance(module, UperNetPreTrainedModel):

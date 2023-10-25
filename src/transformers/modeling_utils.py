@@ -1883,10 +1883,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self.enable_input_require_grads()
 
     def _set_gradient_checkpointing(self, gradient_checkpointing_func=None):
+        gradient_checkpointing_set = False
+
+        # Apply it on the top-level module in case the top-level modules supports it
+        # for example, LongT5Stack inherits from `PreTrainedModel`.
+        if hasattr(self, "gradient_checkpointing"):
+            self.gradient_checkpointing_func = gradient_checkpointing_func
+            self.gradient_checkpointing = gradient_checkpointing_func is not None
+            gradient_checkpointing_set = True
+
         for module in self.modules():
             if hasattr(module, "gradient_checkpointing"):
                 module.gradient_checkpointing_func = gradient_checkpointing_func
                 module.gradient_checkpointing = gradient_checkpointing_func is not None
+                gradient_checkpointing_set = True
+
+        if not gradient_checkpointing_set:
+            raise ValueError(
+                f"{self.__class__.__name__} is not compatible with gradient checkpointing. Make sure all the architecture support it by setting a boolean attribute"
+                " `gradient_checkpointing` to modules of the model that uses checkpointing."
+            )
 
     def gradient_checkpointing_disable(self):
         """

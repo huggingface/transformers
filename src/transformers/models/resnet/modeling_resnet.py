@@ -274,7 +274,6 @@ class ResNetPreTrainedModel(PreTrainedModel):
     config_class = ResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
