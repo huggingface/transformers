@@ -582,12 +582,6 @@ class DPTReassembleStage(nn.Module):
 
         self.neck_ignore_stages = config.neck_ignore_stages
 
-    def get_backbone_hidden_size(self):
-        if self.config.backbone_config is not None and self.config.is_hybrid is False:
-            return self.config.backbone_config.hidden_size
-        else:
-            return self.config.hidden_size
-
     def _init_reassemble_dpt_hybrid(self, config):
         r""" "
         For DPT-Hybrid the first 2 reassemble layers are set to `nn.Identity()`, please check the official
@@ -605,7 +599,7 @@ class DPTReassembleStage(nn.Module):
 
         # When using DPT-Hybrid the readout type is set to "project". The sanity check is done on the config file
         self.readout_projects = nn.ModuleList()
-        hidden_size = self.get_backbone_hidden_size()
+        hidden_size = _get_backbone_hidden_size(config)
         for i in range(len(config.neck_hidden_sizes)):
             if i <= 1:
                 self.readout_projects.append(nn.Sequential(nn.Identity()))
@@ -620,7 +614,7 @@ class DPTReassembleStage(nn.Module):
 
         if config.readout_type == "project":
             self.readout_projects = nn.ModuleList()
-            hidden_size = self.get_backbone_hidden_size()
+            hidden_size = _get_backbone_hidden_size(config)
             for _ in range(len(config.neck_hidden_sizes)):
                 self.readout_projects.append(
                     nn.Sequential(nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
@@ -1159,6 +1153,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         cls_tokens = None
         if self.backbone is not None:
@@ -1202,8 +1197,10 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         if not return_dict:
             if output_hidden_states:
-                output = (predicted_depth,) + outputs[1:]
+                backbone_outputs = outputs[2:] if "cls_tokens" in outputs else outputs[1:]
+                output = (predicted_depth,) + backbone_outputs
             else:
+                backbone_outputs = outputs[3:] if "cls_tokens" in outputs else outputs[2:]
                 output = (predicted_depth,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
