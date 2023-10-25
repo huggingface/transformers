@@ -1620,9 +1620,9 @@ class TFModelTesterMixin:
                     model.save_pretrained(tmp_dir)
 
                     # Fails when we don't set ignore_mismatched_sizes=True
-                    with self.assertRaises(ValueError):
+                    with self.assertRaises(tf.errors.InvalidArgumentError):
                         new_model = TFAutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
-                    with self.assertRaises(ValueError):
+                    with self.assertRaises(tf.errors.InvalidArgumentError):
                         new_model_without_prefix = TFAutoModel.from_pretrained(tmp_dir, vocab_size=10)
 
                     logger = logging.get_logger("transformers.modeling_tf_utils")

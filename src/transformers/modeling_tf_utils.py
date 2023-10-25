@@ -1003,7 +1003,7 @@ def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismat
                     # If the two shapes are not compatible we raise an issue
                     try:
                         weight_value = tf.reshape(weight_value, K.int_shape(weight))
-                    except ValueError as e:
+                    except (ValueError, tf.errors.InvalidArgumentError) as e:
                         if ignore_mismatched_sizes:
                             mismatched_layers.append((weight_name, weight_value.shape, K.int_shape(weight)))
                             continue
