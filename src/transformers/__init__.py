@@ -517,6 +517,12 @@ _import_structure = {
         "SamPromptEncoderConfig",
         "SamVisionConfig",
     ],
+    "models.seamless_m4t": [
+        "SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SeamlessM4TConfig",
+        "SeamlessM4TFeatureExtractor",
+        "SeamlessM4TProcessor",
+    ],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
@@ -805,6 +811,7 @@ else:
     _import_structure["models.plbart"].append("PLBartTokenizer")
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.rembert"].append("RemBertTokenizer")
+    _import_structure["models.seamless_m4t"].append("SeamlessM4TTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.speecht5"].append("SpeechT5Tokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
@@ -877,6 +884,7 @@ else:
     _import_structure["models.rembert"].append("RemBertTokenizerFast")
     _import_structure["models.roberta"].append("RobertaTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
+    _import_structure["models.seamless_m4t"].append("SeamlessM4TTokenizerFast")
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
@@ -1082,6 +1090,7 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2681,6 +2690,21 @@ else:
             "SAM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SamModel",
             "SamPreTrainedModel",
+        ]
+    )
+    _import_structure["models.seamless_m4t"].extend(
+        [
+            "SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SeamlessM4TCodeHifiGan",
+            "SeamlessM4TForSpeechToSpeech",
+            "SeamlessM4TForSpeechToText",
+            "SeamlessM4TForTextToSpeech",
+            "SeamlessM4TForTextToText",
+            "SeamlessM4THifiGan",
+            "SeamlessM4TModel",
+            "SeamlessM4TPreTrainedModel",
+            "SeamlessM4TTextToUnitForConditionalGeneration",
+            "SeamlessM4TTextToUnitModel",
         ]
     )
     _import_structure["models.segformer"].extend(
@@ -4658,6 +4682,12 @@ if TYPE_CHECKING:
         SamPromptEncoderConfig,
         SamVisionConfig,
     )
+    from .models.seamless_m4t import (
+        SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SeamlessM4TConfig,
+        SeamlessM4TFeatureExtractor,
+        SeamlessM4TProcessor,
+    )
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
@@ -4925,6 +4955,7 @@ if TYPE_CHECKING:
         from .models.plbart import PLBartTokenizer
         from .models.reformer import ReformerTokenizer
         from .models.rembert import RemBertTokenizer
+        from .models.seamless_m4t import SeamlessM4TTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.speecht5 import SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
@@ -4990,6 +5021,7 @@ if TYPE_CHECKING:
         from .models.rembert import RemBertTokenizerFast
         from .models.roberta import RobertaTokenizerFast
         from .models.roformer import RoFormerTokenizerFast
+        from .models.seamless_m4t import SeamlessM4TTokenizerFast
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
@@ -5157,8 +5189,6 @@ if TYPE_CHECKING:
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
-
-        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -6484,6 +6514,21 @@ if TYPE_CHECKING:
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
             SamModel,
             SamPreTrainedModel,
+        )
+
+        # PyTorch model imports
+        from .models.seamless_m4t import (
+            SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SeamlessM4TCodeHifiGan,
+            SeamlessM4TForSpeechToSpeech,
+            SeamlessM4TForSpeechToText,
+            SeamlessM4TForTextToSpeech,
+            SeamlessM4TForTextToText,
+            SeamlessM4THifiGan,
+            SeamlessM4TModel,
+            SeamlessM4TPreTrainedModel,
+            SeamlessM4TTextToUnitForConditionalGeneration,
+            SeamlessM4TTextToUnitModel,
         )
         from .models.segformer import (
             SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

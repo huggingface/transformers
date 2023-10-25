@@ -417,7 +417,7 @@ class NllbMoeDenseActDense(nn.Module):
         if (
             isinstance(self.fc2.weight, torch.Tensor)
             and hidden_states.dtype != self.fc2.weight.dtype
-            and self.fc2.weight.dtype != torch.int8
+            and (self.fc2.weight.dtype != torch.int8 and self.fc2.weight.dtype != torch.uint8)
         ):
             hidden_states = hidden_states.to(self.fc2.weight.dtype)
         hidden_states = self.fc2(hidden_states)

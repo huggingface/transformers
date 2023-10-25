@@ -226,7 +226,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         new_height = int(image_height * optimal_scale_factor)
         new_width = int(image_width * optimal_scale_factor)
 
-        scaled_image = resize(image=image, size=(new_width, new_height))
+        scaled_image = resize(image=image, size=(new_height, new_width))
         return np.array(scaled_image)
 
     def _pad_to_target_size(self, image: np.ndarray) -> np.ndarray:
