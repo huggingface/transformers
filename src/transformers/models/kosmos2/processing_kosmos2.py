@@ -309,7 +309,6 @@ class Kosmos2Processor(ProcessorMixin):
                     )
 
     def _preprocess_single_example(self, text, image, bboxes, img_info_tokens):
-        """A"""
         text = text.strip()
         if image is not None:
             # Add `<image> ... (fake) image tokens ... </image>`
