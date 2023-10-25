@@ -870,9 +870,9 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         mems: List[tf.Tensor] | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Union[bool, None] = None,
+        output_hidden_states: Union[bool, None] = None,
+        return_dict: Union[bool, None] = None,
         training: bool = False,
     ) -> TFTransfoXLModelOutput | Tuple[tf.Tensor]:
         outputs = self.transformer(
@@ -938,9 +938,9 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         mems: List[tf.Tensor] | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Union[bool, None] = None,
+        output_hidden_states: Union[bool, None] = None,
+        return_dict: Union[bool, None] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
     ) -> TFTransfoXLLMHeadModelOutput | Tuple[tf.Tensor]:

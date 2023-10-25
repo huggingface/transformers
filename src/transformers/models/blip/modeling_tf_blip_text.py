@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import math
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -678,10 +678,10 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         encoder_hidden_states: tf.Tensor | None = None,
         encoder_attention_mask: tf.Tensor | None = None,
         past_key_values: Tuple[Tuple[tf.Tensor]] | None = None,
-        use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        use_cache: Union[bool, None] = None,
+        output_attentions: Union[bool, None] None] = None,
+        output_hidden_states: Union[bool, None] = None,
+        return_dict: Union[bool, None] = None,
         is_decoder: bool = False,
         training: bool = False,
     ) -> Tuple[tf.Tensor] | TFBaseModelOutputWithPoolingAndCrossAttentions:

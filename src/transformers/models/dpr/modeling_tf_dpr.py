@@ -544,9 +544,9 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         attention_mask: tf.Tensor | None = None,
         token_type_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Union[bool, None] = None,
+        output_hidden_states: Union[bool, None] = None,
+        return_dict: Union[bool, None] = None,
         training: bool = False,
     ) -> TFDPRContextEncoderOutput | Tuple[tf.Tensor, ...]:
         r"""
@@ -625,9 +625,9 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         attention_mask: tf.Tensor | None = None,
         token_type_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Union[bool, None] = None,
+        output_hidden_states: Union[bool, None] = None,
+        return_dict: Union[bool, None] = None,
         training: bool = False,
     ) -> TFDPRQuestionEncoderOutput | Tuple[tf.Tensor, ...]:
         r"""
@@ -704,9 +704,9 @@ class TFDPRReader(TFDPRPretrainedReader):
         input_ids: TFModelInputType | None = None,
         attention_mask: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Union[bool, None] = None,
+        output_hidden_states: Union[bool, None] = None,
+        return_dict: Union[bool, None] = None,
         training: bool = False,
     ) -> TFDPRReaderOutput | Tuple[tf.Tensor, ...]:
         r"""

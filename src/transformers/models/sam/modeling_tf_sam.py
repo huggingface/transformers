@@ -1335,9 +1335,9 @@ class TFSamModel(TFSamPreTrainedModel):
         input_masks: tf.Tensor | None = None,
         image_embeddings: tf.Tensor | None = None,
         multimask_output: bool = True,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Union[bool, None] = None,
+        output_hidden_states: Union[bool, None] = None,
+        return_dict: Union[bool, None] = None,
         training: bool = False,
         **kwargs,
     ) -> TFSamImageSegmentationOutput | Tuple[tf.Tensor]:

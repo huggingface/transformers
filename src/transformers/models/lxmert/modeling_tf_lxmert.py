@@ -1262,9 +1262,9 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         obj_labels: Dict[str, Tuple[tf.Tensor, tf.Tensor]] | None = None,
         matched_label: tf.Tensor | None = None,
         ans: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Union[bool, None] = None,
+        output_hidden_states: Union[bool, None] = None,
+        return_dict: Union[bool, None] = None,
         training: bool = False,
     ) -> Tuple[tf.Tensor] | TFLxmertForPreTrainingOutput:
         r"""

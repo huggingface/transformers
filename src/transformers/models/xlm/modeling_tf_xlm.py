@@ -708,9 +708,9 @@ class TFXLMModel(TFXLMPreTrainedModel):
         cache: Dict[str, tf.Tensor] | None = None,
         head_mask: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Union[bool, None] = None,
+        output_hidden_states: Union[bool, None] = None,
+        return_dict: Union[bool, None] = None,
         training: bool = False,
     ) -> TFBaseModelOutput | Tuple[tf.Tensor]:
         outputs = self.transformer(

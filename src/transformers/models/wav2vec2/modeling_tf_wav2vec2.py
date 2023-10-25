@@ -1619,9 +1619,9 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
         self,
         input_values: tf.Tensor,
         attention_mask: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Union[bool, None] = None,
+        output_hidden_states: Union[bool, None] = None,
+        return_dict: Union[bool, None] = None,
         labels: tf.Tensor | None = None,
         training: bool = False,
     ) -> TFSequenceClassifierOutput | Tuple[tf.Tensor]:

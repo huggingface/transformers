@@ -584,7 +584,7 @@ TIME_OUT_REMOTE_CODE = 15
 
 
 def resolve_trust_remote_code(
-    trust_remote_code: bool | None,
+    trust_remote_code: Union[bool, None],
     model_name: str,
     has_local_code: bool,
     has_remote_code: bool,
