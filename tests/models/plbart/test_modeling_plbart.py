@@ -314,7 +314,7 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
-    @unittest.skip("Failing since ")
+    @unittest.skip("Failing since #26752")
     def test_sample_generate(self):
         pass
 
