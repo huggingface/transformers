@@ -3433,7 +3433,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @classmethod
     def _load_pretrained_model(
         cls,
-        model: PreTrainedModel,
+        model: "PreTrainedModel",
         state_dict: Optional[Dict[str, torch.Tensor]],
         loaded_keys: List[str],
         resolved_archive_file: Union[str, List[str]],

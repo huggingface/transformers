@@ -23,6 +23,7 @@ from typing import Optional, Union
 
 from packaging import version
 
+
 ops = {
     "<": operator.lt,
     "<=": operator.le,

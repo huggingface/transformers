@@ -25,6 +25,7 @@ from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import TensorType, is_tf_available, is_torch_available, logging
 from .config import OnnxConfig
 
+
 if is_torch_available():
     from ..modeling_utils import PreTrainedModel
     from ..pytorch_utils import is_torch_less_than_1_11

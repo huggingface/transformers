@@ -19,6 +19,7 @@ from ..utils import (
 )
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
+
 logger = logging.get_logger(__name__)
 
 if TYPE_CHECKING:

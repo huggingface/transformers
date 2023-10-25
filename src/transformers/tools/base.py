@@ -32,6 +32,7 @@ from ..models.auto import AutoProcessor
 from ..utils import CONFIG_NAME, cached_file, is_accelerate_available, is_torch_available, is_vision_available, logging
 from .agent_types import handle_agent_inputs, handle_agent_outputs
 
+
 logger = logging.get_logger(__name__)
 
 if is_torch_available():

@@ -26,6 +26,7 @@ from packaging import version
 
 from ..utils import is_torch_available, logging
 
+
 if is_torch_available():
     import torch
 

@@ -22,6 +22,7 @@ from ..models.auto import AutoModelForVisualQuestionAnswering, AutoProcessor
 from ..utils import requires_backends
 from .base import PipelineTool
 
+
 if TYPE_CHECKING:
     from PIL import Image
 

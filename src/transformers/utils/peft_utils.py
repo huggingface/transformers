@@ -20,6 +20,7 @@ from packaging import version
 from .hub import cached_file
 from .import_utils import is_peft_available
 
+
 ADAPTER_CONFIG_NAME = "adapter_config.json"
 ADAPTER_WEIGHTS_NAME = "adapter_model.bin"
 ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"

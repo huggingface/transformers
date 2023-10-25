@@ -1,7 +1,8 @@
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
 from .base import PIPELINE_INIT_ARGS, ChunkPipeline
+
 
 if is_vision_available():
     from PIL import Image
@@ -64,7 +65,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
     def __call__(
         self,
         image: Union[str, "Image.Image", List[Dict[str, Any]]],
-        candidate_labels: Union[str, List[str]] = None,
+        candidate_labels: Optional[Union[str, List[str]]] = None,
         **kwargs,
     ):
         """

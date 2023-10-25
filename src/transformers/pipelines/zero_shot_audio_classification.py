@@ -22,6 +22,7 @@ from ..utils import add_end_docstrings, logging
 from .audio_classification import ffmpeg_read
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
+
 logger = logging.get_logger(__name__)
 
 

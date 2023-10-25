@@ -12,6 +12,7 @@ from ..utils import (
 )
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, Pipeline, PipelineException
 
+
 if is_torch_available():
     import torch
 

@@ -20,6 +20,7 @@ from ..models.auto import AutoModelForVision2Seq
 from ..utils import requires_backends
 from .base import PipelineTool
 
+
 if TYPE_CHECKING:
     from PIL import Image
 

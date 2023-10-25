@@ -36,6 +36,7 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import ModelOutput, add_end_docstrings, infer_framework, is_tf_available, is_torch_available, logging
 
+
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
 
 if is_tf_available():

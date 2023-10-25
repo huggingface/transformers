@@ -25,6 +25,7 @@ import numpy
 from .utils import ExplicitEnum, expand_dims, is_numpy_array, is_torch_tensor, logging, reshape, squeeze, tensor_size
 from .utils import transpose as transpose_func
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -162,7 +163,7 @@ def apply_transpose(
 
 
 def load_pytorch_checkpoint_in_tf2_model(
-    tf_model: "TFPreTrainedModel",
+    tf_model: "TFPreTrainedModel",  # noqa: F821
     pytorch_checkpoint_path: Union[str, List[str]],
     tf_inputs: Optional[dict] = None,
     allow_missing_keys: bool = False,
@@ -206,8 +207,8 @@ def load_pytorch_checkpoint_in_tf2_model(
 
 
 def load_pytorch_model_in_tf2_model(
-    tf_model: "TFPreTrainedModel",
-    pt_model: "PreTrainedModel",
+    tf_model: "TFPreTrainedModel",  # noqa: F821
+    pt_model: "PreTrainedModel",  # noqa: F821
     tf_inputs: Optional[dict] = None,
     allow_missing_keys: bool = False,
 ):
@@ -220,11 +221,11 @@ def load_pytorch_model_in_tf2_model(
 
 
 def load_pytorch_weights_in_tf2_model(
-    tf_model,
-    pt_state_dict,
+    tf_model: "TFPreTrainedModel",  # noqa: F821
+    pt_state_dict: dict,
     tf_inputs=None,
-    allow_missing_keys=False,
-    output_loading_info=False,
+    allow_missing_keys: bool = False,
+    output_loading_info: bool = False,
     _prefix=None,
     tf_to_pt_weight_rename=None,
 ):
@@ -252,14 +253,14 @@ def load_pytorch_weights_in_tf2_model(
 
 
 def load_pytorch_state_dict_in_tf2_model(
-    tf_model,
+    tf_model: "TFPreTrainedModel",  # noqa: F821
     pt_state_dict,
     tf_inputs=None,
-    allow_missing_keys=False,
-    output_loading_info=False,
+    allow_missing_keys: bool = False,
+    output_loading_info: bool = False,
     _prefix=None,
     tf_to_pt_weight_rename=None,
-    ignore_mismatched_sizes=False,
+    ignore_mismatched_sizes: bool = False,
 ):
     """Load a pytorch state_dict in a TF 2.0 model. pt_state_dict can be either an actual dict or a lazy-loading
     safetensors archive created with the safe_open() function."""
@@ -428,7 +429,7 @@ def load_pytorch_state_dict_in_tf2_model(
 
 
 def load_tf2_checkpoint_in_pytorch_model(
-    pt_model: "PreTrainedModel",
+    pt_model: "PreTrainedModel",  # noqa: F821
     tf_checkpoint_path: Union[str, List[str]],
     tf_inputs: Optional[dict] = None,
     allow_missing_keys: bool = False,
@@ -473,8 +474,8 @@ def load_tf2_checkpoint_in_pytorch_model(
 
 
 def load_tf2_model_in_pytorch_model(
-    pt_model: "PreTrainedModel",
-    tf_model: "TFPreTrainedModel",
+    pt_model: "PreTrainedModel",  # noqa: F821
+    tf_model: "TFPreTrainedModel",  # noqa: F821
     allow_missing_keys: bool = False,
     output_loading_info: bool = False,
 ):
@@ -487,8 +488,8 @@ def load_tf2_model_in_pytorch_model(
 
 
 def load_tf2_weights_in_pytorch_model(
-    pt_model: "PreTrainedModel",
-    tf_model: "TFPreTrainedModel",
+    pt_model: "PreTrainedModel",  # noqa: F821
+    tf_weights: List["tf.Variable"],  # noqa: F821
     allow_missing_keys: bool = False,
     output_loading_info: bool = False,
 ):
@@ -510,8 +511,8 @@ def load_tf2_weights_in_pytorch_model(
 
 
 def load_tf2_state_dict_in_pytorch_model(
-    pt_model: "PreTrainedModel",
-    tf_model: "TFPreTrainedModel",
+    pt_model: "PreTrainedModel",  # noqa: F821
+    tf_state_dict: dict,
     allow_missing_keys: bool = False,
     output_loading_info: bool = False,
 ):

@@ -13,15 +13,16 @@
 # limitations under the License.
 import warnings
 
+
 warnings.warn(
     "transformers.utils.bitsandbytes module is deprecated and will be removed in a future version. Please import bitsandbytes modules directly from transformers.integrations",
     FutureWarning,
 )
 
 from ..integrations import get_keys_to_not_convert  # noqa
-from ..integrations import (
-    replace_8bit_linear,
-    replace_with_bnb_linear,
-    set_module_8bit_tensor_to_device,
-    set_module_quantized_tensor_to_device,
+from ..integrations import (  # noqa: E402
+    replace_8bit_linear,  # noqa: F401
+    replace_with_bnb_linear,  # noqa: F401
+    set_module_8bit_tensor_to_device,  # noqa: F401
+    set_module_quantized_tensor_to_device,  # noqa: F401
 )

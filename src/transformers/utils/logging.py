@@ -34,6 +34,7 @@ from typing import Optional
 import huggingface_hub.utils as hf_hub_utils
 from tqdm import auto as tqdm_lib
 
+
 _lock = threading.Lock()
 _default_handler: Optional[logging.Handler] = None
 

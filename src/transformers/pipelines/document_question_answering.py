@@ -28,6 +28,7 @@ from ..utils import (
 from .base import PIPELINE_INIT_ARGS, ChunkPipeline
 from .question_answering import select_starts_ends
 
+
 if is_vision_available():
     from PIL import Image
 

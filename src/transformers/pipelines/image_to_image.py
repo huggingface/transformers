@@ -18,6 +18,7 @@ import numpy as np
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
+
 if is_vision_available():
     from PIL import Image
 

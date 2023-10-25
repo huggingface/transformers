@@ -23,6 +23,7 @@ from ..utils import is_torch_available, is_torchaudio_available, logging
 from .audio_utils import ffmpeg_read
 from .base import ArgumentHandler, ChunkPipeline, infer_framework_load_model
 
+
 if TYPE_CHECKING:
     from pyctcdecode import BeamSearchDecoderCTC
 
