@@ -284,7 +284,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
 
         def check(texts, bboxes, expected_input_ids):
             outputs = processor(images=None, text=texts, bboxes=bboxes)
-            assert outputs.input_ids == expected_input_ids
+            self.assertListEqual(outputs.input_ids, expected_input_ids)
 
         # no phrase
         check(texts[0], bboxes[0][0], expected_input_ids[0])
@@ -336,12 +336,10 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             text=batch_text,
             bboxes=batch_bboxes,
         )
-        assert outputs.input_ids == [
-            expected_input_ids[0],
-            expected_input_ids[1],
-            expected_input_ids[2],
-            expected_input_ids[5],
-        ]
+        self.assertListEqual(
+            outputs.input_ids,
+            [expected_input_ids[0], expected_input_ids[1], expected_input_ids[2], expected_input_ids[5]],
+        )
 
         # test batch with padding (without `return_tensors`)
         outputs = processor(
@@ -351,15 +349,17 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             padding=True,
         )
         # padding on the right
-        assert outputs.input_ids[0] == expected_input_ids[0] + [1] * (
-            len(expected_input_ids[5]) - len(expected_input_ids[0])
+        self.assertListEqual(
+            outputs.input_ids[0],
+            expected_input_ids[0] + [1] * (len(expected_input_ids[5]) - len(expected_input_ids[0])),
         )
-        assert outputs.attention_mask[0] == [1] * len(expected_input_ids[0]) + [0] * (
-            len(expected_input_ids[5]) - len(expected_input_ids[0])
+        self.assertListEqual(
+            outputs.attention_mask[0],
+            [1] * len(expected_input_ids[0]) + [0] * (len(expected_input_ids[5]) - len(expected_input_ids[0])),
         )
         # no padding for the longest sequence
-        assert outputs.input_ids[-1] == expected_input_ids[5]
-        assert outputs.attention_mask[-1] == [1] * len(expected_input_ids[5])
+        self.assertListEqual(outputs.input_ids[-1], expected_input_ids[5])
+        self.assertListEqual(outputs.attention_mask[-1], [1] * len(expected_input_ids[5]))
 
         # test batch with padding (with `return_tensors`)
         outputs = processor(
@@ -370,30 +370,33 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             padding=True,
         )
         # padding on the right
-        assert outputs.input_ids.numpy().tolist()[0] == expected_input_ids[0] + [1] * (
-            len(expected_input_ids[5]) - len(expected_input_ids[0])
+        self.assertListEqual(
+            outputs.input_ids.numpy().tolist()[0],
+            expected_input_ids[0] + [1] * (len(expected_input_ids[5]) - len(expected_input_ids[0])),
         )
-        assert outputs.attention_mask.numpy().tolist()[0] == [1] * len(expected_input_ids[0]) + [0] * (
-            len(expected_input_ids[5]) - len(expected_input_ids[0])
+        self.assertListEqual(
+            outputs.attention_mask.numpy().tolist()[0],
+            [1] * len(expected_input_ids[0]) + [0] * (len(expected_input_ids[5]) - len(expected_input_ids[0])),
         )
         # no padding for the longest sequence
-        assert outputs.input_ids.numpy().tolist()[-1] == expected_input_ids[5]
-        assert outputs.attention_mask.numpy().tolist()[-1] == [1] * len(expected_input_ids[5])
+        self.assertListEqual(outputs.input_ids.numpy().tolist()[-1], expected_input_ids[5])
+        self.assertListEqual(outputs.attention_mask.numpy().tolist()[-1], [1] * len(expected_input_ids[5]))
 
         # test with image
         num_image_tokens = 64
 
         outputs = processor(images=image, text=texts[0], bboxes=None)
-        assert outputs.pixel_values[0].shape == (3, 224, 224)
-        assert (
-            outputs.input_ids
-            == [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[0][1:]
+        self.assertTupleEqual(outputs.pixel_values[0].shape, (3, 224, 224))
+        self.assertListEqual(
+            outputs.input_ids,
+            [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[0][1:],
         )
-        assert outputs.image_embeds_position_mask == [0] * 2 + [1] * num_image_tokens + [0] + [0] * (
-            len(expected_input_ids[0]) - 1
+        self.assertListEqual(
+            outputs.image_embeds_position_mask,
+            [0] * 2 + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[0]) - 1),
         )
-        assert np.allclose(outputs.pixel_values[0][:3, :3, :3], EXPECTED_PIXEL_VALUES_1, atol=1e-9)
-        assert np.allclose(outputs.pixel_values[0][:3, -3:, -3:], EXPECTED_PIXEL_VALUES_2, atol=1e-9)
+        np.testing.assert_allclose(outputs.pixel_values[0][:3, :3, :3], EXPECTED_PIXEL_VALUES_1, atol=1e-9)
+        np.testing.assert_allclose(outputs.pixel_values[0][:3, -3:, -3:], EXPECTED_PIXEL_VALUES_2, atol=1e-9)
 
         # test with image in batch (right padding)
         outputs = processor(
@@ -403,29 +406,35 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             return_tensors="pt",
             padding=True,
         )
-        assert outputs.pixel_values.shape == (4, 3, 224, 224)
-        assert np.allclose(
+        self.assertTupleEqual(outputs.pixel_values.shape, (4, 3, 224, 224))
+        np.testing.assert_allclose(
             outputs.pixel_values[:, :3, :3, :3].numpy(), [EXPECTED_PIXEL_VALUES_1] * len(batch_image), atol=1e-9
         )
-        assert np.allclose(
+        np.testing.assert_allclose(
             outputs.pixel_values[:, :3, -3:, -3:].numpy(), [EXPECTED_PIXEL_VALUES_2] * len(batch_image), atol=1e-9
         )
         # padding on the right: the `[1:]` below is because the part for `BOS` is already added in the beginning of each (dynamically computed) expected value  # noqa
-        assert outputs.input_ids.numpy().tolist()[0] == [0, 64003] + list(range(4, 4 + num_image_tokens)) + [
-            64004
-        ] + expected_input_ids[0][1:] + [1] * (len(expected_input_ids[5]) - len(expected_input_ids[0]))
-        assert outputs.attention_mask.numpy().tolist()[0] == [1, 1] + [1] * num_image_tokens + [1] + [1] * len(
-            expected_input_ids[0][1:]
-        ) + [0] * (len(expected_input_ids[5]) - len(expected_input_ids[0]))
-        assert (
-            outputs.input_ids.numpy().tolist()[-1]
-            == [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[5][1:]
+        self.assertListEqual(
+            outputs.input_ids.numpy().tolist()[0],
+            [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[0][1:] + [1] * (len(expected_input_ids[5]) - len(expected_input_ids[0])),
         )
-        assert outputs.attention_mask.numpy().tolist()[-1] == [1] * (2 + num_image_tokens + len(expected_input_ids[5]))
+        self.assertListEqual(
+            outputs.attention_mask.numpy().tolist()[0],
+            [1, 1] + [1] * num_image_tokens + [1] + [1] * len(expected_input_ids[0][1:]) + [0] * (len(expected_input_ids[5]) - len(expected_input_ids[0])),
+        )
+        self.assertListEqual(
+            outputs.input_ids.numpy().tolist()[-1],
+            [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[5][1:],
+        )
+        self.assertListEqual(
+            outputs.attention_mask.numpy().tolist()[-1],
+            [1] * (2 + num_image_tokens + len(expected_input_ids[5])),
+        )
 
-        assert outputs.image_embeds_position_mask.numpy().tolist() == [
-            [0, 0] + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[5]) - 1)
-        ] * len(batch_image)
+        self.assertListEqual(
+            outputs.image_embeds_position_mask.numpy().tolist(),
+            [[0, 0] + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[5]) - 1)] * len(batch_image),
+        )
 
         processor = Kosmos2Processor.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001", padding_side="left")
 
@@ -438,27 +447,26 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             padding=True,
         )
         # padding on the left: the `[1:]` below is because the part for `BOS` is already added in the beginning of each (dynamically computed) expected value  # noqa
-        assert (
-            outputs.input_ids.numpy().tolist()[0]
-            == [1] * (len(expected_input_ids[5]) - len(expected_input_ids[0]))
-            + [0, 64003]
-            + list(range(4, 4 + num_image_tokens))
-            + [64004]
-            + expected_input_ids[0][1:]
+        self.assertListEqual(
+            outputs.input_ids.numpy().tolist()[0],
+            [1] * (len(expected_input_ids[5]) - len(expected_input_ids[0])) + [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[0][1:],
         )
-        assert outputs.attention_mask.numpy().tolist()[0] == [0] * (
-            len(expected_input_ids[5]) - len(expected_input_ids[0])
-        ) + [1, 1] + [1] * num_image_tokens + [1] + [1] * len(expected_input_ids[0][1:])
-        assert outputs.image_embeds_position_mask.numpy().tolist()[0] == [0] * (
-            len(expected_input_ids[5]) - len(expected_input_ids[0])
-        ) + [0, 0] + [1] * num_image_tokens + [0] + [0] * len(expected_input_ids[0][1:])
+        self.assertListEqual(
+            outputs.attention_mask.numpy().tolist()[0],
+            [0] * (len(expected_input_ids[5]) - len(expected_input_ids[0])) + [1, 1] + [1] * num_image_tokens + [1] + [1] * len(expected_input_ids[0][1:]),
+        )
+        self.assertListEqual(
+            outputs.image_embeds_position_mask.numpy().tolist()[0],
+            [0] * (len(expected_input_ids[5]) - len(expected_input_ids[0])) + [0, 0] + [1] * num_image_tokens + [0] + [0] * len(expected_input_ids[0][1:]),
+        )
 
         # no padding for the longest sequence
-        assert (
-            outputs.input_ids.numpy().tolist()[-1]
-            == [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[5][1:]
+        self.assertListEqual(
+            outputs.input_ids.numpy().tolist()[-1],
+            [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[5][1:],
         )
-        assert outputs.attention_mask.numpy().tolist()[-1] == [1] * (2 + num_image_tokens + len(expected_input_ids[5]))
-        assert outputs.image_embeds_position_mask.numpy().tolist()[-1] == [0, 0] + [1] * num_image_tokens + [0] + [
-            0
-        ] * (len(expected_input_ids[5]) - 1)
+        self.assertListEqual(outputs.attention_mask.numpy().tolist()[-1], [1] * (2 + num_image_tokens + len(expected_input_ids[5])))
+        self.assertListEqual(
+            outputs.image_embeds_position_mask.numpy().tolist()[-1],
+            [0, 0] + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[5]) - 1),
+        )

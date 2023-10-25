@@ -532,7 +532,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         processed_text = processed_text[0]
         final_text, entities = final_text_with_entities[0]
 
-        assert np.allclose(
+        np.testing.assert_allclose(
             torch.concat(scores[1:4])[:3, :3].to("cpu").numpy(),
             np.array(
                 [
@@ -543,7 +543,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             ),
             atol=1e-5,
         )
-        assert np.allclose(
+        np.testing.assert_allclose(
             torch.concat(scores[-3:])[-3:, -3:].to("cpu").numpy(),
             np.array(
                 [
@@ -583,7 +583,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         processed_text = processed_text[0]
         final_text, entities = final_text_with_entities[0]
 
-        assert np.allclose(
+        np.testing.assert_allclose(
             torch.concat(scores[1:4])[:3, :3].to("cpu").numpy(),
             np.array(
                 [
@@ -594,7 +594,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             ),
             atol=1e-5,
         )
-        assert np.allclose(
+        np.testing.assert_allclose(
             torch.concat(scores[-3:])[-3:, -3:].to("cpu").numpy(),
             np.array(
                 [
