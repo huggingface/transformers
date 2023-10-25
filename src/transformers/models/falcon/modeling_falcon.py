@@ -1096,8 +1096,6 @@ class FalconPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    # Copied from transformers.models.bloom.modeling_bloom.BloomPreTrainedModel._set_gradient_checkpointing with BloomModel->FalconModel
-
     @staticmethod
     def _convert_cache_to_standard_format(
         past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]], batch_size: int

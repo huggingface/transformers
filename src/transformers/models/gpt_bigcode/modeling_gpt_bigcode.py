@@ -404,8 +404,6 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2PreTrainedModel._set_gradient_checkpointing with GPT2->GPTBigCode
-
 
 GPT_BIGCODE_START_DOCSTRING = r"""
 
