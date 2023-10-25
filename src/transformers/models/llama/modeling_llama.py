@@ -841,7 +841,6 @@ class LlamaPreTrainedModel(PreTrainedModel):
         if isinstance(module, LlamaModel):
             module.gradient_checkpointing_func = gradient_checkpointing_func
             module.gradient_checkpointing = gradient_checkpointing_func is not None
-            module.gradient_checkpointing = value
 
 
 LLAMA_INPUTS_DOCSTRING = r"""
