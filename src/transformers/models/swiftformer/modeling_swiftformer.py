@@ -442,11 +442,6 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
             nn.init.constant_(module.weight, 1.0)
 
-    def _set_gradient_checkpointing(self, module: SwiftFormerEncoder, gradient_checkpointing_func=None) -> None:
-        if isinstance(module, SwiftFormerEncoder):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
 
 SWIFTFORMER_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it

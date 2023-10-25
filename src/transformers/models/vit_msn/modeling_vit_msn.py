@@ -438,11 +438,6 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module: ViTMSNEncoder, gradient_checkpointing_func=None) -> None:
-        if isinstance(module, ViTMSNEncoder):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
 
 VIT_MSN_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it

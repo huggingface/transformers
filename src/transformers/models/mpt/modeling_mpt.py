@@ -294,11 +294,6 @@ class MptPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module: nn.Module, gradient_checkpointing_func=None):
-        if isinstance(module, MptModel):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
     @staticmethod
     def _convert_to_mpt_cache(
         past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]]

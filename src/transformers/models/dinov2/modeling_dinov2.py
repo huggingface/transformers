@@ -510,11 +510,6 @@ class Dinov2PreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.cls_token.dtype)
 
-    def _set_gradient_checkpointing(self, module: Dinov2Encoder, gradient_checkpointing_func=None) -> None:
-        if isinstance(module, Dinov2Encoder):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
 
 DINOV2_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it

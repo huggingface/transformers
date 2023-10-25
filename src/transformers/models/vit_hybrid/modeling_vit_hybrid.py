@@ -480,11 +480,6 @@ class ViTHybridPreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.cls_token.dtype)
 
-    def _set_gradient_checkpointing(self, module: ViTHybridEncoder, gradient_checkpointing_func=None) -> None:
-        if isinstance(module, ViTHybridEncoder):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
 
 VIT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it

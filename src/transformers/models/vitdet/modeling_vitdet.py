@@ -660,11 +660,6 @@ class VitDetPreTrainedModel(PreTrainedModel):
             module.norm3.weight.data.zero_()
             module.norm3.bias.data.zero_()
 
-    def _set_gradient_checkpointing(self, module: VitDetEncoder, gradient_checkpointing_func=None) -> None:
-        if isinstance(module, VitDetEncoder):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
 
 VITDET_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
