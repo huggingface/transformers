@@ -309,7 +309,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
         processor = Wav2Vec2Processor.from_pretrained(SAMPLE_PROCESSOR_CONFIG_DIR)
         with tempfile.TemporaryDirectory() as tmp_dir:
             processor.save_pretrained(
-                os.path.join(tmp_dir, "test-processor"), push_to_hub=True, use_auth_token=self._token
+                os.path.join(tmp_dir, "test-processor"), push_to_hub=True, token=self._token
             )
 
             new_processor = Wav2Vec2Processor.from_pretrained(f"{USER}/test-processor")
@@ -324,7 +324,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
             processor.save_pretrained(
                 os.path.join(tmp_dir, "test-processor-org"),
                 push_to_hub=True,
-                use_auth_token=self._token,
+                token=self._token,
                 organization="valid_org",
             )
 

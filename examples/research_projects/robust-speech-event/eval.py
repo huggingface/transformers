@@ -65,7 +65,7 @@ def normalize_text(text: str) -> str:
 
 def main(args):
     # load dataset
-    dataset = load_dataset(args.dataset, args.config, split=args.split, use_auth_token=True)
+    dataset = load_dataset(args.dataset, args.config, split=args.split, token=True)
 
     # for testing: only process the first two examples as a test
     # dataset = dataset.select(range(10))
