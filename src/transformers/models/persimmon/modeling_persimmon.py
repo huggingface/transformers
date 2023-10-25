@@ -42,7 +42,6 @@ from ...utils import (
 )
 from .configuration_persimmon import PersimmonConfig
 
-
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
@@ -61,9 +60,11 @@ class AttnMaskConverter:
         - Create a causal 4d mask with slided window
         - Convert a 2d attention mask (batch_size, query_length) to a 4d attention mask (batch_size, 1, query_length,
           key_value_length) that can be multiplied with attention scores
+
     Parameters:
         is_causal (`bool`):
             Whether the attention mask should be a uni-directional (causal) or bi-directional mask.
+
         sliding_window (`int`, *optional*):
             Optionally, the sliding window masks can be created if `sliding_window` is defined to a positive integer.
     """
