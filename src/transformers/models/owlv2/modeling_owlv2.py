@@ -584,9 +584,10 @@ class Owlv2PreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, Owlv2Encoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 OWLV2_START_DOCSTRING = r"""
@@ -764,18 +765,12 @@ class Owlv2Encoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
+                layer_outputs = self.gradient_checkpointing_func(
+                    encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     causal_attention_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -1378,6 +1373,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
     def objectness_predictor(self, image_features: torch.FloatTensor) -> torch.FloatTensor:
         """Predicts the probability that each image feature token is an object.
+
         Args:
             image_features (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_dim)`)):
                 Features extracted from the image.
