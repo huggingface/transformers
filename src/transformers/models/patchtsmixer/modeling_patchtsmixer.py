@@ -996,13 +996,14 @@ def forecast_masking(
 
 # TODO: add copied from after PatchTST master merge
 class PatchTSMixerPatchify(nn.Module):
-    """
+    r"""
+    A class to patchify the time series sequence into different patches
     Args:
-        A class to patchify the time series sequence into different patches
-            sequence_length (`int`, required): input sequence length. patch_length (`int`, required): patch length. stride
-            (`int`, required): stride between patches.
+        sequence_length (`int`, *required*): Input sequence length.
+        patch_length (`int`, *required*): Patch length.
+        stride (`int`, *required*): Stride between patches.
     Returns:
-        z: output tensor data [batch_size x num_input_channels x num_patches x patch_length]
+        `None`
     """
 
     def __init__(
@@ -1029,11 +1030,13 @@ class PatchTSMixerPatchify(nn.Module):
         self.s_begin = sequence_length - new_sequence_length
 
     def forward(self, past_values: torch.Tensor):
-        """
+        r"""
         Args:
-            past_values (torch.Tensor, required): Input of shape [batch_size x sequence_length x num_input_channels]
+            past_values (`torch.Tensor` of shape (batch_size x sequence_length x num_input_channels), *required*):
+                Context values of the time series.
         Returns:
-            x: output tensor data [batch_size x num_input_channels x num_patches x patch_length]
+            (`torch.Tensor` of shape (batch_size x num_input_channels x num_patches x patch_length)):
+                Output tensor data.
         """
         sequence_length = past_values.shape[-2]
 
@@ -2147,7 +2150,6 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> PatchTSMixerForRegressionOutput:
         """
-        Args:
             target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
                 `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
                 values of the time series, that serve as labels for the model. The `target_values` is what the Transformer
