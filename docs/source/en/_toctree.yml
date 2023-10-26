@@ -73,6 +73,8 @@
       title: Depth estimation
     - local: tasks/image_to_image
       title: Image-to-Image
+    - local: tasks/knowledge_distillation_for_image_classification
+      title: Knowledge Distillation for Computer Vision
     title: Computer Vision
   - isExpanded: false
     sections:
@@ -340,6 +342,8 @@
         title: FSMT
       - local: model_doc/funnel
         title: Funnel Transformer
+      - local: model_doc/fuyu
+        title: Fuyu
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -610,6 +614,8 @@
         title: MusicGen
       - local: model_doc/pop2piano
         title: Pop2Piano
+      - local: model_doc/seamless_m4t
+        title: Seamless-M4T
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d
