@@ -131,6 +131,34 @@ class PatchTSMixerTranspose(nn.Module):
         return inputs.transpose(*self.dims)
 
 
+# TODO: add copied from after PatchTST master merge
+class PatchTSMixerBatchNorm(nn.Module):
+    """
+    Parameters:
+    Compute batch normalization
+        d_model (`int`): model dimension
+    """
+
+    def __init__(self, d_model):
+        super().__init__()
+        self.d_model = d_model
+        self.transpose = PatchTSMixerTranspose(1, 2)
+        self.batchnorm = nn.BatchNorm1d(self.d_model)
+
+    def forward(self, inputs: torch.Tensor):
+        """
+        Parameters:
+            inputs (`torch.Tensor` of shape `(batch_size, sequence_length, d_model)`):
+                input for Batch norm calculation
+        Returns:
+            `torch.Tensor`: tensor
+        """
+        output = self.transpose(inputs)  # output: (batch_size, d_model, sequence_length)
+        output = self.batchnorm(output)
+        output = self.transpose(output)  # output: (batch_size, sequence_length, d_model)
+        return output
+
+
 class PatchTSMixerNormLayer(nn.Module):
     """Normalization block
 
@@ -145,11 +173,7 @@ class PatchTSMixerNormLayer(nn.Module):
         self.config = config
 
         if "batch" in config.norm_mlp.lower():
-            self.norm = nn.Sequential(
-                PatchTSMixerTranspose(1, 2),
-                nn.BatchNorm1d(config.num_features),
-                PatchTSMixerTranspose(1, 2),
-            )
+            self.norm = PatchTSMixerBatchNorm(config.num_features)
         else:
             self.norm = nn.LayerNorm(config.num_features)
 
