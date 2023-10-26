@@ -75,8 +75,8 @@ def _make_causal_mask(
     return expanded_mask
 
 
-# Copied from transformers.models.bloom.modeling_bloom._expand_mask
-def _expand_mask(mask: torch.Tensor, tgt_length: int) -> torch.BoolTensor:
+# Copied from transformers.models.bloom.modeling_bloom.prepare_4d_attention_mask
+def prepare_4d_attention_mask(mask: torch.Tensor, tgt_length: int) -> torch.BoolTensor:
     """
     Expands attention_mask from `[batch_size, src_length]` to `[batch_size, 1, tgt_length, src_length]`.
     """
@@ -438,7 +438,7 @@ class MptModel(MptPreTrainedModel):
             )
 
         # [batch_size, seq_length] -> [batch_size, 1, tgt_length, src_length]
-        expanded_attn_mask = _expand_mask(attention_mask, tgt_length=src_length)
+        expanded_attn_mask = prepare_4d_attention_mask(attention_mask, tgt_length=src_length)
         combined_attention_mask = (
             expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask | combined_attention_mask
         )
