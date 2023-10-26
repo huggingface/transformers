@@ -2178,7 +2178,7 @@ class TrainingArguments:
         jit_mode: bool = False,
     ):
         """
-        A method that regroups all arguments linked to the evaluation.
+        A method that regroups all arguments linked to evaluation.
 
         Args:
             strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
@@ -2276,7 +2276,7 @@ class TrainingArguments:
         on_each_node: bool = False,
     ):
         """
-        A method that regroups all arguments linked to the evaluation.
+        A method that regroups all arguments linked to checkpoint saving.
 
         Args:
             strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
@@ -2329,7 +2329,7 @@ class TrainingArguments:
         replica_level: str = "passive",
     ):
         """
-        A method that regroups all arguments linked to the evaluation.
+        A method that regroups all arguments linked to logging.
 
         Args:
             strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
