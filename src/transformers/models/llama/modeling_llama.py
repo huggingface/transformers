@@ -71,6 +71,17 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return AttnMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
 
 
+def _make_causal_mask(
+    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
+):
+    warnings.warn(
+        "Calling `transformers.models.llama.modeling_llama._make_causal_mask` is deprecated and will be removed in v4.37. Use `transformers.models.llama.modeling_llama.AttnMaskConverter._make_causal_mask"
+    )
+    return AttnMaskConverter._make_causal_mask(
+        input_ids_shape=input_ids_shape, dtype=dtype, device=device, past_key_values_length=past_key_values_length
+    )
+
+
 class AttnMaskConverter:
     """
     A utility attention mask class that allows:
