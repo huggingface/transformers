@@ -45,6 +45,7 @@ from .integrations import (
     is_optuna_available,
     is_ray_available,
     is_sigopt_available,
+    is_tensorboard_available,
     is_wandb_available,
 )
 from .integrations.deepspeed import is_deepspeed_available
@@ -909,6 +910,13 @@ def require_optimum(test_case):
     Decorator for optimum dependency
     """
     return unittest.skipUnless(is_optimum_available(), "test requires optimum")(test_case)
+
+
+def require_tensorboard(test_case):
+    """
+    Decorator for `tensorboard` dependency
+    """
+    return unittest.skipUnless(is_tensorboard_available(), "test requires tensorboard")
 
 
 def require_auto_gptq(test_case):
