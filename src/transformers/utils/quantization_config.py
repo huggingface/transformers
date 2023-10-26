@@ -453,7 +453,6 @@ class GPTQConfig(QuantizationConfigMixin):
                 )
 
 
-
 @dataclass
 class AWQConfig(QuantizationConfigMixin):
     """
