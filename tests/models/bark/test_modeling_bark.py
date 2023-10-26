@@ -1073,7 +1073,9 @@ class BarkModelIntegrationTests(unittest.TestCase):
                 fine_temperature=0.3,
                 min_eos_p=0.1,
             )
-            self.assertLessEqual(len(output_ids_with_min_eos_p.tolist()), len(output_ids_without_min_eos_p.tolist()))
+        self.assertLess(
+            len(output_ids_with_min_eos_p[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist())
+        )
 
     @require_torch_gpu
     @slow
