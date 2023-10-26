@@ -1334,7 +1334,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                     )
                     use_cache = False
 
-                layer_outputs = self.gradient_checkpointing_func(
+                layer_outputs = self._gradient_checkpointing_func(
                     vblock,
                     decoder_layer,
                     hidden_states,

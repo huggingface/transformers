@@ -939,7 +939,7 @@ class ClapAudioEncoder(nn.Module):
             input_dimensions = self.input_resolutions[i]
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self.gradient_checkpointing_func(
+                layer_outputs = self._gradient_checkpointing_func(
                     layer_module.__call__, hidden_states, input_dimensions, layer_head_mask, output_attentions
                 )
             else:
@@ -1588,7 +1588,7 @@ class ClapTextEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self.gradient_checkpointing_func(
+                layer_outputs = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     hidden_states,
                     attention_mask,

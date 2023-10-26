@@ -672,7 +672,7 @@ class RwkvModel(RwkvPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         for idx, block in enumerate(self.blocks):
             if self.gradient_checkpointing and self.training:
-                hidden_states, state, attentions = self.gradient_checkpointing_func(
+                hidden_states, state, attentions = self._gradient_checkpointing_func(
                     block.__call__, hidden_states, state, use_cache, output_attentions
                 )
             else:

@@ -1211,7 +1211,7 @@ class InformerEncoder(InformerPreTrainedModel):
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
-                    layer_outputs = self.gradient_checkpointing_func(
+                    layer_outputs = self._gradient_checkpointing_func(
                         encoder_layer.__call__,
                         hidden_states,
                         attention_mask,
@@ -1219,7 +1219,7 @@ class InformerEncoder(InformerPreTrainedModel):
                         output_attentions,
                     )
                     if conv_layer is not None:
-                        output = self.gradient_checkpointing_func(conv_layer, layer_outputs[0])
+                        output = self._gradient_checkpointing_func(conv_layer, layer_outputs[0])
                         layer_outputs = (output,) + layer_outputs[1:]
                 else:
                     layer_outputs = encoder_layer(
@@ -1428,7 +1428,7 @@ class InformerDecoder(InformerPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self.gradient_checkpointing_func(
+                layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
                     attention_mask,

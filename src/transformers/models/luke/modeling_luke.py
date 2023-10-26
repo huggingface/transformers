@@ -788,7 +788,7 @@ class LukeEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self.gradient_checkpointing_func(
+                layer_outputs = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     word_hidden_states,
                     entity_hidden_states,

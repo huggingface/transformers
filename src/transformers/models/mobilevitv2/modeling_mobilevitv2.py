@@ -582,7 +582,7 @@ class MobileViTV2Encoder(nn.Module):
 
         for i, layer_module in enumerate(self.layer):
             if self.gradient_checkpointing and self.training:
-                hidden_states = self.gradient_checkpointing_func(
+                hidden_states = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     hidden_states,
                 )

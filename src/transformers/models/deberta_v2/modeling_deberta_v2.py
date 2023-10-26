@@ -501,7 +501,7 @@ class DebertaV2Encoder(nn.Module):
                 all_hidden_states = all_hidden_states + (output_states,)
 
             if self.gradient_checkpointing and self.training:
-                output_states = self.gradient_checkpointing_func(
+                output_states = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     next_kv,
                     attention_mask,

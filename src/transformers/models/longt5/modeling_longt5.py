@@ -1503,7 +1503,7 @@ class LongT5Stack(LongT5PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self.gradient_checkpointing_func(
+                layer_outputs = self._gradient_checkpointing_func(
                     layer_module.forward,
                     hidden_states,
                     extended_attention_mask,

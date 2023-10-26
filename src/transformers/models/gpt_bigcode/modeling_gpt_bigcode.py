@@ -645,7 +645,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                outputs = self.gradient_checkpointing_func(
+                outputs = self._gradient_checkpointing_func(
                     block.__call__,
                     hidden_states,
                     None,

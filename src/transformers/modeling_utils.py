@@ -1873,7 +1873,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             torch.utils.checkpoint.checkpoint, **gradient_checkpointing_kwargs
         )
 
-        self._set_gradient_checkpointing(gradient_checkpointing_func=gradient_checkpointing_func)
+        self._set_gradient_checkpointing(enable=True, gradient_checkpointing_func=gradient_checkpointing_func)
 
         if getattr(self, "_hf_peft_config_loaded", False):
             # When using PEFT + gradient checkpointing + Trainer we need to make sure the input has requires_grad=True
@@ -1882,20 +1882,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # the gradients to make sure the gradient flows.
             self.enable_input_require_grads()
 
-    def _set_gradient_checkpointing(self, gradient_checkpointing_func=None):
+    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = None):
         gradient_checkpointing_set = False
+
+        # We default it to `torch.utils.checkpoint.checkpoint`
+        if gradient_checkpointing_func is None:
+            gradient_checkpointing_func = torch.utils.checkpoint.checkpoint
 
         # Apply it on the top-level module in case the top-level modules supports it
         # for example, LongT5Stack inherits from `PreTrainedModel`.
         if hasattr(self, "gradient_checkpointing"):
-            self.gradient_checkpointing_func = gradient_checkpointing_func
-            self.gradient_checkpointing = gradient_checkpointing_func is not None
+            self._gradient_checkpointing_func = gradient_checkpointing_func
+            self.gradient_checkpointing = enable
             gradient_checkpointing_set = True
 
         for module in self.modules():
             if hasattr(module, "gradient_checkpointing"):
-                module.gradient_checkpointing_func = gradient_checkpointing_func
-                module.gradient_checkpointing = gradient_checkpointing_func is not None
+                module._gradient_checkpointing_func = gradient_checkpointing_func
+                module.gradient_checkpointing = enable
                 gradient_checkpointing_set = True
 
         if not gradient_checkpointing_set:
@@ -1912,7 +1916,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         activations".
         """
         if self.supports_gradient_checkpointing:
-            self._set_gradient_checkpointing(gradient_checkpointing_func=None)
+            self._set_gradient_checkpointing(enable=False)
 
         if getattr(self, "_hf_peft_config_loaded", False):
             self.disable_input_require_grads()
