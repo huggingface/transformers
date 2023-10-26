@@ -339,10 +339,6 @@ class GroundingDINOObjectDetectionOutput(ModelOutput):
     encoder_hidden_states_vision: Optional[Tuple[torch.FloatTensor]] = None
     encoder_hidden_states_text: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    # encoder_attentions_vision: Optional[Tuple[torch.FloatTensor]] = None
-    # encoder_attentions_text: Optional[Tuple[torch.FloatTensor]] = None
-    # encoder_cross_attentions_vision: Optional[Tuple[torch.FloatTensor]] = None
-    # encoder_cross_attentions_text: Optional[Tuple[torch.FloatTensor]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
 
@@ -770,7 +766,6 @@ class GroundingDINOMultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
-# TODO is this an approriate way to name this?
 class GroundingDINOTextEnhancerLayer(nn.Module):
     """Vanilla Transformer with text embeddings as input"""
 
@@ -1296,27 +1291,6 @@ class GroundingDINODecoderLayer(nn.Module):
         self_attn_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ):
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(seq_len, batch, embed_dim)`.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                Position embeddings that are added to the queries and keys in the self-attention layer.
-            reference_points (`torch.FloatTensor`, *optional*):
-                Reference points.
-            spatial_shapes (`torch.LongTensor`, *optional*):
-                Spatial shapes.
-            level_start_index (`torch.LongTensor`, *optional*):
-                Level start index.
-            encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
-                values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
         residual = hidden_states
 
         # Self Attention
@@ -1486,7 +1460,7 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`AutoImageProcessor`]. See [`DeformableDetrImageProcessor.__call__`]
+            Pixel values can be obtained using [`AutoImageProcessor`]. See [`GroundingDINOImageProcessor.__call__`]
             for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
@@ -1497,18 +1471,31 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
 
-        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, num_queries)`, *optional*):
-            Not used by default. Can be used to mask object queries.
+        input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`GroundingDINOTokenizer.__call__`] for details.
+
+        attention_mask (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are real (i.e. **not masked**),
+            - 0 for tokens that are padding (i.e. **masked**).
+
+            [What are attention masks?](../glossary#attention-mask)
+
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
+
+            [What are token type IDs?](../glossary#token-type-ids)
+
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+            Tuple consists of (`last_hidden_state_vision`, *optional*: `last_hidden_state_text`, *optional*: 
+            `hidden_states_vision`, *optional*: `hidden_states_text`, *optional*: `attentions`)
+            `last_hidden_state_vision` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1594,8 +1581,8 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
             vision_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
-                - 1 for pixel features that are real (i.e. **not masked**),
-                - 0 for pixel features that are padding (i.e. **masked**).
+                - 0 for pixel features that are real (i.e. **not masked**),
+                - 1 for pixel features that are padding (i.e. **masked**).
                 [What are attention masks?](../glossary#attention-mask)
             vision_position_embedding (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Position embeddings that are added to the queries and keys in each self-attention layer.
@@ -1609,8 +1596,8 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
                 Flattened text features that are passed to the encoder.
             text_attention_mask (`torch.Tensor` of shape `(batch_size, text_seq_len)`, *optional*):
                 Mask to avoid performing attention on padding text features. Mask values selected in `[0, 1]`:
-                - 1 for text features that are real (i.e. **not masked**),
-                - 0 for text features that are padding (i.e. **masked**).
+                - 0 for text features that are real (i.e. **not masked**),
+                - 1 for text features that are padding (i.e. **masked**).
                 [What are attention masks?](../glossary#attention-mask)
             text_position_embedding (`torch.FloatTensor` of shape `(batch_size, text_seq_len)`):
                 Position embeddings that are added to the queries and keys in each self-attention layer.
@@ -1700,7 +1687,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
 
     The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
 
-    Some tweaks for Deformable DETR:
+    Some tweaks for Grounding DINO:
 
     - `position_embeddings`, `reference_points`, `spatial_shapes` and `valid_ratios` are added to the forward pass.
     - it also returns a stack of intermediate outputs and reference points from all decoding layers.
@@ -1785,14 +1772,18 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
                 The query embeddings that are passed into the decoder.
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
-                in `[0, 1]`:
-                - 1 for pixels that are real (i.e. **not masked**),
-                - 0 for pixels that are padding (i.e. **masked**).
+            vision_encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Last hidden state from encoder related to vision feature map.
+            vision_encoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
+                - 1 for pixel features that are real (i.e. **not masked**),
+                - 0 for pixel features that are padding (i.e. **masked**).
+            text_encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, text_seq_len, hidden_size)`):
+                Last hidden state from encoder related to text features.
+            text_encoder_attention_mask (`torch.Tensor` of shape `(batch_size, text_seq_len)`, *optional*):
+                Mask to avoid performing attention on padding text features. Mask values selected in `[0, 1]`:
+                - 0 for text features that are real (i.e. **not masked**),
+                - 1 for text features that are padding (i.e. **masked**).
             reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
                 Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
             spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
@@ -1801,7 +1792,10 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
                 Indexes for the start of each feature level. In range `[0, sequence_length]`.
             valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
                 Ratio of valid area in each feature level.
-
+            self_attn_mask (`torch.BoolTensor` of shape `(batch_size, text_seq_len)`):
+                Masks to avoid performing self-attention between vision hidden state. Mask values selected in `[0, 1]`:
+                - 1 for queries that are real (i.e. **not masked**),
+                - 0 for queries that are padding (i.e. **masked**).
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -2045,8 +2039,6 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
 
         self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
 
-        print("Two stage:", config.two_stage)
-
         if config.two_stage:
             self.enc_output = nn.Linear(config.d_model, config.d_model)
             self.enc_output_norm = nn.LayerNorm(config.d_model)
@@ -2175,23 +2167,23 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, GroundingDINOModel
+        >>> from transformers import AutoProcessor, GroundingDINOModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "a cat."
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("idea-research/grounding-dino-tiny")
-        >>> model = GroundingDINOModel.from_pretrained("idea-research/grounding-dino-tiny")
+        >>> processor = AutoProcessor.from_pretrained("idea-research/grounding-dino-tiny")
+        >>> model = GroundingDINOForObjectDetection.from_pretrained("idea-research/grounding-dino-tiny")
 
-        >>> inputs = image_processor(images=image, return_tensors="pt")
-
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> last_hidden_states = outputs.last_hidden_state
         >>> list(last_hidden_states.shape)
-        [1, 300, 256]
+        [1, 900, 256]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2464,33 +2456,33 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, GroundingDINOForObjectDetection
+        >>> from transformers import AutoProcessor, GroundingDINOForObjectDetection
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "a cat."
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("idea-research/grounding-dino-tiny")
+        >>> processor = AutoProcessor.from_pretrained("idea-research/grounding-dino-tiny")
         >>> model = GroundingDINOForObjectDetection.from_pretrained("idea-research/grounding-dino-tiny")
 
-        >>> inputs = image_processor(images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> # convert outputs (bounding boxes and class logits) to COCO API
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
+        >>> results = processor.image_processor.post_process_object_detection(outputs, threshold=0.35, target_sizes=target_sizes)[
         ...     0
         ... ]
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(
-        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...         f"Detected {label.item()} with confidence "
         ...         f"{round(score.item(), 3)} at location {box}"
         ...     )
-        Detected cat with confidence 0.8 at location [16.5, 52.84, 318.25, 470.78]
-        Detected cat with confidence 0.789 at location [342.19, 24.3, 640.02, 372.25]
-        Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
+        Detected 1 with confidence 0.453 at location [344.82, 23.18, 637.4, 373.83]
+        Detected 1 with confidence 0.408 at location [11.92, 51.58, 316.57, 472.89]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
