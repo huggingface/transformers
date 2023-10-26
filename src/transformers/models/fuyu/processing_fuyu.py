@@ -387,7 +387,7 @@ class FuyuBatchEncoding(BatchEncoding):
         if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
             for batch_key, batch_element in self.data.items():
                 if isinstance(batch_element, list):
-                    moved_element = [item.to("cuda") for item in batch_element]
+                    moved_element = [item.to(device=device) for item in batch_element]
                 else:
                     moved_element = batch_element.to(device=device)
                 self.data[batch_key] = moved_element
