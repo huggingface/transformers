@@ -464,3 +464,18 @@ class AWQConfig(QuantizationConfigMixin):
         self.zero_point = zero_point
         self.version = version
         self.backend = backend
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        if not torch.cuda.is_available():
+            raise ValueError("AWQ is only available on GPU")
+
+        if self.backend == AWQBackend.LLMAWQ:
+            compute_capability = torch.cuda.get_device_capability()
+            major, minor = compute_capability
+            if major < 8:
+                raise ValueError("LLMAWQ backend is only supported on GPUs with compute capability >= 8.0")
