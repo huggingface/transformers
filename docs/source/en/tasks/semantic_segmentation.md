@@ -41,7 +41,7 @@ We encourage you to log in to your Hugging Face account so you can upload and sh
 >>> notebook_login()
 ```
 
-Semantic segmentation assigns a label or class to every single pixel in an image. Let's take a look at a semantic segmentation model output. It will assign the same class to every instance it comes across in an image, for example, all cats will be labeled as cat instead of "cat-1", "cat-2".
+Semantic segmentation assigns a label or class to every single pixel in an image. Let's take a look at a semantic segmentation model output. It will assign the same class to every instance of an object it comes across in an image, for example, all cats will be labeled as "cat" instead of "cat-1", "cat-2".
 We can use transformers' image segmentation pipeline to quickly infer a semantic segmentation model. Let's take a look at the example image.
 
 ```python
