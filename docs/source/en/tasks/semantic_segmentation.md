@@ -100,7 +100,7 @@ The segmentation pipeline output includes a mask for every predicted class.
   'mask': <PIL.Image.Image image mode=L size=612x415>}]
 ```
 
-Taking a look at the mask for car class, we can see every car is classified in one mask.
+Taking a look at the mask for the car class, we can see every car is classified in the same mask.
 
 ```python
 results[-1]["mask"]
