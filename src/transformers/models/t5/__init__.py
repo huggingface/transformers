@@ -50,7 +50,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_t5"] = [
-        "EncT5ForSequenceClassification",
+        "T5ForEncoderSequenceClassification",
         "T5_PRETRAINED_MODEL_ARCHIVE_LIST",
         "T5EncoderModel",
         "T5ForConditionalGeneration",
@@ -116,9 +116,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_t5 import (
             T5_PRETRAINED_MODEL_ARCHIVE_LIST,
-            EncT5ForSequenceClassification,
             T5EncoderModel,
             T5ForConditionalGeneration,
+            T5ForEncoderSequenceClassification,
             T5ForQuestionAnswering,
             T5ForSequenceClassification,
             T5Model,
