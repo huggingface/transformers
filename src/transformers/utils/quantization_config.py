@@ -349,6 +349,8 @@ class GPTQConfig(QuantizationConfigMixin):
         max_input_length (`int`, *optional*):
             The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
             length. It is specific to the exllama backend with act-order.
+        use_exllama_v2 (`bool`, *optional*, defaults to `False`):
+            Whether to use exllamav2 backend. Only works with `bits` = 4.
     """
 
     def __init__(
@@ -369,6 +371,7 @@ class GPTQConfig(QuantizationConfigMixin):
         pad_token_id: Optional[int] = None,
         disable_exllama: bool = False,
         max_input_length: Optional[int] = None,
+        use_exllama_v2: bool = False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
@@ -388,11 +391,14 @@ class GPTQConfig(QuantizationConfigMixin):
         self.pad_token_id = pad_token_id
         self.disable_exllama = disable_exllama
         self.max_input_length = max_input_length
+        self.use_exllama_v2 = use_exllama_v2
+        # needed for compatibility with optimum gptq config
+        self.disable_exllamav2 = not use_exllama_v2
         self.post_init()
 
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["disable_exllama", "use_cuda_fp16", "max_input_length"]
+        loading_attibutes = ["disable_exllama", "use_exllama_v2", "use_cuda_fp16", "max_input_length"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
 
@@ -417,4 +423,20 @@ class GPTQConfig(QuantizationConfigMixin):
                 raise ValueError(
                     f"""dataset needs to be either a list of string or a value in
                     ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
+                )
+        if self.bits == 4:
+            if self.use_exllama_v2:
+                optimum_version = version.parse(importlib.metadata.version("optimum"))
+                autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
+                if optimum_version <= version.parse("1.13.2") or autogptq_version <= version.parse("0.4.2"):
+                    raise ValueError(
+                        f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
+                    )
+                self.disable_exllama = True
+                logger.warning("You have activated exllamav2 kernels. Exllama kernels will be disabled.")
+            if not self.disable_exllama:
+                logger.warning(
+                    """You have activated exllama backend. Note that you can get better inference
+                    speed using exllamav2 kernel by setting `use_exllama_v2=True`.`disable_exllama` will be deprecated
+                    in future version."""
                 )
