@@ -232,7 +232,7 @@ At this point, only three steps remain:
 ... )
 
 >>> trainer.train()
-````
+```
 
 Once training is completed, share your model to the Hub with the [`~transformers.Trainer.push_to_hub`] method so everyone can use your model:
 
