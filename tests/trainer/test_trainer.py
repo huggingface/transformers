@@ -2161,7 +2161,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        for model in ["test-trainer", "test-trainer-epoch", "test-trainer-step"]:
+        for model in ["test-trainer", "test-trainer-epoch", "test-trainer-step", "test-trainer-tensorboard"]:
             try:
                 delete_repo(token=cls._token, repo_id=model)
             except HTTPError:
@@ -2289,6 +2289,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         for f in files:
             if len(f.split("runs")) > 1 and "events.out.tfevents" in f:
                 found_log = True
+
         assert found_log is True, "No tensorboard log found in repo"
 
 
