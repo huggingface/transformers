@@ -199,7 +199,7 @@ class ClvpDecoderTester:
         self,
         parent,
         batch_size=2,
-        seq_length=7,
+        seq_length=3,
         is_training=True,
         vocab_size=300,
         max_position_embeddings=256,
