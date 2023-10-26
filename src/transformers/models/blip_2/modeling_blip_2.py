@@ -41,7 +41,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM
-from .configuration_blip_2 import Blip2Config, Blip2ModelWithoutLMConfig, Blip2QFormerConfig, Blip2VisionConfig
+from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -1163,7 +1163,6 @@ class Blip2QFormerEncoder(nn.Module):
         )
 
 
-# Adapted from https://github.com/salesforce/LAVIS/blob/main/lavis/models/blip2_models/Qformer.py#L51
 class Blip2TextEmbeddings(nn.Module):
     """Construct the embeddings from word and position embeddings."""
 
@@ -1182,8 +1181,6 @@ class Blip2TextEmbeddings(nn.Module):
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-
-        self.config = config
 
     def forward(
         self,
@@ -1344,7 +1341,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 
         query_length = query_embeds.shape[1] if query_embeds is not None else 0
 
-        if hasattr(self, "embeddings"):
+        if self.config.qformer_text_input:
             embedding_output = self.embeddings(
                 input_ids=input_ids,
                 position_ids=position_ids,
@@ -1838,11 +1835,11 @@ class Blip2Model(Blip2PreTrainedModel):
     BLIP_2_START_DOCSTRING,
 )
 class Blip2ModelWithoutLM(Blip2PreTrainedModel):
-    config_class = Blip2ModelWithoutLMConfig
+    config_class = Blip2Config
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = []
 
-    def __init__(self, config: Blip2ModelWithoutLMConfig):
+    def __init__(self, config: Blip2Config):
         super().__init__(config)
 
         self.vision_model = Blip2VisionModel(config.vision_config)
@@ -2079,11 +2076,11 @@ class Blip2ModelWithoutLM(Blip2PreTrainedModel):
 
 
 class Blip2TextModelWithProjection(Blip2PreTrainedModel):
-    config_class = Blip2ModelWithoutLMConfig
+    config_class = Blip2Config
     supports_gradient_checkpointing = False
     _keep_in_fp32_modules = []
 
-    def __init__(self, config: Blip2ModelWithoutLMConfig):
+    def __init__(self, config: Blip2Config):
         super().__init__(config)
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
@@ -2096,7 +2093,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BLIP_2_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Blip2TextModelOutput, config_class=Blip2ModelWithoutLMConfig)
+    @replace_return_docstrings(output_type=Blip2TextModelOutput, config_class=Blip2Config)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -2158,13 +2155,12 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
         )
 
 
-# Adapted from transformers.models.clip.modeling_clip.CLIPVisionModelWithProjection
 class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
-    config_class = Blip2ModelWithoutLMConfig
+    config_class = Blip2Config
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = []
 
-    def __init__(self, config: Blip2ModelWithoutLMConfig):
+    def __init__(self, config: Blip2Config):
         super().__init__(config)
 
         self.vision_model = Blip2VisionModel(config.vision_config)
@@ -2179,7 +2175,7 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BLIP_2_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Blip2VisionModelOutput, config_class=Blip2ModelWithoutLMConfig)
+    @replace_return_docstrings(output_type=Blip2VisionModelOutput, config_class=Blip2Config)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -2603,11 +2599,11 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 )
 class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
-    config_class = Blip2ModelWithoutLMConfig
+    config_class = Blip2Config
     _keep_in_fp32_modules = []
     _tied_weights_keys = ["cls.predictions.decoder.bias"]
 
-    def __init__(self, config: Blip2ModelWithoutLMConfig):
+    def __init__(self, config: Blip2Config):
         super().__init__(config)
 
         self.vision_model = Blip2VisionModel(config.vision_config)
@@ -2632,7 +2628,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BLIP_2_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Blip2ImageTextMatchingModelOutput, config_class=Blip2ModelWithoutLMConfig)
+    @replace_return_docstrings(output_type=Blip2ImageTextMatchingModelOutput, config_class=Blip2Config)
     def forward(
         self,
         pixel_values: torch.FloatTensor,

@@ -20,7 +20,6 @@ _import_structure = {
     "configuration_blip_2": [
         "BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Blip2Config",
-        "Blip2ModelWithoutLMConfig",
         "Blip2QFormerConfig",
         "Blip2VisionConfig",
     ],
@@ -50,7 +49,6 @@ if TYPE_CHECKING:
     from .configuration_blip_2 import (
         BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Blip2Config,
-        Blip2ModelWithoutLMConfig,
         Blip2QFormerConfig,
         Blip2VisionConfig,
     )

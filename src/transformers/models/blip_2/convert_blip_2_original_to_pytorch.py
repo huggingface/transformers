@@ -35,7 +35,6 @@ from transformers import (
     Blip2Config,
     Blip2ForConditionalGeneration,
     Blip2ForImageTextRetrieval,
-    Blip2ModelWithoutLMConfig,
     Blip2Processor,
     Blip2QFormerConfig,
     Blip2VisionConfig,
@@ -125,7 +124,7 @@ def get_blip2_config(model_name, eos_token_id):
         raise ValueError("Model name not supported")
 
     if "itm" in model_name:
-        config = Blip2ModelWithoutLMConfig(
+        config = Blip2Config(
             vision_config=vision_config,
             qformer_config=Blip2QFormerConfig(vocab_size=30523, qformer_text_input=True).to_dict(),
         )

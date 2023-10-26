@@ -61,10 +61,6 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] Blip2QFormerConfig
 
-## Blip2ModelWithoutLMConfig
-
-[[autodoc]] Blip2ModelWithoutLMConfig
-
 ## Blip2Processor
 
 [[autodoc]] Blip2Processor
