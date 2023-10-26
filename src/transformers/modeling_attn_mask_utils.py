@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import Optional, Union
-import torch
 
+import torch
 
 
 class AttnMaskConverter:
@@ -157,7 +157,9 @@ class AttnMaskConverter:
         return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-def prepare_4d_causal_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length, sliding_window=None):
+def prepare_4d_causal_attention_mask(
+    attention_mask, input_shape, inputs_embeds, past_key_values_length, sliding_window=None
+):
     attn_mask_converter = AttnMaskConverter(is_causal=True, sliding_window=sliding_window)
 
     key_value_length = input_shape[-1] + past_key_values_length
