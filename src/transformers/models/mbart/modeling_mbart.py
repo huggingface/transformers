@@ -516,9 +516,10 @@ class MBartPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (MBartDecoder, MBartDecoder)):
-            module.gradient_checkpointing = value
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
+        if isinstance(module, (MBartDecoder, MBartEncoder)):
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
     @property
     def dummy_inputs(self):
@@ -828,18 +829,12 @@ class MBartEncoder(MBartPreTrainedModel):
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
+                    layer_outputs = self.gradient_checkpointing_func(
+                        encoder_layer.__call__,
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
+                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
@@ -1086,16 +1081,8 @@ class MBartDecoder(MBartPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self.gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
@@ -1103,6 +1090,8 @@ class MBartDecoder(MBartPreTrainedModel):
                     head_mask[idx] if head_mask is not None else None,
                     cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                     None,
+                    output_attentions,
+                    use_cache,
                 )
             else:
                 layer_outputs = decoder_layer(

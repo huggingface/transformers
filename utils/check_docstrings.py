@@ -356,6 +356,7 @@ OBJECTS_TO_IGNORE = [
     "M2M100Config",
     "M2M100Tokenizer",
     "MarkupLMProcessor",
+    "MaskGenerationPipeline",
     "MBart50TokenizerFast",
     "MBartConfig",
     "MCTCTFeatureExtractor",

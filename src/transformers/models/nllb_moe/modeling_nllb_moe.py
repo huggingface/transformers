@@ -874,9 +874,10 @@ class NllbMoePreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (NllbMoeDecoder, NllbMoeEncoder)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 NLLB_MOE_START_DOCSTRING = r"""
@@ -1153,18 +1154,12 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
                 layer_outputs = (None, None, None)
             else:
                 if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
+                    layer_outputs = self.gradient_checkpointing_func(
+                        encoder_layer.__call__,
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
+                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
@@ -1426,15 +1421,8 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                             "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                         )
                         use_cache = False
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return tuple(module(*inputs, use_cache, output_attentions))
-
-                        return custom_forward
-
                     layer_outputs = checkpoint(
-                        create_custom_forward(decoder_layer),
+                        decoder_layer.forward,
                         hidden_states,
                         combined_attention_mask,
                         encoder_hidden_states,
@@ -1442,6 +1430,8 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                         layer_head_mask,
                         cross_attn_layer_head_mask,
                         None,  # past_key_value is always None with gradient checkpointing
+                        use_cache,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = decoder_layer(

@@ -951,11 +951,6 @@ class TFSwinPreTrainedModel(TFPreTrainedModel):
     config_class = SwinConfig
     base_model_prefix = "swin"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
-
-    def _set_gradient_checkpointing(self, module, value=False) -> None:
-        if isinstance(module, TFSwinEncoder):
-            module.gradient_checkpointing = value
 
 
 SWIN_START_DOCSTRING = r"""

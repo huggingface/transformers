@@ -657,19 +657,8 @@ class LayoutLMv3Encoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-                        # return module(*inputs, past_key_value, output_attentions, rel_pos, rel_2d_pos)
-                        # The above line will cause error:
-                        # RuntimeError: Trying to backward through the graph a second time
-                        # (or directly access saved tensors after they have already been freed).
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self.gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,

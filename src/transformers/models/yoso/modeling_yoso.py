@@ -561,17 +561,11 @@ class YosoEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self.gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
@@ -668,9 +662,10 @@ class YosoPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, YosoEncoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 YOSO_START_DOCSTRING = r"""
