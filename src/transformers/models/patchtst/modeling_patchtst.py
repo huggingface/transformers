@@ -1170,7 +1170,9 @@ class PatchTSTStdScaler(nn.Module):
         self.minimum_scale = minimum_scale
 
     @torch.no_grad()
-    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self,
+                data: torch.Tensor, weights: torch.Tensor
+                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         denominator = weights.sum(self.dim, keepdim=self.keepdim)
         denominator = denominator.clamp_min(1.0)
         loc = (data * weights).sum(self.dim, keepdim=self.keepdim) / denominator
@@ -1198,7 +1200,8 @@ class PatchTSTMeanScaler(nn.Module):
     """
 
     def __init__(
-        self, dim: int = -1, keepdim: bool = True, default_scale: Optional[float] = None, minimum_scale: float = 1e-10
+        self, dim: int = -1, keepdim: bool = True,
+        default_scale: Optional[float] = None, minimum_scale: float = 1e-10
     ):
         super().__init__()
         self.dim = dim
@@ -1207,9 +1210,9 @@ class PatchTSTMeanScaler(nn.Module):
         self.default_scale = default_scale
 
     @torch.no_grad()
-    def forward(
-        self, data: torch.Tensor, observed_indicator: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self,
+                data: torch.Tensor, observed_indicator: torch.Tensor
+                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # shape: (N, [C], T=1)
         ts_sum = (data * observed_indicator).abs().sum(self.dim, keepdim=True)
         num_observed = observed_indicator.sum(self.dim, keepdim=True)
@@ -1263,6 +1266,23 @@ class PatchTSTNOPScaler(nn.Module):
         return data, loc, scale
 
 
+class PatchTSTScaler(nn.Module):
+    def __init__(self, config: PatchTSTConfig):
+        super().__init__()
+        if config.scaling == "mean" or config.scaling is True:
+            self.scaler = PatchTSTMeanScaler(dim=1, keepdim=True)
+        elif config.scaling == "std":
+            self.scaler = PatchTSTStdScaler(dim=1, keepdim=True)
+        else:
+            self.scaler = PatchTSTNOPScaler(dim=1, keepdim=True)
+
+    def forward(self,
+                data: torch.Tensor, observed_indicator: torch.Tensor
+                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        data, loc, scale = self.scaler(data, observed_indicator)
+        return data, loc, scale
+
+
 @add_start_docstrings(
     "The bare PatchTST Model outputting raw hidden-states without any specific head.",
     PATCHTST_START_DOCSTRING,
@@ -1271,13 +1291,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
-        if config.scaling == "mean" or config.scaling is True:
-            self.scaler = PatchTSTMeanScaler(dim=1, keepdim=True)
-        elif config.scaling == "std":
-            self.scaler = PatchTSTStdScaler(dim=1, keepdim=True)
-        else:
-            self.scaler = PatchTSTNOPScaler(dim=1, keepdim=True)
-
+        self.scaler = PatchTSTScaler(config)
         self.patchifier = PatchTSTPatchify(config)
         self.mask_input = config.mask_input
 
