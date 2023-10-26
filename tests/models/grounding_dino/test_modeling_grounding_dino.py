@@ -600,6 +600,8 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
                         if (
                             "level_embed" in name
                             or "sampling_offsets.bias" in name
+                            or "text_param" in name
+                            or "vision_param" in name
                             or "value_proj" in name
                             or "output_proj" in name
                             or "reference_points" in name

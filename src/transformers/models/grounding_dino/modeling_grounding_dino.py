@@ -1427,6 +1427,8 @@ class GroundingDINOPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
 
     def _init_weights(self, module):
+        std = self.config.init_std
+
         if isinstance(module, GroundingDINOLearnedPositionEmbedding):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
@@ -1437,21 +1439,26 @@ class GroundingDINOPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (GroundingDINOEncoderLayer, GroundingDINODecoderLayer)):
             for p in module.parameters():
                 if p.dim() > 1:
-                    nn.init.xavier_uniform_(p)
-        elif isinstance(module, GroundingDINOModel):
-            nn.init.constant_(module.text_projection.bias.data, 0)
-            nn.init.xavier_uniform_(module.text_projection.weight.data)
-            for proj in module.input_proj_vision:
-                nn.init.xavier_uniform_(proj[0].weight, gain=1)
-                nn.init.constant_(proj[0].bias, 0)
+                    nn.init.normal_(p, mean=0.0, std=std)
+        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, GroundingDINOMLPPredictionHead):
+            nn.init.constant_(module.layers[-1].weight.data, 0)
+            nn.init.constant_(module.layers[-1].bias.data, 0)
+            
         if hasattr(module, "reference_points") and not self.config.two_stage:
             nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
             nn.init.constant_(module.reference_points.bias.data, 0.0)
         if hasattr(module, "level_embed"):
             nn.init.normal_(module.level_embed)
-        if isinstance(module, GroundingDINOMLPPredictionHead):
-            nn.init.constant_(module.layers[-1].weight.data, 0)
-            nn.init.constant_(module.layers[-1].bias.data, 0)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, GroundingDINODecoder):

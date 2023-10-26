@@ -75,6 +75,8 @@ class GroundingDINOTextPrenetConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Examples:
 
@@ -108,6 +110,7 @@ class GroundingDINOTextPrenetConfig(PretrainedConfig):
         pad_token_id=0,
         position_embedding_type="absolute",
         use_cache=True,
+        init_std=0.02,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -125,6 +128,7 @@ class GroundingDINOTextPrenetConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
+        self.init_std = init_std
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -253,6 +257,8 @@ class GroundingDINOConfig(PretrainedConfig):
             generation.
         positional_embedding_temperature (`float`, *optional*, defaults to 20):
             The temperature for Sine Positional Embedding that is used together with vision backbone.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     Examples:
 
     ```python
@@ -319,6 +325,7 @@ class GroundingDINOConfig(PretrainedConfig):
         decoder_bbox_embed_share=True,
         two_stage_bbox_embed_share=False,
         positional_embedding_temperature=20,
+        init_std=0.02,
         **kwargs,
     ):
         if backbone_config is not None and use_timm_backbone:
@@ -394,6 +401,7 @@ class GroundingDINOConfig(PretrainedConfig):
         if two_stage_bbox_embed_share and not decoder_bbox_embed_share:
             raise ValueError("If two_stage_bbox_embed_share is True, decoder_bbox_embed_share must be True.")
         self.positional_embedding_temperature = positional_embedding_temperature
+        self.init_std = init_std
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
