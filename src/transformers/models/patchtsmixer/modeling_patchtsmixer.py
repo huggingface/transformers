@@ -652,15 +652,12 @@ class PatchTSMixerForecastHead(nn.Module):
         if self.config.forecast_channel_indices is not None:
             self.config.forecast_channel_indices.sort()
 
+        self.dropout_layer = nn.Dropout(config.head_dropout)
         if distribution_output is None:
-            self.base_forecast_block = nn.Sequential(
-                nn.Dropout(config.head_dropout),
-                nn.Linear((config.num_patches * config.num_features), config.forecast_len),
-            )
+            self.base_forecast_block = nn.Linear((config.num_patches * config.num_features), config.forecast_len)
         else:
-            self.base_forecast_block = nn.Sequential(
-                nn.Dropout(config.head_dropout),
-                distribution_output.get_parameter_projection(config.num_patches * config.num_features),
+            self.base_forecast_block = distribution_output.get_parameter_projection(
+                config.num_patches * config.num_features
             )
 
         self.flatten = nn.Flatten(start_dim=-2)
@@ -679,7 +676,7 @@ class PatchTSMixerForecastHead(nn.Module):
         """
 
         hidden_features = self.flatten(hidden_features)  # [batch_size x n_vars x num_patch * num_features]
-
+        hidden_features = self.dropout_layer(hidden_features)  # [batch_size x n_vars x num_patch * num_features]
         forecast = self.base_forecast_block(hidden_features)  # [batch_size x n_vars x forecast_len]
         if isinstance(forecast, tuple):
             forecast = tuple(z.transpose(-1, -2) for z in forecast)
@@ -802,10 +799,8 @@ class PatchTSMixerPretrainHead(nn.Module):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
 
-        self.base_pt_block = nn.Sequential(
-            nn.Dropout(config.head_dropout),
-            nn.Linear(config.num_features, config.patch_len),
-        )
+        self.dropout_layer = nn.Dropout(config.head_dropout)
+        self.base_pt_block = nn.Linear(config.num_features, config.patch_len)
 
     def forward(self, hidden_features):
         """
@@ -818,6 +813,7 @@ class PatchTSMixerPretrainHead(nn.Module):
             `torch.Tensor` of shape `(batch_size x n_vars x num_patch x patch_len)`.
         """
 
+        hidden_features = self.dropout_layer(hidden_features)
         forecast = self.base_pt_block(hidden_features)  # [batch_size x n_vars x num_patch x patch_len]
         return forecast
 
@@ -1257,12 +1253,11 @@ class PatchTSMixerNOPScaler(nn.Module):
 class InjectScalerStatistics4D(nn.Module):
     def __init__(self, num_features: int, num_patches: int, expansion: int = 2):
         super().__init__()
-        self.inverse_transform = nn.Sequential(
-            nn.Linear(num_features + 2, expansion * num_features),
-            nn.Linear(expansion * num_features, num_features),
-        )
 
-        self.map_scale = nn.Sequential(nn.Linear(2, 2 * expansion), nn.Linear(2 * expansion, 2))
+        self.inverse_trans_expansion = nn.Linear(num_features + 2, expansion * num_features)
+        self.inverse_trans_compression = nn.Linear(expansion * num_features, num_features)
+        self.map_scale_expansion = nn.Linear(2, 2 * expansion)
+        self.map_scale_compression = nn.Linear(2 * expansion, 2)
         self.num_patches = num_patches
 
     def forward(self, inputs: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor):
@@ -1285,10 +1280,12 @@ class InjectScalerStatistics4D(nn.Module):
 
         concat_stats = torch.cat([mean, stdev], dim=-1)  # [batch_size x n_channels x num_patch x 2]
 
-        concat_stats = self.map_scale(concat_stats)  # [batch_size x n_channels x num_patch x 2]
+        concat_stats = self.map_scale_expansion(concat_stats)  # [batch_size x n_channels x num_patch x (2*expansion)]
+        concat_stats = self.map_scale_compression(concat_stats)  # [batch_size x n_channels x num_patch x 2]
 
         inputs = torch.cat([inputs, concat_stats], dim=-1)  # [batch_size x channels x num_patch x num_features+2]
-        inputs = self.inverse_transform(inputs)  # [batch_size x channels x num_patch x num_features]
+        inputs = self.inverse_trans_expansion(inputs)  # [batch_size x channels x num_patch x (expansion*num_features)]
+        inputs = self.inverse_trans_compression(inputs)  # [batch_size x channels x num_patch x num_features]
 
         return inputs
 
