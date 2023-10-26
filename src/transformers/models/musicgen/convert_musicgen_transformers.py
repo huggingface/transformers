@@ -225,6 +225,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."
     )
+    parser.add_argument(
+        "--safe_serialization",
+        action="store_true",
+        help="Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).",
+    )
 
     args = parser.parse_args()
     convert_musicgen_checkpoint(args.checkpoint, args.pytorch_dump_folder, args.push_to_hub)
