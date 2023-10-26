@@ -64,6 +64,7 @@ from transformers.testing_utils import (
     is_pt_flax_cross_test,
     is_pt_tf_cross_test,
     require_accelerate,
+    require_bitsandbytes,
     require_flash_attn,
     require_safetensors,
     require_torch,
@@ -348,9 +349,23 @@ class ModelTesterMixin:
             model.gradient_checkpointing_enable()
             self.assertTrue(model.is_gradient_checkpointing)
 
+            # Loop over all modules and check that relevant modules have gradient_checkpointing set to True
+            for n, m in model.named_modules():
+                if hasattr(m, "gradient_checkpointing"):
+                    self.assertTrue(
+                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to True"
+                    )
+
             # check disable works
             model.gradient_checkpointing_disable()
             self.assertFalse(model.is_gradient_checkpointing)
+
+            # Loop over all modules and check that relevant modules have gradient_checkpointing set to False
+            for n, m in model.named_modules():
+                if hasattr(m, "gradient_checkpointing"):
+                    self.assertFalse(
+                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
+                    )
 
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -563,6 +578,13 @@ class ModelTesterMixin:
             model = model_class(config)
             model.to(torch_device)
             model.gradient_checkpointing_enable()
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+            model.gradient_checkpointing_disable()
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": True})
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
@@ -2810,6 +2832,10 @@ class ModelTesterMixin:
 
                 self.assertTrue(torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2))
 
+                # check with inference + dropout
+                model.train()
+                _ = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -2954,6 +2980,45 @@ class ModelTesterMixin:
                 _ = model.generate(
                     dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=30, do_sample=False
                 )
+
+    @require_flash_attn
+    @require_torch_gpu
+    @require_bitsandbytes
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_fp32_ln(self):
+        import torch
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    use_flash_attention_2=True,
+                    low_cpu_mem_usage=True,
+                    load_in_4bit=True,
+                )
+
+                for _, param in model.named_parameters():
+                    # upcast only layer norms
+                    if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
+                        param.data = param.data.to(torch.float32)
+
+                _ = model(input_ids=dummy_input)
+
+                # with attention mask
+                _ = model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
 
 
 global_rng = random.Random()

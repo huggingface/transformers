@@ -544,7 +544,7 @@ class GenerationMixin:
         inputs_kwarg = model_kwargs.pop(input_name, None)
         if inputs_kwarg is not None and inputs is not None:
             raise ValueError(
-                f"`inputs`: {inputs}` were passed alongside {input_name} which is not allowed."
+                f"`inputs`: {inputs}` were passed alongside {input_name} which is not allowed. "
                 f"Make sure to either pass {inputs} or {input_name}=..."
             )
         elif inputs_kwarg is not None:
@@ -820,11 +820,20 @@ class GenerationMixin:
         # instantiate warpers list
         warpers = LogitsProcessorList()
 
+        # In beam methods, we need to keep at least one non-eos token to explore continuations that might have a
+        # better score (i.e. keep len(list(generation_config.eos_token_id)) + 1)
+        if generation_config.num_beams > 1:
+            if isinstance(generation_config.eos_token_id, list):
+                min_tokens_to_keep = len(generation_config.eos_token_id) + 1
+            else:
+                min_tokens_to_keep = 2
+        else:
+            min_tokens_to_keep = 1
+
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
         if generation_config.temperature is not None and generation_config.temperature != 1.0:
             warpers.append(TemperatureLogitsWarper(generation_config.temperature))
-        min_tokens_to_keep = 2 if generation_config.num_beams > 1 else 1
         if generation_config.top_k is not None and generation_config.top_k != 0:
             warpers.append(TopKLogitsWarper(top_k=generation_config.top_k, min_tokens_to_keep=min_tokens_to_keep))
         if generation_config.top_p is not None and generation_config.top_p < 1.0:
@@ -1241,6 +1250,10 @@ class GenerationMixin:
                 decoder_model_args = set(inspect.signature(decoder.forward).parameters)
                 model_args |= {f"decoder_{x}" for x in decoder_model_args}
 
+            # allow assistant_encoder_outputs to be passed if we're doing assisted generating
+            if "assistant_encoder_outputs" in model_kwargs:
+                model_args |= {"assistant_encoder_outputs"}
+
         for key, value in model_kwargs.items():
             if value is not None and key not in model_args:
                 unused_model_args.append(key)
@@ -1297,6 +1310,43 @@ class GenerationMixin:
                     UserWarning,
                 )
 
+    def _extend_attention_mask(self, model_kwargs: Dict[str, Any], new_mask_length: int) -> Dict[str, Any]:
+        if self.config.is_encoder_decoder:
+            key = "decoder_attention_mask"
+        else:
+            key = "attention_mask"
+
+        if key not in model_kwargs:
+            return model_kwargs
+
+        mask = model_kwargs[key]
+        mask_extension_length = new_mask_length - mask.shape[1]
+
+        if mask_extension_length < 0:
+            raise ValueError("Cannot extend attention mask to a length less than it already is")
+
+        model_kwargs[key] = torch.cat(
+            [mask, mask.new_ones((mask.shape[0], mask_extension_length))],
+            dim=-1,
+        )
+
+        return model_kwargs
+
+    def _extend_token_type_ids(self, model_kwargs: Dict[str, Any], new_length: int) -> Dict[str, Any]:
+        if "token_type_ids" not in model_kwargs or model_kwargs["token_type_ids"] is None:
+            return model_kwargs
+
+        token_type_ids = model_kwargs["token_type_ids"]
+        final_token_type = token_type_ids[:, -1].unsqueeze(-1)
+        extension_length = new_length - token_type_ids.shape[1]
+        token_type_copies = final_token_type.repeat(1, extension_length)
+        model_kwargs["token_type_ids"] = torch.cat(
+            [model_kwargs["token_type_ids"], token_type_copies],
+            dim=-1,
+        )
+
+        return model_kwargs
+
     @torch.no_grad()
     def generate(
         self,
@@ -1347,7 +1397,9 @@ class GenerationMixin:
             stopping_criteria (`StoppingCriteriaList`, *optional*):
                 Custom stopping criteria that complement the default stopping criteria built from arguments and a
                 generation config. If a stopping criteria is passed that is already created with the arguments or a
-                generation config an error is thrown. This feature is intended for advanced users.
+                generation config an error is thrown. If your stopping criteria depends on the `scores` input, make
+                sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`. This feature is
+                intended for advanced users.
             prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
@@ -1575,7 +1627,7 @@ class GenerationMixin:
                 raise ValueError("assisted generate requires `use_cache=True`")
 
             # 11. If the assistant model is an encoder-decoder, prepare its encoder outputs
-            if assistant_model.config.is_encoder_decoder:
+            if assistant_model.config.is_encoder_decoder and "assistant_encoder_outputs" not in model_kwargs:
                 assistant_model_kwargs = copy.deepcopy(model_kwargs)
                 inputs_tensor, model_input_name, assistant_model_kwargs = assistant_model._prepare_model_inputs(
                     inputs_tensor, assistant_model.generation_config.bos_token_id, assistant_model_kwargs
@@ -1775,7 +1827,7 @@ class GenerationMixin:
 
                 def typeerror():
                     raise ValueError(
-                        "`force_words_ids` has to either be a `List[List[List[int]]]` or `List[List[int]]`"
+                        "`force_words_ids` has to either be a `List[List[List[int]]]` or `List[List[int]]` "
                         f"of positive integers, but is {generation_config.force_words_ids}."
                     )
 
@@ -3365,18 +3417,15 @@ class GenerationMixin:
             )  # (batch_size * num_beams, vocab_size)
 
             next_token_scores_processed = logits_processor(input_ids, next_token_scores)
+            next_token_scores_processed = logits_warper(input_ids, next_token_scores_processed)
             next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(
                 next_token_scores_processed
             )
-            # Note: logits warpers are intentionally applied after adding running beam scores. On some logits warpers
-            # (like top_p) this is indiferent, but on others (like temperature) it is not. For reference, see
-            # https://github.com/huggingface/transformers/pull/5420#discussion_r449779867
-            next_token_scores = logits_warper(input_ids, next_token_scores)
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
-                    scores += (logits_warper(input_ids, next_token_scores_processed),)
+                    scores += (next_token_scores_processed,)
                 if output_attentions:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
@@ -4310,8 +4359,14 @@ class GenerationMixin:
         ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
         ```"""
         # Assistant: initialize assistant-related variables
-        if not hasattr(assistant_model, "max_assistant_tokens"):
-            assistant_model.max_assistant_tokens = 5  # this value, which will be updated, persists across calls
+        if hasattr(assistant_model, "num_assistant_tokens"):
+            warnings.warn(
+                "Setting `num_assistant_tokens` via `assistant_model.num_assistant_tokens` is deprecated and will be removed in v.37. Make sure to set `num_assistant_tokens` via the generation_config instead.",
+                FutureWarning,
+            )
+            num_assistant_tokens = assistant_model.num_assistant_tokens
+        else:
+            num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
 
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -4384,26 +4439,23 @@ class GenerationMixin:
             # `.generate()` call if we decide to add `past_key_values` as a possible output of generate, as we
             # need access to the assistant cache to secure strong speedups.
             candidate_input_ids = input_ids
-            for _ in range(int(assistant_model.max_assistant_tokens)):
+            for _ in range(int(num_assistant_tokens)):
                 # 1.1. use the assistant model to obtain the next candidate logits
                 if "assistant_past_key_values" in model_kwargs:
                     prev_seq_len = model_kwargs["assistant_past_key_values"][0][assistant_kv_indexing].shape[-2]
                     # `new_token_len` can be 1 or 2 (next token in assistant + last token picked by the larger model)
                     new_token_len = candidate_input_ids.shape[1] - prev_seq_len
                     assist_inputs = candidate_input_ids[:, -new_token_len:]
-                    assist_attn = torch.ones_like(candidate_input_ids)
                     # TODO (joao): make it compatible with models that use unconventional fwd pass logic, like blip2
                     if assistant_model.config.is_encoder_decoder:
                         assistant_model_outputs = assistant_model(
                             decoder_input_ids=assist_inputs,
-                            decoder_attention_mask=assist_attn,
                             past_key_values=model_kwargs["assistant_past_key_values"],
                             encoder_outputs=model_kwargs["assistant_encoder_outputs"],
                         )
                     else:
                         assistant_model_outputs = assistant_model(
                             assist_inputs,
-                            attention_mask=assist_attn,
                             past_key_values=model_kwargs["assistant_past_key_values"],
                         )
                 else:
@@ -4441,61 +4493,35 @@ class GenerationMixin:
             # `candidate_length + 1` relevant logits from this process: in the event that all candidates are correct,
             # we use this forward pass to also pick the subsequent logits in the original model.
 
-            # 2.1. Run a forward pass on the candidate sequence
-            if "past_key_values" in model_kwargs:
-                model_attn = torch.ones_like(candidate_input_ids)
-                model_input_ids = candidate_input_ids[:, -candidate_length - 1 :]
-                if self.config.is_encoder_decoder:
-                    outputs = self(
-                        decoder_input_ids=model_input_ids,
-                        decoder_attention_mask=model_attn,
-                        past_key_values=model_kwargs["past_key_values"],
-                        encoder_outputs=model_kwargs["encoder_outputs"],
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        use_cache=True,
-                    )
-                else:
-                    outputs = self(
-                        model_input_ids,
-                        attention_mask=model_attn,
-                        past_key_values=model_kwargs["past_key_values"],
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        use_cache=True,
-                    )
-            else:
-                if self.config.is_encoder_decoder:
-                    outputs = self(
-                        decoder_input_ids=candidate_input_ids,
-                        encoder_outputs=model_kwargs["encoder_outputs"],
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        use_cache=True,
-                    )
-                else:
-                    outputs = self(
-                        candidate_input_ids,
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        use_cache=True,
-                    )
+            # 2.1. Prepare the model inputs
+            candidate_kwargs = copy.copy(model_kwargs)
+            candidate_kwargs = self._extend_attention_mask(candidate_kwargs, candidate_input_ids.shape[1])
+            candidate_kwargs = self._extend_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
 
-            # 2.2. Process the new logits
+            model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
+
+            # 2.2. Run a forward pass on the candidate sequence
+            outputs = self(
+                **model_inputs,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+
+            # 2.3. Process the new logits
             new_logits = outputs.logits[:, -candidate_length - 1 :]  # excludes the input prompt if present
             if len(logits_processor) > 0:
-                for i in range(candidate_length):
+                for i in range(candidate_length + 1):
                     new_logits[:, i, :] = logits_processor(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
             if len(logits_warper) > 0:
-                for i in range(candidate_length):
+                for i in range(candidate_length + 1):
                     new_logits[:, i, :] = logits_warper(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
 
             # 3. Obtain the next tokens from the original model logits.
             if do_sample:
-                probs = new_logits[:, -candidate_length - 1 :, :].softmax(dim=-1)
+                probs = new_logits.softmax(dim=-1)
                 selected_tokens = torch.multinomial(probs[0, :, :], num_samples=1).squeeze(1)[None, :]
             else:
-                selected_tokens = new_logits[:, -candidate_length - 1 :, :].argmax(dim=-1)
+                selected_tokens = new_logits.argmax(dim=-1)
 
             # 4. Compare the argmax from the original model logits with the assistant forecasted tokens. We can keep
             # the assistant forecasted tokens until the first mismatch, or until the max length is reached.
@@ -4529,13 +4555,13 @@ class GenerationMixin:
             # 6. Adjust the max number of assistant tokens to use in the next iteration. This is a simple heuristic,
             # probably can be improved -- we want to balance the benefits of getting assistant tokens correct with the
             # cost of forecasting incorrect assistant tokens.
-            if n_matches == int(assistant_model.max_assistant_tokens):
-                assistant_model.max_assistant_tokens += 2.0
-            else:
-                assistant_model.max_assistant_tokens = max(1.0, assistant_model.max_assistant_tokens - 1.0)
+            if assistant_model.generation_config.num_assistant_tokens_schedule == "heuristic":
+                if n_matches == int(num_assistant_tokens):
+                    num_assistant_tokens += 2.0
+                else:
+                    num_assistant_tokens = max(1.0, num_assistant_tokens - 1.0)
 
             # Assistant: main logic end
-
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
 

@@ -475,9 +475,10 @@ class MusicgenPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, MusicgenDecoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 MUSICGEN_START_DOCSTRING = r"""
@@ -826,16 +827,8 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
-
-                    return custom_forward
-
                 layer_outputs = checkpoint(
-                    create_custom_forward(decoder_layer),
+                    decoder_layer.forward,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
@@ -843,6 +836,8 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
                     head_mask[idx] if head_mask is not None else None,
                     cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                     None,
+                    output_attentions,
+                    use_cache,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1428,7 +1423,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
         else:
             raise ValueError(
-                "Got incompatible mode for generation, should be one of greedy or sampling."
+                "Got incompatible mode for generation, should be one of greedy or sampling. "
                 "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
             )
 
@@ -1453,7 +1448,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The composite MusicGen model with a text encoder, audio encoder and Musicgen decoder,"
+    "The composite MusicGen model with a text encoder, audio encoder and Musicgen decoder, "
     "for music generation tasks with one or both of text and audio prompts.",
     MUSICGEN_START_DOCSTRING,
 )
@@ -1562,10 +1557,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 self.text_encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
             )
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         # call both encoder and decoder function on gradient checkpointing
-        self.text_encoder._set_gradient_checkpointing(module, value=value)
-        self.decoder._set_gradient_checkpointing(module, value=value)
+        self.text_encoder._set_gradient_checkpointing(module, gradient_checkpointing_func=gradient_checkpointing_func)
+        self.decoder._set_gradient_checkpointing(module, gradient_checkpointing_func=gradient_checkpointing_func)
 
     def get_audio_encoder(self):
         return self.audio_encoder
@@ -1995,9 +1990,17 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             if decoder_attention_mask is not None:
                 decoder_attention_mask = decoder_attention_mask.repeat((2, 1))
 
-        # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -2467,7 +2470,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         else:
             raise ValueError(
-                "Got incompatible mode for generation, should be one of greedy or sampling."
+                "Got incompatible mode for generation, should be one of greedy or sampling. "
                 "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
             )
 
