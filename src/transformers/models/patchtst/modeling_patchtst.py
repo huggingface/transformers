@@ -474,19 +474,7 @@ class PatchTSTMasking(nn.Module):
     Class to perform random or forecast masking.
 
     Parameters:
-        mask_type (`str`, *optional*): Masking type. Allowed values are random, forecast. Defaults to random.
-        random_mask_ratio (`float`, *optional*): Mask ratio for random pretraining.
-        forecast_mask_patches (`list`, *optional*): List of patch lengths to mask in the end of the data.
-        forecast_mask_ratios (`list`, *optional*):
-            List of weights to use for each patch length. For Ex. if forecast_mask_patches is [5,4] and
-            forecast_mask_ratios is [1,1], then equal weights to both patch lengths. Defaults to None.
-        unmasked_channel_indices (`list`, *optional*):
-            Define what channels not to mask. These channels will not be masked during pretrainin. Defaults to None.
-        channel_consistent_masking (`bool`, *optional*):
-            When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
-            across channels. Defaults to True.
-        mask_value (`int`, *optional*): Value to use for masking. Defaults to 0.
-        seed_number (`int`, *optional*): Random seed, when None seed is not set. Defaults to None.
+        config (`PatchTSTConfig`): model config
 
     Returns:
         x_mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`)
@@ -498,26 +486,19 @@ class PatchTSTMasking(nn.Module):
 
     def __init__(
         self,
-        mask_type: str = "random",
-        random_mask_ratio: float = 0.5,
-        forecast_mask_patches: list = [2, 3],
-        forecast_mask_ratios: list = [1, 1],
-        channel_consistent_masking: bool = False,
-        unmasked_channel_indices: list = None,
-        mask_value: int = 0,
-        seed_number: Optional[int] = None,
+        config: PatchTSTConfig
     ):
         super().__init__()
-        self.random_mask_ratio = random_mask_ratio
-        self.channel_consistent_masking = channel_consistent_masking
-        self.mask_type = mask_type
-        self.forecast_mask_patches = forecast_mask_patches
-        self.forecast_mask_ratios = forecast_mask_ratios
-        self.unmasked_channel_indices = unmasked_channel_indices
-        self.mask_value = mask_value
+        self.random_mask_ratio = config.random_mask_ratio
+        self.channel_consistent_masking = config.channel_consistent_masking
+        self.mask_type = config.mask_type
+        self.forecast_mask_patches = config.forecast_mask_patches
+        self.forecast_mask_ratios = config.forecast_mask_ratios
+        self.unmasked_channel_indices = config.unmasked_channel_indices
+        self.mask_value = config.mask_value
         if self.unmasked_channel_indices is not None:
             self.unmasked_channel_indices.sort()
-        self.seed_number = seed_number
+        self.seed_number = config.seed_number
 
     def forward(self, patch_input: torch.Tensor):
         """
@@ -1301,16 +1282,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         self.mask_input = config.mask_input
 
         if self.mask_input:
-            self.masking = PatchTSTMasking(
-                mask_type=config.mask_type,
-                random_mask_ratio=config.random_mask_ratio,
-                forecast_mask_patches=config.forecast_mask_patches,
-                forecast_mask_ratios=config.forecast_mask_ratios,
-                channel_consistent_masking=config.channel_consistent_masking,
-                unmasked_channel_indices=config.unmasked_channel_indices,
-                mask_value=config.mask_value,
-                seed_number=config.seed_number,
-            )
+            self.masking = PatchTSTMasking(config)
         else:
             self.masking = nn.Identity()
         self.encoder = PatchTSTEncoder(config)
