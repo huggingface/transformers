@@ -559,7 +559,7 @@ class BioGptModel(BioGptPreTrainedModel):
         # embed positions
         positions = self.embed_positions(attention_mask, past_key_values_length)
 
-        attention_mask = self._prepare_decoder_attention_mask(
+        attention_mask = prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
 

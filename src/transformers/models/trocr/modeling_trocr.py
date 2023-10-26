@@ -660,7 +660,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
 
         input_shape = input.shape
 
-        attention_mask = self._prepare_decoder_attention_mask(
+        attention_mask = prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
 

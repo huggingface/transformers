@@ -779,7 +779,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = sum([self.embed_tokens[codebook](input[:, codebook]) for codebook in range(num_codebooks)])
 
-        attention_mask = self._prepare_decoder_attention_mask(
+        attention_mask = prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
 

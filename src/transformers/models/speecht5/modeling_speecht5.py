@@ -1652,7 +1652,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-        attention_mask = self._prepare_decoder_attention_mask(
+        attention_mask = prepare_4d_causal_attention_mask(
             attention_mask, input_shape, hidden_states, past_key_values_length
         )
 

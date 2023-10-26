@@ -2501,7 +2501,7 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length)
+        attention_mask = prepare_4d_causal_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length)
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
