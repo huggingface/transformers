@@ -47,6 +47,8 @@ class PatchTSMixerConfig(PretrainedConfig):
         stride (`int`, *optional*, defaults to 8):
             Determines the overlap between two consecutive patches. Set it to patch_len (or greater), if we want
             non-overlapping patches.
+        num_parallel_samples (`int`, *optional*, defaults to 100):
+            The number of samples to generate in parallel for probablistic forecast.
         num_features (`int`, *optional*, defaults to 8):
             Hidden dimension of the model. Recommended to set it as a multiple of patch_len (i.e. 2-5X of patch_len).
             Larger value indicates more complex model.
@@ -80,6 +82,20 @@ class PatchTSMixerConfig(PretrainedConfig):
             when `use_positional_encoding` is set to `True`
         learn_positional_encoding (`bool`, *optional*, defaults to `False`):
             Whether to learn the positional encoding. Works only when `use_positional_encoding` is set to `True`
+        scaling (`string` or `bool`, *optional*, defaults to `"std"`):
+            Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
+            scaler is set to "mean".
+        loss (`string`, *optional*, defaults to `"mse"`):
+            The loss function for the model corresponding to the `distribution_output` head. For parametric
+            distributions it is the negative log likelihood ("nll") and for point estimates it is the mean squared
+            error "mse".
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated normal weight initialization distribution.
+        seed_number (`int`, *optional*):
+            Random seed for masking.
+        post_init (`bool`, *optional*, defaults to `False`):
+            Whether to use custom weight initialization from `transformers` library, or the default initialization in
+            `PyTorch`. Setting it to `False` performs `PyTorch` weight initialization.
         mask_type (`str`, *optional*, defaults to `"random"`):
             Type of masking to use for Masked Pretraining mode. Allowed values are "random", "forecast". In Random
             masking, points are maskes random. In Forecast masking, Points are masked towards the end.
@@ -97,11 +113,11 @@ class PatchTSMixerConfig(PretrainedConfig):
         channel_consistent_masking (`bool`, *optional*, defaults to `True`):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
             across channels.
-        scaling (`string` or `bool`, *optional*, defaults to `"std"`):
-            Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
-            scaler is set to "mean".
         head_dropout (`float`, *optional*, defaults to 0.2):
             The dropout probability the `PatchTSMixer` head.
+        distribution_output (`string`, *optional*, defaults to `"student_t"`):
+            The distribution emission head for the model when loss is "nll". Could be either "student_t", "normal" or
+            "negative_binomial".
         forecast_len (`int`, *optional*, defaults to 16):
             Number of time steps to forecast for a forecasting task. Also known as the Forecast Horizon.
         forecast_channel_indices (`list`, *optional*):
@@ -114,22 +130,6 @@ class PatchTSMixerConfig(PretrainedConfig):
         head_aggregation (`str`, *optional*, defaults to `"max_pool"`):
             Aggregation mode to enable for classification or regression task. Allowed values are `None`, "use_last",
             "max_pool", "avg_pool".
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated normal weight initialization distribution.
-        seed_number (`int`, *optional*):
-            Random seed for masking.
-        post_init (`bool`, *optional*, defaults to `False`):
-            Whether to use custom weight initialization from `transformers` library, or the default initialization in
-            `PyTorch`. Setting it to `False` performs `PyTorch` weight initialization.
-        distribution_output (`string`, *optional*, defaults to `"student_t"`):
-            The distribution emission head for the model when loss is "nll". Could be either "student_t", "normal" or
-            "negative_binomial".
-        loss (`string`, *optional*, defaults to `"mse"`):
-            The loss function for the model corresponding to the `distribution_output` head. For parametric
-            distributions it is the negative log likelihood ("nll") and for point estimates it is the mean squared
-            error "mse".
-        num_parallel_samples (`int`, *optional*, defaults to 100):
-            The number of samples to generate in parallel for probablistic forecast.
 
     Example:
 
