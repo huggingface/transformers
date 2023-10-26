@@ -879,7 +879,6 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        no_images: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -898,7 +897,6 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            no_images (`bool`, *optional*, defaults to `False`): If `True` the vision part is ignored
         """
         if image_hidden_states is None:
             raise ValueError(
@@ -1211,14 +1209,12 @@ class IdeficsModel(IdeficsPreTrainedModel):
             )
             position_ids = position_ids.unsqueeze(0)
 
-        no_images = False
         if (pixel_values, image_encoder_embeddings, perceiver_embeddings).count(None) != 2:
             raise ValueError(
                 "Exactly 1 of pixel_values, image_encoder_embeddings or perceiver_embeddings has to be not-None."
             )
 
         elif pixel_values is not None:
-            no_images = len(torch.nonzero(pixel_values)) == 0
             pixel_values = pixel_values.to(dtype=self.dtype, device=device)  # fp16 compatibility
             batch_size, num_images = pixel_values.shape[:2]
             pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
@@ -1312,7 +1308,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
                 cross_attention_gate,
                 output_attentions,
                 use_cache,
-                no_images,
                 layer_idx,
                 cross_layer_interval,
                 gated_cross_attn_layers,
@@ -1329,7 +1324,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
                         output_attentions=output_attentions,
                         use_cache=use_cache,
                         past_key_value=None,  # not implemented
-                        no_images=no_images,
                     )
                     hidden_states = outputs[0]
 
@@ -1364,7 +1358,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
                     cross_attention_gate,
                     output_attentions,
                     use_cache,
-                    no_images,
                     idx,
                     self.cross_layer_interval,
                     self.gated_cross_attn_layers,
@@ -1381,7 +1374,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
                     cross_attention_gate=cross_attention_gate,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
-                    no_images=no_images,
                     layer_idx=idx,
                     cross_layer_interval=self.cross_layer_interval,
                     gated_cross_attn_layers=self.gated_cross_attn_layers,
