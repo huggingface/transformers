@@ -478,4 +478,4 @@ class AWQConfig(QuantizationConfigMixin):
             compute_capability = torch.cuda.get_device_capability()
             major, minor = compute_capability
             if major < 8:
-                raise ValueError("LLMAWQ backend is only supported on GPUs with compute capability >= 8.0")
+                raise ValueError("LLM-AWQ backend is only supported on GPUs with compute capability >= 8.0")
