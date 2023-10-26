@@ -436,5 +436,7 @@ class GPTQConfig(QuantizationConfigMixin):
                 logger.warning("You have activated exllamav2 kernels. Exllama kernels will be disabled.")
             if not self.disable_exllama:
                 logger.warning(
-                    "You have activated exllama backend. Note that you can get better inference speed using exllamav2 kernel by setting `use_exllama_v2=True`"
+                    """You have activated exllama backend. Note that you can get better inference
+                    speed using exllamav2 kernel by setting `use_exllama_v2=True`.`disable_exllama` will be deprecated
+                    in future version."""
                 )
