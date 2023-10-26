@@ -1429,7 +1429,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
                 module.embed_tokens.weight.data[module.embed_tokens.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (Kosmos2TextBlock, Kosmos2VisionEncoder)):
+        if isinstance(module, (Kosmos2TextTransformer, Kosmos2VisionEncoder)):
             module.gradient_checkpointing_func = gradient_checkpointing_func
             module.gradient_checkpointing = gradient_checkpointing_func is not None
 
