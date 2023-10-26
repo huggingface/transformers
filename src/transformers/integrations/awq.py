@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from ..utils import is_accelerate_available, is_auto_awq_available, is_torch_available
-from ..utils.quantization_config import AWQLinearVersion, AWQBackend
+from ..utils.quantization_config import AWQBackend, AWQLinearVersion
 
 
 if is_torch_available():
