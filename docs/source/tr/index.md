@@ -22,7 +22,7 @@ Lisansa tabi olmayan durumlarda veya yazılı anlaşma olmadıkça, Lisans kapsa
 
 🤗 Transformers, PyTorch, TensorFlow ve JAX arasında çerçeve uyumluluğu sağlar. Bu, bir modelin yaşam döngüsünün her aşamasında farklı bir çerçeve kullanma esnekliği sunar; bir çerçevede üç satır kodla bir modeli eğitebilir ve başka bir çerçevede tahminleme için kullanabilirsiniz. Modeller ayrıca üretim ortamlarında kullanılmak üzere ONNX ve TorchScript gibi bir formata aktarılabilir.
 
-Büyüyen topluluğa [Hub](https://huggingface.co/models), [forum](https://discuss.huggingface.co/) veya [Discord](https://discord.com/invite/JfAtkvEtRb) üzerinden katılabilirsiniz!
+Büyüyen topluluğa [Hub](https://huggingface.co/models), [Forum](https://discuss.huggingface.co/) veya [Discord](https://discord.com/invite/JfAtkvEtRb) üzerinden katılabilirsiniz!
 
 ## Hugging Face ekibinden özel destek arıyorsanız
 
