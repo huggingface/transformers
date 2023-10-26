@@ -484,10 +484,7 @@ class PatchTSTMasking(nn.Module):
 
     """
 
-    def __init__(
-        self,
-        config: PatchTSTConfig
-    ):
+    def __init__(self, config: PatchTSTConfig):
         super().__init__()
         self.random_mask_ratio = config.random_mask_ratio
         self.channel_consistent_masking = config.channel_consistent_masking
@@ -544,6 +541,7 @@ class PatchTSTEncoderLayer(nn.Module):
     """
     PatchTST encoder layer
     """
+
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
 
@@ -588,9 +586,7 @@ class PatchTSTEncoderLayer(nn.Module):
 
         self.pre_norm = config.pre_norm
 
-    def forward(self,
-                hidden_state: torch.Tensor,
-                output_attentions: Optional[bool] = None):
+    def forward(self, hidden_state: torch.Tensor, output_attentions: Optional[bool] = None):
         """
         Parameters:
             hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`, *required*):
@@ -609,8 +605,7 @@ class PatchTSTEncoderLayer(nn.Module):
         if self.pre_norm:
             ## Norm and Multi-Head attention and Add residual connection
             attn_output, attn_weights, _ = self.self_attn(
-                hidden_states=self.norm_sublayer1(hidden_state),
-                output_attentions=output_attentions
+                hidden_states=self.norm_sublayer1(hidden_state), output_attentions=output_attentions
             )
             hidden_state = hidden_state + self.dropout_path1(
                 attn_output
@@ -618,8 +613,7 @@ class PatchTSTEncoderLayer(nn.Module):
         else:
             ## Multi-Head attention and Add residual connection and Norm - Standard Transformer from BERT
             attn_output, attn_weights, _ = self.self_attn(
-                hidden_states=hidden_state,
-                output_attentions=output_attentions
+                hidden_states=hidden_state, output_attentions=output_attentions
             )
             hidden_state = self.norm_sublayer1(
                 hidden_state + self.dropout_path1(attn_output)
@@ -641,8 +635,7 @@ class PatchTSTEncoderLayer(nn.Module):
             if self.pre_norm:
                 ## Norm and Multi-Head attention and Add residual connection
                 attn_output, channel_attn_weights, _ = self.self_attn(
-                    hidden_states=self.norm_sublayer2(hidden_state),
-                    output_attentions=output_attentions
+                    hidden_states=self.norm_sublayer2(hidden_state), output_attentions=output_attentions
                 )
                 hidden_state = hidden_state + self.dropout_path2(
                     attn_output
@@ -684,7 +677,7 @@ class PatchTSTEncoderLayer(nn.Module):
         outputs = (hidden_state,)
 
         if output_attentions:
-            outputs += (attn_weights, channel_attn_weights) if self.channel_attention else (attn_weights, )
+            outputs += (attn_weights, channel_attn_weights) if self.channel_attention else (attn_weights,)
 
         return outputs
 
@@ -734,7 +727,7 @@ class PatchTSTEmbedding(nn.Module):
         # Input encoding
         num_input_channels = patch_input.shape[1]
         if isinstance(self.input_embedding, nn.ModuleList):
-            embeddings = [ self.input_embedding[i](patch_input[:, i, :, :]) for i in range(num_input_channels)]
+            embeddings = [self.input_embedding[i](patch_input[:, i, :, :]) for i in range(num_input_channels)]
             embeddings = torch.stack(embeddings, dim=1)
         else:
             embeddings = self.input_embedding(patch_input)  # x: [bs x num_channels  x num_patches x d_model]
@@ -798,7 +791,9 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
             `BaseModelOutput`
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         # Input embedding
         patch_input = self.embedder(patch_input)
@@ -836,9 +831,7 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
                 all_attentions = all_attentions + (layer_outputs[1],)
 
         # return past_values, hidden_states
-        return BaseModelOutput(last_hidden_state=hidden_state,
-                               hidden_states=encoder_states,
-                               attentions=all_attentions)
+        return BaseModelOutput(last_hidden_state=hidden_state, hidden_states=encoder_states, attentions=all_attentions)
 
 
 PATCHTST_START_DOCSTRING = r"""
@@ -1170,9 +1163,7 @@ class PatchTSTStdScaler(nn.Module):
         self.minimum_scale = minimum_scale
 
     @torch.no_grad()
-    def forward(self,
-                data: torch.Tensor, weights: torch.Tensor
-                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         denominator = weights.sum(self.dim, keepdim=self.keepdim)
         denominator = denominator.clamp_min(1.0)
         loc = (data * weights).sum(self.dim, keepdim=self.keepdim) / denominator
@@ -1200,8 +1191,7 @@ class PatchTSTMeanScaler(nn.Module):
     """
 
     def __init__(
-        self, dim: int = -1, keepdim: bool = True,
-        default_scale: Optional[float] = None, minimum_scale: float = 1e-10
+        self, dim: int = -1, keepdim: bool = True, default_scale: Optional[float] = None, minimum_scale: float = 1e-10
     ):
         super().__init__()
         self.dim = dim
@@ -1210,9 +1200,9 @@ class PatchTSTMeanScaler(nn.Module):
         self.default_scale = default_scale
 
     @torch.no_grad()
-    def forward(self,
-                data: torch.Tensor, observed_indicator: torch.Tensor
-                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # shape: (N, [C], T=1)
         ts_sum = (data * observed_indicator).abs().sum(self.dim, keepdim=True)
         num_observed = observed_indicator.sum(self.dim, keepdim=True)
@@ -1276,9 +1266,9 @@ class PatchTSTScaler(nn.Module):
         else:
             self.scaler = PatchTSTNOPScaler(dim=1, keepdim=True)
 
-    def forward(self,
-                data: torch.Tensor, observed_indicator: torch.Tensor
-                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         data, loc, scale = self.scaler(data, observed_indicator)
         return data, loc, scale
 
@@ -1330,9 +1320,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
             masked_values, mask = self.masking(patched_values), None
 
         encoder_output = self.encoder(
-            patch_input=masked_values,
-            output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions
+            patch_input=masked_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
         )
 
         if not return_dict:
@@ -1430,7 +1418,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
             past_values=past_values,
             past_observed_mask=past_observed_mask,
             output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions
+            output_attentions=output_attentions,
         )
 
         # model_output[0]: [bs x num_channels x num_patches x patch_length] or
@@ -1446,11 +1434,9 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         if not return_dict:
             outputs = (masked_loss, x_hat, model_output.hidden_states, model_output.attentions)
             return tuple(v for v in outputs if v is not None)
-        return PatchTSTForPretrainingOutput(loss=masked_loss,
-                                            prediction_output=x_hat,
-                                            hidden_states=encoder_states,
-                                            attentions=model_output.attentions
-                                            )
+        return PatchTSTForPretrainingOutput(
+            loss=masked_loss, prediction_output=x_hat, hidden_states=encoder_states, attentions=model_output.attentions
+        )
 
 
 class PatchTSTForClassification(PatchTSTPreTrainedModel):
@@ -1503,7 +1489,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
             past_values=past_values,
             past_observed_mask=past_observed_mask,
             output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions
+            output_attentions=output_attentions,
         )
         y_hat = self.head(model_output[0])
 
@@ -1515,11 +1501,12 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         if not return_dict:
             outputs = (loss_val, y_hat, model_output.hidden_states, model_output.attentions)
             return tuple(v for v in outputs if v is not None)
-        return PatchTSTForClassificationOutput(loss=loss_val,
-                                               prediction_logits=y_hat,
-                                               hidden_states=model_output.hidden_states,
-                                               attentions=model_output.attentions
-                                               )
+        return PatchTSTForClassificationOutput(
+            loss=loss_val,
+            prediction_logits=y_hat,
+            hidden_states=model_output.hidden_states,
+            attentions=model_output.attentions,
+        )
 
 
 class PatchTSTClassificationHead(nn.Module):
@@ -1673,7 +1660,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             past_values=past_values,
             past_observed_mask=past_observed_mask,
             output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions
+            output_attentions=output_attentions,
         )
 
         # get output head. y_hat is of shape [bs x pred_len x num_output_channels] or tuple of this shape
@@ -1693,11 +1680,12 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         if not return_dict:
             outputs = (loss_val, y_hat, model_output.hidden_states, model_output.attentions)
             return tuple(v for v in outputs if v is not None)
-        return PatchTSTForPredictionOutput(loss=loss_val,
-                                           prediction_output=y_hat,
-                                           hidden_states=model_output.hidden_states,
-                                           attentions=model_output.attentions
-                                           )
+        return PatchTSTForPredictionOutput(
+            loss=loss_val,
+            prediction_output=y_hat,
+            hidden_states=model_output.hidden_states,
+            attentions=model_output.attentions,
+        )
 
     def generate(
         self,
@@ -1888,7 +1876,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
             past_values=past_values,
             past_observed_mask=past_observed_mask,
             output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions
+            output_attentions=output_attentions,
         )
         # get output head
         y_hat = self.head(model_output.last_hidden_state)
@@ -2087,7 +2075,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             past_values=past_values,
             past_observed_mask=past_observed_mask,
             output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions
+            output_attentions=output_attentions,
         )
         # get output head. y_hat is of shape [bs x num_output_channels] or tuple of this shape
         y_hat = self.head(model_output.last_hidden_state)
@@ -2106,11 +2094,12 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         if not return_dict:
             outputs = (loss_val, y_hat, model_output.hidden_states, model_output.attentions)
             return tuple(v for v in outputs if v is not None)
-        return PatchTSTForRegressionOutput(loss=loss_val,
-                                           prediction_output=y_hat,
-                                           hidden_states=model_output.hidden_states,
-                                           attentions=model_output.attentions
-                                           )
+        return PatchTSTForRegressionOutput(
+            loss=loss_val,
+            prediction_output=y_hat,
+            hidden_states=model_output.hidden_states,
+            attentions=model_output.attentions,
+        )
 
     def generate(
         self,
