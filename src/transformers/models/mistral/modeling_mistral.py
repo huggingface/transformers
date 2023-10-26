@@ -113,7 +113,7 @@ class AttnMaskConverter:
         self,
         attention_mask_2d: torch.Tensor,
         query_length: int,
-        key_value_length: int,
+        key_value_length: Optional[int] = None,
         dtype: torch.dtype = torch.float32,
     ) -> torch.Tensor:
         """
@@ -122,12 +122,16 @@ class AttnMaskConverter:
         causal, a causal mask will be added.
         """
         input_shape = (attention_mask_2d.shape[0], query_length)
-        past_key_values_length = key_value_length - query_length
 
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         causal_4d_mask = None
         if (input_shape[-1] > 1 or self.sliding_window is not None) and self.is_causal:
+            if key_value_length is None:
+                raise ValueError(
+                    "This attention mask converter is causal. Make sure to pass `key_value_length` to correctly create a causal mask."
+                )
+
             past_key_values_length = key_value_length - query_length
             causal_4d_mask = self._make_causal_mask(
                 input_shape,
@@ -147,8 +151,8 @@ class AttnMaskConverter:
 
         return expanded_4d_mask
 
+    @staticmethod
     def _make_causal_mask(
-        self,
         input_ids_shape: torch.Size,
         dtype: torch.dtype,
         device: torch.device,
@@ -177,7 +181,8 @@ class AttnMaskConverter:
 
         return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
-    def _expand_mask(self, mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+    @staticmethod
+    def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
         """
         Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
         """
@@ -645,7 +650,12 @@ class MistralFlashAttention2(MistralAttention):
         else:
             if not use_sliding_windows:
                 attn_output = flash_attn_func(
-                    query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
+                    query_states,
+                    key_states,
+                    value_states,
+                    dropout,
+                    softmax_scale=softmax_scale,
+                    causal=self.is_causal,
                 )
             else:
                 attn_output = flash_attn_func(
@@ -654,7 +664,7 @@ class MistralFlashAttention2(MistralAttention):
                     value_states,
                     dropout,
                     softmax_scale=softmax_scale,
-                    causal=True,
+                    causal=self.is_causal,
                     window_size=(self.config.sliding_window, self.config.sliding_window),
                 )
 
@@ -903,8 +913,6 @@ class MistralModel(MistralPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        # create attention mask cache that trickles down to each attention layer
-        # so that the attention_mask cache can be shared among layers
         self.attn_mask_converter = AttnMaskConverter(is_causal=True, sliding_window=config.sliding_window)
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
