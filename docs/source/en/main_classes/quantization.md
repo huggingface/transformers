@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Quantize 🤗 Transformers models
 
-## `AutoAWQ` integration
+## AWQ integration
 
 AWQ method has been introduced in the [*AWQ: Activation-aware Weight Quantization for LLM Compression and Acceleration* paper](https://arxiv.org/abs/2306.00978). With AWQ you can run models in 4-bit precision, while preserving its original quality (i.e. no performance degradation) with a superior throughput that other quantization methods presented below - reaching similar throughput as pure `float16` inference.
 
