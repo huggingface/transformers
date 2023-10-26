@@ -468,9 +468,9 @@ class AWQConfig(QuantizationConfigMixin):
             Whether to use zero point quantization.
         version (`str`, *optional*, defaults to `"GEMM"`):
             The version of the quantization algorithm to use.
-        backend (`str`, *optional*, defaults to `"autoawq"`): 
-            The quantization backend. Some models might be quantized using `llm-awq` backend. This is useful for
-            users that quantize their own models using `llm-awq` library.
+        backend (`str`, *optional*, defaults to `"autoawq"`):
+            The quantization backend. Some models might be quantized using `llm-awq` backend. This is useful for users
+            that quantize their own models using `llm-awq` library.
     """
 
     def __init__(
