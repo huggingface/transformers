@@ -1750,12 +1750,14 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             self.distribution_output = None
         else:
             dim = config.forecast_len
-            if config.distribution_output == "student_t":
-                self.distribution_output = StudentTOutput(dim=dim)
-            elif config.distribution_output == "normal":
-                self.distribution_output = NormalOutput(dim=dim)
-            elif config.distribution_output == "negative_binomial":
-                self.distribution_output = NegativeBinomialOutput(dim=dim)
+            distribution_output_map = {
+                "student_t": StudentTOutput,
+                "normal": NormalOutput,
+                "negative_binomial": NegativeBinomialOutput,
+            }
+            output_class = distribution_output_map.get(config.distribution_output, None)
+            if output_class is not None:
+                self.distribution_output = output_class(dim=dim)
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
@@ -2110,12 +2112,14 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         if config.loss == "mse":
             self.distribution_output = None
         else:
-            if config.distribution_output == "student_t":
-                self.distribution_output = StudentTOutput(dim=config.num_targets)
-            elif config.distribution_output == "normal":
-                self.distribution_output = NormalOutput(dim=config.num_targets)
-            elif config.distribution_output == "negative_binomial":
-                self.distribution_output = NegativeBinomialOutput(dim=config.num_targets)
+            distribution_output_map = {
+                "student_t": StudentTOutput,
+                "normal": NormalOutput,
+                "negative_binomial": NegativeBinomialOutput,
+            }
+            output_class = distribution_output_map.get(config.distribution_output)
+            if output_class is not None:
+                self.distribution_output = output_class(dim=config.num_targets)
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
