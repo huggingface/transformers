@@ -290,6 +290,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             expected_arg_names.extend(
                 [
                     "output_hidden_states",
+                    "output_attentions",
                     "return_dict",
                 ]
             )
