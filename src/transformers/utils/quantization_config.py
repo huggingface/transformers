@@ -463,4 +463,4 @@ class AWQConfig(QuantizationConfigMixin):
         self.q_group_size = q_group_size
         self.zero_point = zero_point
         self.version = version
-        self.backend = AWQBackend.AUTOAWQ
+        self.backend = backend
