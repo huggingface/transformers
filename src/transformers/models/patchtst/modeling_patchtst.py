@@ -423,36 +423,26 @@ class PatchTSTPatchify(nn.Module):
     """
     A class to patchify the time series sequence into different patches
 
-    Parameters:
-        sequence_length (`int`, *required*): input sequence length.
-        patch_length (`int`, *required*): patch length.
-        stride (`int`, *required*): stride between patches.
-
     Returns:
         `torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`
     """
 
-    def __init__(
-        self,
-        sequence_length: int,
-        patch_length: int,
-        stride: int,
-    ):
+    def __init__(self, config: PatchTSTConfig):
         super().__init__()
 
-        if sequence_length <= patch_length:
+        self.sequence_length = config.context_length
+        self.patch_length = config.patch_length
+        self.stride = config.stride
+
+        if self.sequence_length <= self.patch_length:
             raise ValueError(
-                f"Sequence length ({sequence_length}) has to be greater than the patch length ({patch_length})"
+                f"Sequence length ({self.sequence_length}) has to be greater than the patch length ({self.patch_length})"
             )
 
-        self.sequence_length = sequence_length
-        self.patch_length = patch_length
-        self.stride = stride
-
         # get the number of patches
-        num_patches = (max(sequence_length, patch_length) - patch_length) // stride + 1
-        new_sequence_length = patch_length + stride * (num_patches - 1)
-        self.s_begin = sequence_length - new_sequence_length
+        num_patches = (max(self.sequence_length, self.patch_length) - self.patch_length) // self.stride + 1
+        new_sequence_length = self.patch_length + self.stride * (num_patches - 1)
+        self.sequence_start = self.sequence_length - new_sequence_length
 
     def forward(self, past_values: torch.Tensor):
         """
@@ -469,7 +459,7 @@ class PatchTSTPatchify(nn.Module):
                 f"Input sequence length ({sequence_length}) doesn't match model configuration ({self.sequence_length})."
             )
 
-        output = past_values[:, self.s_begin :, :]  # output: [bs x new_sequence_length x num_channels]
+        output = past_values[:, self.sequence_start :, :]  # output: [bs x new_sequence_length x num_channels]
         output = output.unfold(
             dimension=-2, size=self.patch_length, step=self.stride
         )  # output: [bs x num_patches x num_input_channels x patch_length]
@@ -1307,11 +1297,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         else:
             self.scaler = PatchTSTNOPScaler(dim=1, keepdim=True)
 
-        self.patching = PatchTSTPatchify(
-            config.context_length,
-            patch_length=config.patch_length,
-            stride=config.stride,
-        )
+        self.patchifier = PatchTSTPatchify(config)
         self.mask_input = config.mask_input
 
         if self.mask_input:
@@ -1351,7 +1337,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         scaled_past_values, loc, scale = self.scaler(past_values, past_observed_mask)
 
         # patched_values: [bs x num_input_channels x num_patches x patch_length] for pretrain
-        patched_values = self.patching(scaled_past_values)
+        patched_values = self.patchifier(scaled_past_values)
         if self.mask_input:
             masked_values, mask = self.masking(patched_values)
         else:
