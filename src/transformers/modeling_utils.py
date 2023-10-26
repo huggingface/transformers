@@ -1520,21 +1520,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Returns:
             `List[str]`: List of modules that should not be split
         """
-        if self._no_split_modules is None:
-            raise ValueError(
-                f"{self.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
-                "class needs to implement the `_no_split_modules` attribute."
-            )
-        _no_split_modules = set(self._no_split_modules)
-        for module in self.modules():
-            if isinstance(module, PreTrainedModel):
-                if module._no_split_modules is None:
-                    raise ValueError(
-                        f"{module.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
-                        "class needs to implement the `_no_split_modules` attribute."
-                    )
-                else:
-                    _no_split_modules = _no_split_modules | set(module._no_split_modules)
+        _no_split_modules = set()
+        modules = [self]
+        while len(modules)>0:
+            module = modules.pop(-1)
+            # if the module does not appear in _no_split_modules, we also check the children
+            if module.__class__.__name__ not in _no_split_modules:
+                if isinstance(module, PreTrainedModel) :
+                    if module._no_split_modules is None:
+                        raise ValueError(
+                            f"{module.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
+                            "class needs to implement the `_no_split_modules` attribute."
+                        )
+                    else:
+                        _no_split_modules = _no_split_modules | set(module._no_split_modules)
+                modules += list(module.children())
         return list(_no_split_modules)
 
     def resize_token_embeddings(
@@ -3306,7 +3306,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
+            #device_map = {'shared': 0, 'text_encoder': 0, 'speech_encoder': 0, 'text_decoder': 0, 'lm_head': 0, 't2u_model': 0, 'vocoder.dur_predictor': 0, 'vocoder.unit_embedding': 0, 'vocoder.speaker_embedding': 1, 'vocoder.language_embedding': 0, 'vocoder.hifi_gan.conv_pre': 0, 'vocoder.hifi_gan.resblocks': 1, 'vocoder.hifi_gan.conv_post': 1, 'vocoder.hifi_gan.upsampler': 1}
             device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
+            print(device_map)
 
             if load_in_8bit or load_in_4bit:
                 # The LM head / tied weights or any last module can stay on disk / CPU
