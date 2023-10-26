@@ -104,8 +104,8 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     return tf.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
 
 
-# Copied from transformers.models.bart.modeling_tf_bart.prepare_4d_attention_mask
-def prepare_4d_attention_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
+# Copied from transformers.models.bart.modeling_tf_bart._expand_mask
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -765,7 +765,7 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
         # check attention mask and invert
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = prepare_4d_attention_mask(attention_mask)
+            attention_mask = _expand_mask(attention_mask)
         else:
             attention_mask = None
 
@@ -970,16 +970,16 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
         else:
-            combined_attention_mask = prepare_4d_attention_mask(
+            combined_attention_mask = _expand_mask(
                 tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
             )
 
         if attention_mask is not None:
-            combined_attention_mask = combined_attention_mask + prepare_4d_attention_mask(attention_mask, tgt_len=input_shape[-1])
+            combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
 
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = prepare_4d_attention_mask(encoder_attention_mask, tgt_len=input_shape[-1])
+            encoder_attention_mask = _expand_mask(encoder_attention_mask, tgt_len=input_shape[-1])
 
         hidden_states = self.dropout(hidden_states + positions, training=training)
 

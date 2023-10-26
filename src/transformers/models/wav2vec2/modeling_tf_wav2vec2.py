@@ -190,8 +190,8 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-# Copied from transformers.models.bart.modeling_tf_bart.prepare_4d_attention_mask
-def prepare_4d_attention_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
+# Copied from transformers.models.bart.modeling_tf_bart._expand_mask
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -933,7 +933,7 @@ class TFWav2Vec2Encoder(tf.keras.layers.Layer):
 
         if attention_mask is not None:
             hidden_states = hidden_states * tf.expand_dims(attention_mask, -1)
-            attention_mask = prepare_4d_attention_mask(attention_mask)
+            attention_mask = _expand_mask(attention_mask)
         else:
             attention_mask = None
 
@@ -1000,7 +1000,7 @@ class TFWav2Vec2EncoderStableLayerNorm(tf.keras.layers.Layer):
 
         if attention_mask is not None:
             hidden_states = hidden_states * tf.expand_dims(attention_mask, -1)
-            attention_mask = prepare_4d_attention_mask(attention_mask)
+            attention_mask = _expand_mask(attention_mask)
         else:
             attention_mask = None
 

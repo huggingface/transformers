@@ -245,8 +245,8 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.detr.modeling_detr.prepare_4d_attention_mask
-def prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[int] = None):
+# Copied from transformers.models.detr.modeling_detr._expand_mask
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[int] = None):
     """
     Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, target_seq_len, source_seq_len]`.
     """

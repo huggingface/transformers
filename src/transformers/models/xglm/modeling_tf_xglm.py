@@ -134,8 +134,8 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     return tf.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
 
 
-# Copied from transformers.models.bart.modeling_tf_bart.prepare_4d_attention_mask
-def prepare_4d_attention_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
+# Copied from transformers.models.bart.modeling_tf_bart._expand_mask
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -469,7 +469,7 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
         )
         if attention_mask is None:
             return combined_attention_mask
-        expand_attention_mask = prepare_4d_attention_mask(attention_mask, tgt_len=input_shape[-1])
+        expand_attention_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
         return expand_attention_mask + combined_attention_mask
 
     def embed_positions(self, position_ids: np.ndarray | tf.Tensor | None = None) -> tf.Tensor:
@@ -531,7 +531,7 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = prepare_4d_attention_mask(encoder_attention_mask, tgt_len=input_shape[-1])
+            encoder_attention_mask = _expand_mask(encoder_attention_mask, tgt_len=input_shape[-1])
 
         # embed positions
         positions = self.embed_positions(position_ids)

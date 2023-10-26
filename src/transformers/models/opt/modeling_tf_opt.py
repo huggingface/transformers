@@ -77,8 +77,8 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     return tf.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
 
 
-# Copied from transformers.models.bart.modeling_tf_bart.prepare_4d_attention_mask
-def prepare_4d_attention_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
+# Copied from transformers.models.bart.modeling_tf_bart._expand_mask
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -523,7 +523,7 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             f" {past_key_values_length}.",
         )
 
-        expanded_attn_mask = prepare_4d_attention_mask(attention_mask, tgt_len=input_shape[-1])
+        expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
         if seq_length > 1:
             combined_attention_mask = (
                 _make_causal_mask(input_shape, past_key_values_length=past_key_values_length) + expanded_attn_mask

@@ -74,8 +74,8 @@ TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 LARGE_NEGATIVE = -1e8
 
 
-# Copied from transformers.models.bart.modeling_tf_bart.prepare_4d_attention_mask
-def prepare_4d_attention_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
+# Copied from transformers.models.bart.modeling_tf_bart._expand_mask
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -1026,7 +1026,7 @@ class TFGroupViTTextTransformer(tf.keras.layers.Layer):
 
         # check attention mask and invert
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        attention_mask = prepare_4d_attention_mask(attention_mask)
+        attention_mask = _expand_mask(attention_mask)
 
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,

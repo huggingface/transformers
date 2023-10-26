@@ -364,8 +364,8 @@ class DetaBackboneWithPositionalEncodings(nn.Module):
         return out, pos
 
 
-# Copied from transformers.models.detr.modeling_detr.prepare_4d_attention_mask
-def prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[int] = None):
+# Copied from transformers.models.detr.modeling_detr._expand_mask
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[int] = None):
     """
     Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, target_seq_len, source_seq_len]`.
     """
@@ -687,7 +687,7 @@ class DetaMultiheadAttention(nn.Module):
         # expand attention_mask
         if attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
 
         if attention_mask is not None:
             if attention_mask.size() != (batch_size, 1, target_len, source_len):
