@@ -684,7 +684,7 @@ class PatchTSTEncoderLayer(nn.Module):
         outputs = (hidden_state,)
 
         if output_attentions:
-            outputs += (attn_weights, channel_attn_weights)
+            outputs += (attn_weights, channel_attn_weights) if self.channel_attention else (attn_weights, )
 
         return outputs
 
