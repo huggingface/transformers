@@ -626,11 +626,13 @@ def dtype_byte_size(dtype):
     return bit_size // 8
 
 
-def format_weight_name(name, _prefix=None):
+def strip_model_name_and_prefix(name, _prefix=None):
+    if _prefix is not None and name.startswith(_prefix):
+        name = name[len(_prefix) :]
+        if name.startswith("/"):
+            name = name[1:]
     if "model." not in name and len(name.split("/")) > 1:
         name = "/".join(name.split("/")[1:])
-    if _prefix is not None:
-        name = _prefix + "/" + name
     return name
 
 
@@ -986,7 +988,7 @@ def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismat
     # Read the safetensors file
     with safe_open(resolved_archive_file, framework="tf") as safetensors_archive:
         mismatched_layers = []
-        weight_names = [format_weight_name(w.name, _prefix=_prefix) for w in model.weights]
+        weight_names = [strip_model_name_and_prefix(w.name, _prefix=_prefix) for w in model.weights]
         loaded_weight_names = list(safetensors_archive.keys())
         # Find the missing layers from the high level list of layers
         missing_layers = list(set(weight_names) - set(loaded_weight_names))
@@ -994,7 +996,7 @@ def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismat
         unexpected_layers = list(set(loaded_weight_names) - set(weight_names))
 
         for weight in model.weights:
-            weight_name = format_weight_name(weight.name, _prefix=_prefix)
+            weight_name = strip_model_name_and_prefix(weight.name, _prefix=_prefix)
             if weight_name in loaded_weight_names:
                 weight_value = safetensors_archive.get_tensor(weight_name)
                 # Check if the shape of the current weight and the one from the H5 file are different
@@ -2456,7 +2458,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if index is None:
             if safe_serialization:
-                state_dict = {format_weight_name(w.name): w.value() for w in self.weights}
+                state_dict = {strip_model_name_and_prefix(w.name): w.value() for w in self.weights}
                 safe_save_file(state_dict, output_model_file, metadata={"format": "tf"})
             else:
                 self.save_weights(output_model_file)
