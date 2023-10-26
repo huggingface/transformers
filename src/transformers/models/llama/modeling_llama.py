@@ -65,11 +65,11 @@ def _get_unpad_data(attention_mask):
     )
 
 
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+def prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     warnings.warn(
-        "Calling `transformers.models.llama.modeling_llama._expand_mask` is deprecated and will be removed in v4.37. Use `transformers.models.llama.modeling_llama.AttnMaskConverter._expand_mask"
+        "Calling `transformers.models.llama.modeling_llama.prepare_4d_attention_mask` is deprecated and will be removed in v4.37. Use `transformers.models.llama.modeling_llama.AttnMaskConverter.prepare_4d_attention_mask"
     )
-    return AttnMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
+    return AttnMaskConverter.prepare_4d_attention_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
 
 
 def _make_causal_mask(

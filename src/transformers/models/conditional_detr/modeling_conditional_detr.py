@@ -416,8 +416,8 @@ class ConditionalDetrConvModel(nn.Module):
         return out, pos
 
 
-# Copied from transformers.models.detr.modeling_detr._expand_mask with Detr->ConditionalDetr
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[int] = None):
+# Copied from transformers.models.detr.modeling_detr.prepare_4d_attention_mask with Detr->ConditionalDetr
+def prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[int] = None):
     """
     Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, target_seq_len, source_seq_len]`.
     """
@@ -1324,7 +1324,7 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
         # expand attention_mask
         if attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1477,14 +1477,14 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
 
         if attention_mask is not None and combined_attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            combined_attention_mask = combined_attention_mask + _expand_mask(
+            combined_attention_mask = combined_attention_mask + prepare_4d_attention_mask(
                 attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
             )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            encoder_attention_mask = _expand_mask(
+            encoder_attention_mask = prepare_4d_attention_mask(
                 encoder_attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
             )
 

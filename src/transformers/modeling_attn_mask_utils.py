@@ -105,7 +105,7 @@ class AttnMaskConverter:
             raise NotImplementedError("Sliding window is currently only implemented for causal masking")
 
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        expanded_attn_mask = self._expand_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
+        expanded_attn_mask = self.prepare_4d_attention_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
             attention_mask_2d.device
         )
         expanded_4d_mask = expanded_attn_mask if causal_4d_mask is None else expanded_attn_mask + causal_4d_mask
@@ -143,7 +143,7 @@ class AttnMaskConverter:
         return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
     @staticmethod
-    def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+    def prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
         """
         Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
         """
@@ -178,4 +178,4 @@ def prepare_4d_causal_attention_mask(
 
 
 def prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    return AttnMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
+    return AttnMaskConverter.prepare_4d_attention_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
