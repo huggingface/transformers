@@ -85,7 +85,7 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=gptq_config)
 ```
 
-ディスク オフロードはサポートされていないことに注意してください。さらに、データセットが原因でメモリが不足している場合は、`from_pretained` で `max_memory` を渡す必要がある場合があります。 「device_map」と`max_memory`の詳細については、この [ガイド](https://huggingface.co/docs/accelerate/usage_guides/big_modeling#designing-a-device-map) を参照してください。
+ディスク オフロードはサポートされていないことに注意してください。さらに、データセットが原因でメモリが不足している場合は、`from_pretained` で `max_memory` を渡す必要がある場合があります。 `device_map`と`max_memory`の詳細については、この [ガイド](https://huggingface.co/docs/accelerate/usage_guides/big_modeling#designing-a-device-map) を参照してください。
 
 <Tip warning={true}>
 GPTQ 量子化は、現時点ではテキスト モデルでのみ機能します。さらに、量子化プロセスはハードウェアによっては長時間かかる場合があります (NVIDIA A100 を使用した場合、175B モデル = 4 gpu 時間)。モデルの GPTQ 量子化バージョンが存在しない場合は、ハブで確認してください。そうでない場合は、github で要求を送信できます。
@@ -199,13 +199,13 @@ torch.float32
 
 以下のコード スニペットを実行する前に、以下の要件がインストールされていることを確認してください。
 
-- Latest `bitsandbytes` library
+- 最新の`bitsandbytes`ライブラリ
 `pip install bitsandbytes>=0.39.0`
 
-- Install latest `accelerate`
+- 最新の`accelerate`をインストールする
 `pip install --upgrade accelerate`
 
-- Install latest `transformers`
+- 最新の `transformers` をインストールする
 `pip install --upgrade transformers`
 
 #### Tips and best practices
@@ -241,7 +241,7 @@ model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", load_i
 
 ### Load a large model in 8bit
 
-You can load a model by roughly halving the memory requirements by using `load_in_8bit=True` argument when calling `.from_pretrained` method
+`.from_pretrained` メソッドを呼び出すときに `load_in_8bit=True` 引数を使用すると、メモリ要件をおよそ半分にしてモデルをロードできます。
 
 ```python
 # pip install transformers accelerate bitsandbytes
