@@ -303,8 +303,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         Args:
             inputs (`np.ndarray` or `bytes` or `str` or `dict`):
                 The inputs is either :
-                    - `str` that is the filename of the audio file, the file will be read at the correct sampling rate
-                      to get the waveform using *ffmpeg*. This requires *ffmpeg* to be installed on the system.
+                    - `str` that is either the filename of a local audio file, or a public URL address to download the
+                      audio file. The file will be read at the correct sampling rate to get the waveform using
+                      *ffmpeg*. This requires *ffmpeg* to be installed on the system.
                     - `bytes` it is supposed to be the content of an audio file and is interpreted by *ffmpeg* in the
                       same way.
                     - (`np.ndarray` of shape (n, ) of type `np.float32` or `np.float64`)
@@ -402,7 +403,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 raise ValueError("CTC with LM can only predict word level timestamps, set `return_timestamps='word'`")
             if self.type == "ctc" and return_timestamps not in ["char", "word"]:
                 raise ValueError(
-                    "CTC can either predict character level timestamps, or word level timestamps."
+                    "CTC can either predict character level timestamps, or word level timestamps. "
                     "Set `return_timestamps='char'` or `return_timestamps='word'` as required."
                 )
             if self.type == "seq2seq_whisper" and return_timestamps == "char":

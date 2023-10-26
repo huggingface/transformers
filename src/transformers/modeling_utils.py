@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import collections
+import functools
 import gc
 import importlib.metadata
 import inspect
@@ -70,7 +71,7 @@ from .utils import (
     is_accelerate_available,
     is_auto_gptq_available,
     is_bitsandbytes_available,
-    is_flash_attn_available,
+    is_flash_attn_2_available,
     is_offline_mode,
     is_optimum_available,
     is_peft_available,
@@ -125,6 +126,7 @@ def is_fsdp_enabled():
         torch.distributed.is_available()
         and torch.distributed.is_initialized()
         and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
+        and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1
     )
 
 
@@ -693,7 +695,9 @@ def _load_state_dict_into_meta_model(
         if dtype is not None and torch.is_floating_point(param):
             if (
                 keep_in_fp32_modules is not None
-                and any(module_to_keep_in_fp32 in param_name for module_to_keep_in_fp32 in keep_in_fp32_modules)
+                and any(
+                    module_to_keep_in_fp32 in param_name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules
+                )
                 and dtype == torch.float16
             ):
                 param = param.to(torch.float32)
@@ -1267,17 +1271,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "request support for this architecture: https://github.com/huggingface/transformers/issues/new"
             )
 
-        if not is_flash_attn_available():
+        if not is_flash_attn_2_available():
             raise ImportError(
-                "Flash Attention 2.0 is not available. Please refer to the documentation of https://github.com/Dao-AILab/flash-attention for"
-                " installing it."
+                "Flash Attention 2 is not available. Please refer to the documentation of https://github.com/Dao-AILab/flash-attention for"
+                " installing it. Make sure to have at least the version 2.1.0"
             )
         else:
             flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
-            is_flash_greater_than_2 = flash_attention_version > version.parse("2.0.0")
+            is_flash_greater_than_2 = flash_attention_version >= version.parse("2.1.0")
             if not is_flash_greater_than_2:
                 raise ValueError(
-                    f"You need flash_attn package version to be greater than 2.0. Make sure to have that version installed - detected version {flash_attention_version}"
+                    f"You need flash_attn package version to be greater or equal than 2.1. Make sure to have that version installed - detected version {flash_attention_version}"
                 )
 
         _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
@@ -1504,6 +1508,35 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
 
+    def _get_no_split_modules(self, device_map: str):
+        """
+        Get the modules of the model that should not be spit when using device_map. We iterate through the modules to
+        get the underlying `_no_split_modules`.
+
+        Args:
+            device_map (`str`):
+                The device map value. Options are ["auto", "balanced", "balanced_low_0", "sequential"]
+
+        Returns:
+            `List[str]`: List of modules that should not be split
+        """
+        if self._no_split_modules is None:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
+                "class needs to implement the `_no_split_modules` attribute."
+            )
+        _no_split_modules = set(self._no_split_modules)
+        for module in self.modules():
+            if isinstance(module, PreTrainedModel):
+                if module._no_split_modules is None:
+                    raise ValueError(
+                        f"{module.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
+                        "class needs to implement the `_no_split_modules` attribute."
+                    )
+                else:
+                    _no_split_modules = _no_split_modules | set(module._no_split_modules)
+        return list(_no_split_modules)
+
     def resize_token_embeddings(
         self, new_num_tokens: Optional[int] = None, pad_to_multiple_of: Optional[int] = None
     ) -> nn.Embedding:
@@ -1614,7 +1647,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 new_num_tokens = old_embeddings.weight.shape[0]
             new_num_tokens = ((new_num_tokens + pad_to_multiple_of - 1) // pad_to_multiple_of) * pad_to_multiple_of
         else:
-            logger.warning(
+            logger.info(
                 "You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embedding"
                 f" dimension will be {new_num_tokens}. This might induce some performance reduction as *Tensor Cores* will not be available."
                 " For more details about this, or help on choosing the correct value for resizing, refer to this guide:"
@@ -1816,16 +1849,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         self.base_model._prune_heads(heads_to_prune)
 
-    def gradient_checkpointing_enable(self):
+    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
         """
         Activates gradient checkpointing for the current model.
 
         Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
         activations".
+
+        We pass the `__call__` method of the modules instead of `forward` because `__call__` attaches all the hooks of
+        the module. https://discuss.pytorch.org/t/any-different-between-model-input-and-model-forward-input/3690/2
+
+        Args:
+            gradient_checkpointing_kwargs (dict, *optional*):
+                Additional keyword arguments passed along to the `torch.utils.checkpoint.checkpoint` function.
         """
         if not self.supports_gradient_checkpointing:
             raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
-        self.apply(partial(self._set_gradient_checkpointing, value=True))
+
+        if gradient_checkpointing_kwargs is None:
+            gradient_checkpointing_kwargs = {}
+
+        gradient_checkpointing_func = functools.partial(
+            torch.utils.checkpoint.checkpoint, **gradient_checkpointing_kwargs
+        )
+
+        self.apply(partial(self._set_gradient_checkpointing, gradient_checkpointing_func=gradient_checkpointing_func))
 
         if getattr(self, "_hf_peft_config_loaded", False):
             # When using PEFT + gradient checkpointing + Trainer we need to make sure the input has requires_grad=True
@@ -1842,7 +1890,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         activations".
         """
         if self.supports_gradient_checkpointing:
-            self.apply(partial(self._set_gradient_checkpointing, value=False))
+            self.apply(partial(self._set_gradient_checkpointing, gradient_checkpointing_func=None))
 
         if getattr(self, "_hf_peft_config_loaded", False):
             self.disable_input_require_grads()
@@ -1864,7 +1912,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         state_dict: Optional[dict] = None,
         save_function: Callable = torch.save,
         push_to_hub: bool = False,
-        max_shard_size: Union[int, str] = "10GB",
+        max_shard_size: Union[int, str] = "5GB",
         safe_serialization: bool = False,
         variant: Optional[str] = None,
         token: Optional[Union[str, bool]] = None,
@@ -1893,9 +1941,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+            max_shard_size (`int` or `str`, *optional*, defaults to `"5GB"`):
                 The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
                 lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
+                We default it to 5GB in order for models to be able to run easily on free-tier google colab instances
+                without CPU OOM issues.
 
                 <Tip warning={true}>
 
@@ -1933,15 +1983,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if token is not None:
             kwargs["token"] = token
 
+        _hf_peft_config_loaded = getattr(self, "_hf_peft_config_loaded", False)
+
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_8bit", False) and getattr(self, "is_8bit_serializable", False):
-            warnings.warn(
+        if (
+            getattr(self, "is_loaded_in_8bit", False)
+            and not getattr(self, "is_8bit_serializable", False)
+            and not _hf_peft_config_loaded
+        ):
+            raise ValueError(
                 "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
-                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed.",
-                UserWarning,
+                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed."
             )
 
-        if getattr(self, "is_loaded_in_4bit", False):
+        # If the model has adapters attached, you can save the adapters
+        if getattr(self, "is_loaded_in_4bit", False) and not _hf_peft_config_loaded:
             raise NotImplementedError(
                 "You are calling `save_pretrained` on a 4-bit converted model. This is currently not supported"
             )
@@ -1981,8 +2037,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # loaded from the Hub.
         if self._auto_class is not None:
             custom_object_save(self, save_directory, config=self.config)
-
-        _hf_peft_config_loaded = getattr(model_to_save, "_hf_peft_config_loaded", False)
 
         # Save the config
         if is_main_process:
@@ -2171,8 +2225,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "`.to` is not supported for `4-bit` or `8-bit` bitsandbytes models. Please use the model as it is, since the"
                 " model has already been set to the correct devices and casted to the correct `dtype`."
             )
-        else:
-            return super().to(*args, **kwargs)
+        elif getattr(self, "quantization_method", None) == QuantizationMethod.GPTQ:
+            # For GPTQ models, we prevent users from casting the model to another dytpe to restrict unwanted behaviours.
+            # the correct API should be to load the model with the desired dtype directly through `from_pretrained`.
+            dtype_present_in_args = False
+
+            if "dtype" not in kwargs:
+                for arg in args:
+                    if isinstance(arg, torch.dtype):
+                        dtype_present_in_args = True
+                        break
+            else:
+                dtype_present_in_args = True
+
+            if dtype_present_in_args:
+                raise ValueError(
+                    "You cannot cast a GPTQ model in a new `dtype`. Make sure to load the model using `from_pretrained` using the desired"
+                    " `dtype` by passing the correct `torch_dtype` argument."
+                )
+        return super().to(*args, **kwargs)
 
     def half(self, *args):
         # Checks if the model is quantized
@@ -2480,6 +2551,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             token = use_auth_token
 
+        if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
+            adapter_kwargs["token"] = token
+
         if use_safetensors is None and not is_safetensors_available():
             use_safetensors = False
 
@@ -2526,7 +2600,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     resume_download=resume_download,
                     proxies=proxies,
                     local_files_only=local_files_only,
-                    token=token,
                     _commit_hash=commit_hash,
                     **adapter_kwargs,
                 )
@@ -2627,8 +2700,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     raise RuntimeError("No GPU found. A GPU is needed for quantization.")
                 logger.info(
-                    "The device_map was not initialized."
-                    "Setting device_map to {'':torch.cuda.current_device()}."
+                    "The device_map was not initialized. "
+                    "Setting device_map to {'':torch.cuda.current_device()}. "
                     "If you want to use the model for inference, please set device_map ='auto' "
                 )
                 if low_cpu_mem_usage is None:
@@ -2686,7 +2759,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.warning(
                 "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a "
                 "`quantization_config` attribute and has already quantized weights. However, loading attributes"
-                " (e.g. disable_exllama, use_cuda_fp16, max_input_length) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
+                " (e.g. disable_exllama, use_cuda_fp16, max_input_length, use_exllama_v2) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
             )
         if (
             quantization_method_from_args == QuantizationMethod.GPTQ
@@ -2754,8 +2827,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     else:
                         raise RuntimeError("No GPU found. A GPU is needed for quantization.")
                     logger.info(
-                        "The device_map was not initialized."
-                        "Setting device_map to {'':torch.cuda.current_device()}."
+                        "The device_map was not initialized. "
+                        "Setting device_map to {'':torch.cuda.current_device()}. "
                         "If you want to use the model for inference, please set device_map ='auto' "
                     )
                     if low_cpu_mem_usage is None:
@@ -3078,6 +3151,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
 
+        # make sure we use the model's config since the __init__ call might have copied it
+        config = model.config
+
         # Check first if we are `from_pt`
         if use_keep_in_fp32_modules:
             if is_accelerate_available():
@@ -3136,12 +3212,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 importlib.metadata.version("bitsandbytes")
             ) >= version.parse("0.37.0")
 
-            model.config.quantization_config = quantization_config
+            config.quantization_config = quantization_config
             model.is_8bit_serializable = is_8bit_serializable
 
         if load_in_8bit and torch_dtype is None:
             logger.warning(
-                "You are loading your model in 8bit but you did not specify a `torch_dtype` attribute."
+                "You are loading your model in 8bit but you did not specify a `torch_dtype` attribute. "
                 "All non-linear modules will be loaded in full precision."
                 " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute."
             )
@@ -3155,6 +3231,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model.quantization_method = quantization_method_from_args
         if hasattr(model, "quantization_method"):
             model.is_quantized = True
+
+            # We store the original dtype for quantized models as we cannot easily retrieve it
+            # once the weights have been quantized
+            # Note that once you have loaded a quantized model, you can't change its dtype so this will
+            # remain a single source of truth
+            config._pre_quantization_dtype = torch_dtype
 
         if isinstance(device_map, str):
             special_dtypes = {}
@@ -3185,19 +3267,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     raise ValueError(
                         "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute"
-                        " the appropriate device map, you should upgrade your `accelerate` library,"
-                        "`pip install --upgrade accelerate` or install it from source to support fp4 auto device map"
+                        " the appropriate device map, you should upgrade your `accelerate` library, "
+                        "`pip install --upgrade accelerate` or install it from source to support fp4 auto device map "
                         "calculation. You may encounter unexpected behavior, or pass your own device map"
                     )
             elif load_in_8bit:
                 target_dtype = torch.int8
 
-            if model._no_split_modules is None:
-                raise ValueError(
-                    f"{model.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model"
-                    "class needs to implement the `_no_split_modules` attribute."
-                )
-            no_split_modules = model._no_split_modules
+            no_split_modules = model._get_no_split_modules(device_map)
             if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
                 raise ValueError(
                     "If passing a string for `device_map`, please choose 'auto', 'balanced', 'balanced_low_0' or "
@@ -3365,7 +3442,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if cls.main_input_name != "input_ids":
                 raise RuntimeError("We can only quantize pure text model.")
             quantizer.quantize_model(model, quantization_config.tokenizer)
-            model.config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
+            config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
             model._is_quantized_training_enabled = True
         if quantization_method_from_config == QuantizationMethod.GPTQ:
             model = quantizer.post_init_model(model)
@@ -3528,7 +3605,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if (
                     keep_in_fp32_modules is not None
                     and dtype == torch.float16
-                    and any(module_to_keep_in_fp32 in key for module_to_keep_in_fp32 in keep_in_fp32_modules)
+                    and any(
+                        module_to_keep_in_fp32 in key.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules
+                    )
                 ):
                     target_dtype = torch.float32
 
@@ -3555,7 +3634,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Set some modules to fp32 if any
         if keep_in_fp32_modules is not None:
             for name, param in model.named_parameters():
-                if any(module_to_keep_in_fp32 in name for module_to_keep_in_fp32 in keep_in_fp32_modules):
+                if any(module_to_keep_in_fp32 in name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules):
                     # param = param.to(torch.float32) does not work here as only in the local scope.
                     param.data = param.data.to(torch.float32)
 

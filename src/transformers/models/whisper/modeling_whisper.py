@@ -55,6 +55,18 @@ WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> torch.Tensor:
+    """Returns sinusoids for positional embedding"""
+    if channels % 2 != 0:
+        raise ValueError(
+            f"Number of channels has to be divisible by 2 for sinusoidal positional embeddings, got {channels} channels."
+        )
+    log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
+    inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
+    scaled_time = torch.arange(length).view(-1, 1) * inv_timescales.view(1, -1)
+    return torch.cat([scaled_time.sin(), scaled_time.cos()], dim=1)
+
+
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
@@ -668,10 +680,15 @@ class WhisperPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, WhisperEncoder):
+            with torch.no_grad():
+                embed_positions = module.embed_positions.weight
+                embed_positions.copy_(sinusoids(*embed_positions.shape))
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (WhisperDecoder, WhisperEncoder)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
@@ -835,6 +852,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
 
         self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim)
+        self.embed_positions.requires_grad_(False)
 
         self.layers = nn.ModuleList([WhisperEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
@@ -925,18 +943,12 @@ class WhisperEncoder(WhisperPreTrainedModel):
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
+                    layer_outputs = self.gradient_checkpointing_func(
+                        encoder_layer.__call__,
                         hidden_states,
                         None,
                         (head_mask[idx] if head_mask is not None else None),
+                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
@@ -1157,16 +1169,8 @@ class WhisperDecoder(WhisperPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self.gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
@@ -1174,6 +1178,8 @@ class WhisperDecoder(WhisperPreTrainedModel):
                     head_mask[idx] if head_mask is not None else None,
                     cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                     None,  # past_key_value
+                    output_attentions,
+                    use_cache,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1635,8 +1641,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if return_timestamps is not None:
             if not hasattr(generation_config, "no_timestamps_token_id"):
                 raise ValueError(
-                    "You are trying to return timestamps, but the generation config is not properly set."
-                    "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`."
+                    "You are trying to return timestamps, but the generation config is not properly set. "
+                    "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`. "
                     "For more details on how to generate the approtiate config, refer to https://github.com/huggingface/transformers/issues/21878#issuecomment-1451902363"
                 )
 
@@ -1647,7 +1653,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if language is not None:
             if not hasattr(generation_config, "lang_to_id"):
                 raise ValueError(
-                    "The generation config is outdated and is thus not compatible with the `language` argument"
+                    "The generation config is outdated and is thus not compatible with the `language` argument "
                     "to `generate`. Either set the language using the `forced_decoder_ids` in the model config, "
                     "or update the generation config as per the instructions https://github.com/huggingface/transformers/issues/25084#issuecomment-1664398224"
                 )
@@ -1656,7 +1662,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if task is not None:
             if not hasattr(generation_config, "task_to_id"):
                 raise ValueError(
-                    "The generation config is outdated and is thus not compatible with the `task` argument"
+                    "The generation config is outdated and is thus not compatible with the `task` argument "
                     "to `generate`. Either set the task using the `forced_decoder_ids` in the model config, "
                     "or update the generation config as per the instructions https://github.com/huggingface/transformers/issues/25084#issuecomment-1664398224"
                 )
@@ -1793,9 +1799,17 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         attention_mask=None,
         **kwargs,
     ):
-        # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         return {
             "encoder_outputs": encoder_outputs,

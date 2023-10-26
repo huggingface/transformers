@@ -145,6 +145,26 @@ class GPTQTest(unittest.TestCase):
 
         self.assertAlmostEqual(self.mem_fp16 / mem_quantized, self.EXPECTED_RELATIVE_DIFFERENCE)
 
+    def test_device_and_dtype_assignment(self):
+        r"""
+        Test whether trying to cast (or assigning a device to) a model after converting it in 8-bit will throw an error.
+        Checks also if other models are casted correctly.
+        """
+        # This should work
+        _ = self.quantized_model.to(0)
+
+        with self.assertRaises(ValueError):
+            # Tries with a `dtype``
+            self.quantized_model.to(torch.float16)
+
+    def test_original_dtype(self):
+        r"""
+        A simple test to check if the model succesfully stores the original dtype
+        """
+        self.assertTrue(hasattr(self.quantized_model.config, "_pre_quantization_dtype"))
+        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
+        self.assertTrue(self.quantized_model.config._pre_quantization_dtype == torch.float16)
+
     def test_quantized_layers_class(self):
         """
         Simple test to check if the model conversion has been done correctly by checking on
@@ -158,6 +178,7 @@ class GPTQTest(unittest.TestCase):
             group_size=self.group_size,
             bits=self.bits,
             disable_exllama=self.disable_exllama,
+            disable_exllamav2=True,
         )
         self.assertTrue(self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__ == QuantLinear)
 
@@ -178,7 +199,7 @@ class GPTQTest(unittest.TestCase):
 
     def test_generate_quality(self):
         """
-        Simple test to check the quality of the model by comapring the the generated tokens with the expected tokens
+        Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
         """
         if self.device_map is None:
             self.check_inference_correctness(self.quantized_model.to(0))
@@ -261,8 +282,82 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         """
         Setup quantized model
         """
+        cls.quantization_config = GPTQConfig(bits=4, max_input_length=4028)
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
+            cls.model_name,
+            revision=cls.revision,
+            torch_dtype=torch.float16,
+            device_map={"": 0},
+            quantization_config=cls.quantization_config,
+        )
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, use_fast=True)
 
-        cls.quantization_config = GPTQConfig(bits=4, disable_exllama=False, max_input_length=4028)
+    def check_inference_correctness(self, model):
+        """
+        Test the generation quality of the quantized model and see that we are matching the expected output.
+        Given that we are operating on small numbers + the testing model is relatively small, we might not get
+        the same output across GPUs. So we'll generate few tokens (5-10) and check their output.
+        """
+
+        # Check that inference pass works on the model
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+
+        # Check the exactness of the results
+        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+        # Get the generation
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
+    def test_generate_quality(self):
+        """
+        Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
+        """
+        self.check_inference_correctness(self.quantized_model)
+
+    # this test will fail until the next release of optimum
+    @pytest.mark.skip
+    def test_max_input_length(self):
+        """
+        Test if the max_input_length works. It modifies the maximum input length that of the model that runs with exllama backend.
+        """
+
+        prompt = "I am in Paris and" * 1000
+        inp = self.tokenizer(prompt, return_tensors="pt").to(0)
+        self.assertTrue(inp["input_ids"].shape[1] > 4028)
+        with self.assertRaises(RuntimeError) as cm:
+            self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
+            self.assertTrue("temp_state buffer is too small" in str(cm.exception))
+
+        prompt = "I am in Paris and" * 500
+        inp = self.tokenizer(prompt, return_tensors="pt").to(0)
+        self.assertTrue(inp["input_ids"].shape[1] < 4028)
+        self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
+
+
+@slow
+@require_optimum
+@require_auto_gptq
+@require_torch_gpu
+@require_accelerate
+class GPTQTestExllamaV2(unittest.TestCase):
+    """
+    Test GPTQ model with exllamav2 kernel and desc_act=True (also known as act-order).
+    More information on those arguments here:
+    https://huggingface.co/docs/transformers/main_classes/quantization#transformers.GPTQConfig
+    """
+
+    EXPECTED_OUTPUTS = set()
+    EXPECTED_OUTPUTS.add("Hello my name is Katie and I am a 20 year")
+    model_name = "hf-internal-testing/Llama-2-7B-GPTQ"
+    revision = "gptq-4bit-128g-actorder_True"
+    input_text = "Hello my name is"
+
+    @classmethod
+    def setUpClass(cls):
+        """
+        Setup quantized model
+        """
+        cls.quantization_config = GPTQConfig(bits=4, use_exllama_v2=True)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             revision=cls.revision,
@@ -293,25 +388,6 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         Simple test to check the quality of the model by comapring the the generated tokens with the expected tokens
         """
         self.check_inference_correctness(self.quantized_model)
-
-    # this test will fail until the next release of optimum
-    @pytest.mark.skip
-    def test_max_input_length(self):
-        """
-        Test if the max_input_length works. It modifies the maximum input length that of the model that runs with exllama backend.
-        """
-
-        prompt = "I am in Paris and" * 1000
-        inp = self.tokenizer(prompt, return_tensors="pt").to(0)
-        self.assertTrue(inp["input_ids"].shape[1] > 4028)
-        with self.assertRaises(RuntimeError) as cm:
-            self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
-            self.assertTrue("temp_state buffer is too small" in str(cm.exception))
-
-        prompt = "I am in Paris and" * 500
-        inp = self.tokenizer(prompt, return_tensors="pt").to(0)
-        self.assertTrue(inp["input_ids"].shape[1] < 4028)
-        self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
 
 
 # fail when run all together

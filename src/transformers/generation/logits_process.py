@@ -276,9 +276,14 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     selected. The formula can be seen in the original [paper](https://arxiv.org/pdf/1909.05858.pdf). According to the
     paper a penalty of around 1.2 yields a good balance between truthful generation and lack of repetition.
 
+    This technique can also be used to reward and thus encourage repetition in a similar manner. To penalize and reduce
+    repetition, use `penalty` values above 1.0, where a higher value penalizes more strongly. To reward and encourage
+    repetition, use `penalty` values between 0.0 and 1.0, where a lower value rewards more strongly.
+
     Args:
-        repetition_penalty (`float`):
-            The parameter for repetition penalty. 1.0 means no penalty. See [this
+        penalty (`float`):
+            The parameter for repetition penalty. 1.0 means no penalty. Above 1.0 penalizes previously generated
+            tokens. Between 0.0 and 1.0 rewards previously generated tokens. See [this
             paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
 
     Examples:
@@ -313,7 +318,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         score = torch.gather(scores, 1, input_ids)
 
-        # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
+        # if score < 0 then repetition penalty has to be multiplied to reduce the token probabilities
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
 
         scores.scatter_(1, input_ids, score)
@@ -322,11 +327,18 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
 class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] enforcing an exponential penalty on tokens that are not in the original input.
+    [`LogitsProcessor`] that avoids hallucination by boosting the probabilities of tokens found within the original
+    input.
+
+    This technique can also be used to reward and thus encourage hallucination (or creativity) in a similar manner. To
+    penalize and reduce hallucination, use `penalty` values above 1.0, where a higher value penalizes more strongly. To
+    reward and encourage hallucination, use `penalty` values between 0.0 and 1.0, where a lower value rewards more
+    strongly.
 
     Args:
-        hallucination_penalty (`float`):
-            The parameter for hallucination penalty. 1.0 means no penalty.
+        penalty (`float`):
+            The parameter for hallucination penalty. 1.0 means no penalty. Above 1.0 penalizes hallucination. Between
+            0.0 and 1.0 rewards hallucination.
         encoder_input_ids (`torch.LongTensor`):
             The encoder_input_ids that should be repeated within the decoder ids.
     """
@@ -342,7 +354,7 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         score = torch.gather(scores, 1, self.encoder_input_ids)
 
-        # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
+        # if score < 0 then hallucination penalty has to be multiplied to increase the token probabilities
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
 
         scores.scatter_(1, self.encoder_input_ids, score)
@@ -357,7 +369,7 @@ class TopPLogitsWarper(LogitsWarper):
         top_p (`float`):
             If set to < 1, only the smallest set of most probable tokens with probabilities that add up to `top_p` or
             higher are kept for generation.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -419,7 +431,7 @@ class TopKLogitsWarper(LogitsWarper):
     Args:
         top_k (`int`):
             The number of highest probability vocabulary tokens to keep for top-k-filtering.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -447,9 +459,9 @@ class TypicalLogitsWarper(LogitsWarper):
     Generation](https://arxiv.org/abs/2202.00666) for more information.
 
     Args:
-        mass (`float`):
+        mass (`float`, *optional*, defaults to 0.9):
             Value of typical_p between 0 and 1 inclusive, defaults to 0.9.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -480,8 +492,8 @@ class TypicalLogitsWarper(LogitsWarper):
         cumulative_probs = sorted_logits.softmax(dim=-1).cumsum(dim=-1)
 
         # Remove tokens with cumulative mass above the threshold
-        last_ind = (cumulative_probs < self.mass).sum(dim=1)
-        last_ind[last_ind < 0] = 0
+        last_ind = (cumulative_probs < self.mass).sum(dim=1) - 1
+        last_ind.clamp_(min=0)
         sorted_indices_to_remove = sorted_scores > sorted_scores.gather(1, last_ind.view(-1, 1))
         sorted_indices_to_remove[..., : self.min_tokens_to_keep] = 0
         indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
@@ -499,7 +511,7 @@ class EpsilonLogitsWarper(LogitsWarper):
     Args:
         epsilon (`float`):
             If set to > 0, only the most tokens with probabilities `epsilon` or higher are kept for generation.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -572,7 +584,7 @@ class EtaLogitsWarper(LogitsWarper):
         epsilon (`float`):
             A float value in the range (0, 1). Hyperparameter used to calculate the dynamic cutoff value, `eta`. The
             suggested values from the paper ranges from 3e-4 to 4e-3 depending on the size of the model.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All values that are found to be below the dynamic cutoff value, `eta`, are set to this float value. This
             parameter is useful when logits need to be modified for very low probability tokens that should be excluded
             from generation entirely.
@@ -1445,8 +1457,15 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
 
 class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     r"""
-    Whisper specific Processor. This processor can be used to force a list of tokens. The processor will set their log
-    probs to `inf` so that they are sampled at their corresponding index.
+
+    [`LogitsProcessor`] that modifies the logits for the generation of timestamps in the transcription. When the input
+    tokens are at a specific threshold, the processor sets the scores to negative infinity. The processor makes sure
+    that timestamp tokens appear in pairs, by masking out the logits that would break this pairing pattern. This is
+    done to maintain the consistency and structure of generated timestamps. It also ensures that when the predicted
+    probability of sampling any of the timestamp token is greater than any individual non-timestamp token, those
+    non-timestamp logits are set to negative infinity. This is done to ensure the generation of timestamps over other
+    potential tokens.
+
 
     See [the paper](https://arxiv.org/abs/2212.04356) for more information.
 
@@ -1460,6 +1479,34 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                 max_initial_timestamp_index (`int`, *optional*, defaults to 1):
                     Used to set the maximum value of the initial timestamp. This is used to prevent the model from
                     predicting timestamps that are too far in the future.
+
+    Examples:
+    ``` python
+    >>> import torch
+    >>> from transformers import AutoProcessor, WhisperForConditionalGeneration,GenerationConfig
+    >>> from datasets import load_dataset
+
+    >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
+    >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    >>> inputs = processor(ds[3]["audio"]["array"], return_tensors="pt")
+    >>> input_features = inputs.input_features
+
+    >>> #Displaying timestamps
+    >>> generated_ids = model.generate(inputs=input_features, return_timestamps=True)
+    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+    >>> print("Transcription:", transcription)
+    Transcription: <|startoftranscript|><|0.00|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all, and can<|6.44|><|6.44|> discover in it but little of rocky Ithaca.<|9.44|><|endoftext|>
+
+
+    >>> #No timestamps & change EOS:
+    >>> #This allows the user to select a specific token to terminate the sequence on, in this case it's the word "can"(460)
+    >>> model.generation_config.eos_token_id = 460
+    >>> generated_ids = model.generate(inputs=input_features,return_timestamps=False)
+    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    >>> print("Transcription:", transcription)
+    Transcription:  He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can
+    ```
     """
 
     def __init__(self, generate_config):  # support for the kwargs
@@ -1600,18 +1647,15 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality. A value smaller than 1 has the opposite effect, while
             making the negative prompt provided with negative_prompt_ids (if any) act as a positive prompt.
-        unconditional_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of input sequence tokens in the vocabulary for the unconditional branch. If unset, will default to
-            the last token of the prompt.
-        unconditional_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, **optional**):
-            Attention mask for unconditional_ids.
         model (`PreTrainedModel`):
             The model computing the unconditional scores. Supposedly the same as the one computing the conditional
             scores. Both models must use the same tokenizer.
-        smooth_factor (`float`, **optional**):
-            The interpolation weight for CFG Rescale. 1 means no rescaling, 0 reduces to the conditional scores without
-            CFG. Turn it lower if the output degenerates.
-        use_cache (`bool`, **optional**):
+        unconditional_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary for the unconditional branch. If unset, will default to
+            the last token of the prompt.
+        unconditional_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Attention mask for unconditional_ids.
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether to cache key/values during the negative prompt forward pass.
 
 

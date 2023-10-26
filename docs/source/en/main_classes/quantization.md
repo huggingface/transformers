@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 🤗 Transformers has integrated `optimum` API to perform GPTQ quantization on language models. You can load and quantize your model in 8, 4, 3 or even 2 bits without a big drop of performance and faster inference speed! This is supported by most GPU hardwares.
 
-To learn more about the the quantization model, check out: 
+To learn more about the quantization model, check out: 
 - the [GPTQ](https://arxiv.org/pdf/2210.17323.pdf) paper
 - the `optimum` [guide](https://huggingface.co/docs/optimum/llm_quantization/usage_guides/quantization) on GPTQ quantization
 - the [`AutoGPTQ`](https://github.com/PanQiWei/AutoGPTQ) library used as the backend
@@ -128,12 +128,22 @@ For 4-bit model, you can use the exllama kernels in order to a faster inference 
 
 ```py
 import torch
-gptq_config = GPTQConfig(bits=4, disable_exllama=False)
+gptq_config = GPTQConfig(bits=4)
+model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config = gptq_config)
+```
+
+With the release of the exllamav2 kernels, you can get faster inference speed compared to the exllama kernels. You just need to 
+pass `use_exllama_v2=True` in [`GPTQConfig`] and disable exllama kernels:
+
+```py
+import torch
+gptq_config = GPTQConfig(bits=4, use_exllama_v2=True)
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config = gptq_config)
 ```
 
 Note that only 4-bit models are supported for now. Furthermore, it is recommended to deactivate the exllama kernels if you are finetuning a quantized model with peft. 
 
+You can find the benchmark of these kernels [here](https://github.com/huggingface/optimum/tree/main/tests/benchmark#gptq-benchmark)
 #### Fine-tune a quantized model 
 
 With the official support of adapters in the Hugging Face ecosystem, you can fine-tune models that have been quantized with GPTQ. 

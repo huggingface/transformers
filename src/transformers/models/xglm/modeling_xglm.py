@@ -503,9 +503,10 @@ class XGLMPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, XGLMModel):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 @add_start_docstrings(
@@ -623,9 +624,7 @@ class XGLMModel(XGLMPreTrainedModel):
                 dtype=torch.long,
                 device=input_ids.device if input_ids is not None else inputs_embeds.device,
             )
-            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
-        else:
-            position_ids = position_ids.view(-1, input_shape[-1])
+            position_ids = position_ids.unsqueeze(0)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
@@ -676,16 +675,8 @@ class XGLMModel(XGLMPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self.gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
@@ -693,6 +684,8 @@ class XGLMModel(XGLMPreTrainedModel):
                     head_mask[idx] if head_mask is not None else None,
                     cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                     None,
+                    output_attentions,
+                    use_cache,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -853,21 +846,30 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
     ):
+        if past_key_values is not None:
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
+
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
+                position_ids = position_ids[:, -input_ids.shape[1] :]
         else:
             position_ids = None
             # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
             if attention_mask is None:
                 attention_mask = input_ids.new_ones(input_ids.shape)
-
-        if past_key_values:
-            input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed

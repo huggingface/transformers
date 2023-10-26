@@ -780,9 +780,10 @@ class PegasusXPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (PegasusXDecoder, PegasusXEncoder)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 PEGASUS_X_START_DOCSTRING = r"""
@@ -1071,18 +1072,12 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
+                    layer_outputs = self.gradient_checkpointing_func(
+                        encoder_layer.__call__,
                         hidden_states,
                         global_hidden_states,
                         attention_mask,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
@@ -1331,21 +1326,15 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self.gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     None,
+                    output_attentions,
+                    use_cache,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1671,7 +1660,16 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
     ):
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed

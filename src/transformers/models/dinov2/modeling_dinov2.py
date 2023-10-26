@@ -54,7 +54,8 @@ _CHECKPOINT_FOR_DOC = "facebook/dinov2-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 257, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "facebook/dinov2-base"
+_IMAGE_CLASS_CHECKPOINT = "facebook/dinov2-small-imagenet1k-1-layer"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -446,17 +447,11 @@ class Dinov2Encoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self.gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     layer_head_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
@@ -515,9 +510,10 @@ class Dinov2PreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.cls_token.dtype)
 
-    def _set_gradient_checkpointing(self, module: Dinov2Encoder, value: bool = False) -> None:
+    def _set_gradient_checkpointing(self, module: Dinov2Encoder, gradient_checkpointing_func=None) -> None:
         if isinstance(module, Dinov2Encoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 DINOV2_START_DOCSTRING = r"""
@@ -693,6 +689,7 @@ class Dinov2ForImageClassification(Dinov2PreTrainedModel):
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
     def forward(
         self,

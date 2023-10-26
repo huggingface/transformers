@@ -112,7 +112,7 @@ class EvalPrediction:
     Parameters:
         predictions (`np.ndarray`): Predictions of the model.
         label_ids (`np.ndarray`): Targets to be matched.
-        inputs (`np.ndarray`, *optional*)
+        inputs (`np.ndarray`, *optional*):
     """
 
     def __init__(
@@ -649,14 +649,6 @@ def number_of_arguments(func):
         total_args = len(inspect.signature(func.func).parameters)
         return total_args - len(func.args) - len(func.keywords)
     return len(inspect.signature(func).parameters)
-
-
-class ShardedDDPOption(ExplicitEnum):
-    SIMPLE = "simple"
-    ZERO_DP_2 = "zero_dp_2"
-    ZERO_DP_3 = "zero_dp_3"
-    OFFLOAD = "offload"
-    AUTO_WRAP = "auto_wrap"
 
 
 def find_executable_batch_size(

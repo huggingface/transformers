@@ -18,10 +18,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Mistral model."""
+import inspect
 import math
+import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -29,8 +32,21 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_mistral import MistralConfig
+
+
+if is_flash_attn_2_available():
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+
+    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 
 logger = logging.get_logger(__name__)
@@ -38,31 +54,159 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MistralConfig"
 
 
-def _make_sliding_window_causal_mask(
-    input_ids_shape: torch.Size,
-    dtype: torch.dtype,
-    device: torch.device,
-    past_key_values_length: int = 0,
-    sliding_window: int = 4096,
-):
+# Copied from transformers.models.llama.modeling_llama.AttnMaskConverter
+class AttnMaskConverter:
     """
-    Make causal mask used for sliding window attention
-    """
-    bsz, tgt_len = input_ids_shape
+    A utility attention mask class that allows:
+        - Create a causal 4d mask
+        - Create a causal 4d mask with slided window
+        - Convert a 2d attention mask (batch_size, query_length) to a 4d attention mask (batch_size, 1, query_length,
+          key_value_length) that can be multiplied with attention scores
 
-    tensor = torch.full(
-        (tgt_len, tgt_len),
-        fill_value=1,
-        device=device,
+    Parameters:
+        is_causal (`bool`):
+            Whether the attention mask should be a uni-directional (causal) or bi-directional mask.
+
+        sliding_window (`int`, *optional*):
+            Optionally, the sliding window masks can be created if `sliding_window` is defined to a positive integer.
+    """
+
+    def __init__(self, is_causal: bool, sliding_window: Optional[int] = None):
+        self.is_causal = is_causal
+        self.sliding_window = sliding_window
+
+    def to_causal_4d(
+        self,
+        batch_size: int,
+        query_length: int,
+        key_value_length: int,
+        dtype: torch.dtype = torch.float32,
+        device: Union[torch.device, "str"] = "cpu",
+    ) -> torch.Tensor:
+        """
+        Creates a causal 4D mask of (bsz, head_dim=1, query_length, key_value_length) shape and adds large negative
+        bias to upper right hand triangular matrix (causal mask).
+        """
+        if not self.is_causal:
+            raise ValueError(f"Please use `to_causal_4d` only if {self.__class__} has `is_causal` set to True.")
+
+        # If shape is not cached, create a new causal mask and cache it
+        input_shape = (batch_size, query_length)
+        past_key_values_length = key_value_length - query_length
+
+        # create causal mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        causal_4d_mask = None
+        if input_shape[-1] > 1 or self.sliding_window is not None:
+            past_key_values_length = key_value_length - query_length
+            causal_4d_mask = self._make_causal_mask(
+                input_shape,
+                dtype,
+                device=device,
+                past_key_values_length=past_key_values_length,
+                sliding_window=self.sliding_window,
+            )
+
+        return causal_4d_mask
+
+    def to_4d(
+        self,
+        attention_mask_2d: torch.Tensor,
+        query_length: int,
+        key_value_length: Optional[int] = None,
+        dtype: torch.dtype = torch.float32,
+    ) -> torch.Tensor:
+        """
+        Converts 2D attention mask to 4D attention mask by expanding mask to (bsz, head_dim=1, query_length,
+        key_value_length) shape and by adding a large negative bias to not-attended positions. If attention_mask is
+        causal, a causal mask will be added.
+        """
+        input_shape = (attention_mask_2d.shape[0], query_length)
+
+        # create causal mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        causal_4d_mask = None
+        if (input_shape[-1] > 1 or self.sliding_window is not None) and self.is_causal:
+            if key_value_length is None:
+                raise ValueError(
+                    "This attention mask converter is causal. Make sure to pass `key_value_length` to correctly create a causal mask."
+                )
+
+            past_key_values_length = key_value_length - query_length
+            causal_4d_mask = self._make_causal_mask(
+                input_shape,
+                dtype,
+                device=attention_mask_2d.device,
+                past_key_values_length=past_key_values_length,
+                sliding_window=self.sliding_window,
+            )
+        elif self.sliding_window is not None:
+            raise NotImplementedError("Sliding window is currently only implemented for causal masking")
+
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        expanded_attn_mask = self._expand_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
+            attention_mask_2d.device
+        )
+        expanded_4d_mask = expanded_attn_mask if causal_4d_mask is None else expanded_attn_mask + causal_4d_mask
+
+        return expanded_4d_mask
+
+    @staticmethod
+    def _make_causal_mask(
+        input_ids_shape: torch.Size,
+        dtype: torch.dtype,
+        device: torch.device,
+        past_key_values_length: int = 0,
+        sliding_window: Optional[int] = None,
+    ):
+        """
+        Make causal mask used for bi-directional self-attention.
+        """
+        bsz, tgt_len = input_ids_shape
+        mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
+        mask_cond = torch.arange(mask.size(-1), device=device)
+        mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+
+        mask = mask.to(dtype)
+
+        if past_key_values_length > 0:
+            mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
+
+        # add lower triangular sliding window mask if necessary
+        if sliding_window is not None:
+            diagonal = past_key_values_length - sliding_window + 1
+
+            context_mask = 1 - torch.triu(torch.ones_like(mask, dtype=torch.int), diagonal=diagonal)
+            mask.masked_fill_(context_mask.bool(), torch.finfo(dtype).min)
+
+        return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
+    @staticmethod
+    def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+        """
+        Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+        """
+        bsz, src_len = mask.size()
+        tgt_len = tgt_len if tgt_len is not None else src_len
+
+        expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+
+        inverted_mask = 1.0 - expanded_mask
+
+        return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+
+
+# Copied from transformers.models.llama.modeling_llama._get_unpad_data
+def _get_unpad_data(attention_mask):
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    return (
+        indices,
+        cu_seqlens,
+        max_seqlen_in_batch,
     )
-    mask = torch.tril(tensor, diagonal=0)
-    # make the mask banded to account for sliding window
-    mask = torch.triu(mask, diagonal=-sliding_window)
-    mask = torch.log(mask).to(dtype)
-
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
@@ -121,8 +265,8 @@ class MistralRotaryEmbedding(nn.Module):
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
+        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
@@ -130,8 +274,8 @@ class MistralRotaryEmbedding(nn.Module):
             self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         return (
-            self.cos_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
-            self.sin_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
+            self.cos_cached[:seq_len].to(dtype=x.dtype),
+            self.sin_cached[:seq_len].to(dtype=x.dtype),
         )
 
 
@@ -145,11 +289,8 @@ def rotate_half(x):
 
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
-    # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
-    cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
-    sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
-    cos = cos[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
-    sin = sin[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
+    cos = cos[position_ids].unsqueeze(1)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
+    sin = sin[position_ids].unsqueeze(1)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -170,6 +311,7 @@ class MistralMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
+# Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -198,6 +340,7 @@ class MistralAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
+        self.is_causal = True
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -226,7 +369,12 @@ class MistralAttention(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -291,11 +439,289 @@ class MistralAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
+class MistralFlashAttention2(MistralAttention):
+    """
+    Mistral flash attention module. This module inherits from `MistralAttention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
+    """
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        **kwargs,
+    ):
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
+
+            # overwrite attention_mask with padding_mask
+            attention_mask = kwargs.pop("padding_mask")
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value[0].shape[-2]
+
+        # Because the input can be padded, the absolute sequence length depends on the max position id.
+        rotary_seq_len = max(kv_seq_len, position_ids[:, -1].max().item()) + 1
+        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
+
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+        use_sliding_windows = (
+            _flash_supports_window_size
+            and hasattr(self.config, "sliding_window") is not None
+            and kv_seq_len > self.config.sliding_window
+        )
+
+        if not _flash_supports_window_size:
+            logger.warning_once(
+                "The current flash attention version does not support sliding window attention, for a more memory efficient implementation"
+                " make sure to upgrade flash-attn library."
+            )
+
+        if past_key_value is not None:
+            # Activate slicing cache only if the config has a value `sliding_windows` attribute
+            if hasattr(self.config, "sliding_window") and kv_seq_len > self.config.sliding_window:
+                slicing_tokens = kv_seq_len - self.config.sliding_window
+
+                past_key = past_key_value[0]
+                past_value = past_key_value[1]
+
+                past_key = past_key[:, :, slicing_tokens:, :].contiguous()
+                past_value = past_value[:, :, slicing_tokens:, :].contiguous()
+
+                if past_key.shape[-2] != self.config.sliding_window - 1:
+                    raise ValueError(
+                        f"past key much have a shape of (`batch_size, num_heads, self.config.sliding_window-1, head_dim`), got"
+                        f" {past_key.shape}"
+                    )
+
+                past_key_value = (past_key, past_value)
+
+                if attention_mask is not None:
+                    attention_mask = attention_mask[:, slicing_tokens:]
+                    attention_mask = torch.cat([attention_mask, torch.ones_like(attention_mask[:, -1:])], dim=-1)
+
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+
+        past_key_value = (key_states, value_states) if use_cache else None
+
+        # repeat k/v heads if n_kv_heads < n_heads
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        # TODO: Mistral does not have dropout in the config??
+        # It is recommended to use dropout with FA according to the docs
+        # when training.
+        dropout_rate = 0.0  # if not self.training else self.attn_dropout
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in float16 just to be sure everything works as expected.
+        input_dtype = query_states.dtype
+        if input_dtype == torch.float32:
+            # Handle the case where the model is quantized
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+
+        # Reashape to the expected shape for Flash Attention
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        attn_output = self._flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=dropout_rate,
+            use_sliding_windows=use_sliding_windows,
+        )
+
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value
+
+    def _flash_attention_forward(
+        self,
+        query_states,
+        key_states,
+        value_states,
+        attention_mask,
+        query_length,
+        dropout=0.0,
+        softmax_scale=None,
+        use_sliding_windows=False,
+    ):
+        """
+        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
+        first unpad the input, then computes the attention scores and pad the final attention scores.
+
+        Args:
+            query_states (`torch.Tensor`):
+                Input query states to be passed to Flash Attention API
+            key_states (`torch.Tensor`):
+                Input key states to be passed to Flash Attention API
+            value_states (`torch.Tensor`):
+                Input value states to be passed to Flash Attention API
+            attention_mask (`torch.Tensor`):
+                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
+                position of padding tokens and 1 for the position of non-padding tokens.
+            dropout (`int`, *optional*):
+                Attention dropout
+            softmax_scale (`float`, *optional*):
+                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+            use_sliding_windows (`bool`, *optional*):
+                Whether to activate sliding window attention.
+        """
+        # Contains at least one padding token in the sequence
+        if attention_mask is not None:
+            batch_size = query_states.shape[0]
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+                query_states, key_states, value_states, attention_mask, query_length
+            )
+
+            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+            if not use_sliding_windows:
+                attn_output_unpad = flash_attn_varlen_func(
+                    query_states,
+                    key_states,
+                    value_states,
+                    cu_seqlens_q=cu_seqlens_q,
+                    cu_seqlens_k=cu_seqlens_k,
+                    max_seqlen_q=max_seqlen_in_batch_q,
+                    max_seqlen_k=max_seqlen_in_batch_k,
+                    dropout_p=dropout,
+                    softmax_scale=softmax_scale,
+                    causal=self.is_causal,
+                )
+            else:
+                attn_output_unpad = flash_attn_varlen_func(
+                    query_states,
+                    key_states,
+                    value_states,
+                    cu_seqlens_q=cu_seqlens_q,
+                    cu_seqlens_k=cu_seqlens_k,
+                    max_seqlen_q=max_seqlen_in_batch_q,
+                    max_seqlen_k=max_seqlen_in_batch_k,
+                    dropout_p=dropout,
+                    softmax_scale=softmax_scale,
+                    causal=self.is_causal,
+                    window_size=(self.config.sliding_window, self.config.sliding_window),
+                )
+
+            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+        else:
+            if not use_sliding_windows:
+                attn_output = flash_attn_func(
+                    query_states,
+                    key_states,
+                    value_states,
+                    dropout,
+                    softmax_scale=softmax_scale,
+                    causal=self.is_causal,
+                )
+            else:
+                attn_output = flash_attn_func(
+                    query_states,
+                    key_states,
+                    value_states,
+                    dropout,
+                    softmax_scale=softmax_scale,
+                    causal=self.is_causal,
+                    window_size=(self.config.sliding_window, self.config.sliding_window),
+                )
+
+        return attn_output
+
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+        batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
+
+        # On the first iteration we need to properly re-create the padding mask
+        # by slicing it on the proper place
+        if kv_seq_len != attention_mask.shape[-1]:
+            attention_mask_num_tokens = attention_mask.shape[-1]
+            attention_mask = attention_mask[:, attention_mask_num_tokens - kv_seq_len :]
+
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
+
+        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
+        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
+
+        if query_length == kv_seq_len:
+            query_layer = index_first_axis(
+                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
+            )
+            cu_seqlens_q = cu_seqlens_k
+            max_seqlen_in_batch_q = max_seqlen_in_batch_k
+            indices_q = indices_k
+        elif query_length == 1:
+            max_seqlen_in_batch_q = 1
+            cu_seqlens_q = torch.arange(
+                batch_size + 1, dtype=torch.int32, device=query_layer.device
+            )  # There is a memcpy here, that is very bad.
+            indices_q = cu_seqlens_q[:-1]
+            query_layer = query_layer.squeeze(1)
+        else:
+            # The -q_len: slice assumes left padding.
+            attention_mask = attention_mask[:, -query_length:]
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
+
+        return (
+            query_layer,
+            key_layer,
+            value_layer,
+            indices_q,
+            (cu_seqlens_q, cu_seqlens_k),
+            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
+        )
+
+
 class MistralDecoderLayer(nn.Module):
     def __init__(self, config: MistralConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = MistralAttention(config=config)
+        self.self_attn = (
+            MistralAttention(config=config)
+            if not getattr(config, "_flash_attn_2_enabled", False)
+            else MistralFlashAttention2(config)
+        )
         self.mlp = MistralMLP(config)
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -308,12 +734,17 @@ class MistralDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+                `(batch, sequence_length)` where padding elements are indicated by 0.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -382,6 +813,7 @@ class MistralPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MistralDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -394,9 +826,10 @@ class MistralPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, MistralModel):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 MISTRAL_INPUTS_DOCSTRING = r"""
@@ -480,6 +913,8 @@ class MistralModel(MistralPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
+        self.attn_mask_converter = AttnMaskConverter(is_causal=True, sliding_window=config.sliding_window)
+
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([MistralDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -493,32 +928,6 @@ class MistralModel(MistralPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
-
-    def _prepare_decoder_attention_mask(
-        self, attention_mask, input_shape, inputs_embeds, past_key_values_length, sliding_window
-    ):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_sliding_window_causal_mask(
-                input_shape,
-                inputs_embeds.dtype,
-                device=inputs_embeds.device,
-                past_key_values_length=past_key_values_length,
-                sliding_window=sliding_window,
-            )
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
-                inputs_embeds.device
-            )
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
 
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
     def forward(
@@ -569,18 +978,35 @@ class MistralModel(MistralPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        # embed positions
-        if attention_mask is None:
-            attention_mask = torch.ones(
-                (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
-            )
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask,
-            (batch_size, seq_length),
-            inputs_embeds,
-            past_key_values_length,
-            sliding_window=self.config.sliding_window,
-        )
+
+        if (
+            attention_mask is not None
+            and hasattr(self.config, "_flash_attn_2_enabled")
+            and self.config._flash_attn_2_enabled
+            and past_key_values is not None
+        ):
+            is_padding_right = attention_mask[:, -1].sum().item() != batch_size
+            if is_padding_right:
+                raise ValueError(
+                    "You are attempting to perform batched generation with padding_side='right'"
+                    " this may lead to unexpected behaviour for Flash Attention version of Mistral. Make sure to "
+                    " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
+                )
+
+        if getattr(self.config, "_flash_attn_2_enabled", False):
+            # 2d mask is passed through the layers
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        else:
+            key_value_length = seq_length + past_key_values_length
+            # 4d mask is passed through the layers
+            if attention_mask is not None:
+                attention_mask = self.attn_mask_converter.to_4d(
+                    attention_mask, seq_length, key_value_length, dtype=inputs_embeds.dtype
+                )
+            else:
+                attention_mask = self.attn_mask_converter.to_causal_4d(
+                    batch_size, seq_length, key_value_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
+                )
 
         hidden_states = inputs_embeds
 
@@ -603,19 +1029,14 @@ class MistralModel(MistralPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self.gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     position_ids,
+                    past_key_value,
+                    output_attentions,
+                    use_cache,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -774,8 +1195,18 @@ class MistralForCausalLM(MistralPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
+        # Omit tokens covered by past_key_values
         if past_key_values:
-            input_ids = input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
@@ -783,7 +1214,7 @@ class MistralForCausalLM(MistralPreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
+                position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
