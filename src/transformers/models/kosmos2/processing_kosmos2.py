@@ -603,15 +603,12 @@ def extract_entities_with_patch_indices(text):
     return entities_with_patch_indices
 
 
-def remove_special_fields(text):
-    return re.sub("<.*?>", "", text)
-
-
 def adjust_entity_positions(entity, text):
     """Adjust the positions of the entities in `text` to be relative to the text with special fields removed."""
     entity_name, (start, end) = entity
-    adjusted_start = len(remove_special_fields(text[:start]))
-    adjusted_end = len(remove_special_fields(text[:end]))
+    # computed the length of strings with special fields (tag tokens, patch index tokens, etc.) removed
+    adjusted_start = len(re.sub("<.*?>", "", text[:start]))
+    adjusted_end = len(re.sub("<.*?>", "", text[:end]))
     adjusted_entity = (entity_name, (adjusted_start, adjusted_end))
     return adjusted_entity
 
@@ -651,7 +648,8 @@ def clean_text_and_extract_entities_with_bboxes(text, num_patches_per_side=32):
     >>> entities
     [('a snowman', (12, 21), [(0.390625, 0.046875, 0.984375, 0.828125)]), ('a fire', (41, 47), [(0.171875, 0.015625, 0.484375, 0.890625)])]
     ```"""
-    processed_text = remove_special_fields(text)
+    # remove special fields (tag tokens, patch index tokens, etc.)
+    processed_text = re.sub("<.*?>", "", text)
 
     entities_with_patch_indices = extract_entities_with_patch_indices(text)
     entities = []
