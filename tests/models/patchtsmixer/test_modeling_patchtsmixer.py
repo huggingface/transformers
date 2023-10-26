@@ -94,7 +94,7 @@ class PatchTSMixerModelTester:
         num_labels: int = 3,
         num_targets: int = 3,
         output_range: list = None,
-        head_agg: str = None,
+        head_aggregation: str = None,
         # Trainer related
         batch_size=13,
         is_training=True,
@@ -136,7 +136,7 @@ class PatchTSMixerModelTester:
         self.num_labels = num_labels
         self.num_targets = num_targets
         self.output_range = output_range
-        self.head_agg = head_agg
+        self.head_aggregation = head_aggregation
         # Trainer related
         self.batch_size = batch_size
         self.is_training = is_training
@@ -175,7 +175,7 @@ class PatchTSMixerModelTester:
             num_labels=self.num_labels,
             num_targets=self.num_targets,
             output_range=self.output_range,
-            head_agg=self.head_agg,
+            head_aggregation=self.head_aggregation,
             post_init=self.post_init,
             seed_number=self.seed_number,
         )
@@ -536,7 +536,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             num_labels=3,
             num_targets=3,
             output_range=None,
-            head_agg=None,
+            head_aggregation=None,
             scaling="std",
             use_positional_encoding=False,
             positional_encoding="sincos",
@@ -744,16 +744,16 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             for self_attn in [True, False]:
                 for scaling in [True, False, "mean", "std"]:
                     for gated_attn in [True, False]:
-                        for head_agg in ["max_pool", "avg_pool"]:
+                        for head_aggregation in ["max_pool", "avg_pool"]:
                             params = self.__class__.params.copy()
                             params.update(
                                 mode=mode,
                                 self_attn=self_attn,
                                 scaling=scaling,
-                                head_agg=head_agg,
+                                head_aggregation=head_aggregation,
                                 gated_attn=gated_attn,
                             )
-                            # print(mode,self_attn,revin,gated_attn,head_agg)
+                            # print(mode,self_attn,revin,gated_attn,head_aggregation)
 
                             self.check_module(task="classification", params=params)
 
@@ -762,18 +762,18 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             for self_attn in [True, False]:
                 for scaling in [True, False, "mean", "std"]:
                     for gated_attn in [True, False]:
-                        for head_agg in ["max_pool", "avg_pool"]:
+                        for head_aggregation in ["max_pool", "avg_pool"]:
                             for loss in ["mse", "nll"]:
                                 params = self.__class__.params.copy()
                                 params.update(
                                     mode=mode,
                                     self_attn=self_attn,
                                     scaling=scaling,
-                                    head_agg=head_agg,
+                                    head_aggregation=head_aggregation,
                                     gated_attn=gated_attn,
                                     loss=loss,
                                 )
-                                # print(mode,self_attn,revin,gated_attn,head_agg)
+                                # print(mode,self_attn,revin,gated_attn,head_aggregation)
 
                                 self.check_module(task="regression", params=params)
 
@@ -795,14 +795,14 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
                                         masked_loss=masked_loss,
                                         channel_consistent_masking=channel_consistent_masking,
                                     )
-                                    # print(mode,self_attn,revin,gated_attn,head_agg)
+                                    # print(mode,self_attn,revin,gated_attn,head_aggregation)
 
                                     self.check_module(task="pretrain", params=params)
 
         # for mode in ["flatten","common_channel","mix_channel"]:
         #     for task in ["forecast","classification","regression","pretrain"]:
         #         for self_attn in [True,False]:
-        #             for head_agg in ["max_pool","avg_pool"]:
+        #             for head_aggregation in ["max_pool","avg_pool"]:
         #                 for mask_type in ["random","forecast"]:
         #                     for masked_loss in [True, False]:
         #                         for channel_consistent_masking in [True, False]:

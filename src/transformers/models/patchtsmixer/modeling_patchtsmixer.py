@@ -110,17 +110,15 @@ class PatchTSMixerTranspose(nn.Module):
     Args:
         *dims (`int`): Variable-length list of dimensions to permute the input tensor. The input tensor is
             transposed based on the order of dimensions provided.
-        contiguous (`bool`, *optional*, defaults to False): If True, the transposed tensor is made contiguous.
 
     Returns:
         `torch.Tensor`: The transposed tensor.
 
     """
 
-    def __init__(self, *dims, contiguous=False):
+    def __init__(self, *dims):
         super().__init__()
         self.dims = dims
-        self.contiguous = contiguous
 
     def forward(self, inputs: torch.Tensor):
         """
@@ -129,10 +127,8 @@ class PatchTSMixerTranspose(nn.Module):
         Returns:
             `torch.Tensor`: transposed tensor.
         """
-        if self.contiguous:
-            return inputs.transpose(*self.dims).contiguous()
-        else:
-            return inputs.transpose(*self.dims)
+
+        return inputs.transpose(*self.dims)
 
 
 class PatchTSMixerNormLayer(nn.Module):
@@ -692,7 +688,7 @@ class PatchTSMixerLinearHead(nn.Module):
 
         self.config = config
 
-        if config.head_agg is None:
+        if config.head_aggregation is None:
             mul_factor = config.num_patches
         else:
             mul_factor = 1
@@ -706,7 +702,7 @@ class PatchTSMixerLinearHead(nn.Module):
                 config.num_features * config.num_input_channels * mul_factor
             )
 
-        if config.head_agg is None:
+        if config.head_aggregation is None:
             self.flatten = nn.Flatten(start_dim=-3)
         else:
             self.flatten = nn.Flatten(start_dim=-2)
@@ -726,13 +722,13 @@ class PatchTSMixerLinearHead(nn.Module):
 
         # batch_size x num_features x num_patch or batch_size x n_vars x num_features x num_patch
         hidden_features = hidden_features.transpose(-1, -2)
-        if self.config.head_agg == "use_last":
+        if self.config.head_aggregation == "use_last":
             # batch_size x num_features (flatten) or # batch_size x n_vars x num_features (common_channel)
             hidden_features = hidden_features[..., -1]
-        elif self.config.head_agg == "max_pool":
+        elif self.config.head_aggregation == "max_pool":
             # batch_size x n_vars x num_features or batch_size x num_features
             hidden_features = hidden_features.max(dim=-1).values
-        elif self.config.head_agg == "avg_pool":
+        elif self.config.head_aggregation == "avg_pool":
             # batch_size x n_vars x num_features or batch_size x num_features
             hidden_features = hidden_features.mean(dim=-1)
 
@@ -1764,8 +1760,8 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                         - 1 for values that are **observed**,
                         - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
-                `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
-                values of the time series, that serve as labels for the model. The `target_values` is what the Transformer
+                `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*):
+                Target values of the time series, that serve as labels for the model. The `target_values` is what the Transformer
                 needs during training to learn to output, given the `past_values`. Note that, this is NOT required for a
                 pretraining task.
 
@@ -1774,9 +1770,6 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                 target data with all channels, as channel Filtering for both prediction and target will be manually applied
                 before the loss computation.
 
-                For a classification task, it has a shape of `(batch_size,)`.
-
-                For a regression task, it has a shape of `(batch_size, num_targets)`.
             return_loss (`bool`,  *optional*):
                 Whether to return the loss in the `forward` call.
 

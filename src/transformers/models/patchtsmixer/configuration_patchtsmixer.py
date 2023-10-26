@@ -120,7 +120,7 @@ class PatchTSMixerConfig(PretrainedConfig):
             Number of targets (dimensionality of the regressed variable) for a regression task.
         output_range (`list`, *optional*):
             Output range to restrict for the regression task. Defaults to None.
-        head_agg (`str`, *optional*, defaults to `"max_pool"`):
+        head_aggregation (`str`, *optional*, defaults to `"max_pool"`):
             Aggregation mode to enable for classification or regression task. Allowed values are `None`, "use_last",
             "max_pool", "avg_pool".
         init_std (`float`, *optional*, defaults to 0.02):
@@ -162,10 +162,13 @@ class PatchTSMixerConfig(PretrainedConfig):
 
     def __init__(
         self,
+        # Time series specific configuration
         seq_len: int = 32,
         patch_len: int = 8,
         num_input_channels: int = 1,
         stride: int = 8,
+        num_parallel_samples: int = 100,
+        # General model configuration
         num_features: int = 8,
         expansion_factor: int = 2,
         num_layers: int = 3,
@@ -178,6 +181,12 @@ class PatchTSMixerConfig(PretrainedConfig):
         use_positional_encoding: bool = False,
         positional_encoding: str = "zeros",
         learn_positional_encoding: bool = False,
+        scaling: Optional[Union[str, bool]] = "std",
+        loss: str = "mse",
+        init_std: float = 0.02,
+        seed_number: Optional[int] = None,
+        post_init: bool = False,
+        # Pretrain model configuration
         mask_type: str = "random",
         mask_ratio=0.5,
         mask_patches: list = [2, 3],
@@ -185,19 +194,16 @@ class PatchTSMixerConfig(PretrainedConfig):
         mask_value=0,
         masked_loss: bool = True,
         channel_consistent_masking: bool = True,
-        scaling: Optional[Union[str, bool]] = "std",
+        # General head configuration
         head_dropout: float = 0.2,
+        distribution_output: str = "student_t",
+        # Forecast head configuration
         forecast_len: int = 16,
         forecast_channel_indices: list = None,
+        # Classification/Regression configuration
         num_targets: int = 3,
         output_range: list = None,
-        head_agg: str = "max_pool",
-        init_std: float = 0.02,
-        seed_number: Optional[int] = None,
-        post_init: bool = False,
-        distribution_output: str = "student_t",
-        loss: str = "mse",
-        num_parallel_samples: int = 100,
+        head_aggregation: str = "max_pool",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -211,41 +217,26 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.dropout = dropout
         self.mode = mode
         self.gated_attn = gated_attn
-
         self.norm_mlp = norm_mlp
-
         self.scaling = scaling
-
         self.head_dropout = head_dropout
-
         self.num_patches = (max(seq_len, patch_len) - patch_len) // stride + 1
-
-        # masking related
         self.mask_type = mask_type
         self.mask_ratio = mask_ratio
         self.mask_patches = mask_patches
         self.mask_patch_ratios = mask_patch_ratios
         self.mask_value = mask_value
         self.channel_consistent_masking = channel_consistent_masking
-        # self.mask_mode = mask_mode
         self.masked_loss = masked_loss
-        # patching related
         self.patch_last = True
-
         self.use_positional_encoding = use_positional_encoding
         self.positional_encoding = positional_encoding
         self.learn_positional_encoding = learn_positional_encoding
-
-        # forecast/prediction related
         self.forecast_len = forecast_len
         self.forecast_channel_indices = forecast_channel_indices
-
-        # classification/regression related
         self.num_targets = num_targets
         self.output_range = output_range
-        self.head_agg = head_agg
-
-        # other params
+        self.head_aggregation = head_aggregation
         self.self_attn = self_attn
         self.self_attn_heads = self_attn_heads
         self.init_std = init_std
