@@ -3306,9 +3306,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
-            # device_map = {'shared': 0, 'text_encoder': 0, 'speech_encoder': 0, 'text_decoder': 0, 'lm_head': 0, 't2u_model': 0, 'vocoder.dur_predictor': 0, 'vocoder.unit_embedding': 0, 'vocoder.speaker_embedding': 1, 'vocoder.language_embedding': 0, 'vocoder.hifi_gan.conv_pre': 0, 'vocoder.hifi_gan.resblocks': 1, 'vocoder.hifi_gan.conv_post': 1, 'vocoder.hifi_gan.upsampler': 1}
             device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
-            print(device_map)
 
             if load_in_8bit or load_in_4bit:
                 # The LM head / tied weights or any last module can stay on disk / CPU
