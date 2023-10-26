@@ -38,7 +38,7 @@ def get_dpt_config(model_name):
     if "small" in model_name:
         # equivalent to stage 3, stage 6, stage 9, stage 12
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-small", out_indices=[3, 6, 9, 12], apply_layernorm=False, reshape_hidden_states=True
+            "facebook/dinov2-small", out_indices=[3, 6, 9, 12], apply_layernorm=False, reshape_hidden_states=False
         )
     else:
         raise NotImplementedError("To do")

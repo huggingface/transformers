@@ -58,7 +58,7 @@ class DPTModelTester:
         intermediate_size=8,
         out_features=["stage1", "stage2"],
         apply_layernorm=False,
-        reshape_hidden_states=True,
+        reshape_hidden_states=False,
         neck_hidden_sizes=[2, 2],
         fusion_hidden_size=6,
     ):
@@ -111,6 +111,7 @@ class DPTModelTester:
             intermediate_size=self.intermediate_size,
             is_training=self.is_training,
             out_features=self.out_features,
+            reshape_hidden_states=self.reshape_hidden_states,
         )
 
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):

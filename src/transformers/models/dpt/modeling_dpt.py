@@ -620,7 +620,7 @@ class DPTReassembleStage(nn.Module):
                     nn.Sequential(nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
                 )
 
-    def forward(self, hidden_states: List[torch.Tensor], cls_tokens: List[torch.Tensor]) -> List[torch.Tensor]:
+    def forward(self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None) -> List[torch.Tensor]:
         """
         Args:
             hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
@@ -630,16 +630,15 @@ class DPTReassembleStage(nn.Module):
 
         for i, hidden_state in enumerate(hidden_states):
             if i not in self.neck_ignore_stages:
-                if hidden_state.ndim == 3:
-                    # reshape to (batch_size, num_channels, height, width)
-                    hidden_state, cls_token = hidden_state[:, 1:], hidden_state[:, 0]
-                    batch_size, sequence_length, num_channels = hidden_state.shape
+                # reshape to (batch_size, num_channels, height, width)
+                cls_token, hidden_state = hidden_state[:, 0], hidden_state[:, 1:]
+                batch_size, sequence_length, num_channels = hidden_state.shape
+                if patch_height is not None and patch_width is not None:
+                    hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, num_channels)
+                else:
                     size = int(math.sqrt(sequence_length))
                     hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
-                    hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
-
-                if cls_tokens is not None:
-                    cls_token = cls_tokens[i]
+                hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
 
                 feature_shape = hidden_state.shape
                 if self.config.readout_type == "project":
@@ -1006,13 +1005,11 @@ class DPTNeck(nn.Module):
         # fusion
         self.fusion_stage = DPTFeatureFusionStage(config)
 
-    def forward(self, hidden_states: List[torch.Tensor], cls_tokens: List[torch.Tensor] = None) -> List[torch.Tensor]:
+    def forward(self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None) -> List[torch.Tensor]:
         """
         Args:
             hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
                 List of hidden states from the backbone.
-            cls_tokens (`List[torch.FloatTensor]`, each of shape `(batch_size, hidden_size)`, *optional*):
-                List of cls token features from the backbone. Only relevant for ViT-based models.
         """
         if not isinstance(hidden_states, (tuple, list)):
             raise ValueError("hidden_states should be a tuple or list of tensors")
@@ -1022,7 +1019,7 @@ class DPTNeck(nn.Module):
 
         # postprocess hidden states
         if self.reassemble_stage is not None:
-            hidden_states = self.reassemble_stage(hidden_states, cls_tokens)
+            hidden_states = self.reassemble_stage(hidden_states, patch_height, patch_width)
 
         features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
 
@@ -1155,13 +1152,11 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
-        cls_tokens = None
         if self.backbone is not None:
             outputs = self.backbone.forward_with_filtered_kwargs(
                 pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
             )
             hidden_states = outputs.feature_maps
-            cls_tokens = outputs.cls_tokens if "cls_tokens" in outputs else None
         else:
             outputs = self.dpt(
                 pixel_values,
@@ -1187,7 +1182,14 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
                 hidden_states = backbone_hidden_states
 
-        hidden_states = self.neck(hidden_states, cls_tokens)
+        patch_height, patch_width = None, None
+        if self.config.backbone_config is not None and self.config.is_hybrid is False:
+            _, _, height, width = pixel_values.shape
+            patch_size = self.config.backbone_config.patch_size
+            patch_height = height // patch_size
+            patch_width = width // patch_size
+
+        hidden_states = self.neck(hidden_states, patch_height, patch_width)
 
         predicted_depth = self.head(hidden_states)
 
@@ -1197,10 +1199,8 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         if not return_dict:
             if output_hidden_states:
-                backbone_outputs = outputs[2:] if "cls_tokens" in outputs else outputs[1:]
-                output = (predicted_depth,) + backbone_outputs
+                output = (predicted_depth,) + outputs[1:]
             else:
-                backbone_outputs = outputs[3:] if "cls_tokens" in outputs else outputs[2:]
                 output = (predicted_depth,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1342,7 +1342,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
             hidden_states = backbone_hidden_states
 
-        hidden_states = self.neck(hidden_states=hidden_states, cls_tokens=None)
+        hidden_states = self.neck(hidden_states=hidden_states)
 
         logits = self.head(hidden_states)
 
