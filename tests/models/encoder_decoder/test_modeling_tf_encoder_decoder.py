@@ -525,7 +525,7 @@ class TFEncoderDecoderMixin:
         # PT -> TF
         with tempfile.TemporaryDirectory() as tmpdirname:
             pt_model.save_pretrained(tmpdirname)
-            tf_model = TFEncoderDecoderModel.from_pretrained(tmpdirname, from_pt=True)
+            tf_model = TFEncoderDecoderModel.from_pretrained(tmpdirname)
 
         self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
 
@@ -542,7 +542,7 @@ class TFEncoderDecoderMixin:
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             pt_model.save_pretrained(tmpdirname)
-            tf_model = TFEncoderDecoderModel.from_pretrained(tmpdirname, from_pt=True)
+            tf_model = TFEncoderDecoderModel.from_pretrained(tmpdirname)
 
         self.check_pt_tf_equivalence(tf_model, pt_model, tf_inputs_dict)
 
@@ -560,7 +560,8 @@ class TFEncoderDecoderMixin:
         tf_model(**tf_inputs_dict)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            tf_model.save_pretrained(tmpdirname)
+            # TODO Matt: PT doesn't support loading TF safetensors - remove the arg and from_tf=True when it does
+            tf_model.save_pretrained(tmpdirname, safe_serialization=False)
             pt_model = EncoderDecoderModel.from_pretrained(tmpdirname, from_tf=True)
 
         self.check_pt_tf_equivalence(tf_model, pt_model, tf_inputs_dict)
