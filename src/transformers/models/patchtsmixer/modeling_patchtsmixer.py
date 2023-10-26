@@ -47,6 +47,7 @@ PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 PATCHTSMIXER_START_DOCSTRING = r"""
+
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -55,7 +56,7 @@ PATCHTSMIXER_START_DOCSTRING = r"""
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
     and behavior.
 
-    Args:
+    Parameters:
         config ([`PatchTSMixerConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
@@ -79,7 +80,6 @@ PATCHTSMIXER_INPUTS_DOCSTRING = r"""
 
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
 """
 
 
@@ -2149,7 +2149,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         return_loss: bool = True,
         return_dict: Optional[bool] = None,
     ) -> PatchTSMixerForRegressionOutput:
-        """
+        r"""
             target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
                 `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
                 values of the time series, that serve as labels for the model. The `target_values` is what the Transformer
