@@ -19,7 +19,7 @@ import unittest
 
 import numpy as np
 
-from transformers import Beit3Config, Beit3Processor
+from transformers import Beit3Config, Beit3Processor, BeitImageProcessor, XLMRobertaTokenizer
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_BACKBONE_MAPPING_NAMES,
@@ -51,36 +51,35 @@ if is_vision_available():
 
 class Beit3ModelTester:
     def __init__(
-        self,
-        hidden_size=37,
-        attention_heads=1,
-        intermediate_size=2,
-        num_hidden_layers=1,
-        normalize_before=True,
-        activation_fn="gelu",
-        dropout=0.0,
-        drop_path_rate=0.0,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        deepnorm=False,
-        subln=True,
-        bert_init=False,
-        multiway=True,
-        max_source_positions=16,
-        layernorm_eps=1e-5,
-        vocab_size=50,
-        image_size=16,
-        patch_size=2,
-        num_channels=3,
-        num_labels=2,
-        batch_size=1,
-        seq_length=7,
-        use_labels=True,
-        is_training=True,
+            self,
+            hidden_size=37,
+            num_attention_heads=1,
+            intermediate_size=2,
+            num_hidden_layers=1,
+            normalize_before=True,
+            activation_fn="gelu",
+            dropout=0.0,
+            drop_path_rate=0.0,
+            attention_dropout=0.0,
+            activation_dropout=0.0,
+            deepnorm=False,
+            subln=True,
+            bert_init=False,
+            multiway=True,
+            max_source_positions=16,
+            layernorm_eps=1e-5,
+            vocab_size=50,
+            image_size=16,
+            patch_size=2,
+            num_channels=3,
+            num_labels=2,
+            batch_size=1,
+            seq_length=7,
+            use_labels=True,
+            is_training=True,
     ):
         self.hidden_size = hidden_size
-        self.attention_heads = attention_heads
-        self.attention_heads = attention_heads
+        self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.normalize_before = normalize_before
@@ -111,7 +110,7 @@ class Beit3ModelTester:
     def get_config(self):
         return Beit3Config(
             hidden_size=self.hidden_size,
-            num_attention_heads=self.attention_heads,
+            num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
             num_hidden_layers=self.num_hidden_layers,
             normalize_before=self.normalize_before,
@@ -343,9 +342,6 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @require_torch
 @require_vision
 class BeitModelIntegrationTest(unittest.TestCase):
-    @cached_property
-    def default_processor(self):
-        return Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
 
     @cached_property
     def default_image(self):
@@ -356,13 +352,13 @@ class BeitModelIntegrationTest(unittest.TestCase):
     def test_inference_beit3_image_classification(self):
         model = Beit3ForImageClassification.from_pretrained("Raghavan/beit3_base_patch16_224_in1k").to(torch_device)
 
-        processor = self.default_processor
+        processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
         image = self.default_image
         text = "This is a photo of a cat"
         inputs = processor(text=text, images=image, return_tensors="pt")
 
         # forward pass
-        output = model(**inputs)
+        output = model(pixel_values=torch.tensor(inputs["pixel_values"]))
         self.assertEqual(output.logits.shape, torch.Size([1, 1000]))
         expected_slice = torch.tensor([[-0.260473, -0.420061, -0.492118]])
         assert torch.allclose(output.logits.detach()[:, :3], expected_slice)
@@ -371,7 +367,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
     def test_inference_beit3_vqa(self):
         model = Beit3ForQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa").to(torch_device)
 
-        processor = self.default_processor
+        processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
         image = self.default_image
         text = "This is a photo of a cat"
         inputs = processor(text=text, images=image, return_tensors="pt")
@@ -387,16 +383,20 @@ class BeitModelIntegrationTest(unittest.TestCase):
     def test_inference_beit3_visual_reasoning(self):
         model = Beit3ForVisualReasoning.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2").to(torch_device)
 
-        processor = self.default_processor
+        processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
         image = self.default_image
         text = "This is a photo of a cat"
         inputs = processor(text=text, images=image, return_tensors="pt")
 
-        torch.cat(
-            (torch.tensor(input["pixel_values"]).unsqueeze(1), torch.tensor(input["pixel_values"]).unsqueeze(1)), dim=1
+        pixel_values = torch.cat(
+            (torch.tensor(inputs["pixel_values"]).unsqueeze(1), torch.tensor(inputs["pixel_values"]).unsqueeze(1)),
+            dim=1
         )
         # forward pass
-        output = model(**inputs)
+        output = model(input_ids=torch.tensor(inputs["input_ids"]),
+                       pixel_values=pixel_values,
+                       attention_mask=torch.ones(inputs["input_ids"].shape),
+                       )
         assert output.logits.shape == torch.Size([1, 2])
         torch.testing.assert_allclose(output.logits.detach(), torch.tensor([[6.593818, -6.582055]]))
 
@@ -404,18 +404,22 @@ class BeitModelIntegrationTest(unittest.TestCase):
     def test_inference_beit3_for_image_captioning(self):
         model = Beit3ForCaptioning.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning").to(torch_device)
 
-        processor = self.default_processor
-        image = self.default_image
-        text = "This is a photo of a cat"
-        processor(text=text, images=image, return_tensors="pt")
+        tokenizer = XLMRobertaTokenizer.from_pretrained("/Users/eaxxkra/Downloads/beit3.spm")
+        image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
+        processor = Beit3Processor(image_processor, tokenizer)
 
-        language_masked_pos = torch.zeros((input["input_ids"].shape[0], input["input_ids"].shape[1]))
+        # processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
+        image = self.default_image
+        text = "This is photo of a cat"
+        inputs = processor(text=text, images=image, return_tensors="pt")
+
+        language_masked_pos = torch.zeros((inputs["input_ids"].shape[0], inputs["input_ids"].shape[1]))
         language_masked_pos[0, 5] = 1
-        input_tokens = list(input["input_ids"][0])
+        input_tokens = list(inputs["input_ids"][0])
         input_tokens[5] = 64001
         output = model(
             input_ids=torch.tensor([input_tokens]),
-            pixel_values=torch.tensor(input["pixel_values"]),
+            pixel_values=torch.tensor(inputs["pixel_values"]),
             attention_mask=torch.zeros(language_masked_pos.shape),
             language_masked_pos=language_masked_pos,
         )
@@ -428,13 +432,16 @@ class BeitModelIntegrationTest(unittest.TestCase):
             torch_device
         )
 
-        processor = self.default_processor
+        processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
         image = self.default_image
-        text = "This is a photo of a cat"
-        processor(text=text, images=image, return_tensors="pt")
+        text = "This is photo of a cat"
 
-        inputs = processor(text=["This is photo of a dog"], images=image, return_tensors="pt")
-
-        outputs = model(**inputs)
+        inputs = processor(text=[text], images=image, return_attention_mask=False)
+        another_input_ids = processor(text=["This is photo of a dog"], images=image, return_attention_mask=False)
+        outputs = model(
+            input_ids=torch.tensor([inputs["input_ids"][0], another_input_ids["input_ids"][0]]),
+            pixel_values=torch.tensor([inputs["pixel_values"][0], inputs["pixel_values"][0]]),
+            return_loss=True
+        )
 
         self.assertEqual(round(float(outputs.loss.detach().numpy()), 4), 1.8435)

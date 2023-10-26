@@ -37,7 +37,6 @@ from transformers import (
 )
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
-
 model_type_to_class_mapping = {
     "image_classification": Beit3ForImageClassification,
     "vqa": Beit3ForQuestionAnswering,
@@ -199,7 +198,7 @@ def get_large_config_image_text_retrieval(img_size):
     )
 
 
-def rename_keys(model_state_dict):
+def rename_keys(model_state_dict, beit3_model_type):
     new_state_dict = copy.deepcopy(model_state_dict)
     rename_key_names = rename_key_mappings.keys()
     for key in model_state_dict:
@@ -210,6 +209,12 @@ def rename_keys(model_state_dict):
                 new_state_dict[current_key.replace(rename_key, rename_key_mappings[rename_key])] = val
                 current_key = current_key.replace(rename_key, rename_key_mappings[rename_key])
 
+    if beit3_model_type == 'vqa':
+        keys_to_be_renamed_for_vqa = ["pooler.norm.weight", "pooler.norm.bias", "pooler.dense.weight",
+                                      "pooler.dense.bias"]
+        for key in keys_to_be_renamed_for_vqa:
+            new_state_dict[f"beit3.{key}"] = new_state_dict[key]
+            del new_state_dict[key]
     return new_state_dict
 
 
@@ -268,7 +273,7 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
     model = model_type_to_class_mapping[beit3_model_type](config)
 
     model_state_dict = ulilm_state_dict["model"]
-    model_state_dict = rename_keys(model_state_dict)
+    model_state_dict = rename_keys(model_state_dict, beit3_model_type)
     model.load_state_dict(model_state_dict)
 
     image_processor = BeitImageProcessor(
@@ -360,7 +365,7 @@ if __name__ == "__main__":
         default=None,
         type=str,
         help="Beit3 model type, it has to be one of image_classification, vqa, visual_reasoning,"
-        "image_captioning,image_text_retrieval",
+             "image_captioning,image_text_retrieval",
     )
     parser.add_argument(
         "--validate_logits",

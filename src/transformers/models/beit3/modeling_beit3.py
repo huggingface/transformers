@@ -34,7 +34,6 @@ from transformers.modeling_outputs import (
 from transformers.models.beit3.configuration_beit3 import Beit3Config
 from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 
-
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Beit3Config"
@@ -415,7 +414,7 @@ class Beit3MultiheadAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-        self.scaling = self.head_dim**-0.5
+        self.scaling = self.head_dim ** -0.5
 
         self.key_proj = Beit3AttentionLinear(config)
         self.value_proj = Beit3AttentionLinear(config)
@@ -425,15 +424,15 @@ class Beit3MultiheadAttention(nn.Module):
         self.dropout_module = nn.Dropout(config.attention_dropout)
 
     def forward(
-        self,
-        query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        key_padding_mask: torch.Tensor = None,
-        attention_mask: torch.Tensor = None,
-        multiway_split_position=-1,
-        output_attentions: bool = None,
+            self,
+            query: torch.Tensor,
+            key: torch.Tensor,
+            value: torch.Tensor,
+            past_key_value: Optional[Tuple[torch.Tensor]] = None,
+            key_padding_mask: torch.Tensor = None,
+            attention_mask: torch.Tensor = None,
+            multiway_split_position=-1,
+            output_attentions: bool = None,
     ):
         batch_size, target_length, embed_dim = query.size()
 
@@ -526,14 +525,14 @@ class Beit3PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(
-            module,
-            (
-                Beit3ForVisualReasoning,
-                Beit3ForImageTextRetrieval,
-                Beit3ForQuestionAnswering,
-                Beit3ForImageClassification,
-                Beit3ForCaptioning,
-            ),
+                module,
+                (
+                        Beit3ForVisualReasoning,
+                        Beit3ForImageTextRetrieval,
+                        Beit3ForQuestionAnswering,
+                        Beit3ForImageClassification,
+                        Beit3ForCaptioning,
+                ),
         ):
             module.beit3.text_embedding.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
@@ -588,16 +587,16 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         return residual * self.alpha + hidden_states
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask,
-        image_text_mask=None,
-        multiway_split_position=None,
-        past_key_value=None,
-        output_attentions=None,
+            self,
+            hidden_states,
+            attention_mask,
+            image_text_mask=None,
+            multiway_split_position=None,
+            past_key_value=None,
+            output_attentions=None,
     ):
-        if attention_mask is not None:
-            attention_mask = attention_mask.masked_fill(attention_mask.to(torch.bool), -1e8)
+        if image_text_mask is not None:
+            image_text_mask = image_text_mask.masked_fill(image_text_mask.to(torch.bool), -1e8)
 
         residual = hidden_states
         split_position = multiway_split_position if multiway_split_position is not None else -1
@@ -613,6 +612,7 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
             output_attentions=output_attentions,
         )
 
+        attention_weights = None
         if output_attentions:
             hidden_states, attention_weights = output
         else:
@@ -628,6 +628,8 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         hidden_states = self.residual_connection(hidden_states, residual)
         if not self.normalize_before:
             hidden_states = self.final_layer_norm(hidden_states, split_position=split_position)
+        if output_attentions:
+            return hidden_states, attention_weights
         return hidden_states
 
 
@@ -647,10 +649,10 @@ class Beit3Encoder(nn.Module):
         self.gradient_checkpointing = False
 
     def add_position_embeddings(
-        self,
-        hidden_state,
-        text_end_positions=None,
-        multiway_split_position=None,
+            self,
+            hidden_state,
+            text_end_positions=None,
+            multiway_split_position=None,
     ):
         if self.embed_positions is not None:
             hidden_state = hidden_state + self.embed_positions(
@@ -660,16 +662,16 @@ class Beit3Encoder(nn.Module):
         return hidden_state
 
     def forward(
-        self,
-        hidden_state,
-        attention_mask=None,
-        image_text_mask=None,
-        output_hidden_states=None,
-        output_attentions=None,
-        multiway_split_position=None,
-        past_key_value=None,
-        text_end_positions=None,
-        return_dict=None,
+            self,
+            hidden_state,
+            attention_mask=None,
+            image_text_mask=None,
+            output_hidden_states=None,
+            output_attentions=None,
+            multiway_split_position=None,
+            past_key_value=None,
+            text_end_positions=None,
+            return_dict=None,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -685,7 +687,7 @@ class Beit3Encoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
-            hidden_state = layer(
+            encoder_layer_outputs = layer(
                 hidden_state,
                 attention_mask=attention_mask if past_key_value is None else None,
                 image_text_mask=image_text_mask,
@@ -693,6 +695,11 @@ class Beit3Encoder(nn.Module):
                 past_key_value=past_key_value[idx] if past_key_value is not None else None,
                 output_attentions=output_attentions,
             )
+            if output_attentions:
+                hidden_state, attention_weights = encoder_layer_outputs
+                all_self_attentions = all_self_attentions + (attention_weights,)
+            else:
+                hidden_state = encoder_layer_outputs
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_state,)
@@ -749,17 +756,17 @@ class Beit3Model(Beit3PreTrainedModel):
     @add_start_docstrings_to_model_forward(BEIT3_MODEL)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids=None,
-        pixel_values=None,
-        attention_mask=None,
-        image_text_mask=None,
-        vision_masked_position=None,
-        past_key_value=None,
-        text_end_positions=None,
-        output_hidden_states=None,
-        output_attentions=None,
-        return_dict=None,
+            self,
+            input_ids=None,
+            pixel_values=None,
+            attention_mask=None,
+            image_text_mask=None,
+            vision_masked_position=None,
+            past_key_value=None,
+            text_end_positions=None,
+            output_hidden_states=None,
+            output_attentions=None,
+            return_dict=None,
     ):
         r"""
         Returns:
@@ -867,14 +874,14 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
     @add_start_docstrings_to_model_forward(BEIT3_FOR_VISUAL_REASONING_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids,
-        pixel_values,
-        attention_mask,
-        output_hidden_states=None,
-        output_attentions=None,
-        return_dict=None,
-        labels=None,
+            self,
+            input_ids,
+            pixel_values,
+            attention_mask,
+            output_hidden_states=None,
+            output_attentions=None,
+            return_dict=None,
+            labels=None,
     ):
         r"""
         Returns:
@@ -936,10 +943,12 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         if output_hidden_states:
             outputs.hidden_states if return_dict else outputs[1]
 
-        if not return_dict:
-            multiway_split_position = outputs[-1]
+        if input_ids is None:
+            multiway_split_position = -1
+        elif pixel_values is None:
+            multiway_split_position = 0
         else:
-            multiway_split_position = outputs["multiway_split_position"]
+            multiway_split_position = (self.config.image_size // self.config.patch_size) ** 2 + 1
 
         vision_cls = last_hidden_state[:, 0, :]
         language_cls = last_hidden_state[:, multiway_split_position, :]
@@ -987,12 +996,12 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
     @add_start_docstrings_to_model_forward(BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = True,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
+            self,
+            pixel_values: Optional[torch.FloatTensor] = None,
+            output_hidden_states: Optional[bool] = True,
+            output_attentions: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[Any], ImageClassifierOutput]:
         r"""
         Returns:
@@ -1092,17 +1101,17 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
     @add_start_docstrings_to_model_forward(BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids,
-        pixel_values,
-        attention_mask,
-        language_masked_pos=None,
-        text_len=None,
-        past_key_value=None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
+            self,
+            input_ids,
+            pixel_values,
+            attention_mask,
+            language_masked_pos=None,
+            text_len=None,
+            past_key_value=None,
+            output_hidden_states: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            labels: Optional[torch.LongTensor] = None,
     ):
         r"""
         Returns:
@@ -1247,14 +1256,14 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
     @add_start_docstrings_to_model_forward(BEIT3_FOR_VQA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids,
-        pixel_values,
-        attention_mask,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
+            self,
+            input_ids,
+            pixel_values,
+            attention_mask,
+            output_hidden_states: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[Any], SequenceClassifierOutput]:
         r"""
         Returns:
@@ -1346,14 +1355,14 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
     @add_start_docstrings_to_model_forward(BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Beit3ImageTextMatchingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids: torch.LongTensor,
-        pixel_values: torch.FloatTensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        return_loss: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: torch.LongTensor,
+            pixel_values: torch.FloatTensor,
+            attention_mask: Optional[torch.Tensor] = None,
+            return_loss: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple[Any], Beit3ImageTextMatchingOutput]:
         r"""
         Returns:
