@@ -115,8 +115,8 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     return tf.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
 
 
-# Copied from transformers.models.bart.modeling_tf_bart._expand_mask
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
+# Copied from transformers.models.bart.modeling_tf_bart.prepare_4d_attention_mask
+def prepare_4d_attention_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -798,12 +798,12 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
         combined_attention_mask = tf.cond(
             tf.math.greater(seq_len, 1),
             lambda: _make_causal_mask(input_shape, past_key_values_length=past_key_values_length),
-            lambda: _expand_mask(tf.ones((batch_size, seq_len + past_key_values_length)), tgt_len=seq_len),
+            lambda: prepare_4d_attention_mask(tf.ones((batch_size, seq_len + past_key_values_length)), tgt_len=seq_len),
         )
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
+            expanded_attn_mask = prepare_4d_attention_mask(attention_mask, tgt_len=input_shape[-1])
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
