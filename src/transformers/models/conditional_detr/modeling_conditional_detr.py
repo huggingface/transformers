@@ -322,10 +322,11 @@ def replace_batch_norm(model):
         if isinstance(module, nn.BatchNorm2d):
             new_module = ConditionalDetrFrozenBatchNorm2d(module.num_features)
 
-            new_module.weight.data.copy_(module.weight)
-            new_module.bias.data.copy_(module.bias)
-            new_module.running_mean.data.copy_(module.running_mean)
-            new_module.running_var.data.copy_(module.running_var)
+            if not module.weight.device == torch.device("meta"):
+                new_module.weight.data.copy_(module.weight)
+                new_module.bias.data.copy_(module.bias)
+                new_module.running_mean.data.copy_(module.running_mean)
+                new_module.running_var.data.copy_(module.running_var)
 
             model._modules[name] = new_module
 
@@ -1145,6 +1146,7 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
     config_class = ConditionalDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    _no_split_modules = [r"ConditionalDetrConvEncoder", r"ConditionalDetrEncoderLayer", r"ConditionalDetrDecoderLayer"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1169,9 +1171,10 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, ConditionalDetrDecoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 CONDITIONAL_DETR_START_DOCSTRING = r"""
@@ -1516,15 +1519,8 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
             # apply transformation
             query_sine_embed = query_sine_embed_before_transformation * pos_transformation
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self.gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
                     combined_attention_mask,
                     object_queries,

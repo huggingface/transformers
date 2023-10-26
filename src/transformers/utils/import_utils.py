@@ -73,7 +73,7 @@ _apex_available = _is_package_available("apex")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _flash_attn_2_available = _is_package_available("flash_attn") and version.parse(
     importlib.metadata.version("flash_attn")
-) >= version.parse("2.0.0")
+) >= version.parse("2.1.0")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -349,6 +349,45 @@ def is_torch_bf16_available():
         FutureWarning,
     )
     return is_torch_bf16_gpu_available()
+
+
+@lru_cache()
+def is_torch_fp16_available_on_device(device):
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    try:
+        x = torch.zeros(2, 2, dtype=torch.float16).to(device)
+        _ = x @ x
+    except:  # noqa: E722
+        # TODO: more precise exception matching, if possible.
+        # most backends should return `RuntimeError` however this is not guaranteed.
+        return False
+
+    return True
+
+
+@lru_cache()
+def is_torch_bf16_available_on_device(device):
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    if device == "cuda":
+        return is_torch_bf16_gpu_available()
+
+    try:
+        x = torch.zeros(2, 2, dtype=torch.bfloat16).to(device)
+        _ = x @ x
+    except:  # noqa: E722
+        # TODO: more precise exception matching, if possible.
+        # most backends should return `RuntimeError` however this is not guaranteed.
+        return False
+
+    return True
 
 
 def is_torch_tf32_available():

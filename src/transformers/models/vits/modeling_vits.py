@@ -1167,18 +1167,12 @@ class VitsEncoder(nn.Module):
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
+                    layer_outputs = self.gradient_checkpointing_func(
+                        encoder_layer.__call__,
                         hidden_states,
                         padding_mask,
                         attention_mask,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
@@ -1296,9 +1290,10 @@ class VitsPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (VitsTextEncoder)):
-            module.gradient_checkpointing = value
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
+        if isinstance(module, VitsEncoder):
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 VITS_START_DOCSTRING = r"""
