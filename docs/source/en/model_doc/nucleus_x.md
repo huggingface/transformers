@@ -1,6 +1,6 @@
 <!-- MIT License
 
-Copyright (c) 2023  NucleusAI and The HuggingFace Inc. team and github/syncdoth
+Copyright (c) 2023  NucleusAI and The HuggingFace Inc. team and Sehyun Choi
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

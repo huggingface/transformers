@@ -1,13 +1,13 @@
-# This code was adapted from https://github.com/syncdoth/retnet licensed under
-# the MIT License. Above repository builds on Microsoft's torchscale library and
-# the RetNet implementations in this library, also licensed under the MIT
-# License. It has been modified from its original forms to accommodate minor
-# architectural differences compared to NucleusX used by the NucleusAI team that
-# trained the model.
+# This code was adapted from Sehyun Choi's https://github.com/syncdoth/retnet
+# licensed under the MIT License. Above repository builds on Microsoft's
+# torchscale library and the RetNet implementations in this library, also
+# licensed under the MIT License. It has been modified from its original forms
+# to accommodate minor architectural differences compared to NucleusX used by
+# the NucleusAI team that trained the model.
 
 # MIT License
 #
-# Copyright (c) 2023  NucleusAI and The HuggingFace Inc. team and github/syncdoth
+# Copyright (c) 2023  NucleusAI and The HuggingFace Inc. team and Sehyun Choi
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
