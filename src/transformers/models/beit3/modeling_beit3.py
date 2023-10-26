@@ -904,15 +904,14 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         >>> inputs = processor(text=text, images=image, return_tensors="pt")
 
         >>> pixel_values = torch.cat(
-        ...     (torch.tensor(input["pixel_values"]).unsqueeze(1), torch.tensor(input["pixel_values"]).unsqueeze(1)),
+        ...     (torch.tensor(inputs["pixel_values"]).unsqueeze(1), torch.tensor(inputs["pixel_values"]).unsqueeze(1)),
         ...     dim=1,
         ... )
 
-        >>> # forward pass
         >>> output = model(
-        ...     input_ids=torch.tensor(input["input_ids"]),
+        ...     input_ids=torch.tensor(inputs["input_ids"]),
         ...     pixel_values=pixel_values,
-        ...     attention_mask=torch.ones(input["input_ids"].shape),
+        ...     attention_mask=torch.ones(inputs["input_ids"].shape),
         ... )
         >>> list(output.logits.shape)
         [1, 2]
@@ -1292,7 +1291,7 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         >>> predicted_answer_idx = logits.argmax(-1).item()
         >>> predicted_answer = model.config.id2label[predicted_answer_idx]
         >>> print("Predicted answer:", predicted_answer)
-        [1, 3129]
+        Predicted answer: cat
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1381,14 +1380,16 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> text = "This is photo of a cat"
 
-        >>> inputs = processor(text=text, images=image, return_tensors="pt")
-
+        >>> inputs = processor(text=text, images=image)
+        >>> another_input_ids = processor(text=["This is photo of a dog"], images=image, return_attention_mask=False)
         >>> # forward pass
-        >>> outputs = model(**inputs)
+        >>> outputs = model(input_ids=torch.tensor([inputs["input_ids"][0], another_input_ids["input_ids"][0]]),
+        ...    pixel_values=torch.tensor([inputs["pixel_values"][0], inputs["pixel_values"][0]]),
+        ...    return_loss=True)
 
-        >>> logits_per_image = outputs.logits_per_image
-        >>> print(logits_per_image)
-        1.8435165
+        >>> loss = outputs.loss.detach().numpy()
+        >>> print(loss)
+        1.8435194
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

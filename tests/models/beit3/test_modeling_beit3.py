@@ -107,6 +107,9 @@ class Beit3ModelTester:
         self.use_labels = use_labels
         self.is_training = is_training
 
+        self.encoder_seq_length = ((self.image_size // self.patch_size) ** 2) + self.seq_length + 1
+        self.key_length = ((self.image_size // self.patch_size) ** 2) + self.seq_length + 1
+        
     def get_config(self):
         return Beit3Config(
             hidden_size=self.hidden_size,
