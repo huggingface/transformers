@@ -465,7 +465,7 @@ FSDP を有効にしたモデルの保存は、最近の修正でのみ利用で
 
 TPU ユーザーの皆様に朗報です。 PyTorch/XLA は FSDP をサポートするようになりました。
 最新の Fully Sharded Data Parallel (FSDP) トレーニングがすべてサポートされています。
-詳細については、[FSDP を使用した Cloud TPU での PyTorch モデルのスケーリング](https://pytorch.org/blog/scaling-pytorch-models-on-cloud-tpus-with-fsdp/) および [PyTorch/XLA 実装] を参照してください。 FSDP の](https://github.com/pytorch/xla/tree/master/torch_xla/distributed/fsdp)
+詳細については、[FSDP を使用した Cloud TPU での PyTorch モデルのスケーリング](https://pytorch.org/blog/scaling-pytorch-models-on-cloud-tpus-with-fsdp/) および [PyTorch/XLA 実装 を参照してください。 FSDP の](https://github.com/pytorch/xla/tree/master/torch_xla/distributed/fsdp)
 必要なのは、設定を通じて有効にすることだけです。
 
 **FSDP サポートに必要な PyTorch/XLA バージョン**: >=2.0
