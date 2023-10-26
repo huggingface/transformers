@@ -45,6 +45,11 @@ class AWQLinearVersion(str, Enum):
     GEMV = "GEMV"
 
 
+class AWQBackend(str, Enum):
+    AUTOAWQ = "autoawq"
+    LLMAWQ = "llm-awq"
+
+
 @dataclass
 class QuantizationConfigMixin:
     """
@@ -449,6 +454,7 @@ class AWQConfig(QuantizationConfigMixin):
         q_group_size: int = 128,
         zero_point: bool = True,
         version: str = "GEMM",
+        backend: str = "autoawq",
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AWQ

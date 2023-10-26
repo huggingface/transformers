@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_accelerate_available, is_auto_awq_available
-from ..utils.quantization_config import AWQLinearVersion
+from ..utils import is_accelerate_available, is_auto_awq_available, is_torch_available
+from ..utils.quantization_config import AWQLinearVersion, AWQBackend
 
 
-if is_auto_awq_available():
+if is_torch_available():
     import torch.nn as nn
-    from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
@@ -35,6 +34,14 @@ def replace_with_awq_linear(
     if modules_to_not_convert is None:
         modules_to_not_convert = []
 
+    backend = quantization_config.backend
+
+    if is_auto_awq_available():
+        if backend == AWQBackend.AUTOAWQ:
+            from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
+        elif backend == AWQBackend.LLMAWQ:
+            from awq.quantize.qmodule import WQLinear
+
     for name, module in model.named_children():
         if current_key_name is None:
             current_key_name = []
@@ -47,9 +54,12 @@ def replace_with_awq_linear(
                     in_features = module.in_features
                     out_features = module.out_features
 
-                    target_cls = (
-                        WQLinear_GEMM if quantization_config.version == AWQLinearVersion.GEMM else WQLinear_GEMV
-                    )
+                    if backend == AWQBackend.AUTOAWQ:
+                        target_cls = (
+                            WQLinear_GEMM if quantization_config.version == AWQLinearVersion.GEMM else WQLinear_GEMV
+                        )
+                    else:
+                        target_cls = WQLinear
 
                     model._modules[name] = target_cls(
                         w_bit=quantization_config.w_bit,
