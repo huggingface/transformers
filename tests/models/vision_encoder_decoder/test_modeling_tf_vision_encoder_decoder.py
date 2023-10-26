@@ -803,7 +803,7 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             encoder_decoder_pt.encoder.save_pretrained(tmp_dirname_1)
             encoder_decoder_pt.decoder.save_pretrained(tmp_dirname_2)
             encoder_decoder_tf = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-                tmp_dirname_1, tmp_dirname_2, encoder_from_pt=True, decoder_from_pt=True
+                tmp_dirname_1, tmp_dirname_2
             )
 
         logits_tf = encoder_decoder_tf(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids).logits
@@ -814,7 +814,7 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         # Make sure `from_pretrained` following `save_pretrained` work and give the same result
         # (See https://github.com/huggingface/transformers/pull/14016)
         with tempfile.TemporaryDirectory() as tmp_dirname:
-            encoder_decoder_tf.save_pretrained(tmp_dirname)
+            encoder_decoder_tf.save_pretrained(tmp_dirname, safe_serialization=False)
             encoder_decoder_tf = TFVisionEncoderDecoderModel.from_pretrained(tmp_dirname)
 
             logits_tf_2 = encoder_decoder_tf(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids).logits
