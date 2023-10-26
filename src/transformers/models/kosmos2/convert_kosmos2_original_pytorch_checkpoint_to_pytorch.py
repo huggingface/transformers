@@ -1,9 +1,27 @@
 import argparse
-import re
 
 from fairseq.checkpoint_utils import load_checkpoint_to_cpu
 
 from transformers import Kosmos2Config, Kosmos2ForConditionalGeneration
+
+
+KEYS_TO_MODIFY_MAPPING = {
+    "gpt_model.decoder.output_projection": "text_model.lm_head",
+    "gpt_model.decoder": "text_model.model",
+    "img_connector": "image_to_text_projection",
+    "img_model.visual.class_embedding": "vision_model.model.embeddings.class_embedding",
+    "img_model.visual.positional_embedding": "vision_model.model.embeddings.position_embedding.weight",
+    "img_model.visual.conv1": "vision_model.model.embeddings.patch_embedding",
+    "img_model.visual": "vision_model.model",
+    "ln_pre": "pre_layrnorm",
+    "ln_post": "post_layernorm",
+    "transformer.resblocks": "encoder.layers",
+    "ts_attn": "self_attn",
+    "ln_1": "layer_norm1",
+    "ln_2": "layer_norm2",
+    "c_fc": "fc1",
+    "c_proj": "fc2",
+}
 
 
 KEYS_TO_IGNORE = [
@@ -14,43 +32,17 @@ KEYS_TO_IGNORE = [
 ]
 
 
-def rename_vision_key(key):
-    key = re.sub(r"img_model.visual\.", "vision_model.model.", key)
-    key = re.sub(r"\.class_embedding$", ".embeddings.class_embedding", key)
-    key = re.sub(r"\.positional_embedding$", ".embeddings.position_embedding.weight", key)
-    key = re.sub(r"\.conv1.weight$", ".embeddings.patch_embedding.weight", key)
-    key = re.sub(r"\.ln_pre\.", ".pre_layrnorm.", key)
-    key = re.sub(r"\.transformer.resblocks\.", ".encoder.layers.", key)
-    key = re.sub(r"\.ts_attn\.", ".self_attn.", key)
-    key = re.sub(r"\.ln_1\.", ".layer_norm1.", key)
-    key = re.sub(r"\.ln_2\.", ".layer_norm2.", key)
-    key = re.sub(r"\.c_fc\.", ".fc1.", key)
-    key = re.sub(r"\.c_proj\.", ".fc2.", key)
-    key = re.sub(r"\.ln_post\.", ".post_layernorm.", key)
-
-    return key
-
-
 def rename_key(key):
-    # text decoder
-    key = re.sub(r"gpt_model.decoder\.", "text_model.", key)
-    # text decode: `embed_tokens`
-    key = re.sub(r"\.embed_tokens\.", ".model.embed_tokens.", key)
-    key = re.sub(r"\.layers\.", ".model.layers.", key)
-    key = re.sub(r"^text_model.layer_norm\.", "text_model.model.layer_norm.", key)
-    key = re.sub(r"^text_model.output_projection\.", "text_model.lm_head.", key)
-    key = re.sub(r"^img_connector\.", "image_to_text_projection.", key)
-    key = rename_vision_key(key)
+    for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
+        if key_to_modify in key:
+            key = key.replace(key_to_modify, new_key)
 
     return key
 
 
 def convert_kosmos2_checkpoint_to_pytorch(checkpoint_path, pytorch_dump_folder_path):
     state = load_checkpoint_to_cpu(checkpoint_path)
-
-    state["cfg"]
     state_dict = state["model"]
-
     state_dict_keys = list(state_dict.keys())
 
     config = Kosmos2Config()
@@ -68,6 +60,8 @@ def convert_kosmos2_checkpoint_to_pytorch(checkpoint_path, pytorch_dump_folder_p
 
     # check weight loading
     model.load_state_dict(converted_state_dict, strict=True)
+    # save the result
+    model.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
