@@ -591,6 +591,83 @@ class FuyuProcessor(ProcessorMixin):
         )
         return FuyuBatchFeature(data=batch_encoding)
 
+    def post_process_box_coordinates(self, outputs, target_sizes=None):
+        """
+        Transforms raw coordinates detected by [`FuyuForCausalLM`] to the original images' coordinate space.
+        Coordinates will be returned in "box" format, with the following pattern:
+            `<box>top, left, bottom, right</box>`
+
+        Point coordinates are not supported yet.
+
+        Args:
+            outputs ([`GenerateOutput`]):
+                Raw outputs from `generate`.
+            target_sizes (`torch.Tensor`, *optional*):
+                Tensor of shape (batch_size, 2) where each entry is the (height, width) of the corresponding image in
+                the batch. If set, found coordinates in the output sequence are rescaled to the target sizes. If left
+                to None, coordinates will not be rescaled.
+
+        Returns:
+            `GenerateOutput`: Same output type returned by `generate`, with output token ids replaced with
+                boxed and possible rescaled coordinates.
+        """
+
+        def scale_factor_to_fit(original_size, target_size=None):
+            height, width = original_size
+            if target_size is None:
+                max_height = self.image_processor.target_height
+                max_width = self.image_processor.target_width
+            else:
+                max_height, max_width = target_size
+            if width <= max_width and height <= max_height:
+                return 1.0
+            return min(max_height/height, max_width/width)
+
+        def tokens_to_box(tokens, original_size):
+            bbox_start = self.tokenizer.convert_tokens_to_ids(BBOX_OPEN_STRING)
+            bbox_end = self.tokenizer.convert_tokens_to_ids(BBOX_CLOSE_STRING)
+            try:
+                # Assumes a single box output per sequence
+                bbox_start_pos = (tokens == bbox_start).nonzero(as_tuple=True)[0].item()
+                bbox_end_pos = (tokens == bbox_end).nonzero(as_tuple=True)[0].item()
+            except:
+                return tokens
+
+            if bbox_end_pos != bbox_start_pos + 5:
+                return tokens
+
+            # Retrieve transformed coordinates from tokens
+            coords = self.tokenizer.convert_ids_to_tokens(tokens[bbox_start_pos+1:bbox_end_pos])
+
+            # Scale back to original image size and multiply by 2
+            scale = scale_factor_to_fit(original_size)
+            top, left, bottom, right = [2 * int(float(c)/scale) for c in coords]
+
+            # Replace the IDs so they get detokenized right
+            replacement = f" <box>{top}, {left}, {bottom}, {right}</box>"
+            replacement = self.tokenizer.tokenize(replacement)[1:]
+            replacement = self.tokenizer.convert_tokens_to_ids(replacement)
+            replacement = torch.tensor(replacement).to(tokens)
+
+            tokens = torch.cat([tokens[:bbox_start_pos], replacement, tokens[bbox_end_pos+1:]], 0)
+            return tokens
+
+        if target_sizes is None:
+            target_sizes = ((self.image_processor.target_height, self.image_processor.target_width),) * len(outputs)
+
+        if len(outputs) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as output sequences")
+        if target_sizes.shape[1] != 2:
+            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
+
+        results = None
+        for seq, size in zip(outputs, target_sizes):
+            seq = tokens_to_box(seq, size)[None, :]
+            # TODO: what if sequence lengths vary?
+            results = seq if results is None else torch.cat((results, seq), dim=0)
+
+        return results
+
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
