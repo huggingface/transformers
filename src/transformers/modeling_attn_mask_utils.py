@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from typing import Optional, Union
 import torch
 
@@ -175,3 +174,6 @@ def prepare_4d_causal_attention_mask(attention_mask, input_shape, inputs_embeds,
 
     return attention_mask
 
+
+def prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+    return AttnMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)

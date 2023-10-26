@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
+from ...modeling_attn_mask_utils import prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -904,7 +905,7 @@ class FalconMLP(nn.Module):
 
 
 class FalconDecoderLayer(nn.Module):
-    def __init__(self, config: FalconConfig, attn_mask_converter=None):
+    def __init__(self, config: FalconConfig):
         super().__init__()
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -1159,8 +1160,6 @@ class FalconModel(FalconPreTrainedModel):
         # Embedding + LN Embedding
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
 
-        self.attn_mask_converter = AttnMaskConverter(is_causal=True)
-
         # Transformer blocks
         self.h = nn.ModuleList([FalconDecoderLayer(config) for _ in range(config.num_hidden_layers)])
 
@@ -1266,16 +1265,8 @@ class FalconModel(FalconPreTrainedModel):
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
-            key_value_length = seq_length + past_key_values_length
             # 4d mask is passed through the layers
-            if attention_mask is not None:
-                attention_mask = self.attn_mask_converter.to_4d(
-                    attention_mask, seq_length, key_value_length, dtype=inputs_embeds.dtype
-                )
-            else:
-                attention_mask = self.attn_mask_converter.to_causal_4d(
-                    batch_size, seq_length, key_value_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
-                )
+            attention_mask = prepare_4d_causal_attention_mask(attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length)
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
             if output_hidden_states:
