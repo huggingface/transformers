@@ -439,7 +439,7 @@ class AWQConfig(QuantizationConfigMixin):
             The group size to use for quantization. Recommended value is 128 and -1 uses per-column quantization.
         zero_point (`bool`, *optional*, defaults to `True`):
             Whether to use zero point quantization.
-        version (`str`, *optional*, defaults to `GEMM`):
+        version (`str`, *optional*, defaults to `"GEMM"`):
             The version of the quantization algorithm to use.
     """
 

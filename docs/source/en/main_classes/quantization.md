@@ -18,8 +18,55 @@ rendered properly in your Markdown viewer.
 
 ## `AutoAWQ` integration
 
-TODO: @younesbelkada add a description of the integration
-TOOD: @younesbelkada point to tools in the ecosystem to quantize models with AWQ algorithm
+AWQ method has been introduced in the [*AWQ: Activation-aware Weight Quantization for LLM Compression and Acceleration* paper](https://arxiv.org/abs/2306.00978). With AWQ you can run models in 4-bit precision, while preserving its original quality (i.e. no performance degradation) with a superior throughput that other quantization methods presented below - reaching similar throughput as pure `float16` inference.
+
+We integrated the method for anyone to load and use AWQ weights that are pushed on the Hub or saved on a local path. Note that using AWQ quantization requires to have access to a NVIDIA GPU. CPU inference is not supported yet. 
+
+### Quantizing a model
+
+We advise users to look at different existing tools in the ecosystem to quantize their models with AWQ algorithm, such as:
+
+- [`llm-awq`](https://github.com/mit-han-lab/llm-awq) from MIT Han Lab
+- [`autoawq`](https://github.com/casper-hansen/AutoAWQ) from [`casper-hansen`](https://github.com/casper-hansen)
+- Intel neural compressor from Intel - through [`optimum-intel`](https://huggingface.co/docs/optimum/main/en/intel/optimization_inc)
+
+Many other tools might exist in the ecosystem, please feel free to open a PR to add them to the list.
+Currently the integration with 🤗 Transformers is only available for models that has been quantized using `autoawq` library. Most of these models can be found under [`TheBloke`](https://huggingface.co/TheBloke) namespace of 🤗 Hub.
+We will add support for other tools in the future.
+
+### Load a quantized model
+
+You can load a quantized model from the Hub by using `from_pretrained` method. Make sure that the pushed weights are quantized, by checking that the attribute `quantization_config` is present in the model configuration object. You can confirm that the model is quantized to AWQ format by checking the field `quantization_config.quantization_method` which should be set to `"awq"`. Note that loading the model will set other weights in `float16` by default for performance reasons. If you want to change that behavior, you can pass `torch_dtype` argument to `torch.float32` or `torch.bfloat16`.
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_id = "TheBloke/zephyr-7B-alpha-AWQ"
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda:0")
+```
+
+In case you first load your model on CPU, make sure to move it to your GPU device before using 
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_id = "TheBloke/zephyr-7B-alpha-AWQ"
+model = AutoModelForCausalLM.from_pretrained(model_id).to("cuda:0")
+```
+
+### Combining AWQ and Flash Attention
+
+You can combine AWQ quantization with Flash Attention to get a model that is both quantized and faster. Simply load the model using `from_pretrained` and pass `use_flash_attention_2=True` argument.
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("TheBloke/zephyr-7B-alpha-AWQ", use_flash_attention_2=True).to("cuda:0")
+```
+
+### Benchmarks
+
+TODO: @younesbelkada add benchmark
 
 ### AWQConfig
 
