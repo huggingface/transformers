@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import collections
+import functools
 import gc
 import importlib.metadata
 import inspect
@@ -1272,15 +1273,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if not is_flash_attn_2_available():
             raise ImportError(
-                "Flash Attention 2.0 is not available. Please refer to the documentation of https://github.com/Dao-AILab/flash-attention for"
-                " installing it."
+                "Flash Attention 2 is not available. Please refer to the documentation of https://github.com/Dao-AILab/flash-attention for"
+                " installing it. Make sure to have at least the version 2.1.0"
             )
         else:
             flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
-            is_flash_greater_than_2 = flash_attention_version > version.parse("2.0.0")
+            is_flash_greater_than_2 = flash_attention_version >= version.parse("2.1.0")
             if not is_flash_greater_than_2:
                 raise ValueError(
-                    f"You need flash_attn package version to be greater than 2.0. Make sure to have that version installed - detected version {flash_attention_version}"
+                    f"You need flash_attn package version to be greater or equal than 2.1. Make sure to have that version installed - detected version {flash_attention_version}"
                 )
 
         _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
@@ -1506,6 +1507,35 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
+
+    def _get_no_split_modules(self, device_map: str):
+        """
+        Get the modules of the model that should not be spit when using device_map. We iterate through the modules to
+        get the underlying `_no_split_modules`.
+
+        Args:
+            device_map (`str`):
+                The device map value. Options are ["auto", "balanced", "balanced_low_0", "sequential"]
+
+        Returns:
+            `List[str]`: List of modules that should not be split
+        """
+        if self._no_split_modules is None:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
+                "class needs to implement the `_no_split_modules` attribute."
+            )
+        _no_split_modules = set(self._no_split_modules)
+        for module in self.modules():
+            if isinstance(module, PreTrainedModel):
+                if module._no_split_modules is None:
+                    raise ValueError(
+                        f"{module.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
+                        "class needs to implement the `_no_split_modules` attribute."
+                    )
+                else:
+                    _no_split_modules = _no_split_modules | set(module._no_split_modules)
+        return list(_no_split_modules)
 
     def resize_token_embeddings(
         self, new_num_tokens: Optional[int] = None, pad_to_multiple_of: Optional[int] = None
@@ -1819,16 +1849,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         self.base_model._prune_heads(heads_to_prune)
 
-    def gradient_checkpointing_enable(self):
+    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
         """
         Activates gradient checkpointing for the current model.
 
         Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
         activations".
+
+        We pass the `__call__` method of the modules instead of `forward` because `__call__` attaches all the hooks of
+        the module. https://discuss.pytorch.org/t/any-different-between-model-input-and-model-forward-input/3690/2
+
+        Args:
+            gradient_checkpointing_kwargs (dict, *optional*):
+                Additional keyword arguments passed along to the `torch.utils.checkpoint.checkpoint` function.
         """
         if not self.supports_gradient_checkpointing:
             raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
-        self.apply(partial(self._set_gradient_checkpointing, value=True))
+
+        if gradient_checkpointing_kwargs is None:
+            gradient_checkpointing_kwargs = {}
+
+        gradient_checkpointing_func = functools.partial(
+            torch.utils.checkpoint.checkpoint, **gradient_checkpointing_kwargs
+        )
+
+        self.apply(partial(self._set_gradient_checkpointing, gradient_checkpointing_func=gradient_checkpointing_func))
 
         if getattr(self, "_hf_peft_config_loaded", False):
             # When using PEFT + gradient checkpointing + Trainer we need to make sure the input has requires_grad=True
@@ -1845,7 +1890,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         activations".
         """
         if self.supports_gradient_checkpointing:
-            self.apply(partial(self._set_gradient_checkpointing, value=False))
+            self.apply(partial(self._set_gradient_checkpointing, gradient_checkpointing_func=None))
 
         if getattr(self, "_hf_peft_config_loaded", False):
             self.disable_input_require_grads()
@@ -3106,6 +3151,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
 
+        # make sure we use the model's config since the __init__ call might have copied it
+        config = model.config
+
         # Check first if we are `from_pt`
         if use_keep_in_fp32_modules:
             if is_accelerate_available():
@@ -3164,7 +3212,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 importlib.metadata.version("bitsandbytes")
             ) >= version.parse("0.37.0")
 
-            model.config.quantization_config = quantization_config
+            config.quantization_config = quantization_config
             model.is_8bit_serializable = is_8bit_serializable
 
         if load_in_8bit and torch_dtype is None:
@@ -3226,12 +3274,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             elif load_in_8bit:
                 target_dtype = torch.int8
 
-            if model._no_split_modules is None:
-                raise ValueError(
-                    f"{model.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
-                    "class needs to implement the `_no_split_modules` attribute."
-                )
-            no_split_modules = model._no_split_modules
+            no_split_modules = model._get_no_split_modules(device_map)
             if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
                 raise ValueError(
                     "If passing a string for `device_map`, please choose 'auto', 'balanced', 'balanced_low_0' or "
@@ -3399,7 +3442,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if cls.main_input_name != "input_ids":
                 raise RuntimeError("We can only quantize pure text model.")
             quantizer.quantize_model(model, quantization_config.tokenizer)
-            model.config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
+            config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
             model._is_quantized_training_enabled = True
         if quantization_method_from_config == QuantizationMethod.GPTQ:
             model = quantizer.post_init_model(model)

@@ -724,6 +724,7 @@ class PushToHubMixin:
         token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
         revision: str = None,
+        commit_description: str = None,
     ):
         """
         Uploads all modified files in `working_dir` to `repo_id`, based on `files_timestamps`.
@@ -778,6 +779,7 @@ class PushToHubMixin:
             repo_id=repo_id,
             operations=operations,
             commit_message=commit_message,
+            commit_description=commit_description,
             token=token,
             create_pr=create_pr,
             revision=revision,
@@ -794,6 +796,7 @@ class PushToHubMixin:
         create_pr: bool = False,
         safe_serialization: bool = False,
         revision: str = None,
+        commit_description: str = None,
         **deprecated_kwargs,
     ) -> str:
         """
@@ -825,6 +828,8 @@ class PushToHubMixin:
                 Whether or not to convert the model weights in safetensors format for safer serialization.
             revision (`str`, *optional*):
                 Branch to push the uploaded files to.
+            commit_description (`str`, *optional*):
+                The description of the commit that will be created
 
         Examples:
 
@@ -901,6 +906,7 @@ class PushToHubMixin:
                 token=token,
                 create_pr=create_pr,
                 revision=revision,
+                commit_description=commit_description,
             )
 
 
