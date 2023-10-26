@@ -1012,7 +1012,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
 
         if not self.trainer_compatible:
             warnings.warn(
-                "The output of TransfoXL will be updated in v5 to support a single loss as first argument. In order"
+                "The output of TransfoXL will be updated in v5 to support a single loss as first argument. In order "
                 "to use that updated output, please specify `trainer_compatible=True` as your configuration"
                 " attribute.",
                 DeprecationWarning,

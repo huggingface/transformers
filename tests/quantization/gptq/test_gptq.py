@@ -145,6 +145,26 @@ class GPTQTest(unittest.TestCase):
 
         self.assertAlmostEqual(self.mem_fp16 / mem_quantized, self.EXPECTED_RELATIVE_DIFFERENCE)
 
+    def test_device_and_dtype_assignment(self):
+        r"""
+        Test whether trying to cast (or assigning a device to) a model after converting it in 8-bit will throw an error.
+        Checks also if other models are casted correctly.
+        """
+        # This should work
+        _ = self.quantized_model.to(0)
+
+        with self.assertRaises(ValueError):
+            # Tries with a `dtype``
+            self.quantized_model.to(torch.float16)
+
+    def test_original_dtype(self):
+        r"""
+        A simple test to check if the model succesfully stores the original dtype
+        """
+        self.assertTrue(hasattr(self.quantized_model.config, "_pre_quantization_dtype"))
+        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
+        self.assertTrue(self.quantized_model.config._pre_quantization_dtype == torch.float16)
+
     def test_quantized_layers_class(self):
         """
         Simple test to check if the model conversion has been done correctly by checking on
@@ -178,7 +198,7 @@ class GPTQTest(unittest.TestCase):
 
     def test_generate_quality(self):
         """
-        Simple test to check the quality of the model by comapring the the generated tokens with the expected tokens
+        Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
         """
         if self.device_map is None:
             self.check_inference_correctness(self.quantized_model.to(0))
@@ -290,7 +310,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
 
     def test_generate_quality(self):
         """
-        Simple test to check the quality of the model by comapring the the generated tokens with the expected tokens
+        Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
         """
         self.check_inference_correctness(self.quantized_model)
 

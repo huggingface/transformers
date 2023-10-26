@@ -639,7 +639,7 @@ class NatPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module: NatEncoder, value: bool = False) -> None:
+    def _set_gradient_checkpointing(self, module: NatEncoder, gradient_checkpointing_func=None) -> None:
         pass
 
 
