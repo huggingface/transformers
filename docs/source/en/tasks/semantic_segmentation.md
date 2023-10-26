@@ -109,7 +109,7 @@ results[-1]["mask"]
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/semantic_segmentation_output.png" alt="Semantic Segmentation Output"/>
 </div>
 
-In instance segmentation, the goal is not classifying every pixel, but predicting a mask for **every instance of an object** in a given image. We will use [facebook/mask2former-swin-large-cityscapes-instance](https://huggingface.co/facebook/mask2former-swin-large-cityscapes-instance) for this.
+In instance segmentation, the goal is not to classify every pixel, but to predict a mask for **every instance of an object** in a given image. We will use [facebook/mask2former-swin-large-cityscapes-instance](https://huggingface.co/facebook/mask2former-swin-large-cityscapes-instance) for this.
 
 ```python
 instance_segmentation = pipeline("image-segmentation", "facebook/mask2former-swin-large-cityscapes-instance")
