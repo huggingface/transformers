@@ -783,9 +783,10 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, (PatchTSMixerEncoder)):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 class PatchTSMixerPretrainHead(nn.Module):
@@ -997,10 +998,9 @@ def forecast_masking(
 # TODO: add copied from after PatchTST master merge
 class PatchTSMixerPatchify(nn.Module):
     r"""
-    A class to patchify the time series sequence into different patches
     Args:
-        sequence_length (`int`, *required*): Input sequence length.
-        patch_length (`int`, *required*): Patch length.
+    A class to patchify the time series sequence into different patches
+        sequence_length (`int`, *required*): Input sequence length. patch_length (`int`, *required*): Patch length.
         stride (`int`, *required*): Stride between patches.
     Returns:
         `None`
@@ -1351,12 +1351,13 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         r"""
         Args:
             past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`):
-                Context values of the time series. For a pretraining task, this denotes the input time series to predict
-                the masked portion. For a forecasting task, this denotes the history/past time series values. Similarly,
-                for classification or regression tasks, it denotes the appropriate context values of the time series.
+                Context values of the time series. For a pretraining task, this denotes the input time series to
+                predict the masked portion. For a forecasting task, this denotes the history/past time series values.
+                Similarly, for classification or regression tasks, it denotes the appropriate context values of the
+                time series.
 
-                For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series, it is
-                greater than 1.
+                For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series,
+                it is greater than 1.
 
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
@@ -1784,20 +1785,20 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
     ) -> PatchTSMixerForForecastOutput:
         r"""
             observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-                    Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-                    in `[0, 1]`:
-                        - 1 for values that are **observed**,
-                        - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
-                `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*):
-                Target values of the time series, that serve as labels for the model. The `target_values` is what the Transformer
-                needs during training to learn to output, given the `past_values`. Note that, this is NOT required for a
-                pretraining task.
+                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+                in `[0, 1]`:
+                    - 1 for values that are **observed**,
+                    - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+            target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,:
+                `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
+                values of the time series, that serve as labels for the model. The `target_values` is what the
+                Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
+                required for a pretraining task.
 
-                For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want to
-                forecast only specific channels by setting the indices in `forecast_channel_indices` parameter, pass the
-                target data with all channels, as channel Filtering for both prediction and target will be manually applied
-                before the loss computation.
+                For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
+                to forecast only specific channels by setting the indices in `forecast_channel_indices` parameter, pass
+                the target data with all channels, as channel Filtering for both prediction and target will be manually
+                applied before the loss computation.
 
             return_loss (`bool`,  *optional*):
                 Whether to return the loss in the `forward` call.
@@ -2006,19 +2007,19 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         r"""
             target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
                 `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
-                values of the time series, that serve as labels for the model. The `target_values` is what the Transformer
-                needs during training to learn to output, given the `past_values`. Note that, this is NOT required for a
-                pretraining task.
+                values of the time series, that serve as labels for the model. The `target_values` is what the
+                Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
+                required for a pretraining task.
 
-                For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want to
-                forecast only specific channels by setting the indices in `forecast_channel_indices` parameter, pass the
-                target data with all channels, as channel Filtering for both prediction and target will be manually applied
-                before the loss computation.
+                For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
+                to forecast only specific channels by setting the indices in `forecast_channel_indices` parameter, pass
+                the target data with all channels, as channel Filtering for both prediction and target will be manually
+                applied before the loss computation.
 
                 For a classification task, it has a shape of `(batch_size,)`.
 
                 For a regression task, it has a shape of `(batch_size, num_targets)`.
-            return_loss (`bool`,  *optional*):
+            return_loss (`bool`, *optional*):
                 Whether to return the loss in the `forward` call.
 
         Returns:
@@ -2152,19 +2153,19 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         r"""
             target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
                 `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
-                values of the time series, that serve as labels for the model. The `target_values` is what the Transformer
-                needs during training to learn to output, given the `past_values`. Note that, this is NOT required for a
-                pretraining task.
+                values of the time series, that serve as labels for the model. The `target_values` is what the
+                Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
+                required for a pretraining task.
 
-                For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want to
-                forecast only specific channels by setting the indices in `forecast_channel_indices` parameter, pass the
-                target data with all channels, as channel Filtering for both prediction and target will be manually applied
-                before the loss computation.
+                For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
+                to forecast only specific channels by setting the indices in `forecast_channel_indices` parameter, pass
+                the target data with all channels, as channel Filtering for both prediction and target will be manually
+                applied before the loss computation.
 
                 For a classification task, it has a shape of `(batch_size,)`.
 
                 For a regression task, it has a shape of `(batch_size, num_targets)`.
-            return_loss (`bool`,  *optional*):
+            return_loss (`bool`, *optional*):
                 Whether to return the loss in the `forward` call.
 
         Returns:
