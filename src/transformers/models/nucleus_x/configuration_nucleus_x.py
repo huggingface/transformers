@@ -55,6 +55,8 @@ class NucleusXConfig(PretrainedConfig):
             The gain for initializing linear projection weights using xavier uniform.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        lm_head_initializer_range (`float`, *optional*, defaults to decoder_embed_dim ** -0.5):
+            The standard deviation of the truncated_normal_initializer for initializing the lm_head weights.
         is_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as decoder or not (in which case it's used as an encoder).
         pad_token_id (`int`, *optional*):
@@ -139,6 +141,7 @@ class NucleusXConfig(PretrainedConfig):
         vocab_size: int = 32000,
         initializer_factor: float = 2**-2.5,
         initializer_range: float = 0.02,
+        lm_head_initializer_range: float = 4096**-0.5,
         is_decoder: bool = True,
         pad_token_id: int = None,
         bos_token_id: int = 1,
@@ -170,6 +173,7 @@ class NucleusXConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
+        self.lm_head_initializer_range = lm_head_initializer_range
         # retentive network related
         self.use_lm_decay = use_lm_decay
         self.recurrent_chunk_size = recurrent_chunk_size

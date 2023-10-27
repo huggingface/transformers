@@ -392,24 +392,6 @@ class NucleusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 break
         self.assertTrue(logit_success)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertLessEqual(
-                        param.data.mean(),
-                        1.0,
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-                    self.assertGreaterEqual(
-                        param.data.mean(),
-                        -1.0,
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
     @unittest.skip("NucleusX uses dictionary style KV cache, which is a non standard format")
     def test_past_key_values_format(self):
         pass

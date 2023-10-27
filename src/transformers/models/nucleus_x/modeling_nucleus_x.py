@@ -267,7 +267,7 @@ class NucleusXMultiScaleRetention(nn.Module):
         nn.init.xavier_uniform_(self.k_proj.weight, gain=gain)
         nn.init.xavier_uniform_(self.v_proj.weight, gain=gain)
         nn.init.xavier_uniform_(self.g_proj.weight, gain=gain)
-        nn.init.xavier_uniform_(self.out_proj.weight)
+        nn.init.xavier_uniform_(self.out_proj.weight, gain=gain)
 
     def parallel_retention(self, q, k, v, decay_mask, use_cache=False):
         """Args:
@@ -487,10 +487,15 @@ class NucleusXGLU(nn.Module):
         self.fc2 = nn.Linear(ffn_dim, self.embed_dim, bias=False)
         self.gate = nn.Linear(self.embed_dim, ffn_dim, bias=False)
 
-    def reset_parameters(self):
-        self.fc1.reset_parameters()
-        self.fc2.reset_parameters()
-        self.gate.reset_parameters()
+    def reset_parameters(self, std=0.02):
+        def _reset_param(linear_module):
+            nn.init.normal_(linear_module.weight, mean=0.0, std=std)
+            if linear_module.bias is not None:
+                linear_module.bias.data.zero_()
+
+        _reset_param(self.fc1)
+        _reset_param(self.fc2)
+        _reset_param(self.gate)
 
     def forward(self, x):
         x_shape = x.shape
@@ -636,15 +641,19 @@ class NucleusXPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         std = self.config.initializer_range
+        lm_head_std = self.config.lm_head_initializer_range
         gain = self.config.initializer_factor
 
         if isinstance(module, NucleusXForCausalLM):
-            module.reset_parameters()
+            module.reset_parameters(std=lm_head_std)
+        elif isinstance(module, NucleusXForSequenceClassification):
+            module.reset_parameters(std=lm_head_std)
         elif isinstance(module, NucleusXMultiScaleRetention):
             module.reset_parameters(gain=gain)
-        if isinstance(module, NucleusXGLU):
-            module.reset_parameters()
-        elif isinstance(module, nn.Embedding):  # copied from LlamaPretrainedModel
+        elif isinstance(module, NucleusXGLU):
+            module.reset_parameters(std=std)
+        # copied from LlamaPretrainedModel
+        elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
@@ -1081,8 +1090,10 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
 
         self.post_init()
 
-    def reset_parameters(self):
-        nn.init.normal_(self.lm_head.weight, mean=0, std=self.config.decoder_embed_dim**-0.5)
+    def reset_parameters(self, std=None):
+        if std is None:
+            std = self.config.lm_head_initializer_range
+        nn.init.normal_(self.lm_head.weight, mean=0, std=std)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -1282,6 +1293,11 @@ class NucleusXForSequenceClassification(NucleusXPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def reset_parameters(self, std=None):
+        if std is None:
+            std = self.config.lm_head_initializer_range
+        nn.init.normal_(self.score.weight, mean=0, std=std)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
