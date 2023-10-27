@@ -16,22 +16,19 @@
 import tempfile
 import unittest
 
-import pytest
-
 from transformers import AutoModelForCausalLM, AutoTokenizer, AWQConfig
 from transformers.testing_utils import (
     is_torch_available,
     require_accelerate,
     require_auto_awq,
     require_torch_gpu,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
 
 
 if is_torch_available():
-    import torch
+    pass
 
 
 class AWQConfigTest(unittest.TestCase):
@@ -74,6 +71,7 @@ class AWQConfigTest(unittest.TestCase):
 @slow
 @require_torch_gpu
 @require_auto_awq
+@require_accelerate
 class AWQTest(unittest.TestCase):
     model_name = "ybelkada/test-mistral-7b-v0.1-awq"
     dummy_transformers_model_name = "bigscience/bloom-560m"
@@ -81,7 +79,9 @@ class AWQTest(unittest.TestCase):
     input_text = "Hello my name is"
 
     EXPECTED_OUTPUTS = set()
-    EXPECTED_OUTPUTS.add("Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish")
+    EXPECTED_OUTPUTS.add(
+        "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
+    )
 
     device_map = "cuda"
 
@@ -92,7 +92,10 @@ class AWQTest(unittest.TestCase):
         Setup quantized model
         """
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.quantized_model = AutoModelForCausalLM.from_pretrained(cls.model_name, device_map=cls.device_map,)
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
+            cls.model_name,
+            device_map=cls.device_map,
+        )
 
     def test_quantized_model(self):
         """
@@ -111,7 +114,7 @@ class AWQTest(unittest.TestCase):
 
         quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name).to(torch_device)
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
-        
+
         self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_save_pretrained(self):
@@ -134,6 +137,11 @@ class AWQTest(unittest.TestCase):
         quantization_config = AWQConfig(w_bit=4)
 
         with self.assertRaises(ValueError) as context:
-            _ = AutoModelForCausalLM.from_pretrained(self.dummy_transformers_model_name, quantization_config=quantization_config)
+            _ = AutoModelForCausalLM.from_pretrained(
+                self.dummy_transformers_model_name, quantization_config=quantization_config
+            )
 
-        self.assertEqual(str(context.exception), "You cannot pass an `AWQConfig` when loading a model as you can only use AWQ models for inference. To quantize transformers models with AWQ algorithm, please refer to our quantization docs.")
+        self.assertEqual(
+            str(context.exception),
+            "You cannot pass an `AWQConfig` when loading a model as you can only use AWQ models for inference. To quantize transformers models with AWQ algorithm, please refer to our quantization docs.",
+        )

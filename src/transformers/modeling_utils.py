@@ -2802,6 +2802,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not is_auto_awq_available():
                 raise ImportError("Loading an AWQ quantized model requires auto-awq library (`pip install autoawq`)")
 
+            if not is_accelerate_available():
+                raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
+
             if device_map is None:
                 logger.warning(
                     "You have loaded an AWQ model on CPU and have a CUDA device available, make sure to set "
