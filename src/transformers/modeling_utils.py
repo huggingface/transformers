@@ -1882,7 +1882,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # the gradients to make sure the gradient flows.
             self.enable_input_require_grads()
 
-    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = None):
+    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = torch.utils.checkpoint.checkpoint):
         is_gradient_checkpointing_set = False
 
         # Apply it on the top-level module in case the top-level modules supports it
