@@ -1162,7 +1162,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         delay_pattern = delay_pattern + torch.tril(torch.ones((channel_codebooks, max_length), dtype=torch.bool))
 
         if self.config.audio_channels == 2:
-            # for left/right channel we need to duplicate every row of the pattern pask in an interleaved fashion
+            # for left/right channel we need to duplicate every row of the pattern mask in an interleaved fashion
             delay_pattern = delay_pattern.repeat_interleave(2, dim=0)
 
         mask = ~delay_pattern.to(input_ids.device)
