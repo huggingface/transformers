@@ -1885,10 +1885,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = None):
         is_gradient_checkpointing_set = False
 
-        # We default it to `torch.utils.checkpoint.checkpoint`
-        if gradient_checkpointing_func is None:
-            gradient_checkpointing_func = torch.utils.checkpoint.checkpoint
-
         # Apply it on the top-level module in case the top-level modules supports it
         # for example, LongT5Stack inherits from `PreTrainedModel`.
         if hasattr(self, "gradient_checkpointing"):
