@@ -2213,8 +2213,8 @@ class GenerationMixin:
                         items.append(item.repeat_interleave(1, dim=0))
                     else:
                         items.append(item.repeat_interleave(top_k, dim=0))
-                new_key_values.append(items)
-            model_kwargs["past_key_values"] = new_key_values
+                new_key_values.append(tuple(items))
+            model_kwargs["past_key_values"] = tuple(new_key_values)
 
             if sequential:
                 all_outputs = {key: [] for key in outputs}  # defined in first loop iteration
@@ -2395,6 +2395,17 @@ class GenerationMixin:
             streamer.end()
 
         if return_dict_in_generate:
+            # Contrastive search works by forward looking at the next token, so we need to exclude it from
+            # `past_key_values` to be consistent with the other decoding methods
+            if model_kwargs.get("past_key_values") is not None:
+                past_key_values = []
+                for layer in model_kwargs["past_key_values"]:
+                    layer_past_key_values = []
+                    for item in layer:
+                        layer_past_key_values.append(item[:, :, :-1, :])
+                    past_key_values.append(tuple(layer_past_key_values))
+                model_kwargs["past_key_values"] = tuple(past_key_values)
+
             if self.config.is_encoder_decoder:
                 return ContrastiveSearchEncoderDecoderOutput(
                     sequences=input_ids,
