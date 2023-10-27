@@ -133,7 +133,6 @@ class Message:
 
     @property
     def category_failures(self) -> List[Dict]:
-
         failure_blocks = []
 
         MAX_ERROR_TEXT = 3000 - len("The following examples had failures:\n\n\n\n") - len("[Truncated]\n")
