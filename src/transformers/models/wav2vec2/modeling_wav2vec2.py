@@ -1270,7 +1270,8 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(
