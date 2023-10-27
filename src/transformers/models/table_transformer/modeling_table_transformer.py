@@ -23,6 +23,7 @@ import torch
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -343,20 +344,6 @@ class TableTransformerConvModel(nn.Module):
             pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
 
         return out, pos
-
-
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, target_seq_len, source_seq_len]`.
-    """
-    batch_size, source_len = mask.size()
-    target_len = target_len if target_len is not None else source_len
-
-    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, target_len, source_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrSinePositionEmbedding with Detr->TableTransformer
@@ -966,7 +953,7 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
         # expand attention_mask
         if attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1116,15 +1103,15 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
 
         if attention_mask is not None and combined_attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            combined_attention_mask = combined_attention_mask + _expand_mask(
-                attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
+            combined_attention_mask = combined_attention_mask + _prepare_4d_attention_mask(
+                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
             )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            encoder_attention_mask = _expand_mask(
-                encoder_attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
+            encoder_attention_mask = _prepare_4d_attention_mask(
+                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
             )
 
         # optional intermediate hidden states
