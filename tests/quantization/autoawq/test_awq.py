@@ -31,6 +31,7 @@ if is_torch_available():
     pass
 
 
+@require_torch_gpu
 class AWQConfigTest(unittest.TestCase):
     def test_wrong_backend(self):
         """
