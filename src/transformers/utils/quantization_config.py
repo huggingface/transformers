@@ -434,5 +434,5 @@ class GPTQConfig(QuantizationConfigMixin):
             if not self.disable_exllama:
                 logger.warning(
                     "You have activated exllama backend. Using `disable_exllama` is deprecated and will be removed in version 5.0 of 🤗 Transformers."
-                    "Use `use_exllama_v2` instead. Note that  Note that you can get better inference speed using exllamav2 kernel by setting `use_exllama_v2=True`"
+                    "Use `use_exllama_v2` instead. Note that you can get better inference speed using exllamav2 kernel by setting `use_exllama_v2=True`"
                 )
