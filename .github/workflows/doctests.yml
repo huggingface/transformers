@@ -49,7 +49,7 @@ jobs:
 
       - name: Run doctests
         run: |
-          python3 -m pytest -v --make-reports doc_tests_gpu --doctest-modules docs/source/en/model_doc/code_llama.md generation_strategies.md src/transformers/generation/configuration_utils.py src/transformers/generation/logits_process.py::transformers.generation.logits_process.ExponentialDecayLengthPenalty -sv --doctest-continue-on-failure --doctest-glob="*.md"
+          python3 -m pytest -v --make-reports doc_tests_gpu --doctest-modules docs/source/en/model_doc/code_llama.md docs/source/en/generation_strategies.md src/transformers/generation/configuration_utils.py src/transformers/generation/logits_process.py::transformers.generation.logits_process.ExponentialDecayLengthPenalty -sv --doctest-continue-on-failure --doctest-glob="*.md"
 
       - name: Failure short reports
         if: ${{ failure() }}
