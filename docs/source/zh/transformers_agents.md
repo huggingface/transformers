@@ -135,7 +135,7 @@ agent.run("Draw me a picture of the sea then transform the picture to add an isl
 
 每个 [`~Agent.run`] 操作都是独立的，因此您可以多次连续运行 [`~Agent.run`]并执行不同的任务。
 
-请注意，您的 `agent` 只是一个大型语言模型，因此您略有变化的提示可能会产生完全不同的结果。重要的是尽可能清晰地解释您要执行的任务。我们在[这里](custom_tools#writing-good-user-inputs)更深入地讨论了如何编写良好的提示。
+请注意，您的 `agent` 只是一个大型语言模型，因此您略有变化的提示可能会产生完全不同的结果。重要的是尽可能清晰地解释您要执行的任务。我们在[这里](../en/custom_tools#writing-good-user-inputs)更深入地讨论了如何编写良好的提示。
 
 如果您想在多次执行之间保持同一状态或向`agent`传递非文本对象，可以通过指定`agent`要使用的变量来实现。例如，您可以生成有关河流和湖泊的第一幅图像，并要求模型通过执行以下操作向该图片添加一个岛屿：
 
@@ -227,16 +227,16 @@ agent.chat("Transform the picture so that there is a rock in there")
 
 我们确定了一组可以赋予这些`agent`强大能力的`tools`。以下是我们在`transformers`中集成的`tools`的更新列表：
 
-- **文档问答**：给定一个图像格式的文档（例如PDF），回答该文档上的问题（[Donut](./model_doc/donut)）
-- **文本问答**：给定一段长文本和一个问题，回答文本中的问题（[Flan-T5](./model_doc/flan-t5)）
-- **无条件图像字幕**：为图像添加字幕！（[BLIP](./model_doc/blip)）
-- **图像问答**：给定一张图像，回答该图像上的问题（[VILT](./model_doc/vilt)）
-- **图像分割**：给定一张图像和一个提示，输出该提示的分割掩模（[CLIPSeg](./model_doc/clipseg)）
-- **语音转文本**：给定一个人说话的音频录音，将演讲内容转录为文本（[Whisper](./model_doc/whisper)）
-- **文本转语音**：将文本转换为语音（[SpeechT5](./model_doc/speecht5)）
-- **Zero-Shot文本分类**：给定一个文本和一个标签列表，确定文本最符合哪个标签（[BART](./model_doc/bart)）
-- **文本摘要**：总结长文本为一两句话（[BART](./model_doc/bart)）
-- **翻译**：将文本翻译为指定语言（[NLLB](./model_doc/nllb)）
+- **文档问答**：给定一个图像格式的文档（例如PDF），回答该文档上的问题（[Donut](../en/model_doc/donut)）
+- **文本问答**：给定一段长文本和一个问题，回答文本中的问题（[Flan-T5](../en/model_doc/flan-t5)）
+- **无条件图像字幕**：为图像添加字幕！（[BLIP](../en/model_doc/blip)）
+- **图像问答**：给定一张图像，回答该图像上的问题（[VILT](../en/model_doc/vilt)）
+- **图像分割**：给定一张图像和一个提示，输出该提示的分割掩模（[CLIPSeg](../en/model_doc/clipseg)）
+- **语音转文本**：给定一个人说话的音频录音，将演讲内容转录为文本（[Whisper](../en/model_doc/whisper)）
+- **文本转语音**：将文本转换为语音（[SpeechT5](../en/model_doc/speecht5)）
+- **Zero-Shot文本分类**：给定一个文本和一个标签列表，确定文本最符合哪个标签（[BART](../en/model_doc/bart)）
+- **文本摘要**：总结长文本为一两句话（[BART](../en/model_doc/bart)）
+- **翻译**：将文本翻译为指定语言（[NLLB](../en/model_doc/nllb)）
 
 这些`tools`已在transformers中集成，并且也可以手动使用，例如：
 
@@ -267,8 +267,6 @@ audio = tool("This is a text to speech tool")
 到目前为止，我们已经展示了如何使用`agents`来为您执行操作。但是，`agents`仅使用非常受限Python解释器执行的代码。如果您希望在不同的环境中使用生成的代码，可以提示`agents`返回代码，以及`tools`的定义和准确的导入信息。
 
 例如，以下指令
-
-```python
 
 ```python
 agent.run("Draw me a picture of rivers and lakes", return_code=True)
