@@ -28,6 +28,11 @@ Tips:
 
 The model can also be used for time series classification and time series regression. See the respective [`PatchTSTForClassification`] and [`PatchTSTForRegression`] classes.
 
+At a high level the model vectorizes time series into patches of a given size and encodes them via a Transformer which then outputs the prediction length forecasts:
+
+![model](https://github.com/namctin/transformers/assets/8100/150af169-29de-419a-8d98-eb78251c21fa)
+
+
 This model was contributed by [namctin](https://huggingface.co/namctin), [gsinthong](https://huggingface.co/gsinthong), [diepi](https://huggingface.co/diepi), [vijaye12](https://huggingface.co/vijaye12), [wmgifford](https://huggingface.co/wmgifford), and [kashif](https://huggingface.co/kashif).
 
 The original code can be found [here](https://github.com/yuqinie98/PatchTST).
