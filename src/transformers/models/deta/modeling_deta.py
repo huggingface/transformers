@@ -1775,6 +1775,8 @@ class DetaModel(DetaPreTrainedModel):
 class DetaForObjectDetection(DetaPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     _tied_weights_keys = [r"bbox_embed\.\d+"]
+    # We can't initialize the model on meta device as some weights are modified during the initialization
+    _no_split_modules = None
 
     # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrForObjectDetection.__init__ with DeformableDetr->Deta
     def __init__(self, config: DetaConfig):
