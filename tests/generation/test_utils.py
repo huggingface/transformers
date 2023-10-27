@@ -1961,7 +1961,7 @@ class GenerationTesterMixin:
             [encoder_expected_shape] * len(hidden_states),
         )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_len, config, num_beam_groups=1):
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config, num_beam_groups=1):
         if config.use_cache is False:
             self.assertIsNone(past_key_values)
             return
@@ -1976,7 +1976,7 @@ class GenerationTesterMixin:
         expected_shape = (
             batch_size * num_beam_groups,
             config.num_attention_heads,
-            seq_len,
+            seq_length,
             config.hidden_size // config.num_attention_heads,
         )
         # check shape key, value
