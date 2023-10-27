@@ -809,6 +809,17 @@ class WandbCallback(TrainerCallback):
                     if (args.run_name is None or args.run_name == args.output_dir)
                     else f"model-{self._wandb.run.name}"
                 )
+                # add the model architecture to a separate text file
+                with open(f"{temp_dir}/model_architecture.txt", "w+") as f:
+                    if isinstance(model, PreTrainedModel):
+                        print(model, file=f)
+                    elif isinstance(model, TFPreTrainedModel):
+
+                        def print_to_file(s):
+                            print(s, file=f)
+
+                        model.summary(print_fn=print_to_file)
+
                 artifact = self._wandb.Artifact(name=model_name, type="model", metadata=metadata)
                 for f in Path(temp_dir).glob("*"):
                     if f.is_file():
