@@ -113,7 +113,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
-        image_height, image_width = get_image_size(image)
+        image_height, image_width = get_image_size(image, input_data_format)
 
         target_width = self.size["width"]
         target_height = self.size["height"]
@@ -139,11 +139,8 @@ class FuyuImageProcessor(BaseImageProcessor):
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
-        image_height, image_width, _ = image.shape
-
-        target_width = self.size["width"]
-        target_height = self.size["height"]
-
+        image_height, image_width = get_image_size(image, input_data_format)
+        target_height, target_width = self.size["height"], self.size["width"]
         padding_top = 0
         padding_left = 0
         padding_bottom = target_height - image_height
