@@ -2552,15 +2552,11 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 audio_scales=audio_scales,
             ).audio_values
         else:
-            output_values_left = self.audio_encoder.decode(
-                output_ids[:, :, ::2, :],
-                audio_scales=audio_scales,
-            ).audio_values
+            codec_outputs_left = self.audio_encoder.decode(output_ids[:, :, ::2, :], audio_scales=audio_scales)
+            output_values_left = codec_outputs_left.audio_values
 
-            output_values_right = self.audio_encoder.decode(
-                output_ids[:, :, 1::2, :],
-                audio_scales=audio_scales,
-            ).audio_values
+            codec_outputs_right = self.audio_encoder.decode(output_ids[:, :, 1::2, :], audio_scales=audio_scales)
+            output_values_right = codec_outputs_right.audio_values
 
             output_values = torch.cat([output_values_left, output_values_right], dim=1)
 
