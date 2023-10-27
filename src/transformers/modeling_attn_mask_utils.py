@@ -159,7 +159,7 @@ class AttnMaskConverter:
 
 def prepare_4d_causal_attention_mask(
     attention_mask: Optional[torch.Tensor],
-    input_shape: Union[torch.shape, Tuple, List],
+    input_shape: Union[torch.Size, Tuple, List],
     inputs_embeds: torch.Tensor,
     past_key_values_length: int,
     sliding_window: Optional[int] = None,
@@ -192,7 +192,7 @@ def prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: O
 
 
 def create_4d_causal_attention_mask(
-    input_shape: Union[torch.shape, Tuple, List],
+    input_shape: Union[torch.Size, Tuple, List],
     dtype: torch.dtype,
     device: torch.device,
     sliding_window: Optional[int] = None,
