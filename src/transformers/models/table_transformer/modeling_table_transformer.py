@@ -1104,11 +1104,19 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
             hidden_states = inputs_embeds
             input_shape = inputs_embeds.size()[:-1]
 
+        combined_attention_mask = None
+
+        if attention_mask is not None and combined_attention_mask is not None:
+            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+            combined_attention_mask = combined_attention_mask + prepare_4d_attention_mask(
+                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            )
+
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
             encoder_attention_mask = prepare_4d_attention_mask(
-                encoder_attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
+                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
             )
 
         # optional intermediate hidden states
@@ -1132,7 +1140,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
                 layer_outputs = self.gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    None,
+                    combined_attention_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     None,
@@ -1140,7 +1148,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=None,
+                    attention_mask=combined_attention_mask,
                     object_queries=object_queries,
                     query_position_embeddings=query_position_embeddings,
                     encoder_hidden_states=encoder_hidden_states,
