@@ -818,9 +818,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
         input_shape = input_ids.shape
-        print(input_shape)
-        print(past_key_values[0][0].shape if past_key_values is not None else "no pkv")
-
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
@@ -851,7 +848,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
-        print(position_ids.shape)
         model_inputs.update(
             {
                 "attention_mask": attention_mask,

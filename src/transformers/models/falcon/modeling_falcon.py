@@ -148,7 +148,7 @@ class AttnMaskConverter:
         self,
         attention_mask_2d: torch.Tensor,
         query_length: int,
-        key_value_length: int,
+        key_value_length: Optional[int] = None,
         dtype: torch.dtype = torch.float32,
     ) -> torch.Tensor:
         """
@@ -157,12 +157,16 @@ class AttnMaskConverter:
         causal, a causal mask will be added.
         """
         input_shape = (attention_mask_2d.shape[0], query_length)
-        past_key_values_length = key_value_length - query_length
 
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         causal_4d_mask = None
         if (input_shape[-1] > 1 or self.sliding_window is not None) and self.is_causal:
+            if key_value_length is None:
+                raise ValueError(
+                    "This attention mask converter is causal. Make sure to pass `key_value_length` to correctly create a causal mask."
+                )
+
             past_key_values_length = key_value_length - query_length
             causal_4d_mask = self._make_causal_mask(
                 input_shape,
@@ -182,8 +186,8 @@ class AttnMaskConverter:
 
         return expanded_4d_mask
 
+    @staticmethod
     def _make_causal_mask(
-        self,
         input_ids_shape: torch.Size,
         dtype: torch.dtype,
         device: torch.device,
@@ -212,7 +216,8 @@ class AttnMaskConverter:
 
         return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
-    def _expand_mask(self, mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+    @staticmethod
+    def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
         """
         Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
         """
@@ -837,7 +842,7 @@ class FalconFlashAttention2(FalconAttention):
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=self.is_causal
             )
 
         return attn_output
@@ -1154,8 +1159,6 @@ class FalconModel(FalconPreTrainedModel):
         # Embedding + LN Embedding
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
 
-        # create attention mask cache that trickles down to each attention layer
-        # so that the attention_mask cache can be shared among layers
         self.attn_mask_converter = AttnMaskConverter(is_causal=True)
 
         # Transformer blocks
