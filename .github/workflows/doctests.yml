@@ -3,7 +3,7 @@ name: Doctests
 on:
   push:
     branches:
-      - doctest*
+      - run_truncate
   repository_dispatch:
   schedule:
     - cron: "17 2 * * *"
@@ -20,7 +20,7 @@ env:
 
 jobs:
   run_doctests:
-    runs-on: [single-gpu, nvidia-gpu, t4, doctest-ci]
+    runs-on: [single-gpu, nvidia-gpu, doctest-ci, yih-dar-shieh-debug-doctest]
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -49,7 +49,7 @@ jobs:
 
       - name: Run doctests
         run: |
-          python3 -m pytest -v --make-reports doc_tests_gpu --doctest-modules $(cat doc_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.md"
+          python3 -m pytest -v --make-reports doc_tests_gpu --doctest-modules docs/source/en/model_doc/code_llama.md generation_strategies.md src/transformers/generation/configuration_utils.py src/transformers/generation/logits_process.py::transformers.generation.logits_process.ExponentialDecayLengthPenalty -sv --doctest-continue-on-failure --doctest-glob="*.md"
 
       - name: Failure short reports
         if: ${{ failure() }}
