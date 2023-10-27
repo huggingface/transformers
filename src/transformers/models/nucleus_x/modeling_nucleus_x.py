@@ -270,9 +270,11 @@ class NucleusXMultiScaleRetention(nn.Module):
         nn.init.xavier_uniform_(self.out_proj.weight)
 
     def parallel_retention(self, q, k, v, decay_mask, use_cache=False):
-        """
-        q, # bsz * num_head * len * qk_dim k, # bsz * num_head * len * qk_dim v, # bsz * num_head * len * v_dim
-        decay_mask, # (1 or bsz) * num_head * len * len
+        """Args:
+        - q: [bsz * num_head * len * qk_dim]
+        - k: [bsz * num_head * len * qk_dim]
+        - v: [bsz * num_head * len * v_dim]
+        - decay_mask: [(1 or bsz) * num_head * len * len]
         """
         decay_mask, intra_decay, scale = decay_mask
 
@@ -298,11 +300,13 @@ class NucleusXMultiScaleRetention(nn.Module):
         return output, cache, retention
 
     def recurrent_retention(self, q, k, v, decay, past_key_value=None, retention_mask=None):
-        """
-        q, k, v, # bsz * num_head * 1 * qkv_dim past_key_value:
-            - "prev_key_value" # bsz * num_head * v_dim * qk_dim
-            - "scale" # (1 or bsz) * num_head * 1 * 1
-        decay # (1 or bsz) * num_head * 1 * 1 retention_mask # bsz * 1
+        """Args:
+        - q, k, v: [bsz * num_head * 1 * qkv_dim]
+        - past_key_value: Dict[str, torch.Tensor]
+            - "prev_key_value": [bsz * num_head * v_dim * qk_dim]
+            - "scale": [(1 or bsz) * num_head * 1 * 1]
+        - decay: [(1 or bsz) * num_head * 1 * 1]
+        - retention_mask: [bsz * 1]
         """
         if retention_mask is not None:
             retention_mask = retention_mask.float().view(-1, 1, 1, 1).to(decay)
@@ -338,12 +342,14 @@ class NucleusXMultiScaleRetention(nn.Module):
         return output, cache
 
     def chunkwise_retention(self, q, k, v, decay_mask):
-        """
-        q, k, v, # bsz * num_head * seqlen * qkv_dim past_key_value:
-            - "prev_key_value" # bsz * num_head * v_dim * qk_dim
-            - "scale" # (1 or bsz) * num_head * 1 * 1
-        decay_mask, # 1 * num_head * chunk_size * chunk_size cross_decay, # 1 * num_head * 1 * 1 inner_decay, # 1 *
-        num_head * chunk_size * 1
+        """Args:
+        - q, k, v: [bsz * num_head * seqlen * qkv_dim]
+        - past_key_value: Dict[str, torch.Tensor]
+            - "prev_key_value": [bsz * num_head * v_dim * qk_dim]
+            - "scale": [(1 or bsz) * num_head * 1 * 1]
+        - decay_mask: [1 * num_head * chunk_size * chunk_size]
+        - cross_decay: [1 * num_head * 1 * 1]
+        - inner_decay: [1 * num_head * chunk_size * 1]
         """
         decay_mask, cross_decay, query_inner_decay, value_inner_decay, decay_scale = decay_mask
         bsz, _, tgt_len, _ = v.size()
@@ -489,7 +495,7 @@ class NucleusXGLU(nn.Module):
 
 class NucleusXDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-    Coped from https://github.com/microsoft/torchscale/blob/main/torchscale/component/droppath.py"""
+    Copied from https://github.com/microsoft/torchscale/blob/main/torchscale/component/droppath.py"""
 
     def __init__(self, drop_prob=None):
         super().__init__()
@@ -814,7 +820,7 @@ NUCLEUS_X_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare NucleusX Model transformer outputting raw hidden-states without any specific head on top."
+    "The bare NucleusX Model outputting raw hidden-states without any specific head on top."
     " Based on RetNet Architecture (https://arxiv.org/abs/2307.08621),"
     " adapted from https://github.com/microsoft/torchscale/blob/main/torchscale/architecture/retnet.py",
     NUCLEUS_X_START_DOCSTRING,
@@ -1237,7 +1243,7 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
 
 
 @add_start_docstrings(
-    """NucleusX Model transformer with a sequence classification/regression head on top (a linear layer on top of
+    """NucleusX Model with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks.""",
     NUCLEUS_X_START_DOCSTRING,
 )
