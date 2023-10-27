@@ -92,7 +92,14 @@
     - local: generation_strategies
       title: 生成戦略をカスタマイズする
     title: Generation
-  title: Task Guides
+  # - isExpanded: false
+  #   sections:
+  #   - local: tasks/idefics
+  #     title: Image tasks with IDEFICS
+  #   - local: tasks/prompting
+  #     title: LLM prompting guide
+  #   title: Prompting
+    title: Task Guides
 - sections:
   - local: fast_tokenizers
     title: 🤗 トークナイザーの高速トークナイザーを使用する

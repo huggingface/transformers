@@ -1588,7 +1588,7 @@ class GenerationTesterMixin:
             # may fix in the future: the following models fail with assisted decoding, and need model-specific fixes
             if any(
                 model_name in model_class.__name__.lower()
-                for model_name in ["bigbirdpegasus", "led", "mega", "speech2text", "git", "prophetnet"]
+                for model_name in ["bigbirdpegasus", "led", "mega", "speech2text", "git", "prophetnet", "seamlessm4t"]
             ):
                 return
 

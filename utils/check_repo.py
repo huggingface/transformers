@@ -112,6 +112,9 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "BarkCausalModel",  # Building part of bigger (tested) model.
     "BarkModel",  # Does not have a forward signature - generation tested with integration tests
+    "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
+    "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
+    "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -281,6 +284,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
     "VitMatteForImageMatting",
+    "SeamlessM4TTextToUnitModel",
+    "SeamlessM4TTextToUnitForConditionalGeneration",
+    "SeamlessM4TCodeHifiGan",
+    "SeamlessM4TForSpeechToSpeech",  # no auto class for speech-to-speech
 ]
 
 # DO NOT edit this list!
