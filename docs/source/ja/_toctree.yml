@@ -29,9 +29,76 @@
     title: LLM を使用した生成
   title: Tutorials
 - sections:
-  - local: generation_strategies
-    title: 生成戦略をカスタマイズする
-  title: Generation
+  - isExpanded: false
+    sections:
+    - local: tasks/sequence_classification
+      title: テキストの分類
+    - local: tasks/token_classification
+      title: トークンの分類
+    - local: tasks/question_answering
+      title: 質疑応答
+    - local: tasks/language_modeling
+      title: 因果言語モデリング
+    - local: tasks/masked_language_modeling
+      title: マスクされた言語モデリング
+    - local: tasks/translation
+      title: 翻訳
+    - local: tasks/summarization
+      title: 要約
+    - local: tasks/multiple_choice
+      title: 複数の選択肢
+    title: 自然言語処理
+  - isExpanded: false
+    sections:
+    - local: tasks/audio_classification
+      title: 音声の分類
+    - local: tasks/asr
+      title: 自動音声認識
+    title: オーディオ
+  - isExpanded: false
+    sections:
+    - local: tasks/image_classification
+      title: 画像分類
+    - local: tasks/semantic_segmentation
+      title: セマンティックセグメンテーション
+    - local: tasks/video_classification
+      title: ビデオの分類
+    - local: tasks/object_detection
+      title: 物体検出
+    - local: tasks/zero_shot_object_detection
+      title: ゼロショット物体検出
+    - local: tasks/zero_shot_image_classification
+      title: ゼロショット画像分類
+    - local: tasks/monocular_depth_estimation
+      title: 深さの推定
+    - local: tasks/image_to_image
+      title: 画像から画像へ
+    - local: tasks/knowledge_distillation_for_image_classification
+      title: コンピュータビジョンのための知識の蒸留
+    title: コンピュータビジョン
+  - isExpanded: false
+    sections:
+    - local: tasks/image_captioning
+      title: 画像のキャプション
+    - local: tasks/document_question_answering
+      title: 文書の質問への回答
+    - local: tasks/visual_question_answering
+      title: 視覚的な質問への回答
+    - local: tasks/text-to-speech
+      title: テキスト読み上げ
+    title: マルチモーダル
+  - isExpanded: false
+    sections:
+    - local: generation_strategies
+      title: 生成戦略をカスタマイズする
+    title: 世代
+  - isExpanded: false
+    sections:
+    - local: tasks/idefics
+      title: IDEFICS を使用したイメージ タスク
+    - local: tasks/prompting
+      title: LLM プロンプト ガイド
+    title: プロンプト
 - sections:
   - local: fast_tokenizers
     title: 🤗 トークナイザーの高速トークナイザーを使用する
