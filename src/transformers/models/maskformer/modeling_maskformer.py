@@ -817,14 +817,6 @@ class DetrDecoder(nn.Module):
             hidden_states = inputs_embeds
             input_shape = inputs_embeds.size()[:-1]
 
-        combined_attention_mask = None
-
-        if attention_mask is not None and combined_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            combined_attention_mask = combined_attention_mask + prepare_4d_attention_mask(
-                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-            )
-
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -853,7 +845,7 @@ class DetrDecoder(nn.Module):
                 layer_outputs = self.gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    combined_attention_mask,
+                    None,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     None,
@@ -862,7 +854,7 @@ class DetrDecoder(nn.Module):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=combined_attention_mask,
+                    attention_mask=None,
                     object_queries=object_queries,
                     query_position_embeddings=query_position_embeddings,
                     encoder_hidden_states=encoder_hidden_states,

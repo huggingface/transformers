@@ -23,6 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ....activations import ACT2FN
+from ....modeling_attn_mask_utils import prepare_4d_attention_mask
 from ....file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ....integrations.deepspeed import is_deepspeed_zero3_enabled
 from ....modeling_outputs import BaseModelOutput, CausalLMOutput
@@ -55,21 +56,6 @@ MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "speechbrain/m-ctc-t-large",
     # See all M-CTC-T models at https://huggingface.co/models?filter=mctct
 ]
-
-
-# Copied from transformers.models.bart.modeling_bart.prepare_4d_attention_mask
-def prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 class MCTCTConv1dSubsampler(nn.Module):
