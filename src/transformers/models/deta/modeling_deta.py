@@ -34,6 +34,7 @@ from ...file_utils import (
     is_vision_available,
     replace_return_docstrings,
 )
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
@@ -364,21 +365,6 @@ class DetaBackboneWithPositionalEncodings(nn.Module):
         return out, pos
 
 
-# Copied from transformers.models.detr.modeling_detr._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, target_seq_len, source_seq_len]`.
-    """
-    batch_size, source_len = mask.size()
-    target_len = target_len if target_len is not None else source_len
-
-    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, target_len, source_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
-
-
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrSinePositionEmbedding with DeformableDetr->Deta
 class DetaSinePositionEmbedding(nn.Module):
     """
@@ -687,7 +673,7 @@ class DetaMultiheadAttention(nn.Module):
         # expand attention_mask
         if attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         if attention_mask is not None:
             if attention_mask.size() != (batch_size, 1, target_len, source_len):
