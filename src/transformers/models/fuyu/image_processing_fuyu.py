@@ -34,7 +34,6 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    ImageInput
 )
 from ...utils import TensorType, is_torch_available, is_vision_available, logging, requires_backends
 
@@ -55,9 +54,8 @@ class FuyuImageProcessor(BaseImageProcessor):
 
     - Processing Images:
         Taking a batch of images as input. If the images are variable-sized, it resizes them based on the desired patch
-        dimensions. The image output is always
-        img_h ........................................... 1080
-        img_w ........................................... 1920
+        dimensions. The image output is always img_h ........................................... 1080 img_w
+        ........................................... 1920
 
         Then, it patches up these images using the patchify_image function.
 
@@ -74,19 +72,19 @@ class FuyuImageProcessor(BaseImageProcessor):
             Whether to resize the image to `size`.
         size (`Dict[str, int]`, *optional*, defaults to `{"height": 1080, "width": 1920}`):
             Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image to `size`.
-        padding_value (`float`, *optional*, defaults to `1.0`):
+        padding_value (`float`, *optional*, defaults to 1.0):
             The value to pad the image with.
-        padding_mode (`str`, *optional*, defaults to `constant`):
+        padding_mode (`str`, *optional*, defaults to `"constant"`):
             The padding mode to use when padding the image.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image.
-        image_mean (`float`, *optional*, defaults to `0.5`):
+        image_mean (`float`, *optional*, defaults to 0.5):
             The mean to use when normalizing the image.
-        image_std (`float`, *optional*, defaults to `0.5`):
+        image_std (`float`, *optional*, defaults to 0.5):
             The standard deviation to use when normalizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image.
@@ -141,7 +139,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to `(size["height"], size["width"])`.
@@ -188,7 +186,7 @@ class FuyuImageProcessor(BaseImageProcessor):
             resample=resample,
             data_format=data_format,
             input_data_format=input_data_format,
-            **kwargs
+            **kwargs,
         )
         return scaled_image
 
@@ -208,8 +206,7 @@ class FuyuImageProcessor(BaseImageProcessor):
             image (`np.ndarray`):
                 Image to pad.
             size (`Dict[str, int]`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output
-                image.
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The data format of the output image. If unset, the same format as the input image is used.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -352,19 +349,35 @@ class FuyuImageProcessor(BaseImageProcessor):
             images = [self.resize(image, size=size, input_data_format=input_data_format) for image in images]
 
         if do_pad:
-            images = [self.pad_image(image, size=size, mode=padding_mode, constant_values=padding_value, input_data_format=input_data_format) for image in images]
+            images = [
+                self.pad_image(
+                    image,
+                    size=size,
+                    mode=padding_mode,
+                    constant_values=padding_value,
+                    input_data_format=input_data_format,
+                )
+                for image in images
+            ]
 
         if do_rescale:
-            images = [self.rescale(image, scale=rescale_factor, input_data_format=input_data_format) for image in images]
+            images = [
+                self.rescale(image, scale=rescale_factor, input_data_format=input_data_format) for image in images
+            ]
 
         if do_normalize:
-            images = [self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format) for image in images]
+            images = [
+                self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if data_format is not None:
             images = [to_channel_dimension_format(image, data_format, input_data_format) for image in images]
 
         batch_images = [[torch.Tensor(image)] for image in images]
-        image_unpadded_heights = [torch.Tensor(image_unpadded_height) for image_unpadded_height in image_unpadded_heights]
+        image_unpadded_heights = [
+            torch.Tensor(image_unpadded_height) for image_unpadded_height in image_unpadded_heights
+        ]
         image_unpadded_widths = [torch.Tensor(image_unpadded_width) for image_unpadded_width in image_unpadded_widths]
         data = {
             "images": batch_images,
@@ -490,13 +503,20 @@ class FuyuImageProcessor(BaseImageProcessor):
 
                     # images[batch_index].append(image)
                     num_patches = self.get_num_patches(image_height=image_height, image_width=image_width)
-                    tensor_of_image_ids = torch.full([num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device)
+                    tensor_of_image_ids = torch.full(
+                        [num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device
+                    )
                     patches = self.patchify_image(image=image.unsqueeze(0)).squeeze(0)
 
                     if variable_sized:
                         # Now terminate each line with |NEWLINE|.
                         tensor_of_image_ids = tensor_of_image_ids.reshape(-1, new_w // patch_width)
-                        newline_ids = torch.full([tensor_of_image_ids.shape[0], 1], image_newline_id, dtype=torch.int32, device=image_input.device)
+                        newline_ids = torch.full(
+                            [tensor_of_image_ids.shape[0], 1],
+                            image_newline_id,
+                            dtype=torch.int32,
+                            device=image_input.device,
+                        )
                         tensor_of_image_ids = torch.cat([tensor_of_image_ids, newline_ids], dim=1)
                         tensor_of_image_ids = tensor_of_image_ids.reshape(-1)
 
@@ -522,14 +542,16 @@ class FuyuImageProcessor(BaseImageProcessor):
                 # Indices of image patches.
                 patches_mask = subseq_image_input_ids == image_placeholder_id
                 num_patches = torch.count_nonzero(patches_mask)
-                indices = torch.arange(num_patches, dtype=subseq_image_input_ids.dtype, device=subseq_image_input_ids.device)
+                indices = torch.arange(
+                    num_patches, dtype=subseq_image_input_ids.dtype, device=subseq_image_input_ids.device
+                )
 
                 # Place those indices in the image input ids token stream, with -1 representing non-index tokens.
                 indices_in_stream_per_batch = torch.full_like(subseq_image_input_ids, -1)
                 indices_in_stream_per_subsequence = torch.full_like(subseq_image_input_ids, -1)
                 patches_inds = torch.nonzero(patches_mask, as_tuple=True)[0]
 
-                indices_in_stream_per_batch[patches_inds] = (indices + index_offset)
+                indices_in_stream_per_batch[patches_inds] = indices + index_offset
                 indices_in_stream_per_subsequence[patches_inds] = indices
 
                 per_batch_indices.append(indices_in_stream_per_batch)

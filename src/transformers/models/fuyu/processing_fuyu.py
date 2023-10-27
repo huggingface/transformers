@@ -16,20 +16,13 @@
 Image/Text processor class for GIT
 """
 import re
-from typing import Any, Iterable, List, Optional, Tuple, Union, Dict
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_utils import (
-    ChannelDimension,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    to_numpy_array,
-)
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TruncationStrategy
-from ...utils import is_torch_available, is_vision_available, logging, requires_backends, is_torch_device, TensorType
+from ...utils import TensorType, is_torch_available, is_torch_device, is_vision_available, logging, requires_backends
 
 
 if is_torch_available() and is_vision_available():
@@ -38,11 +31,10 @@ if is_torch_available() and is_vision_available():
 
 logger = logging.get_logger(__name__)
 
-if is_vision_available():
-    import PIL
 
 if is_torch_available():
     import torch
+
 
 BBOX_OPEN_STRING = "<0x00>"  # <bbox>
 BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
@@ -87,7 +79,7 @@ def full_unpacked_stream_to_tensor(
     # Place each batch entry into the batch tensor.
     for bi in range(batch_size):
         tokens_to_place = all_bi_tokens_to_place[bi]
-        new_padded_tensor[bi, :tokens_to_place] = full_unpacked_stream[bi][offset: tokens_to_place + offset]
+        new_padded_tensor[bi, :tokens_to_place] = full_unpacked_stream[bi][offset : tokens_to_place + offset]
 
     return new_padded_tensor
 
@@ -333,8 +325,8 @@ def scale_bbox_to_transformed_image(top: float, left: float, bottom: float, righ
 
 class FuyuBatchEncoding(BatchEncoding):
     """
-    The batch encoding needed by Fuyu model are a dictionary with two tensors and a list of tensors.
-    This class inherits from BatchEncoding to allow casting tensors within a list to a device.
+    The batch encoding needed by Fuyu model are a dictionary with two tensors and a list of tensors. This class
+    inherits from BatchEncoding to allow casting tensors within a list to a device.
     """
 
     def __init__(self, *args, **kwargs):
@@ -395,54 +387,63 @@ class FuyuProcessor(ProcessorMixin):
         self.image_processor = FuyuImageProcessor()
 
     def left_pad_inputs_with_attention_mask(self, model_inputs: List[Dict], return_attention_mask: bool):
-        max_length_input_ids = max(entry['input_ids'].shape[1] for entry in model_inputs)
-        max_length_image_patch_indices = max(entry['image_patches_indices'].shape[1] for entry in model_inputs)
+        max_length_input_ids = max(entry["input_ids"].shape[1] for entry in model_inputs)
+        max_length_image_patch_indices = max(entry["image_patches_indices"].shape[1] for entry in model_inputs)
 
-        batched_inputs = {
-            'input_ids': [],
-            'image_patches': [],
-            'image_patches_indices': [],
-            'attention_mask': []
-        }
+        batched_inputs = {"input_ids": [], "image_patches": [], "image_patches_indices": [], "attention_mask": []}
 
         for entry in model_inputs:
             for key, tensor in entry.items():
-                if key == 'input_ids':
+                if key == "input_ids":
                     num_padding_tokens = max_length_input_ids - tensor.shape[1]
                     padded_input_ids = torch.cat(
-                        [torch.full((tensor.shape[0], num_padding_tokens), self.pad_token_id, dtype=torch.long), tensor], dim=1)
+                        [
+                            torch.full((tensor.shape[0], num_padding_tokens), self.pad_token_id, dtype=torch.long),
+                            tensor,
+                        ],
+                        dim=1,
+                    )
                     batched_inputs[key].append(padded_input_ids)
 
-                    attention_mask = torch.cat([torch.zeros(tensor.shape[0], num_padding_tokens,
-                                                            dtype=torch.long), torch.ones_like(tensor)], dim=1)
-                    batched_inputs['attention_mask'].append(attention_mask)
+                    attention_mask = torch.cat(
+                        [torch.zeros(tensor.shape[0], num_padding_tokens, dtype=torch.long), torch.ones_like(tensor)],
+                        dim=1,
+                    )
+                    batched_inputs["attention_mask"].append(attention_mask)
 
-                elif key == 'image_patches':
+                elif key == "image_patches":
                     # For image_patches, we don't pad but just append them to the list.
                     batched_inputs[key].append(tensor)
 
                 else:  # for image_patches_indices
                     num_padding_indices = max_length_image_patch_indices - tensor.shape[1]
-                    padded_indices = torch.cat([torch.full((tensor.shape[0], num_padding_indices),
-                                                           self.dummy_image_index, dtype=torch.long), tensor], dim=1)
+                    padded_indices = torch.cat(
+                        [
+                            torch.full(
+                                (tensor.shape[0], num_padding_indices), self.dummy_image_index, dtype=torch.long
+                            ),
+                            tensor,
+                        ],
+                        dim=1,
+                    )
                     batched_inputs[key].append(padded_indices)
-        batched_keys = ['input_ids', 'image_patches_indices']
+        batched_keys = ["input_ids", "image_patches_indices"]
         if return_attention_mask:
-            batched_keys.append('attention_mask')
+            batched_keys.append("attention_mask")
         for key in batched_keys:
             batched_inputs[key] = torch.cat(batched_inputs[key], dim=0)
 
         return batched_inputs
 
     def get_sample_encoding(
-            self,
-            prompts,
-            batch_images,
-            image_unpadded_heights,
-            image_unpadded_widths,
-            image_placeholder_id,
-            image_newline_id,
-            tensor_batch_images
+        self,
+        prompts,
+        batch_images,
+        image_unpadded_heights,
+        image_unpadded_widths,
+        image_placeholder_id,
+        image_newline_id,
+        tensor_batch_images,
     ):
         image_present = torch.ones(1, 1, 1)
         model_image_input = self.image_processor.postprocess_with_tokenizer_info(
@@ -507,24 +508,24 @@ class FuyuProcessor(ProcessorMixin):
         return batch_encoding
 
     def __call__(
-            self,
-            text=None,
-            images=None,
-            add_special_tokens: bool = True,
-            return_attention_mask: bool = True,
-            padding: Union[bool, str, PaddingStrategy] = False,
-            truncation: Union[bool, str, TruncationStrategy] = None,
-            max_length: Optional[int] = None,
-            stride: int = 0,
-            pad_to_multiple_of: Optional[int] = None,
-            return_overflowing_tokens: bool = False,
-            return_special_tokens_mask: bool = False,
-            return_offsets_mapping: bool = False,
-            return_token_type_ids: bool = False,
-            return_length: bool = False,
-            verbose: bool = True,
-            return_tensors: Optional[Union[str, TensorType]] = None,
-            **kwargs
+        self,
+        text=None,
+        images=None,
+        add_special_tokens: bool = True,
+        return_attention_mask: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_token_type_ids: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs,
     ) -> FuyuBatchEncoding:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -610,8 +611,8 @@ class FuyuProcessor(ProcessorMixin):
         all_encodings = []
 
         for prompt, image, image_unpadded_height, image_unpadded_width, tensor_batch_image in zip(
-                prompts, batch_images, image_unpadded_heights, image_unpadded_widths, tensor_batch_images
-            ):
+            prompts, batch_images, image_unpadded_heights, image_unpadded_widths, tensor_batch_images
+        ):
             sample_encoding = self.get_sample_encoding(
                 prompts=[prompt],
                 batch_images=[image],
@@ -619,12 +620,11 @@ class FuyuProcessor(ProcessorMixin):
                 image_unpadded_widths=image_unpadded_width.unsqueeze(0),
                 image_placeholder_id=image_placeholder_id,
                 image_newline_id=image_newline_id,
-                tensor_batch_images=tensor_batch_image.unsqueeze(0)
+                tensor_batch_images=tensor_batch_image.unsqueeze(0),
             )
             all_encodings.append(sample_encoding)
         batch_encoding = self.left_pad_inputs_with_attention_mask(
-            model_inputs=all_encodings,
-            return_attention_mask=return_attention_mask
+            model_inputs=all_encodings, return_attention_mask=return_attention_mask
         )
 
         return FuyuBatchEncoding(data=batch_encoding)

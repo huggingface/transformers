@@ -38,13 +38,9 @@ class TestFuyuImageProcessor(unittest.TestCase):
         self.sample_image_pil = Image.fromarray(self.sample_image)
 
     def test_patches(self):
-        expected_num_patches = self.processor.get_num_patches(
-            image_height=self.height, image_width=self.width
-        )
+        expected_num_patches = self.processor.get_num_patches(image_height=self.height, image_width=self.width)
 
-        patches_final = self.processor.patchify_image(
-            image=self.image_input
-        )
+        patches_final = self.processor.patchify_image(image=self.image_input)
         assert (
             patches_final.shape[1] == expected_num_patches
         ), f"Expected {expected_num_patches} patches, got {patches_final.shape[1]}."
