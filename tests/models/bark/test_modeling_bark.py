@@ -922,6 +922,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
     @slow
     def test_generate_semantic_early_stop(self):
         input_ids = self.inputs
+        min_eos_p = 0.01
 
         # fmt: off
         # check first ids
@@ -930,25 +931,38 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
         # Should be able to read min_eos_p from kwargs
         with torch.no_grad():
-            output_ids = self.model.semantic.generate(
+            torch.manual_seed(0)
+            output_ids_without_min_eos_p = self.model.semantic.generate(
                 **input_ids,
-                do_sample=True,
-                temperature=1.0,
+                do_sample=False,
+                temperature=0.9,
                 semantic_generation_config=self.semantic_generation_config,
-                min_eos_p=0.01,
             )
-        self.assertLess(len(output_ids.tolist()), len(expected_output_ids))
+            torch.manual_seed(0)
+            output_ids_kwargs = self.model.semantic.generate(
+                **input_ids,
+                do_sample=False,
+                temperature=0.9,
+                semantic_generation_config=self.semantic_generation_config,
+                min_eos_p=min_eos_p,
+            )
+        self.assertListEqual(output_ids_without_min_eos_p[0, : len(expected_output_ids)].tolist(), expected_output_ids)
+        self.assertLess(len(output_ids_kwargs[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist()))
 
         # Should be able to read min_eos_p from the semantic generation config
-        self.semantic_generation_config.min_eos_p = 0.01
+        self.semantic_generation_config.min_eos_p = min_eos_p
         with torch.no_grad():
+            torch.manual_seed(0)
             output_ids = self.model.semantic.generate(
                 **input_ids,
-                do_sample=True,
-                temperature=1.0,
+                do_sample=False,
+                temperature=0.9,
                 semantic_generation_config=self.semantic_generation_config,
             )
-        self.assertLess(len(output_ids.tolist()), len(expected_output_ids))
+
+        self.assertEqual(output_ids.shape, output_ids_kwargs.shape)
+        self.assertLess(len(output_ids[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist()))
+        self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
     @slow
     def test_generate_coarse(self):
