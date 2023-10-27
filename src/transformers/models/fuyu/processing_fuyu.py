@@ -446,7 +446,7 @@ class FuyuProcessor(ProcessorMixin):
         tensor_batch_images,
     ):
         image_present = torch.ones(1, 1, 1)
-        model_image_input = self.image_processor.postprocess_with_tokenizer_info(
+        model_image_input = self.image_processor.preprocess_with_tokenizer_info(
             image_input=tensor_batch_images,
             image_present=image_present,
             image_unpadded_h=image_unpadded_heights,
@@ -465,7 +465,6 @@ class FuyuProcessor(ProcessorMixin):
             add_BOS=True,
             add_beginning_of_answer_token=True,
         )
-
         image_padded_unpacked_tokens = construct_full_unpacked_stream(
             num_real_text_tokens=prompts_length,
             input_stream=prompt_tokens,
@@ -483,28 +482,23 @@ class FuyuProcessor(ProcessorMixin):
         )
         max_prompt_length = max(x.shape[-1] for x in image_padded_unpacked_tokens)
         max_seq_len_batch = min(max_prompt_length + self.max_tokens_to_generate, self.max_position_embeddings)
-        all_bi_tokens_to_place = []
-        for bi in range(1):
-            tokens_to_place = min(max_seq_len_batch, max(0, image_padded_unpacked_tokens[bi].shape[0]))
-            all_bi_tokens_to_place.append(tokens_to_place)
+        tokens_to_place = min(max_seq_len_batch, max(0, image_padded_unpacked_tokens[0].shape[0]))
 
         # Use same packing logic for the image patch indices.
         image_patch_input_indices = full_unpacked_stream_to_tensor(
-            all_bi_tokens_to_place=all_bi_tokens_to_place,
+            all_bi_tokens_to_place=[tokens_to_place],
             full_unpacked_stream=unpacked_image_patch_indices_per_batch,
             fill_value=-1,
             batch_size=1,
             new_seq_len=max_seq_len_batch,
             offset=0,
         )
-
-        image_patches_tensor = torch.stack([img[0] for img in model_image_input["image_patches"]]).unsqueeze(1)
+        image_patches_tensor = torch.stack([img[0] for img in model_image_input["image_patches"]])
         batch_encoding = {
             "input_ids": image_padded_unpacked_tokens[0].unsqueeze(0),
-            "image_patches": image_patches_tensor[0][0].unsqueeze(0),
+            "image_patches": image_patches_tensor,
             "image_patches_indices": image_patch_input_indices,
         }
-
         return batch_encoding
 
     def __call__(
@@ -594,7 +588,8 @@ class FuyuProcessor(ProcessorMixin):
         # --- Preprocess images using self.image_processor ---
 
         # batch_images, image_unpadded_heights, image_unpadded_widths = self.image_processor.preprocess(images)
-        image_encoding = self.image_processor.preprocess(images)
+        image_encoding = self.image_processor.preprocess(images, return_tensors="pt") # We shouldn't need to hard code "pt" here
+        # Double check this - should this be a list of list of tensors of list of tensors?
         batch_images = image_encoding["images"]
         image_unpadded_heights = image_encoding["image_unpadded_heights"]
         image_unpadded_widths = image_encoding["image_unpadded_widths"]
@@ -631,14 +626,14 @@ class FuyuProcessor(ProcessorMixin):
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
