@@ -18,7 +18,6 @@ import math
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-from transformers.utils import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
@@ -34,9 +33,16 @@ from ...image_utils import (
     is_scaled_image,
     make_list_of_images,
     to_numpy_array,
-    valid_images,
 )
-from ...utils import TensorType, is_torch_available, is_vision_available, logging, requires_backends, is_torch_device
+from ...utils import (
+    TensorType,
+    is_torch_available,
+    is_torch_device,
+    is_torch_dtype,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_vision_available():
@@ -48,13 +54,13 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-
 class FuyuBatchFeature(BatchFeature):
     """
     BatchFeature class for Fuyu image processor.
 
     The outputs of the image processor are not a dictionary of tensors, but rather a dictionary of lists of tensors.
     """
+
     def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
         """
         Convert the inner content to tensors.
@@ -479,20 +485,14 @@ class FuyuImageProcessor(BaseImageProcessor):
         if data_format is not None:
             images = [to_channel_dimension_format(image, data_format, input_data_format) for image in images]
 
-        # batch_images = [[torch.Tensor(image)] for image in images]
-        # image_unpadded_heights = [
-        #     torch.Tensor(image_unpadded_height) for image_unpadded_height in image_unpadded_heights
-        # ]
-        # image_unpadded_widths = [torch.Tensor(image_unpadded_width) for image_unpadded_width in image_unpadded_widths]
         batch_images = [[image] for image in images]
-        image_unpadded_heights = [image_unpadded_height for image_unpadded_height in image_unpadded_heights]
-        image_unpadded_widths = [image_unpadded_width for image_unpadded_width in image_unpadded_widths]
+        image_unpadded_heights = list(image_unpadded_heights)
+        image_unpadded_widths = list(image_unpadded_widths)
         data = {
             "images": batch_images,
             "image_unpadded_heights": image_unpadded_heights,
             "image_unpadded_widths": image_unpadded_widths,
         }
-        # return batch_images, torch.Tensor(image_unpadded_heights), torch.Tensor(image_unpadded_widths)
         return FuyuBatchFeature(data=data, tensor_type=return_tensors)
 
     def get_num_patches(self, image_height: int, image_width: int, patch_size: Dict[str, int] = None) -> int:

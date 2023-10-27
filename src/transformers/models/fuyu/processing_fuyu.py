@@ -588,7 +588,9 @@ class FuyuProcessor(ProcessorMixin):
         # --- Preprocess images using self.image_processor ---
 
         # batch_images, image_unpadded_heights, image_unpadded_widths = self.image_processor.preprocess(images)
-        image_encoding = self.image_processor.preprocess(images, return_tensors="pt") # We shouldn't need to hard code "pt" here
+        image_encoding = self.image_processor.preprocess(
+            images, return_tensors="pt"
+        )  # We shouldn't need to hard code "pt" here
         # Double check this - should this be a list of list of tensors of list of tensors?
         batch_images = image_encoding["images"]
         image_unpadded_heights = image_encoding["image_unpadded_heights"]

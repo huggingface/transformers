@@ -26,7 +26,7 @@ class FuyuProcessingTest(unittest.TestCase):  # TODO Which mixins do we add here
     """ """
 
     def setUp(self):
-        pretrained_model_name = "huggingface/pre_release_model"
+        pretrained_model_name = "adept/fuyu-8b"
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name)
         image_processor = FuyuImageProcessor()
 
@@ -97,7 +97,6 @@ class TestProcessImagesForModelInput(unittest.TestCase):
         """
         Adding a mix of present and absent images.
         """
-        self.image_processor = FuyuImageProcessor()
 
         self.image_input = torch.randn([1, 1, 3, 64, 64])
         self.image_present = torch.tensor([[1]])
@@ -108,10 +107,13 @@ class TestProcessImagesForModelInput(unittest.TestCase):
         self.image_placeholder_id = 999
         self.image_newline_id = 888
         self.variable_sized = True
+        self.image_processor = FuyuImageProcessor(
+            patch_size={"height": self.image_patch_dim_h, "width": self.image_patch_dim_w}
+        )
 
     def test_process_images_for_model_input_fixed_sized(self):
         self.variable_sized = False
-        result = self.image_processor.process_images_for_model_input(
+        result = self.image_processor.preprocess_with_tokenizer_info(
             image_input=self.image_input,
             image_present=self.image_present,
             image_unpadded_h=self.image_unpadded_h,

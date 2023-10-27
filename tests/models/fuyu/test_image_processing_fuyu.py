@@ -24,7 +24,8 @@ if is_vision_available():
 @require_torchvision
 class TestFuyuImageProcessor(unittest.TestCase):
     def setUp(self):
-        self.processor = FuyuImageProcessor(target_height=160, target_width=320, padding_value=1.0)
+        self.size = {"height": 160, "width": 320}
+        self.processor = FuyuImageProcessor(size=self.size, padding_value=1.0)
         self.batch_size = 3
         self.channels = 3
         self.height = 300
@@ -46,16 +47,16 @@ class TestFuyuImageProcessor(unittest.TestCase):
         ), f"Expected {expected_num_patches} patches, got {patches_final.shape[1]}."
 
     def test_scale_to_target_aspect_ratio(self):
-        scaled_image = self.processor._scale_to_target_aspect_ratio(self.sample_image)
+        scaled_image = self.processor.resize(self.sample_image, size=self.size)
         self.assertEqual(scaled_image.shape[0], 160)
         self.assertEqual(scaled_image.shape[1], 74)
 
     def test_apply_transformation_numpy(self):
-        transformed_image = self.processor.scale_pad_normalize(self.sample_image)
-        self.assertEqual(transformed_image.shape[0], 160)
-        self.assertEqual(transformed_image.shape[1], 320)
+        transformed_image = self.processor.preprocess(self.sample_image).images[0][0]
+        self.assertEqual(transformed_image.shape[1], 160)
+        self.assertEqual(transformed_image.shape[2], 320)
 
     def test_apply_transformation_pil(self):
-        transformed_image = self.processor.scale_pad_normalize(self.sample_image_pil)
-        self.assertEqual(transformed_image.shape[0], 160)
-        self.assertEqual(transformed_image.shape[1], 320)
+        transformed_image = self.processor.preprocess(self.sample_image_pil).images[0][0]
+        self.assertEqual(transformed_image.shape[1], 160)
+        self.assertEqual(transformed_image.shape[2], 320)
