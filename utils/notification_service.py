@@ -314,7 +314,7 @@ class Message:
         return entries_changed
 
     @property
-    def model_failures(self) -> Dict:
+    def model_failures(self) -> List[Dict]:
         # Obtain per-model failures
         def per_model_sum(model_category_dict):
             return dicts_to_sum(model_category_dict["failed"].values())
