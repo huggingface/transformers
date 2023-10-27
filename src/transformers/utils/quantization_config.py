@@ -344,6 +344,8 @@ class GPTQConfig(QuantizationConfigMixin):
             The batch size used when processing the dataset
         pad_token_id (`int`, *optional*):
             The pad token id. Needed to prepare the dataset when `batch_size` > 1.
+        disable_exllama (`bool`, *optional*, defaults to `False`):
+            Whether to use exllama backend. Only works with `bits` = 4.
         max_input_length (`int`, *optional*):
             The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
             length. It is specific to the exllama backend with act-order.
@@ -367,6 +369,7 @@ class GPTQConfig(QuantizationConfigMixin):
         module_name_preceding_first_block: Optional[List[str]] = None,
         batch_size: int = 1,
         pad_token_id: Optional[int] = None,
+        disable_exllama: bool = False,
         max_input_length: Optional[int] = None,
         use_exllama_v2: bool = False,
         **kwargs,
@@ -386,7 +389,7 @@ class GPTQConfig(QuantizationConfigMixin):
         self.module_name_preceding_first_block = module_name_preceding_first_block
         self.batch_size = batch_size
         self.pad_token_id = pad_token_id
-        self.disable_exllama = kwargs.get("disable_exllama", False)
+        self.disable_exllama = disable_exllama
         self.max_input_length = max_input_length
         self.use_exllama_v2 = use_exllama_v2
         # needed for compatibility with optimum gptq config
@@ -433,6 +436,7 @@ class GPTQConfig(QuantizationConfigMixin):
                 logger.warning("You have activated exllamav2 kernels. Exllama kernels will be disabled.")
             if not self.disable_exllama:
                 logger.warning(
-                    "You have activated exllama backend. Using `disable_exllama` is deprecated and will be removed in version 5.0 of 🤗 Transformers."
-                    "Use `use_exllama_v2` instead. Note that you can get better inference speed using exllamav2 kernel by setting `use_exllama_v2=True`"
+                    """You have activated exllama backend. Note that you can get better inference
+                    speed using exllamav2 kernel by setting `use_exllama_v2=True`.`disable_exllama` will be deprecated
+                    in future version."""
                 )
