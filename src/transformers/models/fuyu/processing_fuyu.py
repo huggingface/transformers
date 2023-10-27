@@ -386,7 +386,7 @@ class FuyuProcessor(ProcessorMixin):
         self.dummy_image_index = -1
         self.image_processor = FuyuImageProcessor()
 
-    def left_pad_inputs_with_attention_mask(self, model_inputs: List[Dict], return_attention_mask: bool):
+    def _left_pad_inputs_with_attention_mask(self, model_inputs: List[Dict], return_attention_mask: bool):
         max_length_input_ids = max(entry["input_ids"].shape[1] for entry in model_inputs)
         max_length_image_patch_indices = max(entry["image_patches_indices"].shape[1] for entry in model_inputs)
 
@@ -620,7 +620,7 @@ class FuyuProcessor(ProcessorMixin):
                 tensor_batch_images=tensor_batch_image.unsqueeze(0),
             )
             all_encodings.append(sample_encoding)
-        batch_encoding = self.left_pad_inputs_with_attention_mask(
+        batch_encoding = self._left_pad_inputs_with_attention_mask(
             model_inputs=all_encodings, return_attention_mask=return_attention_mask
         )
 

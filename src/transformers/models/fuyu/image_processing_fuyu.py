@@ -93,17 +93,12 @@ class FuyuBatchFeature(BatchFeature):
 
         # Do the tensor conversion in batch
         for key, value in self.items():
-            print(key)
             if key == "images":
-                # Data structure is a list of lists
-                new_value = []
-                for elem in value:
-                    tensor = _safe_convert_tensor(elem)
-                    new_value.append(tensor)
-                self[key] = new_value
+                # List[List[Any]] -> List[List[Tensor]]
+                self[key] = [[_safe_convert_tensor(img) for img in images] for images in value]
             else:
-                # Data structure is a list
-                self[key] = _safe_convert_tensor(value)
+                # List[Any] -> List[Tensor]
+                self[key] = [_safe_convert_tensor(val) for val in value]
         return self
 
     def to(self, *args, **kwargs) -> "BatchFeature":
@@ -485,11 +480,8 @@ class FuyuImageProcessor(BaseImageProcessor):
         if data_format is not None:
             images = [to_channel_dimension_format(image, data_format, input_data_format) for image in images]
 
-        batch_images = [[image] for image in images]
-        image_unpadded_heights = list(image_unpadded_heights)
-        image_unpadded_widths = list(image_unpadded_widths)
         data = {
-            "images": batch_images,
+            "images": [[image] for image in images],
             "image_unpadded_heights": image_unpadded_heights,
             "image_unpadded_widths": image_unpadded_widths,
         }
