@@ -198,6 +198,13 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
     test_pruning = False
     test_onnx = False
 
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name in ("TextGenerationPipelineTests", "ConversationalPipelineTests"):
+            return True
+        return False
+
     def setUp(self):
         self.model_tester = TFBlenderbotSmallModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BlenderbotSmallConfig)
@@ -208,10 +215,6 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
     def test_decoder_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    @unittest.skip("Tiny random model has too few position embeddings for this.")
-    def test_pipeline_conversational(self):
-        pass
 
 
 @require_tokenizers

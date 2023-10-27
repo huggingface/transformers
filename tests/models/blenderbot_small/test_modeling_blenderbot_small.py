@@ -242,7 +242,7 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
-        if pipeline_test_casse_name == "TextGenerationPipelineTests":
+        if pipeline_test_casse_name in ("TextGenerationPipelineTests", "ConversationalPipelineTests"):
             return True
         return False
 
@@ -280,10 +280,6 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
             model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
-
-    @unittest.skip("Tiny random model has too few position embeddings for this.")
-    def test_pipeline_conversational(self):
-        pass
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):

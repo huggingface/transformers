@@ -320,6 +320,13 @@ class FlaxBlenderbotSmallModelTest(FlaxModelTesterMixin, unittest.TestCase, Flax
     )
     all_generative_model_classes = (FlaxBlenderbotSmallForConditionalGeneration,) if is_flax_available() else ()
 
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name in ("TextGenerationPipelineTests", "ConversationalPipelineTests"):
+            return True
+        return False
+
     def setUp(self):
         self.model_tester = FlaxBlenderbotSmallModelTester(self)
 
@@ -397,7 +404,3 @@ class FlaxBlenderbotSmallModelTest(FlaxModelTesterMixin, unittest.TestCase, Flax
             input_ids = np.ones((1, 1)) * model.config.eos_token_id
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
-
-    @unittest.skip("Tiny random model has too few position embeddings for this.")
-    def test_pipeline_conversational(self):
-        pass
