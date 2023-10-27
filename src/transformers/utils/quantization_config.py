@@ -499,6 +499,11 @@ class AWQConfig(QuantizationConfigMixin):
         if not torch.cuda.is_available():
             raise ValueError("AWQ is only available on GPU")
 
+        if self.backend not in [AWQBackend.AUTOAWQ, AWQBackend.LLMAWQ]:
+            raise ValueError(
+                f"Only support quantization backend in {AWQBackend.AUTOAWQ} and {AWQBackend.LLMAWQ} - not recognized backend {self.backend}"
+            )
+
         if self.backend == AWQBackend.LLMAWQ:
             compute_capability = torch.cuda.get_device_capability()
             major, minor = compute_capability

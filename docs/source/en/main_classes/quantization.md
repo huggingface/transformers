@@ -97,6 +97,10 @@ You can find the full results in [this link](https://github.com/huggingface/opti
 
 From the results it appears that AWQ quantization method is the fastest quantization method for inference, text generation and among the lowest peak memory for text generation. However, AWQ seems to have the largest forward latency per batch size. 
 
+### Google colab demo
+
+Check out how to use this integration throughout this [Google Colab demo](https://colab.research.google.com/drive/1HzZH89yAXJaZgwJDhQj9LqSBux932BvY)!
+
 ### AWQConfig
 
 [[autodoc]] AWQConfig
