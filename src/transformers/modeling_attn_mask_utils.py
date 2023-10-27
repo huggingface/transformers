@@ -164,16 +164,20 @@ def _prepare_4d_causal_attention_mask(
     sliding_window: Optional[int] = None,
 ):
     """
-    Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from 
-    a 2D mask of shape `(batch_size, key_value_length)`
+    Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
+    `(batch_size, key_value_length)`
 
     Args:
         attention_mask (`torch.Tensor` or `None`):
             A 2D attention mask of shape `(batch_size, key_value_length)`
         input_shape (`tuple(int)` or `list(int)` or `torch.Size`):
-            The input shape  gg
-            Expected number of dimensions for a single input image. If the input image has a different number of
-            dimensions, an error is raised.
+            The input shape should be a tuple that defines `(batch_size, query_length)`.
+        inputs_embeds (`torch.Tensor`):
+            The embedded inputs as a torch Tensor.
+        past_key_values_length (`int`):
+            The length of the key value cache.
+        sliding_window (`int`, *optional*):
+            If the model uses windowed attention, a sliding window should be passed.
     """
     attn_mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=sliding_window)
 
@@ -194,8 +198,16 @@ def _prepare_4d_causal_attention_mask(
 
 def _prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
-    Creates a non-causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from 
-    a 2D mask of shape `(batch_size, key_value_length)`
+    Creates a non-causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
+    `(batch_size, key_value_length)`
+
+    Args:
+        mask (`torch.Tensor` or `None`):
+            A 2D attention mask of shape `(batch_size, key_value_length)`
+        dtype (`torch.dtype`):
+            The torch dtype the created mask shall have.
+        tgt_len (`int`):
+            The target length or query length the created mask shall have.
     """
     return AttentionMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
 
@@ -209,6 +221,16 @@ def _create_4d_causal_attention_mask(
 ):
     """
     Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)`
+
+    Args:
+        input_shape (`tuple(int)` or `list(int)` or `torch.Size`):
+            The input shape should be a tuple that defines `(batch_size, query_length)`.
+        dtype (`torch.dtype`):
+            The torch dtype the created mask shall have.
+        device (`int`):
+            The torch device the created mask shall have.
+        sliding_window (`int`, *optional*):
+            If the model uses windowed attention, a sliding window should be passed.
     """
     attn_mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=sliding_window)
 
