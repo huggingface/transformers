@@ -125,8 +125,6 @@ XGLM_INPUTS_DOCSTRING = r"""
 """
 
 
-
-
 class XGLMSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 

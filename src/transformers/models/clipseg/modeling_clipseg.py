@@ -24,6 +24,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import create_4d_causal_attention_mask, prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -45,8 +46,6 @@ CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "CIDAS/clipseg-rd64-refined",
     # See all CLIPSeg models at https://huggingface.co/models?filter=clipseg
 ]
-
-
 
 
 # contrastive loss function, adapted from
@@ -711,7 +710,9 @@ class CLIPSegTextTransformer(nn.Module):
 
         # CLIPSeg's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIPSeg/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clipseg/model.py#L324
-        causal_attention_mask = _make_causal_mask(input_shape, hidden_states.dtype, device=hidden_states.device)
+        causal_attention_mask = create_4d_causal_attention_mask(
+            input_shape, hidden_states.dtype, device=hidden_states.device
+        )
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]

@@ -22,7 +22,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import prepare_4d_attention_mask, prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -224,8 +224,6 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
         return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
     else:
         return input_tensor.mean(dim=dim)
-
-
 
 
 # Copied from transformers.models.marian.modeling_marian.MarianSinusoidalPositionalEmbedding with Marian->TimeSeries

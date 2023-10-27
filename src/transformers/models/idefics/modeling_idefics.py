@@ -29,7 +29,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import prepare_4d_attention_mask, prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import prepare_4d_causal_attention_mask
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PretrainedConfig
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -443,8 +443,6 @@ class IdeficsDecoupledLinear(nn.Linear):
             self.bias is not None,
             self.partially_freeze,
         )
-
-
 
 
 class IdeficsRMSNorm(nn.Module):
@@ -1096,30 +1094,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
-
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape,
-                inputs_embeds.dtype,
-                device=inputs_embeds.device,
-                past_key_values_length=past_key_values_length,
-            )
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = prepare_4d_attention_mask(
-                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-            ).to(inputs_embeds.device)
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def forward(

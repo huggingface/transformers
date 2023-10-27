@@ -36,8 +36,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "PersimmonConfig"
 
 
-
-
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Persimmon
 class PersimmonRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):

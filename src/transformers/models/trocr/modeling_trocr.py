@@ -24,7 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import prepare_4d_attention_mask, prepare_4d_causal_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging, replace_return_docstrings
@@ -41,8 +41,6 @@ TROCR_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/trocr-base-handwritten",
     # See all TrOCR models at https://huggingface.co/models?filter=trocr
 ]
-
-
 
 
 # Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->TrOCR

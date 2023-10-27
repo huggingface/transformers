@@ -44,8 +44,6 @@ BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
-
 # Copied from transformers.models.opt.modeling_opt.OPTLearnedPositionalEmbedding with OPT->BioGpt
 class BioGptLearnedPositionalEmbedding(nn.Embedding):
     """

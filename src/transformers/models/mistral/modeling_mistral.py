@@ -68,8 +68,6 @@ def _get_unpad_data(attention_mask):
     )
 
 
-
-
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Mistral
 class MistralRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):

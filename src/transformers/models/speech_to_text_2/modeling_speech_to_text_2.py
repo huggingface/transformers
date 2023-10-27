@@ -24,7 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import prepare_4d_attention_mask, prepare_4d_causal_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging, replace_return_docstrings
@@ -41,8 +41,6 @@ SPEECH_TO_TEXT_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/s2t-wav2vec2-large-en-de",
     # See all Speech2Text2 models at https://huggingface.co/models?filter=speech2text2
 ]
-
-
 
 
 # Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding with Speech2Text->Speech2Text2

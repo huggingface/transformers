@@ -26,7 +26,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, L1Loss
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_attn_mask_utils import prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import prepare_4d_attention_mask, prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -88,8 +88,6 @@ def shift_spectrograms_right(input_values: torch.Tensor, reduction_factor: int =
     shifted_input_values.masked_fill_(shifted_input_values == -100.0, 0.0)
 
     return shifted_input_values
-
-
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices

@@ -25,6 +25,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...modeling_attn_mask_utils import prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     ModelOutput,
@@ -111,8 +112,6 @@ class VitsTextEncoderOutput(ModelOutput):
     prior_log_variances: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
 
 
 @torch.jit.script

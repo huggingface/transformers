@@ -177,5 +177,15 @@ def prepare_4d_causal_attention_mask(
     return attention_mask
 
 
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+def prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     return AttnMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
+
+
+def create_4d_attention_mask(input_shape, dtype, device, sliding_window: Optional[int] = None):
+    attn_mask_converter = AttnMaskConverter(is_causal=True, sliding_window=sliding_window)
+
+    attention_mask = attn_mask_converter.to_causal_4d(
+        input_shape[0], input_shape[-1], input_shape[-1], dtype=dtype, device=device
+    )
+
+    return attention_mask

@@ -21,7 +21,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import prepare_4d_attention_mask, prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -229,8 +229,6 @@ def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.
     Computes the negative log likelihood loss from input distribution with respect to target.
     """
     return -input.log_prob(target)
-
-
 
 
 # Copied from transformers.models.marian.modeling_marian.MarianSinusoidalPositionalEmbedding with Marian->Informer
