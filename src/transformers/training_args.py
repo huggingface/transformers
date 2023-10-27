@@ -1124,7 +1124,7 @@ class TrainingArguments:
     gradient_checkpointing_kwargs: dict = field(
         default=None,
         metadata={
-            "help": "Gradient checkpointing key word arguments. Will be passed to `torch.utils.checkpoint.checkpoint` through `model.gradient_checkpointing_enable`."
+            "help": "Gradient checkpointing key word arguments such as `use_reentrant`. Will be passed to `torch.utils.checkpoint.checkpoint` through `model.gradient_checkpointing_enable`."
         },
     )
     include_inputs_for_metrics: bool = field(
