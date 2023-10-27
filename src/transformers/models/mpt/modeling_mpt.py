@@ -459,7 +459,7 @@ class MptModel(MptPreTrainedModel):
         )
         causal_mask = causal_mask.bool()
 
-        for _, (block, layer_past) in enumerate(zip(self.blocks, past_key_values)):
+        for block, layer_past in zip(self.blocks, past_key_values):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
