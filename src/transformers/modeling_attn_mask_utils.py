@@ -18,7 +18,7 @@ import torch
 
 class AttnMaskConverter:
     """
-    A utility attention mask class that allows:
+    A utility attention mask class that allows one to:
         - Create a causal 4d mask
         - Create a causal 4d mask with slided window
         - Convert a 2d attention mask (batch_size, query_length) to a 4d attention mask (batch_size, 1, query_length,
@@ -59,7 +59,6 @@ class AttnMaskConverter:
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         causal_4d_mask = None
         if input_shape[-1] > 1 or self.sliding_window is not None:
-            past_key_values_length = key_value_length - query_length
             causal_4d_mask = self._make_causal_mask(
                 input_shape,
                 dtype,
