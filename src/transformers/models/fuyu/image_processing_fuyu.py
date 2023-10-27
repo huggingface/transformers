@@ -419,16 +419,11 @@ class FuyuImageProcessor(BaseImageProcessor):
         batch_size, channels, _, _ = image.shape
         unfolded_along_height = image.unfold(2, patch_height, patch_height)
         patches = unfolded_along_height.unfold(3, patch_width, patch_width)
-        patches_reshaped = patches.contiguous().view(
-            batch_size, channels, -1, patch_height, patch_width
-        )
-        patches_final = patches_reshaped.permute(0, 2, 3, 4, 1).reshape(
-            batch_size, -1, channels * patch_height * patch_width
-        )
-        patches_reshaped = patches.contiguous().view(batch_size, channels, -1, patch_height, patch_width)
-        patches_final = patches_reshaped.permute(0, 2, 3, 4, 1)
-        patches_final = patches_final.reshape(batch_size, -1, channels * patch_height * patch_width)
-        return patches_final
+        patches = patches.contiguous()
+        patches = patches.view(batch_size, channels, -1, patch_height, patch_width)
+        patches = patches.permute(0, 2, 3, 4, 1)
+        patches = patches.reshape(batch_size, -1, channels * patch_height * patch_width)
+        return patches
 
     def postprocess_with_tokenizer_info(
         self,
@@ -444,13 +439,22 @@ class FuyuImageProcessor(BaseImageProcessor):
         """Process images for model input. In particular, variable-sized images are handled here.
 
         Args:
-            image_input: [batch_size, subsequence_size, num_channels, height, width] tensor of images padded to model input size.
-            image_present: [batch_size, subsequence_size] tensor of 1s and 0s indicating whether an image is present.
-            image_unpadded_h: [batch_size, subsequence_size] tensor of unpadded image heights.
-            image_unpadded_w: [batch_size, subsequence_size] tensor of unpadded image widths.
-            image_placeholder_id: The id of the image placeholder token. Comes from an associated tokenizer.
-            image_newline_id: The id of the image newline token. Comes from an associated tokenizer.
-            variable_sized: Whether to process images as variable-sized.
+            image_input (`torch.Tensor` of shape [batch_size, subsequence_size, num_channels, height, width]):
+                Tensor of images padded to model input size.
+            image_present (`torch.Tensor` of shape [batch_size, subsequence_size]):
+                Tensor of 1s and 0s indicating whether an image is present.
+            image_unpadded_h (`torch.Tensor` of shape [batch_size, subsequence_size]):
+                Tensor of unpadded image heights.
+            image_unpadded_w (`torch.Tensor` of shape [batch_size, subsequence_size]):
+                Tensor of unpadded image widths.
+            image_placeholder_id (int):
+                The id of the image placeholder token. Comes from an associated tokenizer.
+            image_newline_id (int):
+                The id of the image newline token. Comes from an associated tokenizer.
+            variable_sized (bool):
+                Whether to process images as variable-sized.
+            patch_size (`Dict[str, int]`, *optional*, defaults to `self.patch_size`):
+                Size of the patches.
         """
         requires_backends(self, ["torch"])
 
@@ -459,13 +463,13 @@ class FuyuImageProcessor(BaseImageProcessor):
 
         # Only images that are present.
         images: List[List[torch.Tensor]] = []
-        image_patches: List[List[torch.Tensor]] = []
+        batch_image_patches: List[List[torch.Tensor]] = []
         # Image input ids for every subsequence, including ones with no image present.
-        image_input_ids: List[List[torch.Tensor]] = []
+        batch_image_input_ids: List[List[torch.Tensor]] = []
         for batch_index in range(image_input.shape[0]):
-            images.append([])
-            image_input_ids.append([])
-            image_patches.append([])
+            # images.append([])
+            image_input_ids = []
+            image_patches = []
             for subseq_index in range(image_input.shape[1]):
                 if image_present[batch_index, subseq_index]:
                     image = image_input[batch_index, subseq_index]
@@ -484,67 +488,61 @@ class FuyuImageProcessor(BaseImageProcessor):
                         image = image[:, :new_h, :new_w]
                         image_height, image_width = new_h, new_w
 
-                    images[batch_index].append(image)
+                    # images[batch_index].append(image)
                     num_patches = self.get_num_patches(image_height=image_height, image_width=image_width)
-                    tensor_of_image_ids = torch.full(
-                        [num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device
-                    )
+                    tensor_of_image_ids = torch.full([num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device)
                     patches = self.patchify_image(image=image.unsqueeze(0)).squeeze(0)
+
                     if variable_sized:
                         # Now terminate each line with |NEWLINE|.
                         tensor_of_image_ids = tensor_of_image_ids.reshape(-1, new_w // patch_width)
-                        tensor_of_image_ids = torch.cat(
-                            [
-                                tensor_of_image_ids,
-                                torch.full(
-                                    [tensor_of_image_ids.shape[0], 1],
-                                    image_newline_id,
-                                    dtype=torch.int32,
-                                    device=image_input.device,
-                                ),
-                            ],
-                            dim=1,
-                        )
+                        newline_ids = torch.full([tensor_of_image_ids.shape[0], 1], image_newline_id, dtype=torch.int32, device=image_input.device)
+                        tensor_of_image_ids = torch.cat([tensor_of_image_ids, newline_ids], dim=1)
                         tensor_of_image_ids = tensor_of_image_ids.reshape(-1)
-                    image_input_ids[batch_index].append(tensor_of_image_ids)
-                    image_patches[batch_index].append(patches)
+
+                    images.append([image])
+                    image_input_ids.append(tensor_of_image_ids)
+                    image_patches.append(patches)
                 else:
-                    image_input_ids[batch_index].append(torch.tensor([], dtype=torch.int32, device=image_input.device))
+                    image_input_ids.append(torch.tensor([], dtype=torch.int32, device=image_input.device))
+
+            batch_image_input_ids.append(image_input_ids)
+            batch_image_patches.append(image_patches)
 
         # Create image_patch_input_indices, where non-negative values correspond to image patches to be inserted in
         # the stream.
         image_patch_indices_per_batch: List[List[torch.Tensor]] = []
         image_patch_indices_per_subsequence: List[List[torch.Tensor]] = []
 
-        for batch_index in range(len(image_input_ids)):
-            image_patch_indices_per_batch.append([])
-            image_patch_indices_per_subsequence.append([])
+        for sample_image_input_ids in batch_image_input_ids:
             index_offset = 0
-            for subseq_index in range(len(image_input_ids[batch_index])):
+            per_batch_indices = []
+            per_subsequence_indices = []
+            for subseq_image_input_ids in sample_image_input_ids:
                 # Indices of image patches.
-
-                subseq_image_input_ids = image_input_ids[batch_index][subseq_index]
-
-                num_patches = torch.count_nonzero(subseq_image_input_ids == image_placeholder_id)
+                patches_mask = subseq_image_input_ids == image_placeholder_id
+                num_patches = torch.count_nonzero(patches_mask)
                 indices = torch.arange(num_patches, dtype=subseq_image_input_ids.dtype, device=subseq_image_input_ids.device)
 
                 # Place those indices in the image input ids token stream, with -1 representing non-index tokens.
                 indices_in_stream_per_batch = torch.full_like(subseq_image_input_ids, -1)
                 indices_in_stream_per_subsequence = torch.full_like(subseq_image_input_ids, -1)
+                patches_inds = torch.nonzero(patches_mask, as_tuple=True)[0]
 
-                inds = torch.nonzero(subseq_image_input_ids == image_placeholder_id, as_tuple=True)[0] # FIXME - give a better name
+                indices_in_stream_per_batch[patches_inds] = (indices + index_offset)
+                indices_in_stream_per_subsequence[patches_inds] = indices
 
-                indices_in_stream_per_batch[inds] = (indices + index_offset)
-                indices_in_stream_per_subsequence[inds] = indices
-
-                image_patch_indices_per_batch[batch_index].append(indices_in_stream_per_batch)
-                image_patch_indices_per_subsequence[batch_index].append(indices_in_stream_per_subsequence)
+                per_batch_indices.append(indices_in_stream_per_batch)
+                per_subsequence_indices.append(indices_in_stream_per_subsequence)
                 index_offset += num_patches
+
+            image_patch_indices_per_batch.append(per_batch_indices)
+            image_patch_indices_per_subsequence.append(per_subsequence_indices)
 
         return {
             "images": images,
-            "image_input_ids": image_input_ids,
-            "image_patches": image_patches,
+            "image_input_ids": batch_image_input_ids,
+            "image_patches": batch_image_patches,
             "image_patch_indices_per_batch": image_patch_indices_per_batch,
             "image_patch_indices_per_subsequence": image_patch_indices_per_subsequence,
         }
