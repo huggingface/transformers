@@ -848,7 +848,7 @@ class DetrDecoder(nn.Module):
                     continue
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self.gradient_checkpointing_func(
+                layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
                     combined_attention_mask,
@@ -1612,14 +1612,6 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, MaskFormerPixelLevelModule):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.encoder.gradient_checkpointing = gradient_checkpointing_func is not None
-        if isinstance(module, DetrDecoder):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 @add_start_docstrings(
