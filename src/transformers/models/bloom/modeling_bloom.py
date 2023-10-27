@@ -496,11 +496,6 @@ class BloomPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module: nn.Module, gradient_checkpointing_func=None):
-        if isinstance(module, BloomModel):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
     @staticmethod
     def _convert_to_standard_cache(
         past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]], batch_size: int
@@ -762,7 +757,7 @@ class BloomModel(BloomPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                outputs = self.gradient_checkpointing_func(
+                outputs = self._gradient_checkpointing_func(
                     block.__call__,
                     hidden_states,
                     alibi,
