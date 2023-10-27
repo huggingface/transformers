@@ -1883,7 +1883,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self.enable_input_require_grads()
 
     def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = None):
-        gradient_checkpointing_set = False
+        is_gradient_checkpointing_set = False
 
         # We default it to `torch.utils.checkpoint.checkpoint`
         if gradient_checkpointing_func is None:
@@ -1900,9 +1900,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if hasattr(module, "gradient_checkpointing"):
                 module._gradient_checkpointing_func = gradient_checkpointing_func
                 module.gradient_checkpointing = enable
-                gradient_checkpointing_set = True
+                is_gradient_checkpointing_set = True
 
-        if not gradient_checkpointing_set:
+        if not is_gradient_checkpointing_set:
             raise ValueError(
                 f"{self.__class__.__name__} is not compatible with gradient checkpointing. Make sure all the architecture support it by setting a boolean attribute"
                 " `gradient_checkpointing` to modules of the model that uses checkpointing."
