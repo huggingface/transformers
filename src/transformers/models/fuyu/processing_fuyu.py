@@ -3,6 +3,7 @@ from typing import Any, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
+from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     ChannelDimension,
     get_image_size,
@@ -415,7 +416,7 @@ class FuyuProcessor(ProcessorMixin):
 
         return batch_images, torch.Tensor(image_unpadded_heights), torch.Tensor(image_unpadded_widths)
 
-    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
+    def __call__(self, text=None, images=None, return_tensors=None, **kwargs) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to
@@ -541,11 +542,13 @@ class FuyuProcessor(ProcessorMixin):
             )
 
             image_patches_tensor = torch.stack([img[0] for img in model_image_input["image_patches"]]).unsqueeze(1)
-            return {
-                "input_ids": image_padded_unpacked_tokens[0].unsqueeze(0),
-                "image_patches": image_patches_tensor[0][0].unsqueeze(0),
-                "image_patches_indices": image_patch_input_indices,
-            }
+            return BatchFeature(
+                data={
+                    "input_ids": image_padded_unpacked_tokens[0].unsqueeze(0),
+                    "image_patches": image_patches_tensor[0][0].unsqueeze(0),
+                    "image_patches_indices": image_patch_input_indices,
+                }
+            )
 
     def batch_decode(self, *args, **kwargs):
         """
