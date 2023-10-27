@@ -1521,7 +1521,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             `List[str]`: List of modules that should not be split
         """
         _no_split_modules = set()
-        modules = [self]
+        modules_to_check = [self]
         while len(modules) > 0:
             module = modules.pop(-1)
             # if the module does not appear in _no_split_modules, we also check the children
