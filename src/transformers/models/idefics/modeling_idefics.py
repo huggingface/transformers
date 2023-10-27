@@ -445,6 +445,7 @@ class IdeficsDecoupledLinear(nn.Linear):
         )
 
 
+# this was adapted from LlamaRMSNorm
 class IdeficsRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
