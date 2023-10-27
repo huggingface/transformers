@@ -40,7 +40,7 @@ from ...utils import (
 )
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
-from .vision import IdeficsVisionEncoder, IdeficsVisionTransformer
+from .vision import IdeficsVisionTransformer
 
 
 logger = logging.get_logger(__name__)
@@ -978,11 +978,6 @@ class IdeficsPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (IdeficsModel, IdeficsVisionEncoder)):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
 
 LLAMA_INPUTS_DOCSTRING = r"""
     Args:
@@ -1339,7 +1334,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                     )
                     use_cache = False
 
-                layer_outputs = self.gradient_checkpointing_func(
+                layer_outputs = self._gradient_checkpointing_func(
                     vblock,
                     decoder_layer,
                     hidden_states,

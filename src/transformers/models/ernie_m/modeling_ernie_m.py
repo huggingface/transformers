@@ -411,7 +411,6 @@ class ErnieMPreTrainedModel(PreTrainedModel):
 
     config_class = ErnieMConfig
     base_model_prefix = "ernie_m"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -428,11 +427,6 @@ class ErnieMPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, ErnieMEncoder):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 ERNIE_M_START_DOCSTRING = r"""
