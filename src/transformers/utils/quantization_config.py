@@ -367,7 +367,6 @@ class GPTQConfig(QuantizationConfigMixin):
         module_name_preceding_first_block: Optional[List[str]] = None,
         batch_size: int = 1,
         pad_token_id: Optional[int] = None,
-        disable_exllama: bool = False,
         max_input_length: Optional[int] = None,
         use_exllama_v2: bool = False,
         **kwargs,
@@ -387,7 +386,7 @@ class GPTQConfig(QuantizationConfigMixin):
         self.module_name_preceding_first_block = module_name_preceding_first_block
         self.batch_size = batch_size
         self.pad_token_id = pad_token_id
-        self.disable_exllama = disable_exllama
+        self.disable_exllama = kwargs.get("disable_exllama", False)
         self.max_input_length = max_input_length
         self.use_exllama_v2 = use_exllama_v2
         # needed for compatibility with optimum gptq config
