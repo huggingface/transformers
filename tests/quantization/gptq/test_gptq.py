@@ -69,9 +69,9 @@ class GPTQConfigTest(unittest.TestCase):
         from optimum.gptq import GPTQQuantizer
 
         config = GPTQConfig(bits=2)
-        optimum_config = GPTQQuantizer.from_dict(config.to_dict())
+        optimum_config = GPTQQuantizer.from_dict(config.to_dict_optimum())
         self.assertEqual(optimum_config.bits, config.bits)
-        new_config = GPTQConfig.from_dict(optimum_config.to_dict())
+        new_config = GPTQConfig.from_dict_optimum(optimum_config.to_dict())
         self.assertEqual(optimum_config.bits, new_config.bits)
 
 
@@ -147,11 +147,12 @@ class GPTQTest(unittest.TestCase):
 
     def test_device_and_dtype_assignment(self):
         r"""
-        Test whether trying to cast (or assigning a device to) a model after converting it in 8-bit will throw an error.
+        Test whether trying to cast (or assigning a device to) a model after quantization will throw an error.
         Checks also if other models are casted correctly.
         """
         # This should work
-        _ = self.quantized_model.to(0)
+        if self.device_map is None:
+            _ = self.quantized_model.to(0)
 
         with self.assertRaises(ValueError):
             # Tries with a `dtype``

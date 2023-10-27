@@ -2741,7 +2741,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with GPTQ.")
 
-            quantizer = GPTQQuantizer.from_dict(quantization_config.to_dict())
+            quantizer = GPTQQuantizer.from_dict(quantization_config.to_dict_optimum())
 
         if (
             is_8bit_serializable
@@ -3399,7 +3399,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if cls.main_input_name != "input_ids":
                 raise RuntimeError("We can only quantize pure text model.")
             quantizer.quantize_model(model, quantization_config.tokenizer)
-            model.config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
+            model.config.quantization_config = GPTQConfig.from_dict_optimum(quantizer.to_dict())
             model._is_quantized_training_enabled = True
         if quantization_method_from_config == QuantizationMethod.GPTQ:
             model = quantizer.post_init_model(model)

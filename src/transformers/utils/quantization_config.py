@@ -394,15 +394,12 @@ class GPTQConfig(QuantizationConfigMixin):
         self.max_input_length = max_input_length
         self.use_exllama_v2 = use_exllama_v2
         self.disable_exllama = disable_exllama
-        # needed for compatibility with optimum gptq config
-        self.disable_exllamav2 = not use_exllama_v2
         self.post_init()
 
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
         loading_attibutes = ["use_exllama", "use_exllama_v2", "use_cuda_fp16", "max_input_length"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
-        loading_attibutes_dict["disable_exllama"] = None
         return loading_attibutes_dict
 
     def post_init(self):
@@ -450,5 +447,28 @@ class GPTQConfig(QuantizationConfigMixin):
                     "speed using exllamav2 kernel by setting `use_exllama_v2=True`."
                 )
 
-        # needed for compatibility with optimum config
-        self.disable_exllama = not self.use_exllama
+    def to_dict_optimum(self):
+        """
+        Get compatible dict for optimum gptq config
+        """
+        quant_dict = self.to_dict()
+        # make it compatible with optimum config
+        quant_dict["disable_exllama"] = not self.use_exllama
+        quant_dict["disable_exllamav2"] = not self.use_exllama_v2
+        return quant_dict
+
+    @classmethod
+    def from_dict_optimum(cls, config_dict):
+        """
+        Get compatible class with optimum gptq config dict
+        """
+        if "disable_exllama" in config_dict:
+            config_dict["use_exllama"] = not config_dict["disable_exllama"]
+            # switch to None to not trigger the warning
+            config_dict["disable_exllama"] = None
+
+        if "disable_exllamav2" in config_dict:
+            config_dict["use_exllama_v2"] = not config_dict["disable_exllamav2"]
+
+        config = cls(**config_dict)
+        return config
