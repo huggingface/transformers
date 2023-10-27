@@ -1522,8 +1522,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         _no_split_modules = set()
         modules_to_check = [self]
-        while len(modules) > 0:
-            module = modules.pop(-1)
+        while len(modules_to_check) > 0:
+            module = modules_to_check.pop(-1)
             # if the module does not appear in _no_split_modules, we also check the children
             if module.__class__.__name__ not in _no_split_modules:
                 if isinstance(module, PreTrainedModel):
@@ -1534,7 +1534,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                     else:
                         _no_split_modules = _no_split_modules | set(module._no_split_modules)
-                modules += list(module.children())
+                modules_to_check += list(module.children())
         return list(_no_split_modules)
 
     def resize_token_embeddings(
