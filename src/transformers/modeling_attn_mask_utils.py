@@ -113,7 +113,7 @@ class AttentionMaskConverter:
             attention_mask_2d.device
         )
         if causal_4d_mask is not None:
-            expanded_attn_mask = causal_4d_mask.masked_fill(expanded_attn_mask, torch.finfo(dtype).min)
+            expanded_attn_mask = causal_4d_mask.masked_fill(expanded_attn_mask.bool(), torch.finfo(dtype).min)
             
         # expanded_attn_mask + causal_4d_mask can cause some overflow
         expanded_4d_mask = expanded_attn_mask
