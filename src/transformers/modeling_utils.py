@@ -1894,7 +1894,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(self, "gradient_checkpointing"):
             self._gradient_checkpointing_func = gradient_checkpointing_func
             self.gradient_checkpointing = enable
-            gradient_checkpointing_set = True
+            is_gradient_checkpointing_set = True
 
         for module in self.modules():
             if hasattr(module, "gradient_checkpointing"):
