@@ -860,57 +860,6 @@ class PegasusDecoder(PegasusPreTrainedModel):
         self.embed_tokens = value
 
     # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape,
-                inputs_embeds.dtype,
-                device=inputs_embeds.device,
-                past_key_values_length=past_key_values_length,
-            )
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = prepare_4d_attention_mask(
-                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-            ).to(inputs_embeds.device)
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
-
-    def resize_position_embeddings(self, new_num_position_embeddings: int):
-        """
-        Resizes position embeddings matrix of the model if `new_num_position_embeddings !=
-        config.max_position_embeddings`.
-
-        Arguments:
-            new_num_position_embeddings (`int`):
-                The number of new position embeddings. If position embeddings are learned, increasing the size will add
-                newly initialized vectors at the end, whereas reducing the size will remove vectors from the end. If
-                position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the size will
-                add correct vectors at the end following the position encoding algorithm, whereas reducing the size
-                will remove vectors from the end.
-        """
-        logger.info(f"Setting `config.max_position_embeddings={new_num_position_embeddings}`...")
-        self.config.max_position_embeddings = new_num_position_embeddings
-
-        self.embed_positions = PegasusSinusoidalPositionalEmbedding(
-            self.config.max_position_embeddings,
-            self.config.d_model,
-            self.padding_idx,
-        )
-        self.embed_positions.to(self.device)
-
-    def get_position_embeddings(self) -> nn.Embedding:
-        """
-        Returns the position embeddings matrix
-        """
-        return self.embed_positions
 
     def forward(
         self,
