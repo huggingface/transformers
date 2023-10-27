@@ -1892,10 +1892,11 @@ class GenerationTesterMixin:
         # 2. some old models still return `output.past_key_values` even without `use_cache=True`
         if use_cache:
             past_key_values = output.past_key_values
+            past_sequence_length = gen_len - 1 if config.is_encoder_decoder else seq_length + gen_len - 1
             self._check_past_key_values_for_generate(
                 num_sequences_in_output,
                 past_key_values,
-                seq_length=gen_len + seq_length - 1,
+                seq_length=past_sequence_length,
                 config=config,
             )
 
