@@ -18,17 +18,12 @@ import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, AWQConfig
 from transformers.testing_utils import (
-    is_torch_available,
     require_accelerate,
     require_auto_awq,
     require_torch_gpu,
     slow,
     torch_device,
 )
-
-
-if is_torch_available():
-    pass
 
 
 @require_torch_gpu
