@@ -73,6 +73,7 @@ class AWQConfigTest(unittest.TestCase):
 @require_auto_awq
 @require_accelerate
 class AWQTest(unittest.TestCase):
+    # TODO: @younesbelkada change it to `TheBloke/Mistral-7B-v0.1-AWQ` in the future
     model_name = "ybelkada/test-mistral-7b-v0.1-awq"
     dummy_transformers_model_name = "bigscience/bloom-560m"
 
