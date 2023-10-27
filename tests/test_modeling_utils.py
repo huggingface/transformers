@@ -35,7 +35,6 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.modeling_attn_mask_utils import AttnMaskConverter
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -81,6 +80,7 @@ if is_torch_available():
         T5Config,
         T5ForConditionalGeneration,
     )
+    from transformers.modeling_attn_mask_utils import AttnMaskConverter
     from transformers.modeling_utils import shard_checkpoint
 
     # Fake pretrained models for tests

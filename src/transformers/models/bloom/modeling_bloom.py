@@ -703,6 +703,7 @@ class BloomModel(BloomPreTrainedModel):
         causal_mask = prepare_4d_causal_attention_mask(
             attention_mask,
             input_shape=(batch_size, seq_length),
+            inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
 

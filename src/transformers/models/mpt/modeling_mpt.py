@@ -455,7 +455,7 @@ class MptModel(MptPreTrainedModel):
         alibi = self.build_mpt_alibi_tensor(self.num_heads, self.config.max_seq_len, device=hidden_states.device)
 
         causal_mask = prepare_4d_causal_attention_mask(
-            attention_mask, (batch_size, seq_length), past_key_values_length
+            attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
         )
         for _, (block, layer_past) in enumerate(zip(self.blocks, past_key_values)):
             if output_hidden_states:
