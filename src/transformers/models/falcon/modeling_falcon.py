@@ -224,26 +224,6 @@ class FalconDynamicNTKScalingRotaryEmbedding(FalconRotaryEmbedding):
         self.sin_cached = self.sin_cached.type(dtype)
 
 
-def _make_causal_mask(
-    input_ids_shape: torch.Size, device: torch.device, past_key_values_length: int
-) -> torch.BoolTensor:
-    """
-    Make causal mask used for self-attention. This mask does not take the existing attention mask into account - it
-    just blocks tokens from attending forwards in the sequence. The output shape will be `[batch_size, 1,
-    target_length, target_length+past_key_values_length]`.
-    """
-    batch_size, target_length = input_ids_shape
-
-    mask = torch.triu(torch.ones((target_length, target_length), dtype=torch.bool, device=device), diagonal=1)
-    # If past_key_values_length is 0 this is an empty tensor and the concatenation is a no-op.
-    # This code style is an unfortunate consequence of getting your TF engineer to port models; doing it this
-    # way avoids a data-dependent conditional, which will help me when I have to port this to XLA later.
-    past_mask = torch.zeros((target_length, past_key_values_length), dtype=torch.bool, device=device)
-    mask = torch.cat([past_mask, mask], dim=-1)
-    expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
-    return expanded_mask
-
-
 def prepare_4d_attention_mask(mask: torch.Tensor, past_key_values_length: int) -> torch.BoolTensor:
     """
     Expands attention_mask from `[batch_size, seq_length]` to `[batch_size, 1, seq_length, seq_length + past_length]`.
