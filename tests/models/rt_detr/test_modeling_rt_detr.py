@@ -1,4 +1,4 @@
-# coding=utf-8
+# coding = utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,13 +19,13 @@ import inspect
 import math
 import unittest
 
-from transformers import ResNetConfig, RTDetrConfig, is_torch_available, is_vision_available
+from transformers import RTDetrConfig, RTDetrImageProcessor, is_torch_available, is_vision_available
 from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -33,551 +33,349 @@ if is_torch_available():
     import torch
 
     from transformers import RTDetrForObjectDetection, RTDetrModel
-
+    from transformers.models.rt_detr.modeling_rt_detr import RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
 
     from transformers import DetrImageProcessor
 
+CHECKPOINT = "rafaelpadilla/porting_rt_detr" # TODO: replace
+
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
+
+class RTDetrConfigTester(ConfigTester):
+    def create_and_test_config_common_properties(self):
+        config = self.config_class(**self.inputs_dict)
+        self.parent.assertTrue(hasattr(config, "initializer_range"))
+        self.parent.assertTrue(hasattr(config, "depth"))
+        self.parent.assertTrue(hasattr(config, "variant"))
+        self.parent.assertTrue(hasattr(config, "num_stages"))
+        self.parent.assertTrue(hasattr(config, "return_idx"))
+        self.parent.assertTrue(hasattr(config, "act_presnet"))
+        self.parent.assertTrue(hasattr(config, "freeze_at"))
+        self.parent.assertTrue(hasattr(config, "freeze_norm"))
+        self.parent.assertTrue(hasattr(config, "pretrained"))
+        self.parent.assertTrue(hasattr(config, "is_encoder_decoder"))
+        self.parent.assertTrue(hasattr(config, "block_nums"))
+        self.parent.assertTrue(hasattr(config, "in_channels"))
+        self.parent.assertTrue(hasattr(config, "feat_strides"))
+        self.parent.assertTrue(hasattr(config, "hidden_dim"))
+        self.parent.assertTrue(hasattr(config, "num_head"))
+        self.parent.assertTrue(hasattr(config, "dim_feedforward"))
+        self.parent.assertTrue(hasattr(config, "dropout"))
+        self.parent.assertTrue(hasattr(config, "enc_act"))
+        self.parent.assertTrue(hasattr(config, "use_encoder_idx"))
+        self.parent.assertTrue(hasattr(config, "num_encoder_layers"))
+        self.parent.assertTrue(hasattr(config, "pe_temperature"))
+        self.parent.assertTrue(hasattr(config, "expansion"))
+        self.parent.assertTrue(hasattr(config, "depth_mult"))
+        self.parent.assertTrue(hasattr(config, "act_encoder"))
+        self.parent.assertTrue(hasattr(config, "eval_size"))
+        self.parent.assertTrue(hasattr(config, "num_classes"))
+        self.parent.assertTrue(hasattr(config, "num_queries"))
+        self.parent.assertTrue(hasattr(config, "position_embed_type"))
+        self.parent.assertTrue(hasattr(config, "feat_channels"))
+        self.parent.assertTrue(hasattr(config, "num_levels"))
+        self.parent.assertTrue(hasattr(config, "num_decoder_points"))
+        self.parent.assertTrue(hasattr(config, "num_decoder_layers"))
+        self.parent.assertTrue(hasattr(config, "act_decoder"))
+        self.parent.assertTrue(hasattr(config, "num_denoising"))
+        self.parent.assertTrue(hasattr(config, "label_noise_ratio"))
+        self.parent.assertTrue(hasattr(config, "box_noise_scale"))
+        self.parent.assertTrue(hasattr(config, "learnt_init_query"))
+        self.parent.assertTrue(hasattr(config, "eval_spatial_size"))
+        self.parent.assertTrue(hasattr(config, "eval_idx"))
+        self.parent.assertTrue(hasattr(config, "eps"))
+
 
 class RTDetrModelTester:
     def __init__(
         self,
         parent,
-        batch_size=8,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=8,
-        intermediate_size=4,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        num_queries=12,
-        num_channels=3,
-        min_size=200,
-        max_size=200,
-        n_targets=8,
-        num_labels=91,
+        batch_size = 2,
+        image_size = 640,
+        num_channels = 3,
+        is_training = True,
+        depth = 50,
+        variant = "d",
+        num_stages = 4,
+        return_idx = [0, 1, 2, 3],
+        act_presnet = "relu",
+        freeze_at = -1,
+        freeze_norm = True,
+        pretrained = True,
+        is_encoder_decoder = True,
+        block_nums = [3, 4, 6, 3],
+        in_channels = [512, 1024, 2048],
+        feat_strides = [8, 16, 32],
+        hidden_dim = 256,
+        num_head = 8,
+        dim_feedforward = 1024,
+        dropout = 0.0,
+        enc_act = "gelu",
+        use_encoder_idx = [2],
+        num_encoder_layers = 1,
+        pe_temperature = 10000,
+        expansion = 1.0,
+        depth_mult = 1.0,
+        act_encoder = "silu",
+        eval_size = None,
+        num_classes = 80,
+        num_queries = 300,
+        position_embed_type = "sine",
+        feat_channels = [512, 1024, 2048],
+        num_levels = 3,
+        num_decoder_points = 4,
+        num_decoder_layers = 6,
+        act_decoder = "relu",
+        num_denoising = 100,
+        label_noise_ratio = 0.5,
+        box_noise_scale = 1.0,
+        learnt_init_query = False,
+        eval_spatial_size = None,
+        eval_idx = -1,
+        eps = 1e-2,
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.num_queries = num_queries
+        self.image_size = image_size
         self.num_channels = num_channels
-        self.min_size = min_size
-        self.max_size = max_size
-        self.n_targets = n_targets
-        self.num_labels = num_labels
+        self.is_training = is_training
+        self.depth = depth
+        self.variant = variant
+        self.num_stages = num_stages
+        self.return_idx = return_idx
+        self.act_presnet = act_presnet
+        self.freeze_at = freeze_at
+        self.freeze_norm = freeze_norm
+        self.pretrained = pretrained
+        self.is_encoder_decoder = is_encoder_decoder
+        self.block_nums = block_nums
+        self.in_channels = in_channels
+        self.feat_strides = feat_strides
+        self.hidden_dim = hidden_dim
+        self.num_head = num_head
+        self.dim_feedforward = dim_feedforward
+        self.dropout = dropout
+        self.enc_act = enc_act
+        self.use_encoder_idx = use_encoder_idx
+        self.num_encoder_layers = num_encoder_layers
+        self.pe_temperature = pe_temperature
+        self.expansion = expansion
+        self.depth_mult = depth_mult
+        self.act_encoder = act_encoder
+        self.eval_size = eval_size
+        self.num_classes = num_classes
+        self.num_queries = num_queries
+        self.position_embed_type = position_embed_type
+        self.feat_channels = feat_channels
+        self.num_levels = num_levels
+        self.num_decoder_points = num_decoder_points
+        self.num_decoder_layers = num_decoder_layers
+        self.act_decoder = act_decoder
+        self.num_denoising = num_denoising
+        self.label_noise_ratio = label_noise_ratio
+        self.box_noise_scale = box_noise_scale
+        self.learnt_init_query = learnt_init_query
+        self.eval_spatial_size = eval_spatial_size
+        self.eval_idx = eval_idx
+        self.eps = eps
 
-        # we also set the expected seq length for both encoder and decoder
-        self.encoder_seq_length = math.ceil(self.min_size / 32) * math.ceil(self.max_size / 32)
-        self.decoder_seq_length = self.num_queries
-
+    def prepare_random_inputs(self):
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        labels = ids_tensor([self.batch_size], self.num_classes)
+        pixel_labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_classes)
+        return pixel_values, labels, pixel_labels
+    
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size])
-
-        pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size], device=torch_device)
-
-        labels = None
-        if self.use_labels:
-            # labels is a list of Dict (each Dict being the labels for a given example in the batch)
-            labels = []
-            for i in range(self.batch_size):
-                target = {}
-                target["class_labels"] = torch.randint(
-                    high=self.num_labels, size=(self.n_targets,), device=torch_device
-                )
-                target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
-                target["masks"] = torch.rand(self.n_targets, self.min_size, self.max_size, device=torch_device)
-                labels.append(target)
-
+        pixel_values, labels, pixel_labels = self.prepare_random_inputs()
         config = self.get_config()
-        return config, pixel_values, pixel_mask, labels
+        return config, pixel_values, labels, pixel_labels
 
     def get_config(self):
-        resnet_config = ResNetConfig(
-            num_channels=3,
-            embeddings_size=10,
-            hidden_sizes=[10, 20, 30, 40],
-            depths=[1, 1, 2, 1],
-            hidden_act="relu",
-            num_labels=3,
-            out_features=["stage2", "stage3", "stage4"],
-            out_indices=[2, 3, 4],
-        )
         return RTDetrConfig(
-            d_model=self.hidden_size,
-            encoder_layers=self.num_hidden_layers,
-            decoder_layers=self.num_hidden_layers,
-            encoder_attention_heads=self.num_attention_heads,
-            decoder_attention_heads=self.num_attention_heads,
-            encoder_ffn_dim=self.intermediate_size,
-            decoder_ffn_dim=self.intermediate_size,
-            dropout=self.hidden_dropout_prob,
-            attention_dropout=self.attention_probs_dropout_prob,
-            num_queries=self.num_queries,
-            num_labels=self.num_labels,
-            use_timm_backbone=False,
-            backbone_config=resnet_config,
+            depth = self.depth,
+            variant = self.variant,
+            num_stages = self.num_stages,
+            return_idx = self.return_idx,
+            act_presnet = self.act_presnet,
+            freeze_at = self.freeze_at,
+            freeze_norm = self.freeze_norm,
+            pretrained = self.pretrained,
+            is_encoder_decoder = self.is_encoder_decoder,
+            block_nums = self.block_nums,
+            in_channels = self.in_channels,
+            feat_strides = self.feat_strides,
+            hidden_dim = self.hidden_dim,
+            num_head = self.num_head,
+            dim_feedforward = self.dim_feedforward,
+            dropout = self.dropout,
+            enc_act = self.enc_act,
+            use_encoder_idx = self.use_encoder_idx,
+            num_encoder_layers = self.num_encoder_layers,
+            pe_temperature = self.pe_temperature,
+            expansion = self.expansion,
+            depth_mult = self.depth_mult,
+            act_encoder = self.act_encoder,
+            eval_size = self.eval_size,
+            num_classes = self.num_classes,
+            num_queries = self.num_queries,
+            position_embed_type = self.position_embed_type,
+            feat_channels = self.feat_channels,
+            num_levels = self.num_levels,
+            num_decoder_points = self.num_decoder_points,
+            num_decoder_layers = self.num_decoder_layers,
+            act_decoder = self.act_decoder,
+            num_denoising = self.num_denoising,
+            label_noise_ratio = self.label_noise_ratio,
+            box_noise_scale = self.box_noise_scale,
+            learnt_init_query = self.learnt_init_query,
+            eval_spatial_size = self.eval_spatial_size,
+            eval_idx = self.eval_idx,
+            eps = self.eps,
         )
+    
+    def create_and_check_model(self, model_class, config, pixel_values, labels, pixel_labels):
+        """Create and check the shape of the logits and boxes predicted by the model, and their types."""
+        config.num_classes = self.num_classes
+        model = model_class(config)
+        model.to(torch_device)
+        model.eval()
+        
+        signature = inspect.signature(model_class.forward)
+        arg_names = [*signature.parameters.keys()]
+        if "labels" in arg_names:
+            result = model(pixel_values, labels = labels)
+            self.parent.assertIsInstance(result.loss, torch.Tensor)
+            self.parent.assertIsInstance(result.loss_dict, dict)
+        else:
+            result = model(pixel_values)    
+        # Check model's outputs
+        self.parent.assertEqual(result["pred_logits"].shape, (self.batch_size, self.num_queries, self.num_classes))
+        self.parent.assertEqual(result["pred_boxes"].shape, (self.batch_size, self.num_queries, 4))
 
     def prepare_config_and_inputs_for_common(self):
-        config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs()
-        inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
-        return config, inputs_dict
-
-    def create_and_check_rt_detr_model(self, config, pixel_values, pixel_mask, labels):
-        model = RTDetrModel(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-        result = model(pixel_values)
-
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size)
-        )
-
-    def create_and_check_rt_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
-        model = RTDetrForObjectDetection(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-        result = model(pixel_values)
-
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
-
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
-
-        self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
-
+        config, pixel_values, labels, pixel_labels = self.prepare_config_and_inputs()
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict, labels, pixel_labels
 
 @require_torch
-class RTDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class RTDetrTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+
     all_model_classes = (
-        (
-            RTDetrModel,
-            RTDetrForObjectDetection,
-        )
+        (RTDetrModel, RTDetrForObjectDetection)
         if is_torch_available()
         else ()
     )
-    is_encoder_decoder = True
+    
     test_torchscript = False
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
-
-    # special case for head models
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-
-        if return_labels:
-            if model_class.__name__ in ["RTDetrForObjectDetection", "RT_DETRForSegmentation"]:
-                labels = []
-                for i in range(self.model_tester.batch_size):
-                    target = {}
-                    target["class_labels"] = torch.ones(
-                        size=(self.model_tester.n_targets,), device=torch_device, dtype=torch.long
-                    )
-                    target["boxes"] = torch.ones(
-                        self.model_tester.n_targets, 4, device=torch_device, dtype=torch.float
-                    )
-                    target["masks"] = torch.ones(
-                        self.model_tester.n_targets,
-                        self.model_tester.min_size,
-                        self.model_tester.max_size,
-                        device=torch_device,
-                        dtype=torch.float,
-                    )
-                    labels.append(target)
-                inputs_dict["labels"] = labels
-
-        return inputs_dict
-
+    fx_compatible = False
+    test_resize_embeddings = False
+    test_head_masking = False
+    has_attentions = False
+    
     def setUp(self):
         self.model_tester = RTDetrModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RTDetrConfig, has_text_modality=False)
+        self.config_tester = RTDetrConfigTester(self, config_class = RTDetrConfig, has_text_modality = False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_rt_detr_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_rt_detr_model(*config_and_inputs)
-
-    def test_rt_detr_object_detection_head_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_rt_detr_object_detection_head_model(*config_and_inputs)
-
-    # TODO: check if this works again for PyTorch 2.x.y
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip(reason="RT_DETR does not use inputs_embeds")
+    @unittest.skip(reason="RTDetrModel does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="RT_DETR does not have a get_input_embeddings method")
+    @unittest.skip(reason="RTDetrModel does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="RT_DETR is not a generative model")
-    def test_generate_without_input_ids(self):
+    @unittest.skip(reason="RTDetrModel does not use feedforward chunking")
+    def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="RT_DETR does not use token embeddings")
-    def test_resize_tokens_embeddings(self):
+    @unittest.skip(reason="RTDetrModel is not trainable")
+    def test_training(self):
+        pass
+    
+    @unittest.skip(reason="RTDetrModel is not trainable")
+    def test_training_gradient_checkpointing(self):
+        pass
+    
+    @unittest.skip(reason="RTDetr was not designed smaller.")
+    def test_model_is_small(self):
         pass
 
-    @slow
-    def test_model_outputs_equivalence(self):
-        # TODO Niels: fix me!
-        pass
-
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        decoder_seq_length = self.model_tester.decoder_seq_length
-        encoder_seq_length = self.model_tester.encoder_seq_length
-        decoder_key_length = self.model_tester.decoder_seq_length
-        encoder_key_length = self.model_tester.encoder_seq_length
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-            )
-            out_len = len(outputs)
-
-            if self.is_encoder_decoder:
-                correct_outlen = 5
-
-                # loss is at first position
-                if "labels" in inputs_dict:
-                    correct_outlen += 1  # loss is added to beginning
-                # Object Detection model returns pred_logits and pred_boxes
-                if model_class.__name__ == "RTDetrForObjectDetection":
-                    correct_outlen += 2
-                # Panoptic Segmentation model returns pred_logits, pred_boxes, pred_masks
-                if model_class.__name__ == "RT_DETRForSegmentation":
-                    correct_outlen += 3
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
-
-                self.assertEqual(out_len, correct_outlen)
-
-                # decoder attentions
-                decoder_attentions = outputs.decoder_attentions
-                self.assertIsInstance(decoder_attentions, (list, tuple))
-                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(decoder_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
-                )
-
-                # cross attentions
-                cross_attentions = outputs.cross_attentions
-                self.assertIsInstance(cross_attentions, (list, tuple))
-                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(cross_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        decoder_seq_length,
-                        encoder_key_length,
-                    ],
-                )
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
-                added_hidden_states = 2
-            else:
-                added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
-
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-            )
-
+    @unittest.skip(reason="RTDetr does not output any loss term in the forward pass")
     def test_retain_grad_hidden_states_attentions(self):
-        # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
+        pass
+    
+    @unittest.skip(reason = "RTDetr does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
 
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = True
+    @unittest.skip(reason = "RTDetr does not support input and output embeddings")
+    def test_model_common_attributes(self):
+        pass
 
-        # no need to test all models as different heads yield the same functionality
-        model_class = self.all_model_classes[0]
-        model = model_class(config)
-        model.to(torch_device)
-
-        inputs = self._prepare_for_class(inputs_dict, model_class)
-
-        outputs = model(**inputs)
-
-        output = outputs[0]
-
-        encoder_hidden_states = outputs.encoder_hidden_states[0]
-        encoder_attentions = outputs.encoder_attentions[0]
-        encoder_hidden_states.retain_grad()
-        encoder_attentions.retain_grad()
-
-        decoder_attentions = outputs.decoder_attentions[0]
-        decoder_attentions.retain_grad()
-
-        cross_attentions = outputs.cross_attentions[0]
-        cross_attentions.retain_grad()
-
-        output.flatten()[0].backward(retain_graph=True)
-
-        self.assertIsNotNone(encoder_hidden_states.grad)
-        self.assertIsNotNone(encoder_attentions.grad)
-        self.assertIsNotNone(decoder_attentions.grad)
-        self.assertIsNotNone(cross_attentions.grad)
+    @unittest.skip(reason = "RTDetr does not output attentions")
+    def test_attention_outputs(self):
+        pass
 
     def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config, _, _, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
             signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
 
-            if model.config.is_encoder_decoder:
-                expected_arg_names = ["pixel_values", "pixel_mask"]
-                expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" in arg_names
-                    else []
-                )
-                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-            else:
-                expected_arg_names = ["pixel_values", "pixel_mask"]
-                self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_different_timm_backbone(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # let's pick a random timm backbone
-        config.backbone = "tf_mobilenetv3_small_075"
-
+    def test_model(self):
+        pixel_values, labels, pixel_labels = self.model_tester.prepare_random_inputs()
+        config = RTDetrConfig.from_pretrained(CHECKPOINT)
         for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            self.model_tester.create_and_check_model(model_class, config, pixel_values, labels, pixel_labels)
 
-            if model_class.__name__ == "RTDetrForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    self.model_tester.num_labels + 1,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-
-            self.assertTrue(outputs)
-
-    def test_greyscale_images(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # use greyscale pixel values
-        inputs_dict["pixel_values"] = floats_tensor(
-            [self.model_tester.batch_size, 1, self.model_tester.min_size, self.model_tester.max_size]
-        )
-
-        # let's set num_channels to 1
-        config.num_channels = 1
-        config.backbone_config.num_channels = 1
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            self.assertTrue(outputs)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        configs_no_init.init_xavier_std = 1e9
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if "bbox_attention" in name and "bias" not in name:
-                        self.assertLess(
-                            100000,
-                            abs(param.data.max().item()),
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
-
-TOLERANCE = 1e-4
-
-
-# We will verify our results on an image of cute cats
-def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-    return image
-
-
-@require_timm
-@require_vision
-@slow
-class RTDetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
-    @cached_property
-    def default_image_processor(self):
-        return DetrImageProcessor.from_pretrained("checkpoing/todo") if is_vision_available() else None
-
-    def test_inference_no_head(self):
-        model = RTDetrModel.from_pretrained("checkpoing/todo").to(torch_device)
-
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(**encoding)
-
-        expected_shape = torch.Size((1, 100, 256))
-        assert outputs.last_hidden_state.shape == expected_shape
-        expected_slice = torch.tensor(
-            [[0.0616, -0.5146, -0.4032], [-0.7629, -0.4934, -1.7153], [-0.4768, -0.6403, -0.7826]]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
-
-    def test_inference_object_detection_head(self):
-        model = RTDetrForObjectDetection.from_pretrained("checkpoing/todo").to(torch_device)
-
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
-        pixel_values = encoding["pixel_values"].to(torch_device)
-        pixel_mask = encoding["pixel_mask"].to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(pixel_values, pixel_mask)
-
-        # verify outputs
-        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels + 1))
-        self.assertEqual(outputs.logits.shape, expected_shape_logits)
-        expected_slice_logits = torch.tensor(
-            [[-19.1194, -0.0893, -11.0154], [-17.3640, -1.8035, -14.0219], [-20.0461, -0.5837, -11.1060]]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
-
-        expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
-        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        expected_slice_boxes = torch.tensor(
-            [[0.4433, 0.5302, 0.8853], [0.5494, 0.2517, 0.0529], [0.4998, 0.5360, 0.9956]]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
-
-        # verify postprocessing
-        results = image_processor.post_process_object_detection(
-            outputs, threshold=0.3, target_sizes=[image.size[::-1]]
-        )[0]
-        expected_scores = torch.tensor([0.9982, 0.9960, 0.9955, 0.9988, 0.9987]).to(torch_device)
-        expected_labels = [75, 75, 63, 17, 17]
-        expected_slice_boxes = torch.tensor([40.1633, 70.8115, 175.5471, 117.9841]).to(torch_device)
-
-        self.assertEqual(len(results["scores"]), 5)
-        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
-        self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
-        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
-
-
-@require_vision
+    def test_model_from_pretrained(self):
+        for model_name in RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST:
+            model = RTDetrModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+            
 @require_torch
-@slow
-class RTDetrModelIntegrationTests(unittest.TestCase):
+@require_vision
+class RTDetrModelIntegrationTest(unittest.TestCase):
+
     @cached_property
     def default_image_processor(self):
-        return (
-            DetrImageProcessor.from_pretrained("checkpoing/todo", revision="no_timm")
-            if is_vision_available()
-            else None
-        )
+        return RTDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
-    def test_inference_no_head(self):
-        model = RTDetrModel.from_pretrained("checkpoing/todo", revision="no_timm").to(torch_device)
+    def test_inference(self):
+        model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images = image, return_tensors = "pt").to(torch_device)
 
+        # forward pass
         with torch.no_grad():
-            outputs = model(**encoding)
+            outputs = model(**inputs)
 
-        expected_shape = torch.Size((1, 100, 256))
-        assert outputs.last_hidden_state.shape == expected_shape
+        # verify the logits
+        expected_shape = torch.Size((1, 300, 80))
+        self.assertEqual(outputs.logits.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[0.0616, -0.5146, -0.4032], [-0.7629, -0.4934, -1.7153], [-0.4768, -0.6403, -0.7826]]
+        [[
+            [-4.64763879776001, -5.001153945922852, -4.978509902954102],
+            [-4.159348487854004, -4.703853607177734, -5.946484565734863],
+            [-4.437461853027344, -4.65836238861084, -6.235235691070557],
+        ]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol = 1e-4))
+        

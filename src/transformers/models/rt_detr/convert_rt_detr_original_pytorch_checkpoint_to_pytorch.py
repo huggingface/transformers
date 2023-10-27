@@ -21,7 +21,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import RTDetrConfig, RtDetrImageProcessor, RTDetrModel, RTDetrForObjectDetection
+from transformers import RTDetrConfig, RTDetrImageProcessor, RTDetrModel, RTDetrForObjectDetection
 
 
 # TODO: Rafael Convert all these weights (?)
@@ -82,7 +82,7 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     version = Path(checkpoint_url).parts[-2]
 
     if version != "v0.1":
-        raise ValueError("Given checkpoint version is not supported.")
+        raise ValueError(f"Given checkpoint version ({version}) is not supported.")
 
     # Update config values based on the checkpoint
     update_config_values(config, checkpoint_name)
@@ -287,7 +287,7 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
 
     # Prepare image
     img = get_sample_img()
-    image_processor = RtDetrImageProcessor()
+    image_processor = RTDetrImageProcessor()
     encoding = image_processor(images=img, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
@@ -297,7 +297,7 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
 
     # Pass image by the model
     outputs = model(pixel_values)
-    
+
     # Verify boxes
     output_boxes = outputs.pred_boxes
     assert output_boxes.shape == expected_boxes_shape[checkpoint_name], f"Shapes of output boxes do not match {checkpoint_name} {version}"
@@ -305,7 +305,18 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     assert torch.allclose(output_boxes[0, :3, :], expected, atol=1e-5), f"Output boxes do not match for {checkpoint_name} {version}"
     
     # Verify logits
-    # TODO
+    output_logits = outputs.logits.cpu()
+    original_logits = torch.tensor(
+        [[
+            [-4.64763879776001, -5.001153945922852, -4.978509902954102],
+            [-4.159348487854004, -4.703853607177734, -5.946484565734863],
+            [-4.437461853027344, -4.65836238861084, -6.235235691070557],
+        ]]
+    )
+    assert torch.allclose(output_logits[0,:3,:3], original_logits[0, :3, :3], atol=1e-4)
+
+    if push_to_hub:
+        model.push_to_hub(repo_id=repo_id, commit_message="Add model")
 
     # PResNet
     # "{'depth': 50, 'variant': 'd', 'freeze_at': 0, 'return_idx': [1, 2, 3], 'num_stages': 4, 'freeze_norm': True, 'pretrained': True}"

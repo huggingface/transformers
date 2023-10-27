@@ -26,7 +26,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_rt_detr"] = ["RtDetrImageProcessor"]
+    _import_structure["image_processing_rt_detr"] = ["RTDetrImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_rt_detr import RtDetrImageProcessor
+        from .image_processing_rt_detr import RTDetrImageProcessor
 
     try:
         if not is_torch_available():

@@ -53,7 +53,7 @@ _CONFIG_FOR_DOC = "RTDetrConfig"
 _CHECKPOINT_FOR_DOC = "checkpoing/todo"
 
 RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "checkpoing/todo",
+    "rafaelpadilla/porting_rt_detr",
     # See all RT_DETR models at https://huggingface.co/models?filter=rt_detr
 ]
 
@@ -91,49 +91,9 @@ class RT_DETRDecoderOutput(BaseModelOutputWithCrossAttentions):
 
 @dataclass
 # Copied from transformers.models.detr.modeling_detr.DetrModelOutput with DETR->RT_DETR,Detr->RT_DETR
-class RTDetrModelOutput(Seq2SeqModelOutput):
-    """
-    Base class for outputs of the RT_DETR encoder-decoder model. This class adds one attribute to Seq2SeqModelOutput,
-    namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
-    gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of each
-            layer plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder, after the attention softmax, used to compute the
-            weighted average in the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the encoder at the output of each
-            layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the encoder, after the attention softmax, used to compute the
-            weighted average in the self-attention heads.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, sequence_length, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
-            Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
-            layernorm.
-    """
-
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-
-
-@dataclass
 class RTDetrObjectDetectionOutput(ModelOutput):
     """
-    Output type of [`RTDetrForObjectDetection`].
+    Output type of [`RTDetrModel`].
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -182,6 +142,7 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     loss_dict: Optional[Dict] = None
     logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
+
 
 RT_DETR_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -2314,7 +2275,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
             param.requires_grad_(True)
 
     @add_start_docstrings_to_model_forward(RT_DETR_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=RTDetrModelOutput, config_class=_CONFIG_FOR_DOC)
     @replace_return_docstrings(output_type=RTDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
 
     def forward(
@@ -2328,7 +2288,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # output_attentions: Optional[bool] = None,
         # output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], RTDetrModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], RTDetrObjectDetectionOutput]:
         r"""
         Returns:
 
@@ -2361,7 +2321,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         # First, sent pixel_values through Backbone to obtain the features
         # features = self.backbone_original(pixel_values)
-        features = self.backbone(pixel_values)
+        features = self.backbone(pixel_values) # -> 1, 3, 640, 640
         # TODO: Rafael -> Remove -For the cat image
         # 0 torch.Size([1, 512, 80, 80]) 358398.75
         # 1 torch.Size([1, 1024, 40, 40]) 81166.578125
@@ -2449,7 +2409,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # if not return_dict:
         #     return decoder_outputs + encoder_outputs
 
-        # return RTDetrModelOutput(
+        # return RTDetrObjectDetectionOutput(
         #     last_hidden_state=decoder_outputs.last_hidden_state,
         #     decoder_hidden_states=decoder_outputs.hidden_states,
         #     decoder_attentions=decoder_outputs.attentions,
@@ -2492,14 +2452,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[List[dict]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], RTDetrObjectDetectionOutput]:
         r"""
@@ -2572,7 +2525,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         
         if labels is not None:
             # TODO: model is already returning the logits + pred_boxes, which is wrong
-            # model should output the RTDetrModelOutput object, containing the outputs of the model, 
+            # model should output the RTDetrObjectDetectionOutput object, containing the outputs of the model, 
             # not the predictions.
             # The losses, logits, pred_boxes should be computed here
             pred_boxes = outputs["pred_boxes"]
