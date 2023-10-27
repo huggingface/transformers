@@ -2303,7 +2303,6 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
     config_class = Blip2Config
     _keep_in_fp32_modules = []
-    _tied_weights_keys = ["cls.predictions.decoder.bias"]
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
