@@ -1887,12 +1887,13 @@ class GenerationTesterMixin:
                 use_cache=use_cache,
             )
 
-        # Past Key Value States
+        # Past Key Value States -- note that its inner sequence length is with respect to the inputs of the latest
+        # forward pass, hence the "-1"
         past_key_values = output.past_key_values
         self._check_past_key_values_for_generate(
             num_sequences_in_output,
             past_key_values,
-            seq_length=seq_length,
+            seq_length=gen_len + seq_length - 1,
             config=config,
         )
 
