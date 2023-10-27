@@ -706,6 +706,7 @@ class BloomModel(BloomPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
+        causal_mask = causal_mask.bool()
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
             if output_hidden_states:
