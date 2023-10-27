@@ -770,6 +770,39 @@ class WandbCallback(TrainerCallback):
             if isinstance(model, (PreTrainedModel, TFPreTrainedModel)):
                 self._wandb.config["model/num_parameters"] = model.num_parameters()
 
+            # log the initial model and architecture to an artifact
+            with tempfile.TemporaryDirectory() as temp_dir:
+                model_name = (
+                    f"model-{self._wandb.run.id}"
+                    if (args.run_name is None or args.run_name == args.output_dir)
+                    else f"model-{self._wandb.run.name}"
+                )
+                model_artifact = self._wandb.Artifact(
+                    name=model_name,
+                    type="model",
+                    metadata={
+                        "model_config": model.config.to_dict() if hasattr(model, "config") else None,
+                        "num_parameters": model.num_parameters(),
+                    },
+                    tags=["initial_model"],
+                )
+                model.save_pretrained(temp_dir)
+                # add the architecture to a separate text file
+                with open(f"{temp_dir}/model_architecture.txt", "w+") as f:
+                    if isinstance(model, PreTrainedModel):
+                        print(model, file=f)
+                    elif isinstance(model, TFPreTrainedModel):
+
+                        def print_to_file(s):
+                            print(s, file=f)
+
+                        model.summary(print_fn=print_to_file)
+                for f in Path(temp_dir).glob("*"):
+                    if f.is_file():
+                        with model_artifact.new_file(f.name, mode="wb") as fa:
+                            fa.write(f.read_bytes())
+                self._wandb.run.log_artifact(model_artifact)
+
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if self._wandb is None:
             return
