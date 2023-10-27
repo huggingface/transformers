@@ -1887,15 +1887,17 @@ class GenerationTesterMixin:
                 use_cache=use_cache,
             )
 
-        # Past Key Value States -- note that its inner sequence length is with respect to the inputs of the latest
-        # forward pass, hence the "-1"
-        past_key_values = output.past_key_values
-        self._check_past_key_values_for_generate(
-            num_sequences_in_output,
-            past_key_values,
-            seq_length=gen_len + seq_length - 1,
-            config=config,
-        )
+        # Past Key Value States -- two notes here:
+        # 1. its inner sequence length is with respect to the inputs of the latest forward pass, hence the "-1"
+        # 2. some old models still return `output.past_key_values` even without `use_cache=True`
+        if use_cache:
+            past_key_values = output.past_key_values
+            self._check_past_key_values_for_generate(
+                num_sequences_in_output,
+                past_key_values,
+                seq_length=gen_len + seq_length - 1,
+                config=config,
+            )
 
     def _check_scores(self, batch_size, scores, length, config):
         expected_shape = (batch_size, config.vocab_size)
@@ -1963,10 +1965,6 @@ class GenerationTesterMixin:
         )
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config, num_beam_groups=1):
-        if config.use_cache is False:
-            self.assertIsNone(past_key_values)
-            return
-
         self.assertIsInstance(past_key_values, tuple)
         self.assertListEqual(
             [isinstance(iter_past_key_values, tuple) for iter_past_key_values in past_key_values],
