@@ -1911,7 +1911,7 @@ class Trainer:
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         if args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
-            # Wait for everyone to get here so we are sur the model has been saved by process 0.
+            # Wait for everyone to get here so we are sure the model has been saved by process 0.
             if is_torch_tpu_available():
                 xm.rendezvous("load_best_model_at_end")
             elif args.parallel_mode == ParallelMode.DISTRIBUTED:
@@ -3560,7 +3560,7 @@ class Trainer:
             commit_message=commit_message,
             token=self.args.hub_token,
             run_as_future=True,
-            ignore_patterns=["_*", "**/*"],
+            ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
         )
 
         push_jobs = [model_push_job]
@@ -3630,14 +3630,13 @@ class Trainer:
 
         # Wait for the current upload to be finished.
         self._finish_current_push()
-
         return upload_folder(
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,
             commit_message=commit_message,
             token=self.args.hub_token,
             run_as_future=not blocking,
-            ignore_patterns=["_*", "**/*"],
+            ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
         )
 
     #
