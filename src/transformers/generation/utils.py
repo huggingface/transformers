@@ -4721,15 +4721,15 @@ def _crop_past_key_values(model, past_key_values, maximum_length=None, n_matches
                 k_cache = past_key_values[idx][0][:, :, left_cut:, :]
                 v_cache = past_key_values[idx][1][:, :, left_cut:, :]
 
-        if n_matches is not None:
-            for batch_idx in range(len(n_matches)):
-                num_roll_left = n_matches.max() - n_matches[batch_idx]
-                if num_roll_left > 0:
-                    # TODO(PVP) - check mem usage
-                    # k_cache[batch_idx].index_copy_(1, torch.arange(num_roll_left, maximum_length, device=k_cache.device), k_cache[batch_idx][:, :-num_roll_left].clone())
-                    # v_cache[batch_idx].index_copy_(1, torch.arange(num_roll_left, maximum_length, device=v_cache.device), v_cache[batch_idx][:, :-num_roll_left].clone())
-                    k_cache[batch_idx][:, num_roll_left:] = k_cache[batch_idx][:, :-num_roll_left].clone()
-                    v_cache[batch_idx][:, num_roll_left:] = v_cache[batch_idx][:, :-num_roll_left].clone()
+            if n_matches is not None:
+                for batch_idx in range(len(n_matches)):
+                    num_roll_left = n_matches.max() - n_matches[batch_idx]
+                    if num_roll_left > 0:
+                        # TODO(PVP) - check mem usage
+                        # k_cache[batch_idx].index_copy_(1, torch.arange(num_roll_left, maximum_length, device=k_cache.device), k_cache[batch_idx][:, :-num_roll_left].clone())
+                        # v_cache[batch_idx].index_copy_(1, torch.arange(num_roll_left, maximum_length, device=v_cache.device), v_cache[batch_idx][:, :-num_roll_left].clone())
+                        k_cache[batch_idx][:, num_roll_left:] = k_cache[batch_idx][:, :-num_roll_left].clone()
+                        v_cache[batch_idx][:, num_roll_left:] = v_cache[batch_idx][:, :-num_roll_left].clone()
 
             new_past.append(
                 (
@@ -4764,12 +4764,24 @@ def _crop_past_key_values(model, past_key_values, maximum_length=None, n_matches
                 past_key_values[idx] = past_key_values[idx][:, :, :maximum_length, :]
     else:
         for idx in range(len(past_key_values)):
-            new_past.append(
-                (
-                    past_key_values[idx][0][:, :, :maximum_length, :],
-                    past_key_values[idx][1][:, :, :maximum_length, :],
-                )
-            )
+            if left_cut is None:
+                k_cache = past_key_values[idx][0][:, :, :maximum_length, :]
+                v_cache = past_key_values[idx][1][:, :, :maximum_length, :]
+            else:
+                k_cache = past_key_values[idx][0][:, :, left_cut:, :]
+                v_cache = past_key_values[idx][1][:, :, left_cut:, :]
+
+            if n_matches is not None:
+                for batch_idx in range(len(n_matches)):
+                    num_roll_left = n_matches.max() - n_matches[batch_idx]
+                    if num_roll_left > 0:
+                        # TODO(PVP) - check mem usage
+                        # k_cache[batch_idx].index_copy_(1, torch.arange(num_roll_left, maximum_length, device=k_cache.device), k_cache[batch_idx][:, :-num_roll_left].clone())
+                        # v_cache[batch_idx].index_copy_(1, torch.arange(num_roll_left, maximum_length, device=v_cache.device), v_cache[batch_idx][:, :-num_roll_left].clone())
+                        k_cache[batch_idx][:, num_roll_left:] = k_cache[batch_idx][:, :-num_roll_left].clone()
+                        v_cache[batch_idx][:, num_roll_left:] = v_cache[batch_idx][:, :-num_roll_left].clone()
+
+            new_past.append((k_cache, v_cache))
         past_key_values = tuple(new_past)
     return past_key_values
 

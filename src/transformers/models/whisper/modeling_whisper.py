@@ -1537,7 +1537,10 @@ class WhisperDecoder(WhisperPreTrainedModel):
         else:
             positions = self.embed_positions(inputs_embeds, past_key_values_length=past_key_values_length, position_ids=position_ids)
 
-        hidden_states = inputs_embeds + positions
+        try:
+            hidden_states = inputs_embeds + positions
+        except:
+            import ipdb; ipdb.set_trace()
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         if self.gradient_checkpointing and self.training:
@@ -2480,6 +2483,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -2589,6 +2593,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2639,7 +2644,9 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
             input_ids = input_ids[:, remove_prefix_length:]
 
         if position_ids is not None and position_ids.shape[1] > position_ids.shape[1]:
+            print("pos len", position_ids.shape)
             position_ids = position_ids[:, remove_prefix_length:]
+            print("pos len", position_ids.shape)
 
         return {
             "encoder_outputs": encoder_outputs,
