@@ -21,7 +21,13 @@ import re
 import unittest
 from typing import Dict, List, Tuple
 
-from transformers import GroundingDINOConfig, SwinConfig, is_torch_available, is_vision_available, GroundingDINOTextPrenetConfig
+from transformers import (
+    GroundingDINOConfig,
+    GroundingDINOTextPrenetConfig,
+    SwinConfig,
+    is_torch_available,
+    is_vision_available,
+)
 from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
@@ -48,7 +54,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoImageProcessor, AutoProcessor
+    from transformers import AutoProcessor
 
 
 class GroundingDINOModelTester:
@@ -141,11 +147,7 @@ class GroundingDINOModelTester:
             out_indices=[2, 3, 4],
         )
         text_backbone = GroundingDINOTextPrenetConfig(
-            hidden_size=8,
-            num_hidden_layers=2,
-            num_attention_heads=2,
-            intermediate_size=8,
-            max_position_embeddings=8
+            hidden_size=8, num_hidden_layers=2, num_attention_heads=2, intermediate_size=8, max_position_embeddings=8
         )
         return GroundingDINOConfig(
             d_model=self.hidden_size,
@@ -165,7 +167,7 @@ class GroundingDINOModelTester:
             use_timm_backbone=False,
             backbone_config=swin_config,
             max_text_len=self.max_text_len,
-            text_backbone_config=text_backbone
+            text_backbone_config=text_backbone,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -465,7 +467,7 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states_vision 
+            hidden_states = outputs.encoder_hidden_states_vision
 
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
@@ -514,7 +516,6 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
 
     def test_retain_grad_hidden_states_attentions(self):
         # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
@@ -658,7 +659,7 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             # Therefore, differently from DeformableDetr, we expect the group lens to be 2
             # one for self.bbox_embed in GroundingDINOForObejectDetection and another one
             # in the decoder
-            tied_params = [group for group in tied_params if len(group) > 2] 
+            tied_params = [group for group in tied_params if len(group) > 2]
             self.assertListEqual(
                 tied_params,
                 [],
@@ -673,6 +674,7 @@ TOLERANCE = 1e-4
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
+
 
 def prepare_text():
     text = "a cat."
@@ -701,7 +703,9 @@ class GroundingDINOModelIntegrationTests(unittest.TestCase):
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.d_model))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
-        expected_boxes = torch.tensor([[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]]).to(torch_device)
+        expected_boxes = torch.tensor(
+            [[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]]
+        ).to(torch_device)
         expected_logits = torch.tensor(
             [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
         ).to(torch_device)

@@ -25,11 +25,10 @@ from torchvision import transforms as T
 
 from transformers import (
     AutoTokenizer,
-    DeformableDetrImageProcessor,
     GroundingDINOConfig,
     GroundingDINOForObjectDetection,
+    GroundingDINOImageProcessor,
     GroundingDINOProcessor,
-    GroundingDINOImageProcessor
 )
 
 

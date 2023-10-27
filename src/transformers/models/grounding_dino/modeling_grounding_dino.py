@@ -153,9 +153,9 @@ class GroundingDINODecoderOutput(ModelOutput):
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention, cross-attention and multi-scale deformable attention heads.
+            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+            weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -186,9 +186,10 @@ class GroundingDINOEncoderOutput(ModelOutput):
             of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
             each layer plus the initial embedding outputs.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the text-vision attention, vision-text attention, text-enhancer (self-attention) and multi-scale deformable attention heads.
+            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+            weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
+            multi-scale deformable attention heads.
     """
 
     last_hidden_state_vision: torch.FloatTensor = None
@@ -217,9 +218,9 @@ class GroundingDINOModelOutput(ModelOutput):
             shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
             plus the initial embedding outputs.
         decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention, cross-attention and multi-scale deformable attention heads.
+            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+            weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
         encoder_last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -233,14 +234,15 @@ class GroundingDINOModelOutput(ModelOutput):
             of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
             each layer plus the initial embedding outputs.
         encoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the text-vision attention, vision-text attention, text-enhancer (self-attention) and multi-scale deformable attention heads.
-            attention softmax, used to compute the weighted average in the bi-attention heads.
+            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+            weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
+            multi-scale deformable attention heads. attention softmax, used to compute the weighted average in the
+            bi-attention heads.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
-            Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are
-            picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-            foreground and background).
+            Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
+            region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
+            background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
     """
@@ -290,9 +292,9 @@ class GroundingDINOObjectDetectionOutput(ModelOutput):
             shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
             plus the initial embedding outputs.
         decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention, cross-attention and multi-scale deformable attention heads.
+            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+            weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
         encoder_last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -306,9 +308,10 @@ class GroundingDINOObjectDetectionOutput(ModelOutput):
             of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
             each layer plus the initial embedding outputs.
         encoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the text-vision attention, vision-text attention, text-enhancer (self-attention) and multi-scale deformable attention heads.
+            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+            weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
+            multi-scale deformable attention heads.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
             Stacked intermediate hidden states (output of each layer of the decoder).
         intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
@@ -316,9 +319,9 @@ class GroundingDINOObjectDetectionOutput(ModelOutput):
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
             Initial reference points sent through the Transformer decoder.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are
-            picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-            foreground and background).
+            Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
+            region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
+            background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
     """
@@ -1427,7 +1430,7 @@ class GroundingDINOPreTrainedModel(PreTrainedModel):
         elif isinstance(module, GroundingDINOMLPPredictionHead):
             nn.init.constant_(module.layers[-1].weight.data, 0)
             nn.init.constant_(module.layers[-1].bias.data, 0)
-            
+
         if hasattr(module, "reference_points") and not self.config.two_stage:
             nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
             nn.init.constant_(module.reference_points.bias.data, 0.0)
@@ -1460,8 +1463,8 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`AutoImageProcessor`]. See [`GroundingDINOImageProcessor.__call__`]
-            for details.
+            Pixel values can be obtained using [`AutoImageProcessor`]. See [`GroundingDINOImageProcessor.__call__`] for
+            details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -1492,10 +1495,11 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
             [What are token type IDs?](../glossary#token-type-ids)
 
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state_vision`, *optional*: `last_hidden_state_text`, *optional*: 
+            Tuple consists of (`last_hidden_state_vision`, *optional*: `last_hidden_state_text`, *optional*:
             `hidden_states_vision`, *optional*: `hidden_states_text`, *optional*: `attentions`)
-            `last_hidden_state_vision` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+            `last_hidden_state_vision` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence
+            of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the
+            decoder.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1664,13 +1668,7 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
             all_attns = (all_attn_fused_vision, all_attn_fused_text, all_attn_enhanced_text, all_attn_deformable)
 
         if not return_dict:
-            enc_outputs = [
-                vision_features,
-                text_features,
-                encoder_vision_states,
-                encoder_text_states,
-                all_attns
-            ]
+            enc_outputs = [vision_features, text_features, encoder_vision_states, encoder_text_states, all_attns]
             return tuple(v for v in enc_outputs if v is not None)
         return GroundingDINOEncoderOutput(
             last_hidden_state_vision=vision_features,
@@ -2042,7 +2040,11 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         if config.two_stage:
             self.enc_output = nn.Linear(config.d_model, config.d_model)
             self.enc_output_norm = nn.LayerNorm(config.d_model)
-            if config.two_stage_bbox_embed_share and config.decoder_bbox_embed_share and self.decoder.bbox_embed is not None:
+            if (
+                config.two_stage_bbox_embed_share
+                and config.decoder_bbox_embed_share
+                and self.decoder.bbox_embed is not None
+            ):
                 self.encoder_output_bbox_embed = self.decoder.bbox_embed
             else:
                 self.encoder_output_bbox_embed = GroundingDINOMLPPredictionHead(
@@ -2472,15 +2474,12 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
 
         >>> # convert outputs (bounding boxes and class logits) to COCO API
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = processor.image_processor.post_process_object_detection(outputs, threshold=0.35, target_sizes=target_sizes)[
-        ...     0
-        ... ]
+        >>> results = processor.image_processor.post_process_object_detection(
+        ...     outputs, threshold=0.35, target_sizes=target_sizes
+        ... )[0]
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
-        ...     print(
-        ...         f"Detected {label.item()} with confidence "
-        ...         f"{round(score.item(), 3)} at location {box}"
-        ...     )
+        ...     print(f"Detected {label.item()} with confidence " f"{round(score.item(), 3)} at location {box}")
         Detected 1 with confidence 0.453 at location [344.82, 23.18, 637.4, 373.83]
         Detected 1 with confidence 0.408 at location [11.92, 51.58, 316.57, 472.89]
         ```"""

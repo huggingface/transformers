@@ -763,7 +763,7 @@ class GroundingDINOImageProcessor(BaseImageProcessor):
     Constructs a Grounding DINO image processor.
 
     Args:
-        format (`str`, *optional*, defaults to `"coco_detection"`):
+        format (`str`, *optional*, defaults to `AnnotionFormat.COCO_DETECTION`):
             Data format of the annotations. One of "coco_detection" or "coco_panoptic".
         do_resize (`bool`, *optional*, defaults to `True`):
             Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be
@@ -771,7 +771,7 @@ class GroundingDINOImageProcessor(BaseImageProcessor):
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 800, "longest_edge": 1333}`):
             Size of the image's (height, width) dimensions after resizing. Can be overridden by the `size` parameter in
             the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Controls whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
@@ -779,9 +779,9 @@ class GroundingDINOImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
-        do_normalize:
             Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
             `preprocess` method.
+        do_normalize (`bool`, *optional*, defaults to `True`): <fill_docstring>
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
             Mean values to use when normalizing the image. Can be a single value or a list of values, one for each
             channel. Can be overridden by the `image_mean` parameter in the `preprocess` method.
@@ -1349,11 +1349,11 @@ class GroundingDINOImageProcessor(BaseImageProcessor):
         self, outputs, threshold: float = 0.1, target_sizes: Union[TensorType, List[Tuple]] = None
     ):
         """
-        Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format.
+        Converts the raw output of [`GroundingDINOForObjectDetection`] into final bounding boxes in (top_left_x,
+        top_left_y, bottom_right_x, bottom_right_y) format.
 
         Args:
-            outputs ([`OwlViTObjectDetectionOutput`]):
+            outputs ([`GroundingDINOObjectDetectionOutput`]):
                 Raw outputs of the model.
             threshold (`float`, *optional*):
                 Score threshold to keep object detection predictions.
