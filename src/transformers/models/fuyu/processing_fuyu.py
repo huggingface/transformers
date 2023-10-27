@@ -331,52 +331,6 @@ def scale_bbox_to_transformed_image(top: float, left: float, bottom: float, righ
     return [top_scaled, left_scaled, bottom_scaled, right_scaled]
 
 
-# Copied from transformers.models.detr.image_processing_detr.max_across_indices
-def max_across_indices(values: Iterable[Any]) -> List[Any]:
-    """
-    Return the maximum value across all indices of an iterable of values.
-    """
-    return [max(values_i) for values_i in zip(*values)]
-
-
-# Copied from transformers.models.detr.image_processing_detr.get_max_height_width
-def get_max_height_width(
-    images: List[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
-) -> List[int]:
-    """
-    Get the maximum height and width across all images in a batch.
-    """
-    if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(images[0])
-
-    if input_data_format == ChannelDimension.FIRST:
-        _, max_height, max_width = max_across_indices([img.shape for img in images])
-    elif input_data_format == ChannelDimension.LAST:
-        max_height, max_width, _ = max_across_indices([img.shape for img in images])
-    else:
-        raise ValueError(f"Invalid channel dimension format: {input_data_format}")
-    return (max_height, max_width)
-
-
-# Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
-def make_pixel_mask(
-    image: np.ndarray, output_size: Tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
-) -> np.ndarray:
-    """
-    Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
-
-    Args:
-        image (`np.ndarray`):
-            Image to make the pixel mask for.
-        output_size (`Tuple[int, int]`):
-            Output size of the mask.
-    """
-    input_height, input_width = get_image_size(image, channel_dim=input_data_format)
-    mask = np.zeros(output_size, dtype=np.int64)
-    mask[:input_height, :input_width] = 1
-    return mask
-
-
 class FuyuBatchEncoding(BatchEncoding):
     """
     The batch encoding needed by Fuyu model are a dictionary with two tensors and a list of tensors.
@@ -638,7 +592,11 @@ class FuyuProcessor(ProcessorMixin):
 
         # --- Preprocess images using self.image_processor ---
 
-        batch_images, image_unpadded_heights, image_unpadded_widths = self.image_processor.preprocess(images)
+        # batch_images, image_unpadded_heights, image_unpadded_widths = self.image_processor.preprocess(images)
+        image_encoding = self.image_processor.preprocess(images)
+        batch_images = image_encoding["images"]
+        image_unpadded_heights = image_encoding["image_unpadded_heights"]
+        image_unpadded_widths = image_encoding["image_unpadded_widths"]
         self.subsequence_length = 1  # Each batch contains only one sequence.
         self.batch_size = len(batch_images)
 
@@ -650,8 +608,10 @@ class FuyuProcessor(ProcessorMixin):
 
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
         all_encodings = []
+
         for prompt, image, image_unpadded_height, image_unpadded_width, tensor_batch_image in zip(
-                prompts, batch_images, image_unpadded_heights, image_unpadded_widths, tensor_batch_images):
+                prompts, batch_images, image_unpadded_heights, image_unpadded_widths, tensor_batch_images
+            ):
             sample_encoding = self.get_sample_encoding(
                 prompts=[prompt],
                 batch_images=[image],
