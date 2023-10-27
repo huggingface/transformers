@@ -296,7 +296,7 @@ class NucleusXMultiScaleRetention(nn.Module):
         intra_decay = intra_decay[:, :, :, None, None]  # [b, h, t, 1, 1]
         current_kv = (current_kv * intra_decay).sum(2)  # [b, h, v_dim, qk_dim]
 
-        cache = {"prev_key_value": current_kv, "scale": scale}
+        cache = {"prev_key_value": current_kv, "scale": scale, "seqlen": torch.tensor(q.size(2), dtype=torch.long)}
         return output, cache, retention
 
     def recurrent_retention(self, q, k, v, decay, past_key_value=None, retention_mask=None):
@@ -305,6 +305,7 @@ class NucleusXMultiScaleRetention(nn.Module):
         - past_key_value: Dict[str, torch.Tensor]
             - "prev_key_value": [bsz * num_head * v_dim * qk_dim]
             - "scale": [(1 or bsz) * num_head * 1 * 1]
+            - "seqlen": int, sequence length of processed tokens, including padding tokens
         - decay: [(1 or bsz) * num_head * 1 * 1]
         - retention_mask: [bsz * 1]
         """
@@ -318,6 +319,7 @@ class NucleusXMultiScaleRetention(nn.Module):
         if past_key_value is not None and "prev_key_value" in past_key_value:
             prev_kv = past_key_value["prev_key_value"]
             prev_scale = past_key_value["scale"]
+            prev_seqlen = past_key_value["seqlen"]
             scale = torch.where(retention_mask == 0, prev_scale, prev_scale * decay + 1)
             # connect prev_kv and current_kv
             # how much to decay prev_kv
@@ -335,10 +337,15 @@ class NucleusXMultiScaleRetention(nn.Module):
             # setting it to 0 here. This is a little ugly, so we might want to
             # change this later. TODO: improve
             scale = torch.where(retention_mask == 0, torch.zeros_like(decay), scale)
+            prev_seqlen = 0
 
         output = torch.sum(q * current_kv, dim=3).unsqueeze(1)  # (b, 1, h, d_v)
 
-        cache = {"prev_key_value": current_kv, "scale": scale}
+        cache = {
+            "prev_key_value": current_kv,
+            "scale": scale,
+            "seqlen": torch.tensor(prev_seqlen + 1, dtype=torch.long),
+        }
         return output, cache
 
     def chunkwise_retention(self, q, k, v, decay_mask):
@@ -347,6 +354,7 @@ class NucleusXMultiScaleRetention(nn.Module):
         - past_key_value: Dict[str, torch.Tensor]
             - "prev_key_value": [bsz * num_head * v_dim * qk_dim]
             - "scale": [(1 or bsz) * num_head * 1 * 1]
+            - "seqlen": int, sequence length of processed tokens, including padding tokens
         - decay_mask: [1 * num_head * chunk_size * chunk_size]
         - cross_decay: [1 * num_head * 1 * 1]
         - inner_decay: [1 * num_head * chunk_size * 1]
@@ -399,7 +407,11 @@ class NucleusXMultiScaleRetention(nn.Module):
         output = inner_output / align_inner_scale + cross_output / align_cross_scale
         output = output.transpose(2, 3)  # [b, n_c, t_c, h, v_dim]
 
-        cache = {"prev_key_value": kv_state.transpose(-2, -1), "scale": decay_scale}
+        cache = {
+            "prev_key_value": kv_state.transpose(-2, -1),
+            "scale": decay_scale,
+            "seqlen": torch.tensor(tgt_len, dtype=torch.long),
+        }
         return output, cache
 
     def forward(
@@ -670,6 +682,7 @@ class NucleusXOutputWithPast(ModelOutput):
         past_key_values (`Tuple(Dict(str, torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             - "prev_key_value": shape=(bsz * num_head * v_dim * qk_dim)
             - "scale": shape=((1 or bsz) * num_head * 1 * 1)
+            - "seqlen": int, sequence length of processed tokens, including padding tokens
 
             Contains pre-computed hidden-states (key and values in the multi-scale retention blocks) that can be used
             (see `past_key_values` input) to speed up sequential decoding.
@@ -707,6 +720,7 @@ class NucleusXCausalLMOutputWithPast(ModelOutput):
         past_key_values (`Tuple(Dict(str, torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             - "prev_key_value": shape=(bsz * num_head * v_dim * qk_dim)
             - "scale": shape=((1 or bsz) * num_head * 1 * 1)
+            - "seqlen": int, sequence length of processed tokens, including padding tokens
 
             Contains pre-computed hidden-states (key and values in the multi-scale retention blocks) that can be used
             (see `past_key_values` input) to speed up sequential decoding.
@@ -745,6 +759,7 @@ class NucleusXClassifierOutputWithPast(ModelOutput):
         past_key_values (`Tuple(Dict(str, torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             - "prev_key_value": shape=(bsz * num_head * v_dim * qk_dim)
             - "scale": shape=((1 or bsz) * num_head * 1 * 1)
+            - "seqlen": int, sequence length of processed tokens, including padding tokens
 
             Contains pre-computed hidden-states (key and values in the multi-scale retention blocks) that can be used
             (see `past_key_values` input) to speed up sequential decoding.
@@ -912,6 +927,7 @@ class NucleusXModel(NucleusXPreTrainedModel):
         past_key_values (`Tuple(Dict(str, torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             - "prev_key_value": shape=(bsz * num_head * v_dim * qk_dim)
             - "scale": shape=((1 or bsz) * num_head * 1 * 1)
+            - "seqlen": int, sequence length of processed tokens, including padding tokens
 
             Contains pre-computed hidden-states (key and values in the multi-scale retention blocks) that can be used
             (see `past_key_values` input) to speed up sequential decoding.
@@ -942,6 +958,17 @@ class NucleusXModel(NucleusXPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         batch_size, seq_length = input_shape
+
+        if past_key_values is not None:
+            if forward_mode == "recurrent":
+                prev_seqlen = past_key_values[0]["seqlen"]
+                seq_length = prev_seqlen + 1
+            else:
+                logger.warning_once(
+                    "past_key_values is set but forward_mode is not 'recurrent'."
+                    " The past_key_values will be ignored."
+                )
+
         # embed tokens
         inputs_embeds = self.forward_embedding(
             input_ids=input_ids, inputs_embeds=inputs_embeds, forward_mode=forward_mode
@@ -1096,6 +1123,7 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
         past_key_values (`Tuple(Dict(str, torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             - "prev_key_value": shape=(bsz * num_head * v_dim * qk_dim)
             - "scale": shape=((1 or bsz) * num_head * 1 * 1)
+            - "seqlen": int, sequence length of processed tokens, including padding tokens
 
             Contains pre-computed hidden-states (key and values in the multi-scale retention blocks) that can be used
             (see `past_key_values` input) to speed up sequential decoding.
@@ -1198,10 +1226,6 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
     ):
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
-            raise NotImplementedError(
-                "Generation from `inputs_embeds` is not implemented for NucleusX yet."
-                " The obstacle is to set the correct seqlen for the relative position encoding."
-            )
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
@@ -1226,6 +1250,7 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
         for layer_past in past_key_values:  # dict
             layer_past_kv = layer_past["prev_key_value"]  # [b, h, v_dim / h, qk_dim]
             layer_past_scale = layer_past["scale"]  # [b, h, 1, 1]
+            layer_past_seqlen = layer_past["seqlen"]  # int
             if layer_past_scale.size(0) > 1:
                 # this means that retention_mask is not None, so the scale for
                 # each batch is different. We need to select the correct scale then.
@@ -1237,6 +1262,7 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
                 {
                     "prev_key_value": layer_past_kv.index_select(0, beam_idx),
                     "scale": layer_past_scale,
+                    "seqlen": layer_past_seqlen,
                 },
             )
         return reordered_past

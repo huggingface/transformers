@@ -413,7 +413,3 @@ class NucleusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     @unittest.skip("NucleusX uses dictionary style KV cache, which is a non standard format")
     def test_past_key_values_format(self):
         pass
-
-    @unittest.skip("NucleusX does not support generate from inputs_embeds yet")
-    def test_generate_from_inputs_embeds_decoder_only(self):
-        pass
