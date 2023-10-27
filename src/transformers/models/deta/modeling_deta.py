@@ -307,10 +307,11 @@ def replace_batch_norm(model):
         if isinstance(module, nn.BatchNorm2d):
             new_module = DetaFrozenBatchNorm2d(module.num_features)
 
-            new_module.weight.data.copy_(module.weight)
-            new_module.bias.data.copy_(module.bias)
-            new_module.running_mean.data.copy_(module.running_mean)
-            new_module.running_var.data.copy_(module.running_var)
+            if not module.weight.device == torch.device("meta"):
+                new_module.weight.data.copy_(module.weight)
+                new_module.bias.data.copy_(module.bias)
+                new_module.running_mean.data.copy_(module.running_mean)
+                new_module.running_var.data.copy_(module.running_var)
 
             model._modules[name] = new_module
 
@@ -947,11 +948,12 @@ class DetaClassificationHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrPreTrainedModel with DeformableDetr->Deta
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrPreTrainedModel with DeformableDetrConvEncoder->DetaBackboneWithPositionalEncodings,DeformableDetr->Deta
 class DetaPreTrainedModel(PreTrainedModel):
     config_class = DetaConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    _no_split_modules = [r"DetaBackboneWithPositionalEncodings", r"DetaEncoderLayer", r"DetaDecoderLayer"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -977,9 +979,10 @@ class DetaPreTrainedModel(PreTrainedModel):
         if hasattr(module, "level_embed"):
             nn.init.normal_(module.level_embed)
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, DetaDecoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 DETA_START_DOCSTRING = r"""
@@ -1273,15 +1276,8 @@ class DetaDecoder(DetaPreTrainedModel):
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self.gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
                     encoder_hidden_states,
                     encoder_attention_mask,

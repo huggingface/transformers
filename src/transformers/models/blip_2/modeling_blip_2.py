@@ -297,9 +297,14 @@ class Blip2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, Blip2Encoder):
-            module.gradient_checkpointing = value
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
+        if isinstance(module, (Blip2Encoder, Blip2QFormerEncoder)):
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
+
+        # Enable / disable GC for the language model as well
+        if hasattr(self, "language_model") and hasattr(self.language_model, "_set_gradient_checkpointing"):
+            self.language_model._set_gradient_checkpointing(module, gradient_checkpointing_func)
 
 
 BLIP_2_START_DOCSTRING = r"""
@@ -473,17 +478,11 @@ class Blip2Encoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
+                layer_outputs = self.gradient_checkpointing_func(
+                    encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -944,15 +943,8 @@ class Blip2QFormerEncoder(nn.Module):
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions, query_length)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self.gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,

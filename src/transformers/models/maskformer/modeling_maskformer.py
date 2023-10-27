@@ -848,20 +848,14 @@ class DetrDecoder(nn.Module):
                     continue
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self.gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
                     combined_attention_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     None,
+                    output_attentions,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1619,11 +1613,13 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
         if isinstance(module, MaskFormerPixelLevelModule):
-            module.encoder.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.encoder.gradient_checkpointing = gradient_checkpointing_func is not None
         if isinstance(module, DetrDecoder):
-            module.gradient_checkpointing = value
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 @add_start_docstrings(

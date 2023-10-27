@@ -614,6 +614,8 @@
         title: MusicGen
       - local: model_doc/pop2piano
         title: Pop2Piano
+      - local: model_doc/seamless_m4t
+        title: Seamless-M4T
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d

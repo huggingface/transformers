@@ -40,7 +40,7 @@ from ...utils import (
 )
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
-from .vision import IdeficsVisionTransformer
+from .vision import IdeficsVisionEncoder, IdeficsVisionTransformer
 
 
 logger = logging.get_logger(__name__)
@@ -978,9 +978,10 @@ class IdeficsPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, IdeficsModel):
-            module.gradient_checkpointing = value
+    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
+        if isinstance(module, (IdeficsModel, IdeficsVisionEncoder)):
+            module.gradient_checkpointing_func = gradient_checkpointing_func
+            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 LLAMA_INPUTS_DOCSTRING = r"""
@@ -1098,7 +1099,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         self.norm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1339,7 +1339,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                     )
                     use_cache = False
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs = self.gradient_checkpointing_func(
                     vblock,
                     decoder_layer,
                     hidden_states,

@@ -128,12 +128,22 @@ For 4-bit model, you can use the exllama kernels in order to a faster inference 
 
 ```py
 import torch
-gptq_config = GPTQConfig(bits=4, disable_exllama=False)
+gptq_config = GPTQConfig(bits=4)
+model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config = gptq_config)
+```
+
+With the release of the exllamav2 kernels, you can get faster inference speed compared to the exllama kernels. You just need to 
+pass `use_exllama_v2=True` in [`GPTQConfig`] and disable exllama kernels:
+
+```py
+import torch
+gptq_config = GPTQConfig(bits=4, use_exllama_v2=True)
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config = gptq_config)
 ```
 
 Note that only 4-bit models are supported for now. Furthermore, it is recommended to deactivate the exllama kernels if you are finetuning a quantized model with peft. 
 
+You can find the benchmark of these kernels [here](https://github.com/huggingface/optimum/tree/main/tests/benchmark#gptq-benchmark)
 #### Fine-tune a quantized model 
 
 With the official support of adapters in the Hugging Face ecosystem, you can fine-tune models that have been quantized with GPTQ. 
