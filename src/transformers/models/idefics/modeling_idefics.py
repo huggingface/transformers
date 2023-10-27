@@ -29,7 +29,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PretrainedConfig
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -1211,7 +1211,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
             attention_mask = torch.ones(
                 (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
             )
-        attention_mask = prepare_4d_causal_attention_mask(
+        attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
         )
 

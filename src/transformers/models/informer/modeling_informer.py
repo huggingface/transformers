@@ -21,7 +21,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import prepare_4d_attention_mask, prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1157,7 +1157,7 @@ class InformerEncoder(InformerPreTrainedModel):
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1330,14 +1330,14 @@ class InformerDecoder(InformerPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-        attention_mask = prepare_4d_causal_attention_mask(
+        attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = prepare_4d_attention_mask(
+            encoder_attention_mask = _prepare_4d_attention_mask(
                 encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
             )
 

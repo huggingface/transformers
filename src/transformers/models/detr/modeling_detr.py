@@ -23,7 +23,7 @@ import torch
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import prepare_4d_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -1065,7 +1065,7 @@ class DetrEncoder(DetrPreTrainedModel):
         # expand attention_mask
         if attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1212,14 +1212,14 @@ class DetrDecoder(DetrPreTrainedModel):
 
         if attention_mask is not None and combined_attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            combined_attention_mask = combined_attention_mask + prepare_4d_attention_mask(
+            combined_attention_mask = combined_attention_mask + _prepare_4d_attention_mask(
                 attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
             )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            encoder_attention_mask = prepare_4d_attention_mask(
+            encoder_attention_mask = _prepare_4d_attention_mask(
                 encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
             )
 

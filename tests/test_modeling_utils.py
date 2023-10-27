@@ -80,7 +80,7 @@ if is_torch_available():
         T5Config,
         T5ForConditionalGeneration,
     )
-    from transformers.modeling_attn_mask_utils import AttnMaskConverter
+    from transformers.modeling_attn_mask_utils import AttentionMaskConverter
     from transformers.modeling_utils import shard_checkpoint
 
     # Fake pretrained models for tests
@@ -1269,7 +1269,7 @@ class AttentionMaskTester(unittest.TestCase):
         return num_mask_triangle - num_cut_mask
 
     def test_2d_to_4d_causal(self):
-        mask_converter = AttnMaskConverter(is_causal=True)
+        mask_converter = AttentionMaskConverter(is_causal=True)
 
         # auto-regressive use case
         self.check_to_4d(mask_converter, q_len=1, kv_len=7)
@@ -1284,8 +1284,7 @@ class AttentionMaskTester(unittest.TestCase):
         self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
 
     def test_2d_to_4d(self):
-        torch.ones((3, 7), device=torch_device, dtype=torch.long)
-        mask_converter = AttnMaskConverter(is_causal=False)
+        mask_converter = AttentionMaskConverter(is_causal=False)
 
         # non auto-regressive case
         self.check_to_4d(mask_converter, q_len=7, kv_len=7)
@@ -1294,8 +1293,7 @@ class AttentionMaskTester(unittest.TestCase):
         self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
 
     def test_2d_to_4d_causal_sliding(self):
-        torch.ones((3, 7), device=torch_device, dtype=torch.long)
-        mask_converter = AttnMaskConverter(is_causal=True, sliding_window=5)
+        mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=5)
 
         # auto-regressive use case
         self.check_to_4d(mask_converter, q_len=1, kv_len=7)
@@ -1310,7 +1308,7 @@ class AttentionMaskTester(unittest.TestCase):
         self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
 
     def test_causal_mask(self):
-        mask_converter = AttnMaskConverter(is_causal=True)
+        mask_converter = AttentionMaskConverter(is_causal=True)
 
         # auto-regressive use case
         self.check_to_causal(mask_converter, q_len=1, kv_len=7)
@@ -1320,7 +1318,7 @@ class AttentionMaskTester(unittest.TestCase):
         self.check_to_causal(mask_converter, q_len=7, kv_len=7)
 
     def test_causal_mask_sliding(self):
-        mask_converter = AttnMaskConverter(is_causal=True, sliding_window=3)
+        mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=3)
 
         # auto-regressive use case
         self.check_to_causal(mask_converter, q_len=1, kv_len=7)

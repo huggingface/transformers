@@ -39,7 +39,7 @@ from ...file_utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ...modeling_attn_mask_utils import prepare_4d_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
@@ -787,7 +787,7 @@ class DeformableDetrMultiheadAttention(nn.Module):
         # expand attention_mask
         if attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         if attention_mask is not None:
             if attention_mask.size() != (batch_size, 1, target_len, source_len):

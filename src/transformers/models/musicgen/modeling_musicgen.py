@@ -29,7 +29,7 @@ from ...activations import ACT2FN
 from ...generation.configuration_utils import GenerationConfig
 from ...generation.logits_process import ClassifierFreeGuidanceLogitsProcessor, LogitsProcessorList
 from ...generation.stopping_criteria import StoppingCriteriaList
-from ...modeling_attn_mask_utils import prepare_4d_attention_mask, prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -723,14 +723,14 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = sum([self.embed_tokens[codebook](input[:, codebook]) for codebook in range(num_codebooks)])
 
-        attention_mask = prepare_4d_causal_attention_mask(
+        attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = prepare_4d_attention_mask(
+            encoder_attention_mask = _prepare_4d_attention_mask(
                 encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
             )
 

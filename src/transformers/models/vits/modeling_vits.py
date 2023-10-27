@@ -25,7 +25,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_attn_mask_utils import prepare_4d_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     ModelOutput,
@@ -1136,7 +1136,7 @@ class VitsEncoder(nn.Module):
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         hidden_states = hidden_states * padding_mask
 

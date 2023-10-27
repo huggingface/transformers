@@ -25,7 +25,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_attn_mask_utils import prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -700,7 +700,7 @@ class BloomModel(BloomPreTrainedModel):
 
         alibi = self.build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
 
-        causal_mask = prepare_4d_causal_attention_mask(
+        causal_mask = _prepare_4d_causal_attention_mask(
             attention_mask,
             input_shape=(batch_size, seq_length),
             inputs_embeds=inputs_embeds,

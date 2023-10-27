@@ -21,7 +21,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -593,7 +593,7 @@ class OPTDecoder(OPTPreTrainedModel):
                 f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "
                 f"{mask_seq_length} (sum of the lengths of current and past inputs)"
             )
-        causal_attention_mask = prepare_4d_causal_attention_mask(
+        causal_attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
         pos_embeds = self.embed_positions(attention_mask, past_key_values_length)

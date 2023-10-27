@@ -29,7 +29,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import AttnMaskConverter, prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -67,18 +67,18 @@ def _get_unpad_data(attention_mask):
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     warnings.warn(
-        "Calling `transformers.models.llama.modeling_llama.prepare_4d_attention_mask` is deprecated and will be removed in v4.37. Use `transformers.modeling_attn_mask_utils.AttnMaskConverter.prepare_4d_attention_mask"
+        "Calling `transformers.models.llama.modeling_llama._prepare_4d_attention_mask` is deprecated and will be removed in v4.37. Use `transformers.modeling_attn_mask_utils.AttentionMaskConverter._prepare_4d_attention_mask"
     )
-    return AttnMaskConverter.prepare_4d_attention_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
+    return AttentionMaskConverter._prepare_4d_attention_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
 
 
 def _make_causal_mask(
     input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
 ):
     warnings.warn(
-        "Calling `transformers.models.llama.modeling_llama._make_causal_mask` is deprecated and will be removed in v4.37. Use `transformers.models.llama.modeling_llama.AttnMaskConverter._make_causal_mask"
+        "Calling `transformers.models.llama.modeling_llama._make_causal_mask` is deprecated and will be removed in v4.37. Use `transformers.models.llama.modeling_llama.AttentionMaskConverter._make_causal_mask"
     )
-    return AttnMaskConverter._make_causal_mask(
+    return AttentionMaskConverter._make_causal_mask(
         input_ids_shape=input_ids_shape, dtype=dtype, device=device, past_key_values_length=past_key_values_length
     )
 
@@ -862,7 +862,7 @@ class LlamaModel(LlamaPreTrainedModel):
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
             # 4d mask is passed through the layers
-            attention_mask = prepare_4d_causal_attention_mask(
+            attention_mask = _prepare_4d_causal_attention_mask(
                 attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
             )
 

@@ -16,7 +16,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 
 
-class AttnMaskConverter:
+class AttentionMaskConverter:
     """
     A utility attention mask class that allows:
         - Create a causal 4d mask
@@ -157,7 +157,7 @@ class AttnMaskConverter:
         return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-def prepare_4d_causal_attention_mask(
+def _prepare_4d_causal_attention_mask(
     attention_mask: Optional[torch.Tensor],
     input_shape: Union[torch.Size, Tuple, List],
     inputs_embeds: torch.Tensor,
@@ -165,9 +165,18 @@ def prepare_4d_causal_attention_mask(
     sliding_window: Optional[int] = None,
 ):
     """
-    Creates a 4D causal mask from a 2D attention mask or no attention mask
+    Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from 
+    a 2D mask of shape `(batch_size, key_value_length)`
+
+    Args:
+        attention_mask (`torch.Tensor` or `None`):
+            A 2D attention mask of shape `(batch_size, key_value_length)`
+        input_shape (`tuple(int)` or `list(int)` or `torch.Size`):
+            The input shape  gg
+            Expected number of dimensions for a single input image. If the input image has a different number of
+            dimensions, an error is raised.
     """
-    attn_mask_converter = AttnMaskConverter(is_causal=True, sliding_window=sliding_window)
+    attn_mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=sliding_window)
 
     key_value_length = input_shape[-1] + past_key_values_length
 
@@ -184,14 +193,15 @@ def prepare_4d_causal_attention_mask(
     return attention_mask
 
 
-def prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+def _prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
-    Creates a non-causal 4D mask from a 2D attention mask
+    Creates a non-causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from 
+    a 2D mask of shape `(batch_size, key_value_length)`
     """
-    return AttnMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
+    return AttentionMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
 
 
-def create_4d_causal_attention_mask(
+def _create_4d_causal_attention_mask(
     input_shape: Union[torch.Size, Tuple, List],
     dtype: torch.dtype,
     device: torch.device,
@@ -199,9 +209,9 @@ def create_4d_causal_attention_mask(
     sliding_window: Optional[int] = None,
 ):
     """
-    Creates a causal 4D mask
+    Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)`
     """
-    attn_mask_converter = AttnMaskConverter(is_causal=True, sliding_window=sliding_window)
+    attn_mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=sliding_window)
 
     key_value_length = past_key_values_length + input_shape[-1]
     attention_mask = attn_mask_converter.to_causal_4d(

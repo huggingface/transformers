@@ -27,7 +27,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput
-from ...modeling_attn_mask_utils import prepare_4d_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -1267,7 +1267,7 @@ class GitModel(GitPreTrainedModel):
         if attention_mask is not None:
             # if the user provides an attention mask, we add it to the default one
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = prepare_4d_attention_mask(
+            expanded_attn_mask = _prepare_4d_attention_mask(
                 attention_mask, embedding_output.dtype, tgt_len=input_shape[-1]
             ).to(embedding_output.device)
             if past_key_values_length > 0:

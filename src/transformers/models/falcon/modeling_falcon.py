@@ -24,7 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
-from ...modeling_attn_mask_utils import prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -224,7 +224,7 @@ class FalconDynamicNTKScalingRotaryEmbedding(FalconRotaryEmbedding):
         self.sin_cached = self.sin_cached.type(dtype)
 
 
-def prepare_4d_attention_mask(mask: torch.Tensor, past_key_values_length: int) -> torch.BoolTensor:
+def _prepare_4d_attention_mask(mask: torch.Tensor, past_key_values_length: int) -> torch.BoolTensor:
     """
     Expands attention_mask from `[batch_size, seq_length]` to `[batch_size, 1, seq_length, seq_length + past_length]`.
     """
@@ -1104,7 +1104,7 @@ class FalconModel(FalconPreTrainedModel):
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
             # 4d mask is passed through the layers
-            attention_mask = prepare_4d_causal_attention_mask(
+            attention_mask = _prepare_4d_causal_attention_mask(
                 attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
             )
 
