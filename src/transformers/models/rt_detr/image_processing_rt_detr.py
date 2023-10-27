@@ -48,7 +48,6 @@ if is_vision_available():
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 class RTDetrImageProcessor(BaseImageProcessor):
     r"""
     Constructs a RTDetr image processor.
@@ -276,48 +275,161 @@ class RTDetrImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
+    @property
+    def mscoco_label_category_map(self):
+        """Mapping categories of detected classes to COCO dataset"""
+        return {
+                1: 1,
+                2: 2,
+                3: 3,
+                4: 4,
+                5: 5,
+                6: 6,
+                7: 7,
+                8: 8,
+                9: 9,
+                10: 10,
+                11: 11,
+                12: 13,
+                13: 14,
+                14: 15,
+                15: 16,
+                16: 17,
+                17: 18,
+                18: 19,
+                19: 20,
+                20: 21,
+                21: 22,
+                22: 23,
+                23: 24,
+                24: 25,
+                25: 27,
+                26: 28,
+                27: 31,
+                28: 32,
+                29: 33,
+                30: 34,
+                31: 35,
+                32: 36,
+                33: 37,
+                34: 38,
+                35: 39,
+                36: 40,
+                37: 41,
+                38: 42,
+                39: 43,
+                40: 44,
+                41: 46,
+                42: 47,
+                43: 48,
+                44: 49,
+                45: 50,
+                46: 51,
+                47: 52,
+                48: 53,
+                49: 54,
+                50: 55,
+                51: 56,
+                52: 57,
+                53: 58,
+                54: 59,
+                55: 60,
+                56: 61,
+                57: 62,
+                58: 63,
+                59: 64,
+                60: 65,
+                61: 67,
+                62: 70,
+                63: 72,
+                64: 73,
+                65: 74,
+                66: 75,
+                67: 76,
+                68: 77,
+                69: 78,
+                70: 79,
+                71: 80,
+                72: 81,
+                73: 82,
+                74: 84,
+                75: 85,
+                76: 86,
+                77: 87,
+                78: 88,
+                79: 89,
+                80: 90
+            }
 
-    def post_process_object_detection(self, outputs, target_sizes: Union[TensorType, List[Tuple]] = None):
+    def post_process(self, outputs, target_sizes: Union[TensorType, List[Tuple]] = None, use_focal_loss: bool =True, remap_coco_category: bool = True):
         """
-        TODO ADD DOCSTRING
+        Converts the raw output of [`RTDetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
+
+        Args:
+            outputs ([`RTDetrObjectDetectionOutput`]):
+                Raw outputs of the model.
+            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
+                Tensor containing the size (height, width) of each image of the batch. For evaluation, this must be the
+                original image size (before any data augmentation). For visualization, this should be the image size
+                after data augment, but before padding.
+            use_focal_loss (`bool` defaults to True): 
+                Variable informing if the focal loss was used to predict the outputs.
+                Depending on its value, a different function is used to process the logits and obtain the scores.
+            remap_coco_category (`bool` defaults to True): 
+                Variable informing if a remapping to COCO's category should be used in the labels.
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            in the batch as predicted by the model.
         """
+
         logger.warning_once(
             "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
         )
         
-        out_logits, out_bbox = outputs.pred_logits, outputs.pred_boxes
+        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
-        if len(out_logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-        if target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
+        if target_sizes is not None:
+            if len(out_logits) != len(target_sizes):
+                raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+            if target_sizes.shape[1] != 2:
+                raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
-        prob = torch.nn.functional.softmax(out_logits, -1)
-        scores, labels = prob[..., :-1].max(-1)
-
-        # convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(out_bbox)
-        # and from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-        boxes = boxes * scale_fct[:, None, :]
-
-        if self.use_focal_loss:
+            # convert from relative cxcywh to absolute xyxy
+            boxes = center_to_corners_format(out_bbox)
+            img_h, img_w = target_sizes.unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            boxes = boxes * scale_fct[:, None, :]
+        
+        num_top_queries = out_logits.shape[1]
+        num_classes = out_logits.shape[2]
+        
+        if use_focal_loss:
             scores = torch.nn.functional.sigmoid(out_logits)
-            scores, index = torch.topk(scores.flatten(1), self.num_top_queries, axis=-1)
-            labels = index % self.num_classes
-            index = index // self.num_classes
+            scores, index = torch.topk(scores.flatten(1), num_top_queries, axis=-1)
+            labels = index % num_classes
+            index = index // num_classes
             boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
+        else:
+            scores = torch.nn.functional.softmax(out_logits)[:, :, :-1]
+            scores, labels = scores.max(dim=-1)
+            if scores.shape[1] > num_top_queries:
+                scores, index = torch.topk(scores, num_top_queries, dim=-1)
+                labels = torch.gather(labels, dim=1, index=index)
+                boxes = torch.gather(boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1]))
+        
+        if remap_coco_category:
+            labels = torch.tensor([self.mscoco_label_category_map[int(x.item()) + 1] for x in labels.flatten()])\
+                .to(boxes.device).reshape(labels.shape)
 
         results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
         return results
 
-        
-    def post_process_object_detection(self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None):
+    def post_process_object_detection(self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None, use_focal_loss: bool =True, remap_coco_category: bool = True):
         """
-        Converts the raw output of [`RTDetrModel`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format with their scores and labels. 
+        Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
@@ -327,38 +439,57 @@ class RTDetrImageProcessor(BaseImageProcessor):
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+            use_focal_loss (`bool` defaults to True): 
+                Variable informing if the focal loss was used to predict the outputs.
+                Depending on its value, a different function is used to process the logits and obtain the scores.
+            remap_coco_category (`bool` defaults to True): 
+                Variable informing if a remapping to COCO's category should be used in the labels.
+
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        logger.warning_once(
-            "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
-        )
+        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
-        out_logits, out_bbox = outputs.pred_logits, outputs.pred_boxes
+        if target_sizes is not None:
+            if len(out_logits) != len(target_sizes):
+                raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+            if target_sizes.shape[1] != 2:
+                raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
-        if len(out_logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-        if target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
-
-        prob = torch.nn.functional.softmax(out_logits, -1)
-        scores, labels = prob[..., :-1].max(-1)
-
-        # convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(out_bbox)
-        # and from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-        boxes = boxes * scale_fct[:, None, :]
-
-        if self.use_focal_loss:
+            # convert from relative cxcywh to absolute xyxy
+            boxes = center_to_corners_format(out_bbox)
+            img_h, img_w = target_sizes.unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            boxes = boxes * scale_fct[:, None, :]
+        
+        num_top_queries = out_logits.shape[1]
+        num_classes = out_logits.shape[2]
+        
+        if use_focal_loss:
             scores = torch.nn.functional.sigmoid(out_logits)
-            scores, index = torch.topk(scores.flatten(1), self.num_top_queries, axis=-1)
-            labels = index % self.num_classes
-            index = index // self.num_classes
-            boxes = bbox_pred.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, bbox_pred.shape[-1]))
+            scores, index = torch.topk(scores.flatten(1), num_top_queries, axis=-1)
+            labels = index % num_classes
+            index = index // num_classes
+            boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
+        else:
+            scores = torch.nn.functional.softmax(out_logits)[:, :, :-1]
+            scores, labels = scores.max(dim=-1)
+            if scores.shape[1] > num_top_queries:
+                scores, index = torch.topk(scores, num_top_queries, dim=-1)
+                labels = torch.gather(labels, dim=1, index=index)
+                boxes = torch.gather(boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1]))
+        
+        if remap_coco_category:
+            labels = torch.tensor([self.mscoco_label_category_map[int(x.item()) + 1] for x in labels.flatten()])\
+                .to(boxes.device).reshape(labels.shape)
 
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
+        results = []
+        for s, l, b in zip(scores, labels, boxes):
+            score = s[s > threshold]
+            label = l[s > threshold]
+            box = b[s > threshold]
+            results.append({"scores": score, "labels": label, "boxes": box})
+
         return results
+    
