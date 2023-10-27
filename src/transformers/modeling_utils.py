@@ -1520,21 +1520,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Returns:
             `List[str]`: List of modules that should not be split
         """
-        if self._no_split_modules is None:
-            raise ValueError(
-                f"{self.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
-                "class needs to implement the `_no_split_modules` attribute."
-            )
-        _no_split_modules = set(self._no_split_modules)
-        for module in self.modules():
-            if isinstance(module, PreTrainedModel):
-                if module._no_split_modules is None:
-                    raise ValueError(
-                        f"{module.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
-                        "class needs to implement the `_no_split_modules` attribute."
-                    )
-                else:
-                    _no_split_modules = _no_split_modules | set(module._no_split_modules)
+        _no_split_modules = set()
+        modules_to_check = [self]
+        while len(modules_to_check) > 0:
+            module = modules_to_check.pop(-1)
+            # if the module does not appear in _no_split_modules, we also check the children
+            if module.__class__.__name__ not in _no_split_modules:
+                if isinstance(module, PreTrainedModel):
+                    if module._no_split_modules is None:
+                        raise ValueError(
+                            f"{module.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
+                            "class needs to implement the `_no_split_modules` attribute."
+                        )
+                    else:
+                        _no_split_modules = _no_split_modules | set(module._no_split_modules)
+                modules_to_check += list(module.children())
         return list(_no_split_modules)
 
     def resize_token_embeddings(
