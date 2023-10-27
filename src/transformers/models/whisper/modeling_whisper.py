@@ -476,8 +476,11 @@ class WhisperPositionalEmbedding(nn.Embedding):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__(num_positions, embedding_dim)
 
-    def forward(self, input_ids, past_key_values_length=0):
-        return self.weight[past_key_values_length : past_key_values_length + input_ids.shape[1]]
+    def forward(self, input_ids, past_key_values_length=0, position_ids=None):
+        if position_ids is None:
+            return self.weight[past_key_values_length : past_key_values_length + input_ids.shape[1]]
+        else:
+            return self.weight[position_ids]
 
 
 class WhisperAttention(nn.Module):
@@ -1426,6 +1429,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         cross_attn_head_mask=None,
         past_key_values=None,
         inputs_embeds=None,
+        position_ids=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1529,9 +1533,9 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
         # embed positions
         if input_ids is not None:
-            positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
+            positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length, position_ids=position_ids)
         else:
-            positions = self.embed_positions(inputs_embeds, past_key_values_length=past_key_values_length)
+            positions = self.embed_positions(inputs_embeds, past_key_values_length=past_key_values_length, position_ids=position_ids)
 
         hidden_states = inputs_embeds + positions
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1719,6 +1723,7 @@ class WhisperModel(WhisperPreTrainedModel):
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
+        decoder_position_ids: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1777,6 +1782,7 @@ class WhisperModel(WhisperPreTrainedModel):
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
+            position_ids=decoder_position_ids,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1850,6 +1856,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
+        decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1904,6 +1911,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             decoder_inputs_embeds=decoder_inputs_embeds,
+            decoder_position_ids=decoder_position_ids,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2201,6 +2209,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         use_cache=None,
         encoder_outputs=None,
         attention_mask=None,
+        decoder_position_ids=None,
+        decoder_attention_mask=None,
         **kwargs,
     ):
         if past_key_values is not None:
@@ -2215,12 +2225,16 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
+        if decoder_position_ids is not None and decoder_position_ids.shape[1] > decoder_input_ids.shape[1]:
+            decoder_position_ids = decoder_position_ids[:, remove_prefix_length:]
+
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "use_cache": use_cache,
-            "decoder_attention_mask": None,
+            "decoder_attention_mask": decoder_attention_mask,
+            "decoder_position_ids": decoder_position_ids,
         }
 
     @staticmethod
@@ -2608,6 +2622,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
         past_key_values=None,
         use_cache=None,
         encoder_outputs=None,
+        position_ids=None,
         attention_mask=None,
         **kwargs,
     ):
@@ -2623,12 +2638,16 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
 
             input_ids = input_ids[:, remove_prefix_length:]
 
+        if position_ids is not None and position_ids.shape[1] > position_ids.shape[1]:
+            position_ids = position_ids[:, remove_prefix_length:]
+
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
             "input_ids": input_ids,
             "use_cache": use_cache,
-            "attention_mask": None,
+            "attention_mask": attention_mask,
+            "position_ids": position_ids,
         }
 
     @staticmethod
