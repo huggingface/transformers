@@ -490,9 +490,7 @@ def prepare_img():
 @slow
 class Kosmos2ModelIntegrationTest(unittest.TestCase):
     def run_example(self, prompt, image, model, processor):
-        inputs = processor(text=prompt, images=image, return_tensors="pt", add_eos_token=False, padding=True).to(
-            torch_device
-        )
+        inputs = processor(text=prompt, images=image, return_tensors="pt", padding=True).to(torch_device)
 
         generation_outputs = model.generate(
             pixel_values=inputs["pixel_values"],

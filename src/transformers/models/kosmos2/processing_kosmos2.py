@@ -109,7 +109,7 @@ class Kosmos2Processor(ProcessorMixin):
         num_image_tokens: Optional[int] = 64,
         first_image_token_id: Optional[int] = None,
         add_special_tokens: bool = True,
-        add_eos_token: bool = True,
+        add_eos_token: bool = False,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
@@ -137,7 +137,7 @@ class Kosmos2Processor(ProcessorMixin):
             first_image_token_id (`int`, *optional*):
                 The token id that will be used for the first place of the subsequence that is reserved to store image
                 information. If unset, will default to `self.tokenizer.unk_token_id + 1`.
-            add_eos_token (`bool`, defaults to `True`):
+            add_eos_token (`bool`, defaults to `False`):
                 Whether or not to include `EOS` token id in the encoding when `add_special_tokens=True`.
         """
         if images is None and text is None:

@@ -1806,7 +1806,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         ...     "</object>"
         ... )
 
-        >>> inputs = processor(text=text, images=image, return_tensors="pt")
+        >>> inputs = processor(text=text, images=image, return_tensors="pt", add_eos_token=True)
 
         >>> last_hidden_state = model(
         ...     pixel_values=inputs["pixel_values"],
@@ -1948,8 +1948,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
 
         >>> prompt = "<grounding> An image of"
 
-        >>> # set `add_eos_token=False` when doing generation
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt", add_eos_token=False)
+        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
 
         >>> generated_ids = model.generate(
         ...     pixel_values=inputs["pixel_values"],
