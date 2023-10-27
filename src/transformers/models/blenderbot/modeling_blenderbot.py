@@ -818,7 +818,7 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
+    
 
     def forward(
         self,
