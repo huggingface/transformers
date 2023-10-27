@@ -123,7 +123,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
 
         input_str = "This is a test"
 
-        encoded_processor = processor(text=input_str)
+        encoded_processor = processor(text=input_str, add_eos_token=True)
 
         encoded_tok = tokenizer(input_str, return_token_type_ids=False)
 
@@ -280,7 +280,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
         )
 
         def check(texts, bboxes, expected_input_ids):
-            outputs = processor(images=None, text=texts, bboxes=bboxes)
+            outputs = processor(images=None, text=texts, bboxes=bboxes, add_eos_token=True)
             self.assertListEqual(outputs.input_ids, expected_input_ids)
 
         # no phrase
@@ -332,6 +332,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             images=None,
             text=batch_text,
             bboxes=batch_bboxes,
+            add_eos_token=True,
         )
         self.assertListEqual(
             outputs.input_ids,
@@ -344,6 +345,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             text=batch_text,
             bboxes=batch_bboxes,
             padding=True,
+            add_eos_token=True,
         )
         # padding on the right
         self.assertListEqual(
@@ -365,6 +367,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             bboxes=batch_bboxes,
             return_tensors="pt",
             padding=True,
+            add_eos_token=True,
         )
         # padding on the right
         self.assertListEqual(
@@ -382,7 +385,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
         # test with image
         num_image_tokens = 64
 
-        outputs = processor(images=image, text=texts[0], bboxes=None)
+        outputs = processor(images=image, text=texts[0], bboxes=None, add_eos_token=True)
         self.assertTupleEqual(outputs.pixel_values[0].shape, (3, 224, 224))
         self.assertListEqual(
             outputs.input_ids,
@@ -402,6 +405,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             bboxes=batch_bboxes,
             return_tensors="pt",
             padding=True,
+            add_eos_token=True,
         )
         self.assertTupleEqual(outputs.pixel_values.shape, (4, 3, 224, 224))
         np.testing.assert_allclose(
@@ -439,6 +443,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             bboxes=batch_bboxes,
             return_tensors="pt",
             padding=True,
+            add_eos_token=True,
         )
         # padding on the left: the `[1:]` below is because the part for `BOS` is already added in the beginning of each (dynamically computed) expected value  # noqa
         # fmt: off
