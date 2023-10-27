@@ -167,7 +167,6 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
         "blip2-flan-t5-xl-coco": ("blip2_t5", "caption_coco_flant5xl"),
         "blip2-flan-t5-xxl": ("blip2_t5", "pretrain_flant5xxl"),
         "blip2-itm-vit-g": ("blip2_image_text_matching", "pretrain"),
-        # "blip2-itm-vit-large": ("blip2_image_text_matching", "pretrain_vitL"),
         "blip2-itm-vit-g-coco": ("blip2_image_text_matching", "coco"),
     }
 
@@ -196,8 +195,6 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     # some keys can be renamed efficiently
     for key, val in state_dict.copy().items():
         val = state_dict.pop(key)
-        if key.startswith("Qformer.cls"):
-            key = key.replace("Qformer.cls", "cls")
         if key.startswith("Qformer.bert"):
             key = key.replace("Qformer.bert", "qformer")
         if "attention.self" in key:
@@ -217,7 +214,12 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     missing_keys, unexpected_keys = hf_model.load_state_dict(state_dict, strict=False)
     assert len(missing_keys) == 0
-    assert unexpected_keys == ["qformer.embeddings.position_ids"]
+
+    if "itm" in model_name:
+        unexpected_keys = list(filter(lambda x: not x.startswith("Qformer.cls"), unexpected_keys))
+        assert unexpected_keys == ["temp", "qformer.embeddings.position_ids"]
+    else:
+        assert unexpected_keys == ["qformer.embeddings.position_ids"]
 
     image = load_demo_image()
     original_pixel_values = vis_processors["eval"](image).unsqueeze(0).to(lavis_device)
@@ -349,7 +351,6 @@ if __name__ == "__main__":
         "blip2-flan-t5-xl-coco",
         "blip2-flan-t5-xxl",
         "blip2-itm-vit-g",
-        # "blip2-itm-vit-large",
         "blip2-itm-vit-g-coco",
     ]
     parser.add_argument(

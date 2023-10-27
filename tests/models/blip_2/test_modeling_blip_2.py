@@ -25,7 +25,6 @@ import requests
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 from transformers.testing_utils import (
     require_torch,
-    require_torch_gpu,
     require_torch_multi_gpu,
     require_vision,
     slow,
@@ -52,7 +51,6 @@ if is_torch_available():
         Blip2ForConditionalGeneration,
         Blip2ForImageTextRetrieval,
         Blip2Model,
-        Blip2ModelWithoutLM,
         Blip2TextModelWithProjection,
         Blip2VisionModel,
         Blip2VisionModelWithProjection,
@@ -1196,14 +1194,7 @@ class Blip2TextRetrievalModelTester:
 
 @require_torch
 class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            Blip2ForImageTextRetrieval,
-            Blip2ModelWithoutLM,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (Blip2ForImageTextRetrieval,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -1277,39 +1268,6 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             for model_class in self.all_model_classes:
                 model = model_class.from_pretrained(model_name)
                 self.assertIsNotNone(model)
-
-    def test_get_text_features(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        inputs_dict = {
-            "input_ids": torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]).to(torch_device),
-            "attention_mask": torch.LongTensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]).to(torch_device),
-        }
-
-        model = Blip2ModelWithoutLM(config).to(torch_device)
-        model.eval()
-        text_features = model.get_text_features(**inputs_dict)
-        self.assertEqual(text_features[0].shape, (10, config.image_text_hidden_size))
-
-    def test_get_image_features(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        keys_to_pop = ["input_ids", "attention_mask"]
-
-        for key in keys_to_pop:
-            inputs_dict.pop(key)
-
-        model = Blip2ModelWithoutLM(config).to(torch_device)
-        model.eval()
-        image_features = model.get_image_features(**inputs_dict)
-        self.assertEqual(
-            image_features.shape,  # [12, 32, 256]
-            (
-                self.model_tester.vision_model_tester.batch_size,
-                config.vision_config.hidden_size,
-                config.image_text_hidden_size,
-            ),
-        )
 
     def test_training(self):
         pass
@@ -1524,89 +1482,3 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
             [0, 3, 7, 152, 67, 839, 1],
         )
         self.assertEqual(generated_text, "san diego")
-
-    @require_torch_gpu
-    def test_inference_itm_features(self):
-        processor = Blip2Processor.from_pretrained("jpizarrom/blip2-itm-vit-g")
-        model = Blip2ModelWithoutLM.from_pretrained(
-            "jpizarrom/blip2-itm-vit-g",
-        ).to(torch_device)
-
-        # image features
-        image = prepare_img()
-        image_inputs = processor(images=image, return_tensors="pt").to(torch_device)
-        image_features = model.get_image_features(**image_inputs)
-        expected_image_features = torch.tensor(
-            [
-                -0.0946953147649765,
-                -0.07541415840387344,
-                0.03312666341662407,
-                0.053536128252744675,
-                0.03368198126554489,
-                -0.013867943547666073,
-            ]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(image_features[0][0][:6], expected_image_features, atol=1e-3))
-
-        # text features
-        text_inputs = processor(text="a woman sitting on the beach with a dog", padding=True, return_tensors="pt").to(
-            torch_device
-        )
-        text_features = model.get_text_features(**text_inputs)
-        expected_text_features = torch.tensor(
-            [
-                -0.10836730897426605,
-                0.05315554141998291,
-                -0.028310950845479965,
-                0.016979066655039787,
-                0.0865054652094841,
-                -0.046645939350128174,
-            ]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(text_features[0][0][:6], expected_text_features, atol=1e-3))
-
-        # check similarity
-        similarity = (image_features @ text_features[:, 0, :].t()).max()
-        expected_similarity = torch.tensor(0.44385525584220886).to(torch_device)
-        self.assertTrue(torch.allclose(similarity, expected_similarity, atol=1e-3))
-
-    @require_torch_gpu
-    def test_inference_itm_features_fp16(self):
-        processor = Blip2Processor.from_pretrained("jpizarrom/blip2-itm-vit-g")
-        model = Blip2ModelWithoutLM.from_pretrained("jpizarrom/blip2-itm-vit-g", torch_dtype=torch.float16).to(
-            torch_device
-        )
-
-        # image features
-        image = prepare_img()
-        image_inputs = processor(images=image, return_tensors="pt").to(torch_device, dtype=torch.float16)
-        image_features = model.get_image_features(**image_inputs)
-        expected_image_features = [
-            -0.093994140625,
-            -0.075927734375,
-            0.031890869140625,
-            0.053009033203125,
-            0.0352783203125,
-            -0.01190185546875,
-        ]
-        self.assertTrue(np.allclose(image_features[0][0][:6].tolist(), expected_image_features, atol=1e-3))
-
-        # text features
-        text_inputs = processor(text="a woman sitting on the beach with a dog", padding=True, return_tensors="pt").to(
-            torch_device
-        )
-        text_features = model.get_text_features(**text_inputs)
-        expected_text_features = [
-            -0.1082763671875,
-            0.053192138671875,
-            -0.02825927734375,
-            0.0169830322265625,
-            0.08648681640625,
-            -0.04656982421875,
-        ]
-        self.assertTrue(np.allclose(text_features[0][0][:6].tolist(), expected_text_features, atol=1e-3))
-
-        # check similarity
-        similarity = (image_features @ text_features[:, 0, :].t()).max()
-        expected_similarity = 0.44384765625
-        self.assertTrue(np.allclose(similarity.item(), expected_similarity, atol=1e-3))

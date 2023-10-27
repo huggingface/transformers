@@ -94,10 +94,6 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] Blip2ForImageTextRetrieval
     - forward
 
-## Blip2ModelWithoutLM
-
-[[autodoc]] Blip2ModelWithoutLM
-
 ## Blip2TextModelWithProjection
 
 [[autodoc]] Blip2TextModelWithProjection
