@@ -22,9 +22,9 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
-from ...modeling_attn_mask_utils import prepare_4d_causal_attention_mask
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...modeling_attn_mask_utils import prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -514,7 +514,9 @@ class MptModel(MptPreTrainedModel):
 
         alibi = self.build_mpt_alibi_tensor(self.num_heads, self.config.max_seq_len, device=hidden_states.device)
 
-        causal_mask = prepare_4d_causal_attention_mask(attention_mask, (batch_size, seq_length), past_key_values_length)
+        causal_mask = prepare_4d_causal_attention_mask(
+            attention_mask, (batch_size, seq_length), past_key_values_length
+        )
         for _, (block, layer_past) in enumerate(zip(self.blocks, past_key_values)):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)

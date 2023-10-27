@@ -844,8 +844,6 @@ class PegasusDecoder(PegasusPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    
-
     def forward(
         self,
         input_ids=None,

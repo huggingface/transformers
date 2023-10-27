@@ -26,7 +26,6 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import prepare_4d_attention_mask
 from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
@@ -35,6 +34,7 @@ from ...file_utils import (
     is_vision_available,
     replace_return_docstrings,
 )
+from ...modeling_attn_mask_utils import prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid

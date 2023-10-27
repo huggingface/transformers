@@ -824,8 +824,6 @@ class MarianDecoder(MarianPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    
-
     def forward(
         self,
         input_ids: torch.LongTensor = None,

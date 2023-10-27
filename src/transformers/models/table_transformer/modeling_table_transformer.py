@@ -23,9 +23,9 @@ import torch
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...modeling_attn_mask_utils import prepare_4d_attention_mask
 from ...utils import (
     ModelOutput,
     add_start_docstrings,

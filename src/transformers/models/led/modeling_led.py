@@ -2063,7 +2063,9 @@ class LEDDecoder(LEDPreTrainedModel):
 
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = prepare_4d_causal_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length)
+        combined_attention_mask = prepare_4d_causal_attention_mask(
+            attention_mask, input_shape, inputs_embeds, past_key_values_length
+        )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:

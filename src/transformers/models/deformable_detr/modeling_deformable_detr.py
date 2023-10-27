@@ -20,7 +20,6 @@ import math
 import warnings
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
-from ...modeling_attn_mask_utils import prepare_4d_attention_mask
 
 import torch
 import torch.nn.functional as F
@@ -40,6 +39,7 @@ from ...file_utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...modeling_attn_mask_utils import prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid

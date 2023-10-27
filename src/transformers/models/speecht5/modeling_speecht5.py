@@ -1512,8 +1512,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    
-
     def forward(
         self,
         hidden_states: Optional[torch.FloatTensor] = None,
