@@ -34,6 +34,7 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    ImageInput
 )
 from ...utils import TensorType, is_torch_available, is_vision_available, logging, requires_backends
 
@@ -67,6 +68,32 @@ class FuyuImageProcessor(BaseImageProcessor):
     - Image Patch Indices:
         For each image patch, the code maintains an index where these patches should be inserted in a token stream.
 
+
+    Args:
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image to `size`.
+        size (`Dict[str, int]`, *optional*, defaults to `{"height": 1080, "width": 1920}`):
+            Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
+        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+            `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image to `size`.
+        padding_value (`float`, *optional*, defaults to `1.0`):
+            The value to pad the image with.
+        padding_mode (`str`, *optional*, defaults to `constant`):
+            The padding mode to use when padding the image.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the image.
+        image_mean (`float`, *optional*, defaults to `0.5`):
+            The mean to use when normalizing the image.
+        image_std (`float`, *optional*, defaults to `0.5`):
+            The standard deviation to use when normalizing the image.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image.
+        rescale_factor (`float`, *optional*, defaults to `1 / 255`):
+            The factor to use when rescaling the image.
+        patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 30, "width": 30}`):
+            Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
     """
 
     model_input_names = [
@@ -90,7 +117,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         image_std: Union[float, List[float]] = 0.5,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
-        patch_size: Dict[str, int] = None,
+        patch_size: Optional[Dict[str, int]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -110,13 +137,40 @@ class FuyuImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
+        size: Dict[str, int],
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs
     ) -> np.ndarray:
-        image_height, image_width = get_image_size(image, input_data_format)
+        """
+        Resize an image to `(size["height"], size["width"])`.
 
-        target_width = self.size["width"]
-        target_height = self.size["height"]
+        Args:
+            image (`np.ndarray`):
+                Image to resize.
+            size (`Dict[str, int]`):
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
+            data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+
+        Returns:
+            `np.ndarray`: The resized image.
+        """
+        image_height, image_width = get_image_size(image, input_data_format)
+        target_height, target_width = size["height"], size["width"]
 
         if image_width <= target_width and image_height <= target_height:
             return image
@@ -129,18 +183,40 @@ class FuyuImageProcessor(BaseImageProcessor):
         new_width = int(image_width * optimal_scale_factor)
 
         scaled_image = resize(
-            image=image, size=(new_height, new_width), data_format=data_format, input_data_format=input_data_format
+            image=image,
+            size=(new_height, new_width),
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs
         )
         return scaled_image
 
     def pad_image(
         self,
         image: np.ndarray,
+        size: Dict[str, int],
+        mode: str = "constant",
+        constant_values: float = 1.0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
+        """
+        Pad an image to `(size["height"], size["width"])`.
+
+        Args:
+            image (`np.ndarray`):
+                Image to pad.
+            size (`Dict[str, int]`):
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output
+                image.
+            data_format (`ChannelDimension` or `str`, *optional*):
+                The data format of the output image. If unset, the same format as the input image is used.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
+        """
         image_height, image_width = get_image_size(image, input_data_format)
-        target_height, target_width = self.size["height"], self.size["width"]
+        target_height, target_width = size["height"], size["width"]
         padding_top = 0
         padding_left = 0
         padding_bottom = target_height - image_height
@@ -148,8 +224,8 @@ class FuyuImageProcessor(BaseImageProcessor):
         padded_image = pad(
             image,
             padding=((padding_top, padding_bottom), (padding_left, padding_right)),
-            mode=self.padding_mode,
-            constant_values=self.padding_value,
+            mode=mode,
+            constant_values=constant_values,
             data_format=data_format,
             input_data_format=input_data_format,
         )
@@ -174,7 +250,54 @@ class FuyuImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         return_tensors: Optional[TensorType] = None,
     ):
-        """Utility function to preprocess the images and extract necessary information about original formats."""
+        """
+
+        Utility function to preprocess the images and extract necessary information about original formats.
+
+        Args:
+            images (`ImageInput`):
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
+            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
+                Whether to resize the image to `size`.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
+            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
+            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+                Whether to pad the image to `size`.
+            padding_value (`float`, *optional*, defaults to `self.padding_value`):
+                The value to pad the image with.
+            padding_mode (`str`, *optional*, defaults to `self.padding_mode`):
+                The padding mode to use when padding the image.
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to normalize the image.
+            image_mean (`float`, *optional*, defaults to `self.image_mean`):
+                The mean to use when normalizing the image.
+            image_std (`float`, *optional*, defaults to `self.image_std`):
+                The standard deviation to use when normalizing the image.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image.
+            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+                The factor to use when rescaling the image.
+            patch_size (`Dict[str, int]`, *optional*, defaults to `self.patch_size`):
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                - Unset: Return a list of `np.ndarray`.
+                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
+                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format of the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+        """
 
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -191,11 +314,6 @@ class FuyuImageProcessor(BaseImageProcessor):
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         patch_size = patch_size if patch_size is not None else self.patch_size
 
-        images = make_list_of_images(images)
-
-        batch_images = []
-        image_unpadded_heights = []
-        image_unpadded_widths = []
         images = make_list_of_images(images)
 
         if not valid_images(images):
@@ -231,26 +349,44 @@ class FuyuImageProcessor(BaseImageProcessor):
         image_unpadded_widths = [[image_size[1]] for image_size in image_sizes]
 
         if do_resize:
-            images = [self.resize(image) for image in images]
+            images = [self.resize(image, size=size, input_data_format=input_data_format) for image in images]
 
         if do_pad:
-            images = [self.pad_image(image) for image in images]
+            images = [self.pad_image(image, size=size, mode=padding_mode, constant_values=padding_value, input_data_format=input_data_format) for image in images]
 
         if do_rescale:
-            images = [self.rescale(image, rescale_factor) for image in images]
+            images = [self.rescale(image, scale=rescale_factor, input_data_format=input_data_format) for image in images]
 
         if do_normalize:
-            images = [self.normalize(image, image_mean, image_std) for image in images]
+            images = [self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format) for image in images]
 
         if data_format is not None:
             images = [to_channel_dimension_format(image, data_format, input_data_format) for image in images]
 
         batch_images = [[torch.Tensor(image)] for image in images]
+        image_unpadded_heights = [torch.Tensor(image_unpadded_height) for image_unpadded_height in image_unpadded_heights]
+        image_unpadded_widths = [torch.Tensor(image_unpadded_width) for image_unpadded_width in image_unpadded_widths]
+        data = {
+            "images": batch_images,
+            "image_unpadded_heights": image_unpadded_heights,
+            "image_unpadded_widths": image_unpadded_widths,
+        }
+        # return batch_images, torch.Tensor(image_unpadded_heights), torch.Tensor(image_unpadded_widths)
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
-        return batch_images, torch.Tensor(image_unpadded_heights), torch.Tensor(image_unpadded_widths)
+    def get_num_patches(self, image_height: int, image_width: int, patch_size: Dict[str, int] = None) -> int:
+        """
+        Calculate number of patches required to encode an image.
 
-    def get_num_patches(self, image_height: int, image_width: int) -> int:
-        """Calculate number of patches required to encode an image."""
+        Args:
+            image_height (`int`):
+                Height of the image.
+            image_width (`int`):
+                Width of the image.
+            patch_size (`Dict[str, int]`, *optional*, defaults to `self.patch_size`):
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
+        """
+        patch_size = patch_size if patch_size is not None else self.patch_size
         patch_height, patch_width = self.patch_size["height"], self.patch_size["width"]
 
         if image_height % patch_height != 0:
@@ -263,33 +399,35 @@ class FuyuImageProcessor(BaseImageProcessor):
         num_patches = num_patches_per_dim_h * num_patches_per_dim_w
         return num_patches
 
-    def patchify_image(self, image: "torch.Tensor") -> "torch.Tensor":
+    def patchify_image(self, image: "torch.Tensor", patch_size: Optional[Dict[str, int]] = None) -> "torch.Tensor":
         """
         Convert an image into a tensor of patches.
 
         Args:
-            image: Image to convert. Shape: [batch, channels, height, width]
+            image (`torch.Tensor`):
+                Image to convert. Shape: [batch, channels, height, width]
+            patch_size (`Dict[str, int]`, *optional*, defaults to `self.patch_size`):
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
         """
         requires_backends(self, ["torch"])
+        patch_size = patch_size if patch_size is not None else self.patch_size
+        patch_height, patch_width = patch_size["height"], patch_size["width"]
 
         # TODO refer to https://github.com/ArthurZucker/transformers/blob/0f0a3fe5ca5697ee58faeb5b53f049af720b5e98/src/transformers/models/vit_mae/modeling_vit_mae.py#L871
         # torch implementation is faster but does not handle non-squares
 
         batch_size, channels, _, _ = image.shape
-        unfolded_along_height = image.unfold(2, self.patch_size["height"], self.patch_size["height"])
-        patches = unfolded_along_height.unfold(3, self.patch_size["width"], self.patch_size["width"])
-
+        unfolded_along_height = image.unfold(2, patch_height, patch_height)
+        patches = unfolded_along_height.unfold(3, patch_width, patch_width)
         patches_reshaped = patches.contiguous().view(
-            batch_size, channels, -1, self.patch_size["height"], self.patch_size["width"]
+            batch_size, channels, -1, patch_height, patch_width
         )
-
         patches_final = patches_reshaped.permute(0, 2, 3, 4, 1).reshape(
-            batch_size, -1, channels * self.patch_size["height"] * self.patch_size["width"]
+            batch_size, -1, channels * patch_height * patch_width
         )
-
-        patches_reshaped = patches.contiguous().view(batch_size, channels, -1, self.patch_size["height"], self.patch_size["width"])
+        patches_reshaped = patches.contiguous().view(batch_size, channels, -1, patch_height, patch_width)
         patches_final = patches_reshaped.permute(0, 2, 3, 4, 1)
-        patches_final = patches_final.reshape(batch_size, -1, channels * self.patch_size["height"] * self.patch_size["width"])
+        patches_final = patches_final.reshape(batch_size, -1, channels * patch_height * patch_width)
         return patches_final
 
     def postprocess_with_tokenizer_info(
@@ -301,7 +439,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         image_placeholder_id: int,
         image_newline_id: int,
         variable_sized: bool,
-        patch_size: Dict[str, int] = None,
+        patch_size: Optional[Dict[str, int]] = None,
     ) -> dict:
         """Process images for model input. In particular, variable-sized images are handled here.
 
@@ -317,6 +455,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         requires_backends(self, ["torch"])
 
         patch_size = patch_size if patch_size is not None else self.patch_size
+        patch_height, patch_width = patch_size["height"], patch_size["width"]
 
         # Only images that are present.
         images: List[List[torch.Tensor]] = []
@@ -330,33 +469,30 @@ class FuyuImageProcessor(BaseImageProcessor):
             for subseq_index in range(image_input.shape[1]):
                 if image_present[batch_index, subseq_index]:
                     image = image_input[batch_index, subseq_index]
+                    image_height, image_width = image.shape[1], image.shape[2]
                     if variable_sized:
                         # The min() is required here due to floating point issues:
                         # math.ceil(torch.tensor(300).cuda() / 30) == 11
                         new_h = min(
-                            image.shape[1],
-                            math.ceil(image_unpadded_h[batch_index, subseq_index] / self.patch_size["height"])
-                            * self.patch_size["height"],
+                            image_height,
+                            math.ceil(image_unpadded_h[batch_index, subseq_index] / patch_height) * patch_height,
                         )
                         new_w = min(
-                            image.shape[2],
-                            math.ceil(image_unpadded_w[batch_index, subseq_index] / self.patch_size["width"])
-                            * self.patch_size["width"],
+                            image_width,
+                            math.ceil(image_unpadded_w[batch_index, subseq_index] / patch_width) * patch_width,
                         )
                         image = image[:, :new_h, :new_w]
+                        image_height, image_width = new_h, new_w
 
                     images[batch_index].append(image)
-                    num_patches = self.get_num_patches(image_height=image.shape[1], image_width=image.shape[2])
-                    tensor_of_image_ids = torch.full(
-                        [num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device
-                    )
+                    num_patches = self.get_num_patches(image_height=image_height, image_width=image_width)
                     tensor_of_image_ids = torch.full(
                         [num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device
                     )
                     patches = self.patchify_image(image=image.unsqueeze(0)).squeeze(0)
                     if variable_sized:
                         # Now terminate each line with |NEWLINE|.
-                        tensor_of_image_ids = tensor_of_image_ids.reshape(-1, new_w // patch_size["width"])
+                        tensor_of_image_ids = tensor_of_image_ids.reshape(-1, new_w // patch_width)
                         tensor_of_image_ids = torch.cat(
                             [
                                 tensor_of_image_ids,
@@ -386,22 +522,20 @@ class FuyuImageProcessor(BaseImageProcessor):
             index_offset = 0
             for subseq_index in range(len(image_input_ids[batch_index])):
                 # Indices of image patches.
-                num_patches = torch.count_nonzero(image_input_ids[batch_index][subseq_index] == image_placeholder_id)
-                indices = torch.arange(
-                    num_patches,
-                    dtype=image_input_ids[batch_index][subseq_index].dtype,
-                    device=image_input_ids[batch_index][subseq_index].device,
-                )
+
+                subseq_image_input_ids = image_input_ids[batch_index][subseq_index]
+
+                num_patches = torch.count_nonzero(subseq_image_input_ids == image_placeholder_id)
+                indices = torch.arange(num_patches, dtype=subseq_image_input_ids.dtype, device=subseq_image_input_ids.device)
 
                 # Place those indices in the image input ids token stream, with -1 representing non-index tokens.
-                indices_in_stream_per_batch = torch.full_like(image_input_ids[batch_index][subseq_index], -1)
-                indices_in_stream_per_subsequence = torch.full_like(image_input_ids[batch_index][subseq_index], -1)
-                indices_in_stream_per_batch[
-                    torch.nonzero(image_input_ids[batch_index][subseq_index] == image_placeholder_id, as_tuple=True)[0]
-                ] = (indices + index_offset)
-                indices_in_stream_per_subsequence[
-                    torch.nonzero(image_input_ids[batch_index][subseq_index] == image_placeholder_id, as_tuple=True)[0]
-                ] = indices
+                indices_in_stream_per_batch = torch.full_like(subseq_image_input_ids, -1)
+                indices_in_stream_per_subsequence = torch.full_like(subseq_image_input_ids, -1)
+
+                inds = torch.nonzero(subseq_image_input_ids == image_placeholder_id, as_tuple=True)[0] # FIXME - give a better name
+
+                indices_in_stream_per_batch[inds] = (indices + index_offset)
+                indices_in_stream_per_subsequence[inds] = indices
 
                 image_patch_indices_per_batch[batch_index].append(indices_in_stream_per_batch)
                 image_patch_indices_per_subsequence[batch_index].append(indices_in_stream_per_subsequence)
