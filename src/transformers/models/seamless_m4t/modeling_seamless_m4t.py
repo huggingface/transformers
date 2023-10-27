@@ -2641,6 +2641,7 @@ class SeamlessM4THifiGan(nn.Module):
 class SeamlessM4TCodeHifiGan(PreTrainedModel):
     config_class = SeamlessM4TConfig
     main_input_name = "input_embeds"
+    _no_split_modules = []
 
     def __init__(self, config):
         super().__init__(config)
