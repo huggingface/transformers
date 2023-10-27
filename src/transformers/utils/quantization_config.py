@@ -369,7 +369,6 @@ class GPTQConfig(QuantizationConfigMixin):
         module_name_preceding_first_block: Optional[List[str]] = None,
         batch_size: int = 1,
         pad_token_id: Optional[int] = None,
-        disable_exllama: Optional[bool] = None,
         use_exllama: bool = True,
         max_input_length: Optional[int] = None,
         use_exllama_v2: bool = False,
@@ -393,7 +392,7 @@ class GPTQConfig(QuantizationConfigMixin):
         self.use_exllama = use_exllama
         self.max_input_length = max_input_length
         self.use_exllama_v2 = use_exllama_v2
-        self.disable_exllama = disable_exllama
+        self.disable_exllama = kwargs.get("disable_exllama", None)
         self.post_init()
 
     def get_loading_attributes(self):
