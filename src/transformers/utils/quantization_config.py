@@ -344,7 +344,7 @@ class GPTQConfig(QuantizationConfigMixin):
             The batch size used when processing the dataset
         pad_token_id (`int`, *optional*):
             The pad token id. Needed to prepare the dataset when `batch_size` > 1.
-        disable_exllama (`bool`, *optional*, defaults to `False`):
+        use_exllama (`bool`, *optional*, defaults to `True`):
             Whether to use exllama backend. Only works with `bits` = 4.
         max_input_length (`int`, *optional*):
             The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
@@ -369,7 +369,8 @@ class GPTQConfig(QuantizationConfigMixin):
         module_name_preceding_first_block: Optional[List[str]] = None,
         batch_size: int = 1,
         pad_token_id: Optional[int] = None,
-        disable_exllama: bool = False,
+        disable_exllama: Optional[bool] = None,
+        use_exllama: bool = True,
         max_input_length: Optional[int] = None,
         use_exllama_v2: bool = False,
         **kwargs,
@@ -389,16 +390,17 @@ class GPTQConfig(QuantizationConfigMixin):
         self.module_name_preceding_first_block = module_name_preceding_first_block
         self.batch_size = batch_size
         self.pad_token_id = pad_token_id
-        self.disable_exllama = disable_exllama
+        self.use_exllama = use_exllama
         self.max_input_length = max_input_length
         self.use_exllama_v2 = use_exllama_v2
+        self.disable_exllama = disable_exllama
         # needed for compatibility with optimum gptq config
         self.disable_exllamav2 = not use_exllama_v2
         self.post_init()
 
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["disable_exllama", "use_exllama_v2", "use_cuda_fp16", "max_input_length"]
+        loading_attibutes = ["use_exllama", "use_exllama_v2", "use_cuda_fp16", "max_input_length"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
 
@@ -425,6 +427,12 @@ class GPTQConfig(QuantizationConfigMixin):
                     ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
                 )
         if self.bits == 4:
+            if self.disable_exllama is not None:
+                logger.warning(
+                    "Using `disable_exllama` is deprecated and will be removed in future version. Use `use_exllama` instead."
+                )
+                self.use_exllama = not self.disable_exllama
+
             if self.use_exllama_v2:
                 optimum_version = version.parse(importlib.metadata.version("optimum"))
                 autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
@@ -432,11 +440,14 @@ class GPTQConfig(QuantizationConfigMixin):
                     raise ValueError(
                         f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
                     )
-                self.disable_exllama = True
+                self.use_exllama = False
                 logger.warning("You have activated exllamav2 kernels. Exllama kernels will be disabled.")
-            if not self.disable_exllama:
+
+            if self.use_exllama:
                 logger.warning(
-                    """You have activated exllama backend. Note that you can get better inference
-                    speed using exllamav2 kernel by setting `use_exllama_v2=True`.`disable_exllama` will be deprecated
-                    in future version."""
+                    "You have activated exllama backend. Note that you can get better inference "
+                    "speed using exllamav2 kernel by setting `use_exllama_v2=True`."
                 )
+
+        # needed for compatibility with optimum config
+        self.disable_exllama = not self.use_exllama

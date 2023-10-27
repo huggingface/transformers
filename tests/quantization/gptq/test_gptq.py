@@ -98,7 +98,7 @@ class GPTQTest(unittest.TestCase):
     bits = 4
     group_size = 128
     desc_act = False
-    disable_exllama = True
+    use_exllama = False
 
     dataset = [
         "auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."
@@ -125,7 +125,7 @@ class GPTQTest(unittest.TestCase):
             tokenizer=cls.tokenizer,
             group_size=cls.group_size,
             desc_act=cls.desc_act,
-            disable_exllama=cls.disable_exllama,
+            use_exllama=cls.use_exllama,
         )
 
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -177,7 +177,7 @@ class GPTQTest(unittest.TestCase):
             desc_act=self.desc_act,
             group_size=self.group_size,
             bits=self.bits,
-            disable_exllama=self.disable_exllama,
+            disable_exllama=not self.use_exllama,
             disable_exllamav2=True,
         )
         self.assertTrue(self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__ == QuantLinear)
@@ -212,7 +212,7 @@ class GPTQTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            if self.disable_exllama:
+            if not self.use_exllama:
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname).to(0)
             else:
                 # we need to put it directly to the gpu. Otherwise, we won't be able to initialize the exllama kernel
@@ -235,13 +235,13 @@ class GPTQTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            if self.disable_exllama:
-                self.assertEqual(self.quantized_model.config.quantization_config.disable_exllama, True)
+            if not self.use_exllama:
+                self.assertEqual(self.quantized_model.config.quantization_config.use_exllama, False)
                 # we need to put it directly to the gpu. Otherwise, we won't be able to initialize the exllama kernel
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
-                    tmpdirname, quantization_config=GPTQConfig(disable_exllama=False, bits=4), device_map={"": 0}
+                    tmpdirname, quantization_config=GPTQConfig(use_exllama=True, bits=4), device_map={"": 0}
                 )
-                self.assertEqual(quantized_model_from_saved.config.quantization_config.disable_exllama, False)
+                self.assertEqual(quantized_model_from_saved.config.quantization_config.use_exllama, True)
                 self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
                 self.check_inference_correctness(quantized_model_from_saved)
 
@@ -256,7 +256,7 @@ class GPTQTestDeviceMap(GPTQTest):
 @require_torch_multi_gpu
 class GPTQTestDeviceMapExllama(GPTQTest):
     device_map = "auto"
-    disable_exllama = False
+    use_exllama = True
 
 
 @slow
