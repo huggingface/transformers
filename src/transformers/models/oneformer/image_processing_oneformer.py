@@ -361,7 +361,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             sequence like `(width, height)`, output size will be matched to this. If size is an int, smaller edge of
             the image will be matched to this number. i.e, if `height > width`, then image will be rescaled to `(size *
             height / width, size)`.
-        resample (`int`, *optional*, defaults to `Resampling.BILINEAR`):
+        resample (`int`, *optional*, defaults to `2`):
             An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
             `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
             `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
