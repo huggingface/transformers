@@ -639,7 +639,6 @@ def require_torch_multi_accelerator(test_case):
     if not is_torch_available():
         return unittest.skip("test requires PyTorch")(test_case)
 
-
     return unittest.skipUnless(backend_device_count(torch_device) > 1, "test requires multiple accelerators")(
         test_case
     )
