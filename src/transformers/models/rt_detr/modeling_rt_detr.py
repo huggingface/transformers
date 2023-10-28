@@ -17,6 +17,8 @@ import copy
 import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
+from collections import OrderedDict
+import torch.nn.functional as F
 
 import torch
 from torch import nn, Tensor
@@ -50,47 +52,16 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RTDetrConfig"
-_CHECKPOINT_FOR_DOC = "checkpoing/todo"
+# TODO: Replace all occurrences of the checkpoint with the final one
+_CHECKPOINT_FOR_DOC = "rafaelpadilla/porting_rt_detr" 
 
 RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "rafaelpadilla/porting_rt_detr",
-    # See all RT_DETR models at https://huggingface.co/models?filter=rt_detr
+    # See all RTDETR models at https://huggingface.co/models?filter=rt_detr
 ]
 
 
 @dataclass
-# Copied from transformers.models.detr.modeling_detr.DetrDecoderOutput with DETR->RT_DETR,Detr->RT_DETR
-class RT_DETRDecoderOutput(BaseModelOutputWithCrossAttentions):
-    """
-    Base class for outputs of the RT_DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
-    namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
-    gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
-            Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
-            layernorm.
-    """
-
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-
-
-@dataclass
-# Copied from transformers.models.detr.modeling_detr.DetrModelOutput with DETR->RT_DETR,Detr->RT_DETR
 class RTDetrObjectDetectionOutput(ModelOutput):
     """
     Output type of [`RTDetrModel`].
@@ -107,36 +78,8 @@ class RTDetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~DetrImageProcessor.post_process_object_detection`] to retrieve the
-            unnormalized bounding boxes.
-        auxiliary_outputs (`list[Dict]`, *optional*):
-            Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
-            and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
-            `pred_boxes`) for each decoder layer.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of each
-            layer plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder, after the attention softmax, used to compute the
-            weighted average in the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the encoder at the output of each
-            layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the encoder, after the attention softmax, used to compute the
-            weighted average in the self-attention heads.
+            possible padding). You can use [`~RTDetrImageProcessor.post_process_object_detection`] to retrieve the
+            unnormalized (absolute) bounding boxes.
     """
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
@@ -164,377 +107,10 @@ RT_DETR_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
-
-            Pixel values can be obtained using [`AutoImageProcessor`]. See [`DetrImageProcessor.__call__`] for details.
-
-        pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
-
-            - 1 for pixels that are real (i.e. **not masked**),
-            - 0 for pixels that are padding (i.e. **masked**).
-
-            [What are attention masks?](../glossary#attention-mask)
-
-        decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
-            Not used by default. Can be used to mask object queries.
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
+            Pixel values can be obtained using [`AutoImageProcessor`]. See [`RTDetrImageProcessor.__call__`] for details.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
-
-
-# # Copied from transformers.models.detr.modeling_detr.DetrEncoder with DETR->RT_DETR,Detr->RT_DETR
-# class RT_DETREncoder(RTDetrPreTrainedModel):
-#     """
-#     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-#     [`RT_DETREncoderLayer`].
-
-#     The encoder updates the flattened feature map through multiple self-attention layers.
-
-#     Small tweak for RT_DETR:
-
-#     - object_queries are added to the forward pass.
-
-#     Args:
-#         config: RTDetrConfig
-#     """
-
-#     def __init__(self, config: RTDetrConfig):
-#         super().__init__(config)
-
-#         self.dropout = config.dropout
-#         self.layerdrop = config.encoder_layerdrop
-
-#         self.layers = nn.ModuleList([RT_DETREncoderLayer(config) for _ in range(config.encoder_layers)])
-
-#         # in the original RT_DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
-
-#         # Initialize weights and apply final processing
-#         self.post_init()
-
-#     def forward(
-#         self,
-#         inputs_embeds=None,
-#         attention_mask=None,
-#         object_queries=None,
-#         output_attentions=None,
-#         output_hidden_states=None,
-#         return_dict=None,
-#         **kwargs,
-#     ):
-#         r"""
-#         Args:
-#             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-#                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
-
-#             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-#                 Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
-
-#                 - 1 for pixel features that are real (i.e. **not masked**),
-#                 - 0 for pixel features that are padding (i.e. **masked**).
-
-#                 [What are attention masks?](../glossary#attention-mask)
-
-#             object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-#                 Object queries that are added to the queries in each self-attention layer.
-
-#             output_attentions (`bool`, *optional*):
-#                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-#                 returned tensors for more detail.
-#             output_hidden_states (`bool`, *optional*):
-#                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-#                 for more detail.
-#             return_dict (`bool`, *optional*):
-#                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-#         """
-#         position_embeddings = kwargs.pop("position_embeddings", None)
-
-#         if kwargs:
-#             raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-#         if position_embeddings is not None and object_queries is not None:
-#             raise ValueError(
-#                 "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-#             )
-
-#         if position_embeddings is not None:
-#             logger.warning_once(
-#                 "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-#             )
-#             object_queries = position_embeddings
-
-#         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-#         output_hidden_states = (
-#             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-#         )
-#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-#         hidden_states = inputs_embeds
-#         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-
-#         # expand attention_mask
-#         if attention_mask is not None:
-#             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-#             attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
-
-#         encoder_states = () if output_hidden_states else None
-#         all_attentions = () if output_attentions else None
-#         for i, encoder_layer in enumerate(self.layers):
-#             if output_hidden_states:
-#                 encoder_states = encoder_states + (hidden_states,)
-#             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-#             to_drop = False
-#             if self.training:
-#                 dropout_probability = torch.rand([])
-#                 if dropout_probability < self.layerdrop:  # skip the layer
-#                     to_drop = True
-
-#             if to_drop:
-#                 layer_outputs = (None, None)
-#             else:
-#                 # we add object_queries as extra input to the encoder_layer
-#                 layer_outputs = encoder_layer(
-#                     hidden_states,
-#                     attention_mask,
-#                     object_queries=object_queries,
-#                     output_attentions=output_attentions,
-#                 )
-
-#                 hidden_states = layer_outputs[0]
-
-#             if output_attentions:
-#                 all_attentions = all_attentions + (layer_outputs[1],)
-
-#         if output_hidden_states:
-#             encoder_states = encoder_states + (hidden_states,)
-
-#         if not return_dict:
-#             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-#         return BaseModelOutput(
-#             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-#         )
-
-
-# # Copied from transformers.models.detr.modeling_detr.DetrDecoder with DETR->RT_DETR,Detr->RT_DETR
-# class RT_DETRDecoder(RTDetrPreTrainedModel):
-#     """
-#     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`RT_DETRDecoderLayer`].
-
-#     The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
-
-#     Some small tweaks for RT_DETR:
-
-#     - object_queries and query_position_embeddings are added to the forward pass.
-#     - if self.config.auxiliary_loss is set to True, also returns a stack of activations from all decoding layers.
-
-#     Args:
-#         config: RTDetrConfig
-#     """
-
-#     def __init__(self, config: RTDetrConfig):
-#         super().__init__(config)
-#         self.dropout = config.dropout
-#         self.layerdrop = config.decoder_layerdrop
-
-#         self.layers = nn.ModuleList([RT_DETRDecoderLayer(config) for _ in range(config.decoder_layers)])
-#         # in RT_DETR, the decoder uses layernorm after the last decoder layer output
-#         self.layernorm = nn.LayerNorm(config.d_model)
-
-#         self.gradient_checkpointing = False
-#         # Initialize weights and apply final processing
-#         self.post_init()
-
-#     def forward(
-#         self,
-#         inputs_embeds=None,
-#         attention_mask=None,
-#         encoder_hidden_states=None,
-#         encoder_attention_mask=None,
-#         object_queries=None,
-#         query_position_embeddings=None,
-#         output_attentions=None,
-#         output_hidden_states=None,
-#         return_dict=None,
-#         **kwargs,
-#     ):
-#         r"""
-#         Args:
-#             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-#                 The query embeddings that are passed into the decoder.
-
-#             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-#                 Mask to avoid performing attention on certain queries. Mask values selected in `[0, 1]`:
-
-#                 - 1 for queries that are **not masked**,
-#                 - 0 for queries that are **masked**.
-
-#                 [What are attention masks?](../glossary#attention-mask)
-#             encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-#                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-#                 of the decoder.
-#             encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-#                 Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
-#                 in `[0, 1]`:
-
-#                 - 1 for pixels that are real (i.e. **not masked**),
-#                 - 0 for pixels that are padding (i.e. **masked**).
-
-#             object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-#                 Object queries that are added to the queries and keys in each cross-attention layer.
-#             query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-#                 , *optional*): Position embeddings that are added to the values and keys in each self-attention layer.
-
-#             output_attentions (`bool`, *optional*):
-#                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-#                 returned tensors for more detail.
-#             output_hidden_states (`bool`, *optional*):
-#                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-#                 for more detail.
-#             return_dict (`bool`, *optional*):
-#                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-#         """
-#         position_embeddings = kwargs.pop("position_embeddings", None)
-
-#         if kwargs:
-#             raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-#         if position_embeddings is not None and object_queries is not None:
-#             raise ValueError(
-#                 "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-#             )
-
-#         if position_embeddings is not None:
-#             logger.warning_once(
-#                 "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-#             )
-#             object_queries = position_embeddings
-
-#         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-#         output_hidden_states = (
-#             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-#         )
-#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-#         if inputs_embeds is not None:
-#             hidden_states = inputs_embeds
-#             input_shape = inputs_embeds.size()[:-1]
-
-#         combined_attention_mask = None
-
-#         if attention_mask is not None and combined_attention_mask is not None:
-#             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-#             combined_attention_mask = combined_attention_mask + _expand_mask(
-#                 attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
-#             )
-
-#         # expand encoder attention mask
-#         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-#             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-#             encoder_attention_mask = _expand_mask(
-#                 encoder_attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
-#             )
-
-#         # optional intermediate hidden states
-#         intermediate = () if self.config.auxiliary_loss else None
-
-#         # decoder layers
-#         all_hidden_states = () if output_hidden_states else None
-#         all_self_attns = () if output_attentions else None
-#         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-
-#         for idx, decoder_layer in enumerate(self.layers):
-#             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-#             if output_hidden_states:
-#                 all_hidden_states += (hidden_states,)
-#             if self.training:
-#                 dropout_probability = torch.rand([])
-#                 if dropout_probability < self.layerdrop:
-#                     continue
-
-#             if self.gradient_checkpointing and self.training:
-
-#                 def create_custom_forward(module):
-#                     def custom_forward(*inputs):
-#                         return module(*inputs, output_attentions)
-
-#                     return custom_forward
-
-#                 layer_outputs = torch.utils.checkpoint.checkpoint(
-#                     create_custom_forward(decoder_layer),
-#                     hidden_states,
-#                     combined_attention_mask,
-#                     encoder_hidden_states,
-#                     encoder_attention_mask,
-#                     None,
-#                 )
-#             else:
-#                 layer_outputs = decoder_layer(
-#                     hidden_states,
-#                     attention_mask=combined_attention_mask,
-#                     object_queries=object_queries,
-#                     query_position_embeddings=query_position_embeddings,
-#                     encoder_hidden_states=encoder_hidden_states,
-#                     encoder_attention_mask=encoder_attention_mask,
-#                     output_attentions=output_attentions,
-#                 )
-
-#             hidden_states = layer_outputs[0]
-
-#             if self.config.auxiliary_loss:
-#                 hidden_states = self.layernorm(hidden_states)
-#                 intermediate += (hidden_states,)
-
-#             if output_attentions:
-#                 all_self_attns += (layer_outputs[1],)
-
-#                 if encoder_hidden_states is not None:
-#                     all_cross_attentions += (layer_outputs[2],)
-
-#         # finally, apply layernorm
-#         hidden_states = self.layernorm(hidden_states)
-
-#         # add hidden states from the last decoder layer
-#         if output_hidden_states:
-#             all_hidden_states += (hidden_states,)
-
-#         # stack intermediate decoder activations
-#         if self.config.auxiliary_loss:
-#             intermediate = torch.stack(intermediate)
-
-#         if not return_dict:
-#             return tuple(
-#                 v
-#                 for v in [hidden_states, all_hidden_states, all_self_attns, all_cross_attentions, intermediate]
-#                 if v is not None
-#             )
-#         return RT_DETRDecoderOutput(
-#             last_hidden_state=hidden_states,
-#             hidden_states=all_hidden_states,
-#             attentions=all_self_attns,
-#             cross_attentions=all_cross_attentions,
-#             intermediate_hidden_states=intermediate,
-#         )
-
-
-#### TODO: Rafael
-from collections import OrderedDict
-
-import torch.nn.functional as F
 
 
 class NestedTensor(object):
@@ -556,6 +132,7 @@ class NestedTensor(object):
 
     def __repr__(self):
         return str(self.tensors)
+
 
 # below: taken from https://github.com/facebookresearch/detr/blob/master/util/misc.py#L306
 def _max_by_axis(the_list):
@@ -905,10 +482,7 @@ class Blocks(nn.Module):
         return out
 
 
-# TODO: Rafael! Important: Use Resnet-d from timm library instead of the PResNet (config.userfromtimm=True) -> see how deformable detr does
-
-
-# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->RtDetr
+# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->RTDetr
 class RTDetrFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
@@ -948,59 +522,13 @@ class RTDetrFrozenBatchNorm2d(nn.Module):
         return x * scale + bias
 
 
-# TODO: Rafael remove it
-# class FrozenBatchNorm2d(nn.Module):
-#     """copy and modified from https://github.com/facebookresearch/detr/blob/master/models/backbone.py
-#     BatchNorm2d where the batch statistics and the affine parameters are fixed.
-#     Copy-paste from torchvision.misc.ops with added eps before rqsrt,
-#     without which any other models than torchvision.models.resnet[18,34,50,101]
-#     produce nans.
-#     """
-#     def __init__(self, num_features, eps=1e-5):
-#         super(FrozenBatchNorm2d, self).__init__()
-#         n = num_features
-#         self.register_buffer("weight", torch.ones(n))
-#         self.register_buffer("bias", torch.zeros(n))
-#         self.register_buffer("running_mean", torch.zeros(n))
-#         self.register_buffer("running_var", torch.ones(n))
-#         self.eps = eps
-#         self.num_features = n
-
-#     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-#                               missing_keys, unexpected_keys, error_msgs):
-#         num_batches_tracked_key = prefix + 'num_batches_tracked'
-#         if num_batches_tracked_key in state_dict:
-#             del state_dict[num_batches_tracked_key]
-
-#         super(FrozenBatchNorm2d, self)._load_from_state_dict(
-#             state_dict, prefix, local_metadata, strict,
-#             missing_keys, unexpected_keys, error_msgs)
-
-#     def forward(self, x):
-#         # move reshapes to the beginning to make it fuser-friendly
-#         w = self.weight.reshape(1, -1, 1, 1)
-#         b = self.bias.reshape(1, -1, 1, 1)
-#         rv = self.running_var.reshape(1, -1, 1, 1)
-#         rm = self.running_mean.reshape(1, -1, 1, 1)
-#         scale = w * (rv + self.eps).rsqrt()
-#         bias = b - rm * scale
-#         return x * scale + bias
-
-#     def extra_repr(self):
-#         return (
-#             "{num_features}, eps={eps}".format(**self.__dict__)
-#         )
-
-
 def bias_init_with_prob(prior_prob=0.01):
     bias_init = float(-math.log((1 - prior_prob) / prior_prob))
     return bias_init
 
-
 def inverse_sigmoid(x: torch.Tensor, eps: float = 1e-5) -> torch.Tensor:
     x = x.clip(min=0.0, max=1.0)
     return torch.log(x.clip(min=eps) / (1 - x).clip(min=eps))
-
 
 def deformable_attention_core_func(value, value_spatial_shapes, sampling_locations, attention_weights):
     batch_size, _, num_head, head_dim = value.shape
@@ -1042,7 +570,6 @@ class PResNet(nn.Module):
         return_idx = config.return_idx
         freeze_at = config.freeze_at
         freeze_norm = config.freeze_norm
-        pretrained = config.pretrained
         channels_in = 64
         if variant in ["c", "d"]:
             conv_def = [
@@ -1095,12 +622,6 @@ class PResNet(nn.Module):
 
         if freeze_norm:
             self._freeze_norm(self)
-
-        # TODO Rafael:
-        # if pretrained:
-        #     state = torch.hub.load_state_dict_from_url(donwload_url[depth])
-        #     self.load_state_dict(state)
-        #     print(f"Load PResNet{depth} state_dict")
 
     def _freeze_parameters(self, m: nn.Module):
         for p in m.parameters():
@@ -1258,147 +779,6 @@ class CSPRepLayer(nn.Module):
         x_1 = self.bottlenecks(x_1)
         x_2 = self.conv2(x)
         return self.conv3(x_1 + x_2)
-
-
-class HybridEncoder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.in_channels = config.in_channels
-        self.feat_strides = config.feat_strides
-        self.hidden_dim = config.hidden_dim
-        self.use_encoder_idx = config.use_encoder_idx
-        self.num_encoder_layers = config.num_encoder_layers
-        self.pe_temperature = config.pe_temperature
-        self.eval_size = config.eval_size
-        self.out_channels = [self.hidden_dim for _ in range(len(self.in_channels))]
-        self.out_strides = self.feat_strides
-        num_head = config.num_head
-        dim_feedforward = config.dim_feedforward
-        dropout = config.dropout
-        enc_act = config.enc_act
-        expansion = config.expansion
-        depth_mult = config.depth_mult
-        act_encoder = config.act_encoder
-        # channel projection
-        self.input_proj = nn.ModuleList()
-        for in_channel in self.in_channels:
-            self.input_proj.append(
-                nn.Sequential(
-                    nn.Conv2d(in_channel, self.hidden_dim, kernel_size=1, bias=False), nn.BatchNorm2d(self.hidden_dim)
-                )
-            )
-
-        # encoder transformer
-        encoder_layer = TransformerEncoderLayer(
-            self.hidden_dim, num_head=num_head, dim_feedforward=dim_feedforward, dropout=dropout, activation=enc_act
-        )
-
-        self.encoder = nn.ModuleList(
-            [
-                TransformerEncoder(copy.deepcopy(encoder_layer), self.num_encoder_layers)
-                for _ in range(len(self.use_encoder_idx))
-            ]
-        )
-
-        # top-down fpn
-        self.lateral_convs = nn.ModuleList()
-        self.fpn_blocks = nn.ModuleList()
-        for _ in range(len(self.in_channels) - 1, 0, -1):
-            self.lateral_convs.append(ConvNormLayer(self.hidden_dim, self.hidden_dim, 1, 1, activation=act_encoder))
-            self.fpn_blocks.append(
-                CSPRepLayer(
-                    self.hidden_dim * 2,
-                    self.hidden_dim,
-                    round(3 * depth_mult),
-                    activation=act_encoder,
-                    expansion=expansion,
-                )
-            )
-
-        # bottom-up pan
-        self.downsample_convs = nn.ModuleList()
-        self.pan_blocks = nn.ModuleList()
-        for _ in range(len(self.in_channels) - 1):
-            self.downsample_convs.append(ConvNormLayer(self.hidden_dim, self.hidden_dim, 3, 2, activation=act_encoder))
-            self.pan_blocks.append(
-                CSPRepLayer(
-                    self.hidden_dim * 2,
-                    self.hidden_dim,
-                    round(3 * depth_mult),
-                    activation=act_encoder,
-                    expansion=expansion,
-                )
-            )
-
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        if self.eval_size:
-            for idx in self.use_encoder_idx:
-                stride = self.feat_strides[idx]
-                pos_embed = self.build_2d_sincos_position_embedding(
-                    self.eval_size[1] // stride, self.eval_size[0] // stride, self.hidden_dim, self.pe_temperature
-                )
-                setattr(self, f"pos_embed{idx}", pos_embed)
-
-    @staticmethod
-    def build_2d_sincos_position_embedding(w, h, embed_dim=256, temperature=10000.0):
-        grid_w = torch.arange(int(w), dtype=torch.float32)
-        grid_h = torch.arange(int(h), dtype=torch.float32)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
-        if embed_dim % 4 != 0:
-            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
-        pos_dim = embed_dim // 4
-        omega = torch.arange(pos_dim, dtype=torch.float32) / pos_dim
-        omega = 1.0 / (temperature**omega)
-
-        out_w = grid_w.flatten()[..., None] @ omega[None]
-        out_h = grid_h.flatten()[..., None] @ omega[None]
-
-        return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
-
-    def forward(self, feats):
-        if len(feats) != len(self.in_channels):
-            raise "Relation len(feats) != len(self.in_channels) must apply."
-        proj_feats = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
-        # encoder
-        if self.num_encoder_layers > 0:
-            for i, enc_ind in enumerate(self.use_encoder_idx):
-                h, w = proj_feats[enc_ind].shape[2:]
-                # flatten [B, C, H, W] to [B, HxW, C]
-                src_flatten = proj_feats[enc_ind].flatten(2).permute(0, 2, 1)
-                if self.training or self.eval_size is None:
-                    pos_embed = self.build_2d_sincos_position_embedding(w, h, self.hidden_dim, self.pe_temperature).to(
-                        src_flatten.device
-                    )
-                else:
-                    pos_embed = getattr(self, f"pos_embed{enc_ind}", None).to(src_flatten.device)
-
-                memory = self.encoder[i](src_flatten, pos_embed=pos_embed)
-                proj_feats[enc_ind] = memory.permute(0, 2, 1).reshape(-1, self.hidden_dim, h, w).contiguous()
-
-        # broadcasting and fusion
-        inner_outs = [proj_feats[-1]]
-        for idx in range(len(self.in_channels) - 1, 0, -1):
-            feat_heigh = inner_outs[0]
-            feat_low = proj_feats[idx - 1]
-            feat_heigh = self.lateral_convs[len(self.in_channels) - 1 - idx](feat_heigh)
-            inner_outs[0] = feat_heigh
-            upsample_feat = F.interpolate(feat_heigh, scale_factor=2.0, mode="nearest")
-            inner_out = self.fpn_blocks[len(self.in_channels) - 1 - idx](
-                torch.concat([upsample_feat, feat_low], dim=1)
-            )
-            inner_outs.insert(0, inner_out)
-
-        outs = [inner_outs[0]]
-        for idx in range(len(self.in_channels) - 1):
-            feat_low = outs[-1]
-            feat_height = inner_outs[idx + 1]
-            downsample_feat = self.downsample_convs[idx](feat_low)
-            out = self.pan_blocks[idx](torch.concat([downsample_feat, feat_height], dim=1))
-            outs.append(out)
-
-        return outs
 
 
 class MSDeformableAttention(nn.Module):
@@ -1617,7 +997,6 @@ class TransformerDecoder(nn.Module):
             ref_points_detach = inter_ref_bbox.detach() if self.training else inter_ref_bbox
 
         return torch.stack(dec_out_bboxes), torch.stack(dec_out_logits)
-
 
 
 class MLP(nn.Module):
@@ -1878,7 +1257,7 @@ class RTDetrTransformer(nn.Module):
             dn_out_bboxes, out_bboxes = torch.split(out_bboxes, dn_meta["dn_num_split"], dim=2)
             dn_out_logits, out_logits = torch.split(out_logits, dn_meta["dn_num_split"], dim=2)
 
-        out = {"pred_logits": out_logits[-1], "pred_boxes": out_bboxes[-1]}
+        out = {"logits": out_logits[-1], "pred_boxes": out_bboxes[-1]}
 
         if self.training and self.aux_loss:
             out["aux_outputs"] = self._set_aux_loss(out_logits[:-1], out_bboxes[:-1])
@@ -1895,7 +1274,8 @@ class RTDetrTransformer(nn.Module):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
-        return [{"pred_logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
+        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
+
 
 # Copied from transformers.models.detr.modeling_detr.dice_loss
 def dice_loss(inputs, targets, num_boxes):
@@ -1956,12 +1336,19 @@ class RTDetrLoss(nn.Module):
     Args:
         matcher (`DetrHungarianMatcher`):
             Module able to compute a matching between targets and proposals.
-        num_classes (`int`):
-            Number of object categories, omitting the special no-object category.
-        eos_coef (`float`):
-            Relative classification weight applied to the no-object category.
+        weight_dict (`Dict`):
+            Dictionary relating each loss with its weights. 
+            These losses are configured in RTDetrConf as `weight_loss_vfl`, `weight_loss_bbox`, `weight_loss_giou`
         losses (`List[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
+        alpha (`float`):
+            Parameter alpha used to compute the focal loss.
+        gamma (`float`):
+            Parameter gamma used to compute the focal loss.
+        eos_coef (`float`):
+            Relative classification weight applied to the no-object category.
+        num_classes (`int`):
+            Number of object categories, omitting the special no-object category.
     """
 
     def __init__(self, matcher, weight_dict, losses, alpha, gamma, eos_coef, num_classes):
@@ -2100,7 +1487,7 @@ class RTDetrLoss(nn.Module):
         return losses
 
     def loss_labels_bce(self, outputs, targets, indices, num_boxes, log=True):
-        src_logits = outputs['pred_logits']
+        src_logits = outputs["logits"]
         idx = self._get_source_permutation_idx(indices)
         target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
         target_classes = torch.full(src_logits.shape[:2], self.num_classes,
@@ -2125,10 +1512,10 @@ class RTDetrLoss(nn.Module):
         return batch_idx, target_idx
 
     def loss_labels_focal(self, outputs, targets, indices, num_boxes, log=True):
-        if "pred_logits" not in outputs:
-            raise KeyError("No predicted logits found in outputs")
+        if "logits" not in outputs:
+            raise KeyError("No logits found in outputs")
 
-        src_logits = outputs['pred_logits']
+        src_logits = outputs["logits"]
 
         idx = self._get_source_permutation_idx(indices)
         target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
@@ -2222,11 +1609,6 @@ class RTDetrLoss(nn.Module):
 
 
 class RTDetrPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = RTDetrConfig
     base_model_prefix = "rt_detr"
     main_input_name = "pixel_values"
@@ -2241,15 +1623,157 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, RT_DETRDecoder): # TODO: <==== what is _set_gradient_checkpointing used for?
-            module.gradient_checkpointing = value
 
+class HybridEncoder(RTDetrPreTrainedModel):
+    """
+    Decoder consisting of TODO
+    
+    Args:
+        config: DetaConfig
+    """
+    
+    def __init__(self, config: RTDetrConfig):
+        super().__init__(config)
+        self.in_channels = config.in_channels
+        self.feat_strides = config.feat_strides
+        self.hidden_dim = config.hidden_dim
+        self.use_encoder_idx = config.use_encoder_idx
+        self.num_encoder_layers = config.num_encoder_layers
+        self.pe_temperature = config.pe_temperature
+        self.eval_size = config.eval_size
+        self.out_channels = [self.hidden_dim for _ in range(len(self.in_channels))]
+        self.out_strides = self.feat_strides
+        num_head = config.num_head
+        dim_feedforward = config.dim_feedforward
+        dropout = config.dropout
+        enc_act = config.enc_act
+        expansion = config.expansion
+        depth_mult = config.depth_mult
+        act_encoder = config.act_encoder
+        # channel projection
+        self.input_proj = nn.ModuleList()
+        for in_channel in self.in_channels:
+            self.input_proj.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channel, self.hidden_dim, kernel_size=1, bias=False), nn.BatchNorm2d(self.hidden_dim)
+                )
+            )
+
+        # encoder transformer
+        encoder_layer = TransformerEncoderLayer(
+            self.hidden_dim, num_head=num_head, dim_feedforward=dim_feedforward, dropout=dropout, activation=enc_act
+        )
+
+        self.encoder = nn.ModuleList(
+            [
+                TransformerEncoder(copy.deepcopy(encoder_layer), self.num_encoder_layers)
+                for _ in range(len(self.use_encoder_idx))
+            ]
+        )
+
+        # top-down fpn
+        self.lateral_convs = nn.ModuleList()
+        self.fpn_blocks = nn.ModuleList()
+        for _ in range(len(self.in_channels) - 1, 0, -1):
+            self.lateral_convs.append(ConvNormLayer(self.hidden_dim, self.hidden_dim, 1, 1, activation=act_encoder))
+            self.fpn_blocks.append(
+                CSPRepLayer(
+                    self.hidden_dim * 2,
+                    self.hidden_dim,
+                    round(3 * depth_mult),
+                    activation=act_encoder,
+                    expansion=expansion,
+                )
+            )
+
+        # bottom-up pan
+        self.downsample_convs = nn.ModuleList()
+        self.pan_blocks = nn.ModuleList()
+        for _ in range(len(self.in_channels) - 1):
+            self.downsample_convs.append(ConvNormLayer(self.hidden_dim, self.hidden_dim, 3, 2, activation=act_encoder))
+            self.pan_blocks.append(
+                CSPRepLayer(
+                    self.hidden_dim * 2,
+                    self.hidden_dim,
+                    round(3 * depth_mult),
+                    activation=act_encoder,
+                    expansion=expansion,
+                )
+            )
+
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        if self.eval_size:
+            for idx in self.use_encoder_idx:
+                stride = self.feat_strides[idx]
+                pos_embed = self.build_2d_sincos_position_embedding(
+                    self.eval_size[1] // stride, self.eval_size[0] // stride, self.hidden_dim, self.pe_temperature
+                )
+                setattr(self, f"pos_embed{idx}", pos_embed)
+
+    @staticmethod
+    def build_2d_sincos_position_embedding(w, h, embed_dim=256, temperature=10000.0):
+        grid_w = torch.arange(int(w), dtype=torch.float32)
+        grid_h = torch.arange(int(h), dtype=torch.float32)
+        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
+        if embed_dim % 4 != 0:
+            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
+        pos_dim = embed_dim // 4
+        omega = torch.arange(pos_dim, dtype=torch.float32) / pos_dim
+        omega = 1.0 / (temperature**omega)
+
+        out_w = grid_w.flatten()[..., None] @ omega[None]
+        out_h = grid_h.flatten()[..., None] @ omega[None]
+
+        return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
+
+    def forward(self, feats):
+        if len(feats) != len(self.in_channels):
+            raise "Relation len(feats) != len(self.in_channels) must apply."
+        proj_feats = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
+        # encoder
+        if self.num_encoder_layers > 0:
+            for i, enc_ind in enumerate(self.use_encoder_idx):
+                h, w = proj_feats[enc_ind].shape[2:]
+                # flatten [B, C, H, W] to [B, HxW, C]
+                src_flatten = proj_feats[enc_ind].flatten(2).permute(0, 2, 1)
+                if self.training or self.eval_size is None:
+                    pos_embed = self.build_2d_sincos_position_embedding(w, h, self.hidden_dim, self.pe_temperature).to(
+                        src_flatten.device
+                    )
+                else:
+                    pos_embed = getattr(self, f"pos_embed{enc_ind}", None).to(src_flatten.device)
+
+                memory = self.encoder[i](src_flatten, pos_embed=pos_embed)
+                proj_feats[enc_ind] = memory.permute(0, 2, 1).reshape(-1, self.hidden_dim, h, w).contiguous()
+
+        # broadcasting and fusion
+        inner_outs = [proj_feats[-1]]
+        for idx in range(len(self.in_channels) - 1, 0, -1):
+            feat_heigh = inner_outs[0]
+            feat_low = proj_feats[idx - 1]
+            feat_heigh = self.lateral_convs[len(self.in_channels) - 1 - idx](feat_heigh)
+            inner_outs[0] = feat_heigh
+            upsample_feat = F.interpolate(feat_heigh, scale_factor=2.0, mode="nearest")
+            inner_out = self.fpn_blocks[len(self.in_channels) - 1 - idx](
+                torch.concat([upsample_feat, feat_low], dim=1)
+            )
+            inner_outs.insert(0, inner_out)
+
+        outs = [inner_outs[0]]
+        for idx in range(len(self.in_channels) - 1):
+            feat_low = outs[-1]
+            feat_height = inner_outs[idx + 1]
+            downsample_feat = self.downsample_convs[idx](feat_low)
+            out = self.pan_blocks[idx](torch.concat([downsample_feat, feat_height], dim=1))
+            outs.append(out)
+
+        return outs
 
 @add_start_docstrings(
     """
-    The bare RT_DETR Model (consisting of a backbone and encoder-decoder Transformer) outputting raw hidden-states without
-    any specific head on top.
+    The bare RT_DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further decoded into scores and classes.
     """,
     RT_DETR_START_DOCSTRING,
 )
@@ -2258,8 +1782,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
         super().__init__(config)
 
         self.backbone = PResNet(config)
-        # backbone_name = "resnet50d" #config.backbone_name
-        # self.backbone_timm = TimmBackbone.from_pretrained(backbone_name, out_indices=[2,3,4])
         self.encoder = HybridEncoder(config)
         self.decoder = RTDetrTransformer(config)
 
@@ -2276,17 +1798,9 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(RT_DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RTDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
-
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        # pixel_mask: Optional[torch.LongTensor] = None,
-        # decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        # encoder_outputs: Optional[torch.FloatTensor] = None,
-        # inputs_embeds: Optional[torch.FloatTensor] = None,
-        # decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        # output_attentions: Optional[bool] = None,
-        # output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], RTDetrObjectDetectionOutput]:
         r"""
@@ -2302,128 +1816,41 @@ class RTDetrModel(RTDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("checkpoing/todo")
-        >>> model = RTDetrModel.from_pretrained("checkpoing/todo")
+        >>> image_processor = AutoImageProcessor.from_pretrained(_CHECKPOINT_FOR_DOC)
+        >>> model = RTDetrModel.from_pretrained(_CHECKPOINT_FOR_DOC)
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> # forward pass
-        >>> outputs = model(**inputs)
+        >>> outputs = model(**inputs) 
 
-        >>> # the last hidden states are the final query embeddings of the Transformer decoder
-        >>> # these are of shape (batch_size, num_queries, hidden_size)
-        >>> last_hidden_states = outputs.last_hidden_state
-        >>> list(last_hidden_states.shape)
-        [1, 100, 256]
+        >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 300, 80]
+        
+        >>> boxes = outputs.pred_boxes
+        >>> list(boxes.shape)
+        [1, 300, 4]
         ```"""
-        # TODO: Check how other models do these individual steps:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # First, sent pixel_values through Backbone to obtain the features
-        # features = self.backbone_original(pixel_values)
-        features = self.backbone(pixel_values) # -> 1, 3, 640, 640
-        # TODO: Rafael -> Remove -For the cat image
-        # 0 torch.Size([1, 512, 80, 80]) 358398.75
-        # 1 torch.Size([1, 1024, 40, 40]) 81166.578125
-        # 2 torch.Size([1, 2048, 20, 20]) 15052.0986328125
-
-        # Second: Send features through the encoder
-        if features is None:
-            pass  # TODO
-        else:
-            encoder_outputs = self.encoder(features)
-        # TODO: Rafael -> Remove - For the cat image
-        # Expected
-        # 0 torch.Size([1, 256, 80, 80]) 501037.875
-        # 1 torch.Size([1, 256, 40, 40]) 103032.84375
-        # 2 torch.Size([1, 256, 20, 20]) 34950.58203125
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-
-        # Third: Send features through the decoder
-        if encoder_outputs is None:
-            pass  # TODO
-        else:
-            decoder_outputs = self.decoder(encoder_outputs)
+        features = self.backbone(pixel_values) 
+        encoder_outputs = self.encoder(features)
+        outputs = self.decoder(encoder_outputs)
         
-        # TODO: Rafael -> Remove - For the cat image
-        # Expected:
-        # pred_logits torch.Size([1, 300, 80]) -160269.53125
-        # pred_boxes torch.Size([1, 300, 4]) 622.9794921875
-        
-        # TODO: The return of RTDetrModel should be a DetrModelOutput object.
-        return decoder_outputs
+        pred_boxes = outputs["pred_boxes"]
+        logits = outputs["logits"]
 
-        # # get final feature map and downsampled mask
-        # feature_map, mask = features[-1]
-
-        # if mask is None:
-        #     raise ValueError("Backbone does not return downsampled pixel mask")
-
-        # # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        # projected_feature_map = self.input_projection(feature_map)
-
-        # # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
-        # # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
-        # flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        # object_queries = object_queries_list[-1].flatten(2).permute(0, 2, 1)
-
-        # flattened_mask = mask.flatten(1)
-
-        # # Fourth, sent flattened_features + flattened_mask + position embeddings through encoder
-        # # flattened_features is a Tensor of shape (batch_size, heigth*width, hidden_size)
-        # # flattened_mask is a Tensor of shape (batch_size, heigth*width)
-        # if encoder_outputs is None:
-        #     encoder_outputs = self.encoder(
-        #         inputs_embeds=flattened_features,
-        #         attention_mask=flattened_mask,
-        #         object_queries=object_queries,
-        #         output_attentions=output_attentions,
-        #         output_hidden_states=output_hidden_states,
-        #         return_dict=return_dict,
-        #     )
-        # # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        # elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-        #     encoder_outputs = BaseModelOutput(
-        #         last_hidden_state=encoder_outputs[0],
-        #         hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-        #         attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-        #     )
-
-        # # Fifth, sent query embeddings + object_queries through the decoder (which is conditioned on the encoder output)
-        # query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
-        # queries = torch.zeros_like(query_position_embeddings)
-
-        # # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
-        # decoder_outputs = self.decoder(
-        #     inputs_embeds=queries,
-        #     attention_mask=None,
-        #     object_queries=object_queries,
-        #     query_position_embeddings=query_position_embeddings,
-        #     encoder_hidden_states=encoder_outputs[0],
-        #     encoder_attention_mask=flattened_mask,
-        #     output_attentions=output_attentions,
-        #     output_hidden_states=output_hidden_states,
-        #     return_dict=return_dict,
-        # )
-
-        # if not return_dict:
-        #     return decoder_outputs + encoder_outputs
-
-        # return RTDetrObjectDetectionOutput(
-        #     last_hidden_state=decoder_outputs.last_hidden_state,
-        #     decoder_hidden_states=decoder_outputs.hidden_states,
-        #     decoder_attentions=decoder_outputs.attentions,
-        #     cross_attentions=decoder_outputs.cross_attentions,
-        #     encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-        #     encoder_hidden_states=encoder_outputs.hidden_states,
-        #     encoder_attentions=encoder_outputs.attentions,
-        #     intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
-        # )
+        return RTDetrObjectDetectionOutput(
+            logits=logits,
+            pred_boxes=pred_boxes,
+        )
 
 
 @add_start_docstrings(
     """
-    RT_DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on top, for tasks
+    RT_DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection boxes, scores and classes, for tasks
     such as COCO detection.
     """,
     RT_DETR_START_DOCSTRING,
@@ -2434,16 +1861,6 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
 
         self.model = RTDetrModel(config)
         
-
-        # TODO: finish this class
-#         # Object detection heads
-#         self.class_labels_classifier = nn.Linear(
-#             config.d_model, config.num_labels + 1
-#         )  # We add one for the "no object" class
-#         self.bbox_predictor = RT_DETRMLPPredictionHead(
-#             input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
-#         )
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -2475,8 +1892,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("checkpoing/todo")
-        >>> model = RTDetrForObjectDetection.from_pretrained("checkpoing/todo")
+        >>> image_processor = AutoImageProcessor.from_pretrained(_CHECKPOINT_FOR_DOC)
+        >>> model = RTDetrForObjectDetection.from_pretrained(_CHECKPOINT_FOR_DOC)
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -2486,7 +1903,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
         ...     0
         ... ]
-
+        # TODO: id2label is not mapped
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(
@@ -2504,32 +1921,14 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         # First, sent images through RTDetr base model to obtain encoder + decoder outputs
         outputs = self.model(
             pixel_values,
-            # pixel_mask=pixel_mask,
-            # decoder_attention_mask=decoder_attention_mask,
-            # encoder_outputs=encoder_outputs,
-            # inputs_embeds=inputs_embeds,
-            # decoder_inputs_embeds=decoder_inputs_embeds,
-            # output_attentions=output_attentions,
-            # output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        loss, loss_dict, auxiliary_outputs = None, None, None
-        # TODO (Rafael) Remove
-        import pickle
-        labels = pickle.load(open("/home/rafael/repos/RT-DETR/targets_gatinho.pkl", "rb"))
-        for label in labels:
-            label["class_labels"] = label["labels"]
-            del label["labels"]
-        #####
+        pred_boxes = outputs["pred_boxes"]
+        logits = outputs["logits"]
         
+        loss, loss_dict = None, None
         if labels is not None:
-            # TODO: model is already returning the logits + pred_boxes, which is wrong
-            # model should output the RTDetrObjectDetectionOutput object, containing the outputs of the model, 
-            # not the predictions.
-            # The losses, logits, pred_boxes should be computed here
-            pred_boxes = outputs["pred_boxes"]
-            logits = outputs["pred_logits"]
             # First: create the matcher
             matcher = RTDetrHungarianMatcher(
                 class_cost=self.config.matcher_class_cost, 
@@ -2568,10 +1967,10 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
                            "weight_loss_scaled": weight_loss_scaled,
                            "reduced_loss_unscaled": reduced_loss_unscaled}
         
-        loss = sum(loss_dict.values())
+            loss = sum(loss_dict.values())
         return RTDetrObjectDetectionOutput(
             loss=loss,
-            loss_dict=losses_dict,
+            loss_dict=loss_dict,
             logits=logits,
             pred_boxes=pred_boxes,
         )
@@ -2615,7 +2014,7 @@ class RTDetrHungarianMatcher(nn.Module):
 
         Params:
             outputs: This is a dict that contains at least these entries:
-                 "pred_logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
+                 "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
                  "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates
 
             targets: This is a list of targets (len(targets) = batch_size), where each target is a dict containing:

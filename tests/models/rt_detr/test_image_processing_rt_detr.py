@@ -60,7 +60,7 @@ class RTDetrImageProcessingTester(unittest.TestCase):
     def get_expected_values(self):
         return self.size, self.size
 
-    def expected_output_image_shape(self, images):
+    def expected_output_image_shape(self, image):
         height, width = self.get_expected_values()
         return self.num_channels, height, width
 
@@ -96,7 +96,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "do_rescale"))
         self.assertTrue(hasattr(image_processing, "rescale_factor"))
         self.assertTrue(hasattr(image_processing, "return_tensors"))
-        
+
     @slow
     def test_image_processor_outputs(self):
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -112,6 +112,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         expected_slice = torch.tensor([0.5490196347236633, 0.5647059082984924, 0.572549045085907])
         self.assertTrue(torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-5))
 
+    @slow
     def test_multiple_images_processor_outputs(self):
         images_urls = [
             "http://images.cocodataset.org/val2017/000000000139.jpg",

@@ -21,7 +21,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import RTDetrConfig, RTDetrImageProcessor, RTDetrModel, RTDetrForObjectDetection
+from transformers import RTDetrConfig, RTDetrForObjectDetection, RTDetrImageProcessor
 
 
 # TODO: Rafael Convert all these weights (?)
@@ -40,21 +40,29 @@ from transformers import RTDetrConfig, RTDetrImageProcessor, RTDetrModel, RTDetr
 #########################
 
 expected_logits = {
-    "rtdetr_r50vd_6x_coco_from_paddle.pth": torch.tensor([-4.159348487854004, -4.703853607177734, -5.946484565734863, -5.562824249267578, -4.7707929611206055]),
+    "rtdetr_r50vd_6x_coco_from_paddle.pth": torch.tensor(
+        [-4.159348487854004, -4.703853607177734, -5.946484565734863, -5.562824249267578, -4.7707929611206055]
+    ),
 }
 
 expected_logits_shape = {
     "rtdetr_r50vd_6x_coco_from_paddle.pth": torch.Size([1, 300, 80]),
 }
 
-# TODO
-expected_boxes = {"rtdetr_r50vd_6x_coco_from_paddle.pth": torch.tensor([[0.1688060760498047, 0.19992263615131378, 0.21225441992282867, 0.09384090453386307],
-[0.768376350402832, 0.41226309537887573, 0.4636859893798828, 0.7233726978302002],
-[0.25953856110572815, 0.5483334064483643, 0.4777486026287079, 0.8709195256233215]])
+expected_boxes = {
+    "rtdetr_r50vd_6x_coco_from_paddle.pth": torch.tensor(
+        [
+            [0.1688060760498047, 0.19992263615131378, 0.21225441992282867, 0.09384090453386307],
+            [0.768376350402832, 0.41226309537887573, 0.4636859893798828, 0.7233726978302002],
+            [0.25953856110572815, 0.5483334064483643, 0.4777486026287079, 0.8709195256233215],
+        ]
+    )
 }
 
-expected_boxes_shape= {"rtdetr_r50vd_6x_coco_from_paddle.pth": torch.Size([1, 300, 4]),
-                  }
+expected_boxes_shape = {
+    "rtdetr_r50vd_6x_coco_from_paddle.pth": torch.Size([1, 300, 4]),
+}
+
 
 def get_sample_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -93,197 +101,10 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     # Load checkpoints from url
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["ema"]["module"]
     state_dict_for_object_detection = {f"model.{k}": v for k, v in state_dict.items()}
-    
-    # Original -> TIMM
-    replaces = {"model.backbone.conv1.conv1_1.conv.weight": "model.backbone._backbone.conv1.0.weight",
-                "model.backbone.conv1.conv1_1.norm.weight": "model.backbone._backbone.conv1.1.weight",
-                "model.backbone.conv1.conv1_1.norm.bias": "model.backbone._backbone.conv1.1.bias",
-                "model.backbone.conv1.conv1_1.norm.running_mean": "model.backbone._backbone.conv1.1.running_mean",
-                "model.backbone.conv1.conv1_1.norm.running_var": "model.backbone._backbone.conv1.1.running_var",
-                "model.backbone.conv1.conv1_2.conv.weight": "model.backbone._backbone.conv1.3.weight", 
-                "model.backbone.conv1.conv1_2.norm.weight": "model.backbone._backbone.conv1.4.weight",
-                "model.backbone.conv1.conv1_2.norm.bias": "model.backbone._backbone.conv1.4.bias",
-                "model.backbone.conv1.conv1_3.conv.weight": "model.backbone._backbone.conv1.6.weight",
-                "model.backbone.conv1.conv1_3.norm.weight": "model.backbone._backbone.bn1.weight",
-                "model.backbone.conv1.conv1_3.norm.bias": "model.backbone._backbone.bn1.bias",
-                "model.backbone.res_layers.0.blocks.0.branch2a.conv.weight": "model.backbone._backbone.layer1.0.conv1.weight",
-                "model.backbone.res_layers.0.blocks.0.branch2a.norm.weight": "model.backbone._backbone.layer1.0.bn1.weight",
-                "model.backbone.res_layers.0.blocks.0.branch2a.norm.bias":  "model.backbone._backbone.layer1.0.bn1.bias",
-                "model.backbone.res_layers.0.blocks.0.branch2b.conv.weight": "model.backbone._backbone.layer1.0.conv2.weight",
-                "model.backbone.res_layers.0.blocks.0.branch2b.norm.weight": "model.backbone._backbone.layer1.0.bn2.weight",
-                "model.backbone.res_layers.0.blocks.0.branch2b.norm.bias": "model.backbone._backbone.layer1.0.bn2.bias", 
-                "model.backbone.res_layers.0.blocks.0.branch2c.conv.weight": "model.backbone._backbone.layer1.0.conv3.weight",
-                "model.backbone.res_layers.0.blocks.0.branch2c.norm.weight": "model.backbone._backbone.layer1.0.bn3.weight", 
-                "model.backbone.res_layers.0.blocks.0.branch2c.norm.bias": "model.backbone._backbone.layer1.0.bn3.bias", 
-                "model.backbone.res_layers.0.blocks.0.short.conv.weight": "model.backbone._backbone.layer1.0.downsample.1.weight",
-                "model.backbone.res_layers.0.blocks.0.short.norm.weight": "model.backbone._backbone.layer1.0.downsample.2.weight", 
-                "model.backbone.res_layers.0.blocks.0.short.norm.bias": "model.backbone._backbone.layer1.0.downsample.2.bias", 
-                "model.backbone.res_layers.0.blocks.1.branch2a.conv.weight": "model.backbone._backbone.layer1.1.conv1.weight",
-                "model.backbone.res_layers.0.blocks.1.branch2a.norm.weight": "model.backbone._backbone.layer1.1.bn1.weight",
-                "model.backbone.res_layers.0.blocks.1.branch2a.norm.bias": "model.backbone._backbone.layer1.1.bn1.bias",
-                "model.backbone.res_layers.0.blocks.1.branch2b.conv.weight": "model.backbone._backbone.layer1.1.conv2.weight",
-                "model.backbone.res_layers.0.blocks.1.branch2b.norm.weight": "model.backbone._backbone.layer1.1.bn2.weight",
-                "model.backbone.res_layers.0.blocks.1.branch2b.norm.bias": "model.backbone._backbone.layer1.1.bn2.bias",
-                "model.backbone.res_layers.0.blocks.1.branch2c.conv.weight": "model.backbone._backbone.layer1.1.conv3.weight",
-                "model.backbone.res_layers.0.blocks.1.branch2c.norm.weight": "model.backbone._backbone.layer1.1.bn3.weight",
-                "model.backbone.res_layers.0.blocks.1.branch2c.norm.bias": "model.backbone._backbone.layer1.1.bn3.bias",
-                "model.backbone.res_layers.0.blocks.2.branch2a.conv.weight": "model.backbone._backbone.layer1.2.conv1.weight",
-                "model.backbone.res_layers.0.blocks.2.branch2a.norm.weight": "model.backbone._backbone.layer1.2.bn1.weight",
-                "model.backbone.res_layers.0.blocks.2.branch2a.norm.bias": "model.backbone._backbone.layer1.2.bn1.bias",
-                "model.backbone.res_layers.0.blocks.2.branch2b.conv.weight": "model.backbone._backbone.layer1.2.conv2.weight",
-                "model.backbone.res_layers.0.blocks.2.branch2b.norm.weight": "model.backbone._backbone.layer1.2.bn2.weight", 
-                "model.backbone.res_layers.0.blocks.2.branch2b.norm.bias": "model.backbone._backbone.layer1.2.bn2.bias", 
-                "model.backbone.res_layers.0.blocks.2.branch2c.conv.weight": "model.backbone._backbone.layer1.2.conv3.weight", 
-                "model.backbone.res_layers.0.blocks.2.branch2c.norm.weight": "model.backbone._backbone.layer1.2.bn3.weight", 
-                "model.backbone.res_layers.0.blocks.2.branch2c.norm.bias": "model.backbone._backbone.layer1.2.bn3.bias", 
-                "model.backbone.res_layers.1.blocks.0.branch2a.conv.weight": "model.backbone._backbone.layer2.0.conv1.weight", 
-                "model.backbone.res_layers.1.blocks.0.branch2a.norm.weight": "model.backbone._backbone.layer2.0.bn1.weight", 
-                "model.backbone.res_layers.1.blocks.0.branch2a.norm.bias": "model.backbone._backbone.layer2.0.bn1.bias", 
-                "model.backbone.res_layers.1.blocks.0.branch2b.conv.weight": "model.backbone._backbone.layer2.0.conv2.weight", 
-                "model.backbone.res_layers.1.blocks.0.branch2b.norm.weight": "model.backbone._backbone.layer2.0.bn2.weight", 
-                "model.backbone.res_layers.1.blocks.0.branch2b.norm.bias": "model.backbone._backbone.layer2.0.bn2.bias", 
-                "model.backbone.res_layers.1.blocks.0.branch2c.conv.weight": "model.backbone._backbone.layer2.0.conv3.weight", 
-                "model.backbone.res_layers.1.blocks.0.branch2c.norm.weight": "model.backbone._backbone.layer2.0.bn3.weight", 
-                "model.backbone.res_layers.1.blocks.0.branch2c.norm.bias": "model.backbone._backbone.layer2.0.bn3.bias",
-                "model.backbone.res_layers.1.blocks.0.short.conv.conv.weight": "model.backbone._backbone.layer2.0.downsample.1.weight",
-                "model.backbone.res_layers.1.blocks.0.short.conv.norm.weight": "model.backbone._backbone.layer2.0.downsample.2.weight",
-                "model.backbone.res_layers.1.blocks.0.short.conv.norm.bias": "model.backbone._backbone.layer2.0.downsample.2.bias",
-                "model.backbone.res_layers.1.blocks.1.branch2a.conv.weight": "model.backbone._backbone.layer2.1.conv1.weight",
-                "model.backbone.res_layers.1.blocks.1.branch2a.norm.weight": "model.backbone._backbone.layer2.1.bn1.weight",
-                "model.backbone.res_layers.1.blocks.1.branch2a.norm.bias": "model.backbone._backbone.layer2.1.bn1.bias",
-                "model.backbone.res_layers.1.blocks.1.branch2b.conv.weight": "model.backbone._backbone.layer2.1.conv2.weight",
-                "model.backbone.res_layers.1.blocks.1.branch2b.norm.weight": "model.backbone._backbone.layer2.1.bn2.weight",
-                "model.backbone.res_layers.1.blocks.1.branch2b.norm.bias": "model.backbone._backbone.layer2.1.bn2.bias",
-                "model.backbone.res_layers.1.blocks.1.branch2c.conv.weight": "model.backbone._backbone.layer2.1.conv3.weight",
-                "model.backbone.res_layers.1.blocks.1.branch2c.norm.weight": "model.backbone._backbone.layer2.1.bn3.weight",
-                "model.backbone.res_layers.1.blocks.1.branch2c.norm.bias": "model.backbone._backbone.layer2.1.bn3.bias",
-                "model.backbone.res_layers.1.blocks.2.branch2a.conv.weight": "model.backbone._backbone.layer2.2.conv1.weight",
-                "model.backbone.res_layers.1.blocks.2.branch2a.norm.weight": "model.backbone._backbone.layer2.2.bn1.weight",
-                "model.backbone.res_layers.1.blocks.2.branch2a.norm.bias": "model.backbone._backbone.layer2.2.bn1.bias",
-                "model.backbone.res_layers.1.blocks.2.branch2b.conv.weight": "model.backbone._backbone.layer2.2.conv2.weight",
-                "model.backbone.res_layers.1.blocks.2.branch2b.norm.weight": "model.backbone._backbone.layer2.2.bn2.weight",
-                "model.backbone.res_layers.1.blocks.2.branch2b.norm.bias": "model.backbone._backbone.layer2.2.bn2.bias",
-                "model.backbone.res_layers.1.blocks.2.branch2c.conv.weight": "model.backbone._backbone.layer2.2.conv3.weight",
-                "model.backbone.res_layers.1.blocks.2.branch2c.norm.weight":   "model.backbone._backbone.layer2.2.bn3.weight",
-                "model.backbone.res_layers.1.blocks.2.branch2c.norm.bias":   "model.backbone._backbone.layer2.2.bn3.bias",
-                "model.backbone.res_layers.1.blocks.3.branch2a.conv.weight":   "model.backbone._backbone.layer2.3.conv1.weight",
-                "model.backbone.res_layers.1.blocks.3.branch2a.norm.weight": "model.backbone._backbone.layer2.3.bn1.weight",
-                "model.backbone.res_layers.1.blocks.3.branch2a.norm.bias": "model.backbone._backbone.layer2.3.bn1.bias",
-                "model.backbone.res_layers.1.blocks.3.branch2b.conv.weight":   "model.backbone._backbone.layer2.3.conv2.weight",
-                "model.backbone.res_layers.1.blocks.3.branch2b.norm.weight": "model.backbone._backbone.layer2.3.bn2.weight",
-                "model.backbone.res_layers.1.blocks.3.branch2b.norm.bias": "model.backbone._backbone.layer2.3.bn2.bias",
-                "model.backbone.res_layers.1.blocks.3.branch2c.conv.weight": "model.backbone._backbone.layer2.3.conv3.weight",
-                "model.backbone.res_layers.1.blocks.3.branch2c.norm.weight":   "model.backbone._backbone.layer2.3.bn3.weight",
-                "model.backbone.res_layers.1.blocks.3.branch2c.norm.bias":   "model.backbone._backbone.layer2.3.bn3.bias",
-                "model.backbone.res_layers.2.blocks.0.branch2a.conv.weight":   "model.backbone._backbone.layer3.0.conv1.weight",
-                "model.backbone.res_layers.2.blocks.0.branch2a.norm.weight":   "model.backbone._backbone.layer3.0.bn1.weight",
-                "model.backbone.res_layers.2.blocks.0.branch2a.norm.bias":   "model.backbone._backbone.layer3.0.bn1.bias",
-                "model.backbone.res_layers.2.blocks.0.branch2b.conv.weight":   "model.backbone._backbone.layer3.0.conv2.weight",
-                "model.backbone.res_layers.2.blocks.0.branch2b.norm.weight":   "model.backbone._backbone.layer3.0.bn2.weight",
-                "model.backbone.res_layers.2.blocks.0.branch2b.norm.bias":   "model.backbone._backbone.layer3.0.bn2.bias",
-                "model.backbone.res_layers.2.blocks.0.branch2c.conv.weight":   "model.backbone._backbone.layer3.0.conv3.weight",
-                "model.backbone.res_layers.2.blocks.0.branch2c.norm.weight":   "model.backbone._backbone.layer3.0.bn3.weight",
-                "model.backbone.res_layers.2.blocks.0.branch2c.norm.bias":   "model.backbone._backbone.layer3.0.bn3.bias",
-                "model.backbone.res_layers.2.blocks.0.short.conv.conv.weight":   "model.backbone._backbone.layer3.0.downsample.1.weight",
-                "model.backbone.res_layers.2.blocks.0.short.conv.norm.weight":    "model.backbone._backbone.layer3.0.downsample.2.weight",
-                "model.backbone.res_layers.2.blocks.0.short.conv.norm.bias":   "model.backbone._backbone.layer3.0.downsample.2.bias",
-                "model.backbone.res_layers.2.blocks.1.branch2a.conv.weight":   "model.backbone._backbone.layer3.1.conv1.weight",
-                "model.backbone.res_layers.2.blocks.1.branch2a.norm.weight":   "model.backbone._backbone.layer3.1.bn1.weight",
-                "model.backbone.res_layers.2.blocks.1.branch2a.norm.bias":   "model.backbone._backbone.layer3.1.bn1.bias",
-                "model.backbone.res_layers.2.blocks.1.branch2b.conv.weight":   "model.backbone._backbone.layer3.1.conv2.weight",
-                "model.backbone.res_layers.2.blocks.1.branch2b.norm.weight": "model.backbone._backbone.layer3.1.bn2.weight", 
-                "model.backbone.res_layers.2.blocks.1.branch2b.norm.bias": "model.backbone._backbone.layer3.1.bn2.bias", 
-                "model.backbone.res_layers.2.blocks.1.branch2c.conv.weight": "model.backbone._backbone.layer3.1.conv3.weight", 
-                "model.backbone.res_layers.2.blocks.1.branch2c.norm.weight": "model.backbone._backbone.layer3.1.bn3.weight", 
-                "model.backbone.res_layers.2.blocks.1.branch2c.norm.bias": "model.backbone._backbone.layer3.1.bn3.bias", 
-                "model.backbone.res_layers.2.blocks.2.branch2a.conv.weight": "model.backbone._backbone.layer3.2.conv1.weight", 
-                "model.backbone.res_layers.2.blocks.2.branch2a.norm.weight": "model.backbone._backbone.layer3.2.bn1.weight", 
-                "model.backbone.res_layers.2.blocks.2.branch2a.norm.bias": "model.backbone._backbone.layer3.2.bn1.bias", 
-                "model.backbone.res_layers.2.blocks.2.branch2b.conv.weight": "model.backbone._backbone.layer3.2.conv2.weight", 
-                "model.backbone.res_layers.2.blocks.2.branch2b.norm.weight": "model.backbone._backbone.layer3.2.bn2.weight", 
-                "model.backbone.res_layers.2.blocks.2.branch2b.norm.bias": "model.backbone._backbone.layer3.2.bn2.bias", 
-                "model.backbone.res_layers.2.blocks.2.branch2c.conv.weight": "model.backbone._backbone.layer3.2.conv3.weight", 
-                "model.backbone.res_layers.2.blocks.2.branch2c.norm.weight": "model.backbone._backbone.layer3.2.bn3.weight", 
-                "model.backbone.res_layers.2.blocks.2.branch2c.norm.bias": "model.backbone._backbone.layer3.2.bn3.bias", 
-                "model.backbone.res_layers.2.blocks.3.branch2a.conv.weight": "model.backbone._backbone.layer3.3.conv1.weight", 
-                "model.backbone.res_layers.2.blocks.3.branch2a.norm.weight": "model.backbone._backbone.layer3.3.bn1.weight", 
-                "model.backbone.res_layers.2.blocks.3.branch2a.norm.bias": "model.backbone._backbone.layer3.3.bn1.bias", 
-                "model.backbone.res_layers.2.blocks.3.branch2b.conv.weight": "model.backbone._backbone.layer3.3.conv2.weight", 
-                "model.backbone.res_layers.2.blocks.3.branch2b.norm.weight": "model.backbone._backbone.layer3.3.bn2.weight", 
-                "model.backbone.res_layers.2.blocks.3.branch2b.norm.bias": "model.backbone._backbone.layer3.3.bn2.bias", 
-                "model.backbone.res_layers.2.blocks.3.branch2c.conv.weight": "model.backbone._backbone.layer3.3.conv3.weight", 
-                "model.backbone.res_layers.2.blocks.3.branch2c.norm.weight": "model.backbone._backbone.layer3.3.bn3.weight", 
-                "model.backbone.res_layers.2.blocks.3.branch2c.norm.bias": "model.backbone._backbone.layer3.3.bn3.bias", 
-                "model.backbone.res_layers.2.blocks.4.branch2a.conv.weight": "model.backbone._backbone.layer3.4.conv1.weight", 
-                "model.backbone.res_layers.2.blocks.4.branch2a.norm.weight": "model.backbone._backbone.layer3.4.bn1.weight", 
-                "model.backbone.res_layers.2.blocks.4.branch2a.norm.bias": "model.backbone._backbone.layer3.4.bn1.bias", 
-                "model.backbone.res_layers.2.blocks.4.branch2b.conv.weight": "model.backbone._backbone.layer3.4.conv2.weight", 
-                "model.backbone.res_layers.2.blocks.4.branch2b.norm.weight":  "model.backbone._backbone.layer3.4.bn2.weight",
-                "model.backbone.res_layers.2.blocks.4.branch2b.norm.bias":  "model.backbone._backbone.layer3.4.bn2.bias",
-                "model.backbone.res_layers.2.blocks.4.branch2c.conv.weight":  "model.backbone._backbone.layer3.4.conv3.weight",
-                "model.backbone.res_layers.2.blocks.4.branch2c.norm.weight":  "model.backbone._backbone.layer3.4.bn3.weight",
-                "model.backbone.res_layers.2.blocks.4.branch2c.norm.bias":  "model.backbone._backbone.layer3.4.bn3.bias",
-                "model.backbone.res_layers.2.blocks.5.branch2a.conv.weight":  "model.backbone._backbone.layer3.5.conv1.weight",
-                "model.backbone.res_layers.2.blocks.5.branch2a.norm.weight":  "model.backbone._backbone.layer3.5.bn1.weight",
-                "model.backbone.res_layers.2.blocks.5.branch2a.norm.bias":  "model.backbone._backbone.layer3.5.bn1.bias",
-                "model.backbone.res_layers.2.blocks.5.branch2b.conv.weight":  "model.backbone._backbone.layer3.5.conv2.weight",
-                "model.backbone.res_layers.2.blocks.5.branch2b.norm.weight":  "model.backbone._backbone.layer3.5.bn2.weight",
-                "model.backbone.res_layers.2.blocks.5.branch2b.norm.bias":  "model.backbone._backbone.layer3.5.bn2.bias",
-                "model.backbone.res_layers.2.blocks.5.branch2c.conv.weight":  "model.backbone._backbone.layer3.5.conv3.weight",
-                "model.backbone.res_layers.2.blocks.5.branch2c.norm.weight":  "model.backbone._backbone.layer3.5.bn3.weight",
-                "model.backbone.res_layers.2.blocks.5.branch2c.norm.bias":  "model.backbone._backbone.layer3.5.bn3.bias",
-                "model.backbone.res_layers.3.blocks.0.branch2a.conv.weight":  "model.backbone._backbone.layer4.0.conv1.weight",
-                "model.backbone.res_layers.3.blocks.0.branch2a.norm.weight":  "model.backbone._backbone.layer4.0.bn1.weight",
-                "model.backbone.res_layers.3.blocks.0.branch2a.norm.bias":  "model.backbone._backbone.layer4.0.bn1.bias",
-                "model.backbone.res_layers.3.blocks.0.branch2b.conv.weight":  "model.backbone._backbone.layer4.0.conv2.weight",
-                "model.backbone.res_layers.3.blocks.0.branch2b.norm.weight":  "model.backbone._backbone.layer4.0.bn2.weight",
-                "model.backbone.res_layers.3.blocks.0.branch2b.norm.bias":  "model.backbone._backbone.layer4.0.bn2.bias",
-                "model.backbone.res_layers.3.blocks.0.branch2c.conv.weight":  "model.backbone._backbone.layer4.0.conv3.weight",
-                "model.backbone.res_layers.3.blocks.0.branch2c.norm.weight":  "model.backbone._backbone.layer4.0.bn3.weight",
-                "model.backbone.res_layers.3.blocks.0.branch2c.norm.bias":  "model.backbone._backbone.layer4.0.bn3.bias",
-                "model.backbone.res_layers.3.blocks.0.short.conv.conv.weight":  "model.backbone._backbone.layer4.0.downsample.1.weight",
-                "model.backbone.res_layers.3.blocks.0.short.conv.norm.weight": "model.backbone._backbone.layer4.0.downsample.2.weight",
-                "model.backbone.res_layers.3.blocks.0.short.conv.norm.bias": "model.backbone._backbone.layer4.0.downsample.2.bias",
-                "model.backbone.res_layers.3.blocks.1.branch2a.conv.weight":  "model.backbone._backbone.layer4.1.conv1.weight",
-                "model.backbone.res_layers.3.blocks.1.branch2a.norm.weight":  "model.backbone._backbone.layer4.1.bn1.weight",
-                "model.backbone.res_layers.3.blocks.1.branch2a.norm.bias":  "model.backbone._backbone.layer4.1.bn1.bias",
-                "model.backbone.res_layers.3.blocks.1.branch2b.conv.weight":  "model.backbone._backbone.layer4.1.conv2.weight",
-                "model.backbone.res_layers.3.blocks.1.branch2b.norm.weight":  "model.backbone._backbone.layer4.1.bn2.weight",
-                "model.backbone.res_layers.3.blocks.1.branch2b.norm.bias":  "model.backbone._backbone.layer4.1.bn2.bias",
-                "model.backbone.res_layers.3.blocks.1.branch2c.conv.weight":  "model.backbone._backbone.layer4.1.conv3.weight",
-                "model.backbone.res_layers.3.blocks.1.branch2c.norm.weight":  "model.backbone._backbone.layer4.1.bn3.weight",
-                "model.backbone.res_layers.3.blocks.1.branch2c.norm.bias":  "model.backbone._backbone.layer4.1.bn3.bias",
-                "model.backbone.res_layers.3.blocks.2.branch2a.conv.weight":  "model.backbone._backbone.layer4.2.conv1.weight",
-                "model.backbone.res_layers.3.blocks.2.branch2a.norm.weight":  "model.backbone._backbone.layer4.2.bn1.weight",
-                "model.backbone.res_layers.3.blocks.2.branch2a.norm.bias":  "model.backbone._backbone.layer4.2.bn1.bias",
-                "model.backbone.res_layers.3.blocks.2.branch2b.conv.weight":  "model.backbone._backbone.layer4.2.conv2.weight",
-                "model.backbone.res_layers.3.blocks.2.branch2b.norm.weight":  "model.backbone._backbone.layer4.2.bn2.weight",
-                "model.backbone.res_layers.3.blocks.2.branch2b.norm.bias":  "model.backbone._backbone.layer4.2.bn2.bias",
-                "model.backbone.res_layers.3.blocks.2.branch2c.conv.weight":  "model.backbone._backbone.layer4.2.conv3.weight",
-                "model.backbone.res_layers.3.blocks.2.branch2c.norm.weight":  "model.backbone._backbone.layer4.2.bn3.weight",
-                "model.backbone.res_layers.3.blocks.2.branch2c.norm.bias":  "model.backbone._backbone.layer4.2.bn3.bias",
-                }
 
-    # for old_key, _ in state_dict_for_object_detection.copy().items():
-    #     if old_key in replaces:
-    #         val = state_dict_for_object_detection.pop(old_key)
-    #         new_key = replaces[old_key]
-    #         state_dict_for_object_detection[new_key] = val
-        
-    # Transfer mapped weights 
-    missing, unnexpected = model.load_state_dict(state_dict_for_object_detection, strict=False)
+    # Transfer mapped weights
+    model.load_state_dict(state_dict_for_object_detection)
     model.eval()
-    
-    # # TODO: remove it... just for debugging
-    # state_dict_for_object_detection = {f"model.{k}": v for k, v in state_dict.items()}
-    # for k, v in state_dict_for_object_detection.copy().items():
-    #     if "model.backbone." in k:
-    #         new_k = k.replace("model.backbone.", "model.backbone_original.")
-    #         val = state_dict_for_object_detection.pop(k)
-    #         state_dict_for_object_detection[new_k] = val 
-        
-    # missing, unnexpected = model.load_state_dict(state_dict_for_object_detection, strict=False)
-    # model.eval()
 
     # Prepare image
     img = get_sample_img()
@@ -300,42 +121,29 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
 
     # Verify boxes
     output_boxes = outputs.pred_boxes
-    assert output_boxes.shape == expected_boxes_shape[checkpoint_name], f"Shapes of output boxes do not match {checkpoint_name} {version}"
+    assert (
+        output_boxes.shape == expected_boxes_shape[checkpoint_name]
+    ), f"Shapes of output boxes do not match {checkpoint_name} {version}"
     expected = expected_boxes[checkpoint_name].to(device)
-    assert torch.allclose(output_boxes[0, :3, :], expected, atol=1e-5), f"Output boxes do not match for {checkpoint_name} {version}"
-    
+    assert torch.allclose(
+        output_boxes[0, :3, :], expected, atol=1e-5
+    ), f"Output boxes do not match for {checkpoint_name} {version}"
+
     # Verify logits
     output_logits = outputs.logits.cpu()
     original_logits = torch.tensor(
-        [[
-            [-4.64763879776001, -5.001153945922852, -4.978509902954102],
-            [-4.159348487854004, -4.703853607177734, -5.946484565734863],
-            [-4.437461853027344, -4.65836238861084, -6.235235691070557],
-        ]]
+        [
+            [
+                [-4.64763879776001, -5.001153945922852, -4.978509902954102],
+                [-4.159348487854004, -4.703853607177734, -5.946484565734863],
+                [-4.437461853027344, -4.65836238861084, -6.235235691070557],
+            ]
+        ]
     )
-    assert torch.allclose(output_logits[0,:3,:3], original_logits[0, :3, :3], atol=1e-4)
+    assert torch.allclose(output_logits[0, :3, :3], original_logits[0, :3, :3], atol=1e-4)
 
     if push_to_hub:
         model.push_to_hub(repo_id=repo_id, commit_message="Add model")
-
-    # PResNet
-    # "{'depth': 50, 'variant': 'd', 'freeze_at': 0, 'return_idx': [1, 2, 3], 'num_stages': 4, 'freeze_norm': True, 'pretrained': True}"
-    # HybridEncoder
-    # "{'in_channels': [512, 1024, 2048], 'feat_strides': [8, 16, 32], 'hidden_dim': 256, 'use_encoder_idx': [2], 'num_encoder_layers': 1, 'nhead': 8, 'dim_feedforward': 1024, 'dropout': 0.0, 'enc_act': 'gelu', 'pe_temperature': 10000, 'expansion': 1.0, 'depth_mult': 1, 'act': 'silu', 'eval_spatial_size': [640, 640]}"
-    # RTDETRTransformer
-    # "{'feat_channels': [256, 256, 256], 'feat_strides': [8, 16, 32], 'hidden_dim': 256, 'num_levels': 3, 'num_queries': 300, 'num_decoder_layers': 6, 'num_denoising': 100, 'eval_idx': -1, 'eval_spatial_size': [640, 640]}"
-
-    # image_processor = ViTMAEImageProcessor(size=config.image_size)
-
-    # new_state_dict = convert_state_dict(state_dict, config)
-
-    # print(f"Saving model to {pytorch_dump_folder_path}")
-    # model.save_pretrained(pytorch_dump_folder_path)
-
-    # print(f"Saving image processor to {pytorch_dump_folder_path}")
-    # image_processor.save_pretrained(pytorch_dump_folder_path)
-    # if push_to_hub:
-    #     model.push_to_hub(repo_id=repo_id, organization="DepuMeng", commit_message="Add model")
 
 
 if __name__ == "__main__":
