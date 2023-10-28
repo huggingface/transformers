@@ -1891,7 +1891,7 @@ class GenerationTesterMixin:
         # 1. Its inner sequence length is with respect to the inputs of the latest forward pass, hence the "-1"
         # 2. Some old models still return `output.past_key_values` even without `use_cache=True`
         # 3. TODO (joao): A few models have different formats, skipping those until the cache refactor is complete
-        models_without_standard_cache = ("bloom", "ctrl", "fsmt", "gpt_bigcode", "mega", "reformer")
+        models_without_standard_cache = ("bloom", "ctrl", "fsmt", "gptbigcode", "mega", "reformer")
         has_standard_cache = not any(
             model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
         )

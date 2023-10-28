@@ -2402,7 +2402,7 @@ class GenerationMixin:
                 for layer in model_kwargs["past_key_values"]:
                     layer_past_key_values = []
                     for item in layer:
-                        layer_past_key_values.append(item[:, :, :-1, :])
+                        layer_past_key_values.append(item[..., :-1, :])
                     past_key_values.append(tuple(layer_past_key_values))
                 model_kwargs["past_key_values"] = tuple(past_key_values)
 
