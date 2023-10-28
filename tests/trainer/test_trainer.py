@@ -283,7 +283,6 @@ if is_torch_available():
             loss = nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 
-
     class RegressionPreTrainedModelWithGradientCheckpointing(PreTrainedModel):
         config_class = RegressionModelConfig
         base_model_prefix = "regression"
@@ -291,31 +290,22 @@ if is_torch_available():
 
         def __init__(self, config):
             super().__init__(config)
-            # self.lin1 = nn.Linear(4, config.hidden_size)
-            self.layers = nn.ModuleList([TstLayer(config.hidden_size) for _ in range(4)])
+            self.layers = nn.ModuleList([nn.Linear(config.hidden_size, config.hidden_size) for _ in range(4)])
             self.head = nn.Linear(config.hidden_size, 1)
-            self.gradient_checkpointing = True
+            self.gradient_checkpointing = False
             self.double_output = config.double_output
 
-        def custom(self, module):
-            def custom_forward(*inputs):
-                inputs = module(inputs[0])
-                return inputs
-            return custom_forward
-
         def forward(self, input_x, labels=None, **kwargs):
-            # y = self.lin1(input_x)
-            y = input_x
+            y = input_x.unsqueeze(0)
 
             for layer in self.layers:
                 if self.training and self.gradient_checkpointing:
-                    y = self._gradient_checkpointing_func(
-                        layer.__call__, 
-                        y
-                    )
+                    outputs = self._gradient_checkpointing_func(layer.__call__, y)
                 else:
-                    y = layer(y)
-            
+                    outputs = layer(y)
+
+                y = outputs * 3
+
             logits = self.head(y)
 
             if labels is None:
@@ -324,7 +314,6 @@ if is_torch_available():
             loss = nn.functional.mse_loss(logits, labels)
 
             return (loss, y, y) if self.double_output else (loss, y)
-
 
     class RegressionRandomPreTrainedModel(PreTrainedModel):
         config_class = RegressionModelConfig
@@ -381,7 +370,11 @@ if is_torch_available():
             if pretrained:
                 config = RegressionModelConfig(a=a, b=b, double_output=double_output)
                 # We infer the correct model class if one uses gradient_checkpointing or not
-                target_cls = RegressionPreTrainedModel if not gradient_checkpointing else RegressionPreTrainedModelWithGradientCheckpointing
+                target_cls = (
+                    RegressionPreTrainedModel
+                    if not gradient_checkpointing
+                    else RegressionPreTrainedModelWithGradientCheckpointing
+                )
                 model = target_cls(config)
             else:
                 model = RegressionModel(a=a, b=b, double_output=double_output)
@@ -594,24 +587,23 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         self.check_trained_model(trainer.model)
 
-
     def test_gradient_checkpointing(self):
         trainer = get_regression_trainer(
-            per_device_train_batch_size=1, learning_rate=0.4, gradient_checkpointing=True, gradient_checkpointing_kwargs={"use_reentrant": False}, max_steps=100
+            per_device_train_batch_size=1,
+            learning_rate=0.1,
+            gradient_checkpointing=True,
+            gradient_checkpointing_kwargs={"use_reentrant": False},
         )
         previous_params = {k: v.detach().clone() for k, v in trainer.model.named_parameters()}
 
-        for n, p in trainer.model.named_parameters():
-            p.requires_grad_(True)
-
         trainer.train()
 
-        # import pdb; pdb.set_trace()
-        
         # Check if model weights have been updated
         for k, v in trainer.model.named_parameters():
-            self.assertFalse(torch.allclose(previous_params[k], v), f"Model weights for {k} have not been updated")
-
+            self.assertFalse(
+                torch.allclose(previous_params[k], v, rtol=1e-4, atol=1e-4),
+                f"Model weights for {k} have not been updated",
+            )
 
     def test_training_loss(self):
         n_gpus = max(1, get_gpu_count())
