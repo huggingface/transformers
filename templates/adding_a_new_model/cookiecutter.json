@@ -15,5 +15,6 @@
     "TensorFlow",
     "Flax"
   ],
-  "is_encoder_decoder_model": ["True", "False"]
+  "is_encoder_decoder_model": ["True", "False"],
+  "default": true,
 }
