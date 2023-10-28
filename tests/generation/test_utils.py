@@ -1888,9 +1888,14 @@ class GenerationTesterMixin:
             )
 
         # Past Key Value States -- two notes here:
-        # 1. its inner sequence length is with respect to the inputs of the latest forward pass, hence the "-1"
-        # 2. some old models still return `output.past_key_values` even without `use_cache=True`
-        if use_cache:
+        # 1. Its inner sequence length is with respect to the inputs of the latest forward pass, hence the "-1"
+        # 2. Some old models still return `output.past_key_values` even without `use_cache=True`
+        # 3. TODO (joao): A few models have different formats, skipping those until the cache refactor is complete
+        models_without_standard_cache = ("bloom", "ctrl", "fsmt", "gpt_bigcode", "mega", "reformer")
+        has_standard_cache = not any(
+            model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
+        )
+        if use_cache and has_standard_cache:
             past_key_values = output.past_key_values
             past_sequence_length = output.sequences.shape[-1] - 1
             self._check_past_key_values_for_generate(
@@ -1975,7 +1980,7 @@ class GenerationTesterMixin:
         # (batch, head, seq_length, head_features)
         expected_shape = (
             batch_size * num_beam_groups,
-            config.num_attention_heads,
+            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
             seq_length,
             config.hidden_size // config.num_attention_heads,
         )
