@@ -850,7 +850,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
             raise OSError(
                 f"Unable to load weights from TF checkpoint file for '{resolved_archive_file}' "
                 f"at '{resolved_archive_file}'. "
-                "If you tried to load a TF model from a sharded checkpoint, you should try converting the model"
+                "If you tried to load a TF model from a sharded checkpoint, you should try converting the model "
                 "by loading it in pytorch and saving it localy. A convertion script should be realeased soon."
             )
 
@@ -2378,7 +2378,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(
@@ -2645,9 +2646,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         commit_hash = kwargs.pop("_commit_hash", None)
         tf_to_pt_weight_rename = kwargs.pop("tf_to_pt_weight_rename", None)
 
+        # Not relevant for TF models
+        _ = kwargs.pop("adapter_kwargs", None)
+
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(
@@ -3098,7 +3103,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(

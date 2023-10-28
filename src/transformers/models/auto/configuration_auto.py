@@ -97,6 +97,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("focalnet", "FocalNetConfig"),
         ("fsmt", "FSMTConfig"),
         ("funnel", "FunnelConfig"),
+        ("fuyu", "FuyuConfig"),
         ("git", "GitConfig"),
         ("glpn", "GLPNConfig"),
         ("gpt-sw3", "GPT2Config"),
@@ -138,6 +139,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mega", "MegaConfig"),
         ("megatron-bert", "MegatronBertConfig"),
         ("mgp-str", "MgpstrConfig"),
+        ("mistral", "MistralConfig"),
         ("mobilebert", "MobileBertConfig"),
         ("mobilenet_v1", "MobileNetV1Config"),
         ("mobilenet_v2", "MobileNetV2Config"),
@@ -152,11 +154,13 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("nat", "NatConfig"),
         ("nezha", "NezhaConfig"),
         ("nllb-moe", "NllbMoeConfig"),
+        ("nougat", "VisionEncoderDecoderConfig"),
         ("nystromformer", "NystromformerConfig"),
         ("oneformer", "OneFormerConfig"),
         ("open-llama", "OpenLlamaConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),
         ("opt", "OPTConfig"),
+        ("owlv2", "Owlv2Config"),
         ("owlvit", "OwlViTConfig"),
         ("pegasus", "PegasusConfig"),
         ("pegasus_x", "PegasusXConfig"),
@@ -182,6 +186,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("roformer", "RoFormerConfig"),
         ("rwkv", "RwkvConfig"),
         ("sam", "SamConfig"),
+        ("seamless_m4t", "SeamlessM4TConfig"),
         ("segformer", "SegformerConfig"),
         ("sew", "SEWConfig"),
         ("sew-d", "SEWDConfig"),
@@ -221,6 +226,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vit_mae", "ViTMAEConfig"),
         ("vit_msn", "ViTMSNConfig"),
         ("vitdet", "VitDetConfig"),
+        ("vitmatte", "VitMatteConfig"),
         ("vits", "VitsConfig"),
         ("vivit", "VivitConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
@@ -306,6 +312,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("focalnet", "FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fsmt", "FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("funnel", "FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("fuyu", "FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("git", "GIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("gpt2", "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -344,6 +351,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("mega", "MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("megatron-bert", "MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mgp-str", "MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mistral", "MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilenet_v1", "MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilenet_v2", "MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilevit", "MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -361,6 +369,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("open-llama", "OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("openai-gpt", "OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("opt", "OPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("owlv2", "OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("owlvit", "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pegasus", "PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pegasus_x", "PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -384,6 +393,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("roformer", "ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("rwkv", "RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sam", "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("seamless_m4t", "SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("segformer", "SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew-d", "SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -415,6 +425,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("vit_mae", "VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit_msn", "VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vitdet", "VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("vitmatte", "VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vits", "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vivit", "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2", "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -514,6 +525,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("focalnet", "FocalNet"),
         ("fsmt", "FairSeq Machine-Translation"),
         ("funnel", "Funnel Transformer"),
+        ("fuyu", "Fuyu"),
         ("git", "GIT"),
         ("glpn", "GLPN"),
         ("gpt-sw3", "GPT-Sw3"),
@@ -561,6 +573,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("megatron-bert", "Megatron-BERT"),
         ("megatron_gpt2", "Megatron-GPT2"),
         ("mgp-str", "MGP-STR"),
+        ("mistral", "Mistral"),
         ("mluke", "mLUKE"),
         ("mms", "MMS"),
         ("mobilebert", "MobileBERT"),
@@ -578,11 +591,13 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("nezha", "Nezha"),
         ("nllb", "NLLB"),
         ("nllb-moe", "NLLB-MOE"),
+        ("nougat", "Nougat"),
         ("nystromformer", "Nyströmformer"),
         ("oneformer", "OneFormer"),
         ("open-llama", "OpenLlama"),
         ("openai-gpt", "OpenAI GPT"),
         ("opt", "OPT"),
+        ("owlv2", "OWLv2"),
         ("owlvit", "OWL-ViT"),
         ("pegasus", "Pegasus"),
         ("pegasus_x", "PEGASUS-X"),
@@ -609,6 +624,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("roformer", "RoFormer"),
         ("rwkv", "RWKV"),
         ("sam", "SAM"),
+        ("seamless_m4t", "SeamlessM4T"),
         ("segformer", "SegFormer"),
         ("sew", "SEW"),
         ("sew-d", "SEW-D"),
@@ -651,6 +667,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("vit_mae", "ViTMAE"),
         ("vit_msn", "ViTMSN"),
         ("vitdet", "VitDet"),
+        ("vitmatte", "ViTMatte"),
         ("vits", "VITS"),
         ("vivit", "ViViT"),
         ("wav2vec2", "Wav2Vec2"),
@@ -1010,7 +1027,8 @@ class AutoConfig:
         use_auth_token = kwargs.pop("use_auth_token", None)
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if kwargs.get("token", None) is not None:
                 raise ValueError(
@@ -1022,9 +1040,6 @@ class AutoConfig:
         kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         code_revision = kwargs.pop("code_revision", None)
-
-        revision = kwargs.pop("revision", None)
-        kwargs["revision"] = sanitize_code_revision(pretrained_model_name_or_path, revision, trust_remote_code)
 
         config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
@@ -1073,24 +1088,3 @@ class AutoConfig:
                 "match!"
             )
         CONFIG_MAPPING.register(model_type, config, exist_ok=exist_ok)
-
-
-def sanitize_code_revision(pretrained_model_name_or_path, revision, trust_remote_code):
-    if revision in ["main", None] and not trust_remote_code:
-        revision_dict = {
-            "tiiuae/falcon-7b": "4e2d06f0a7c6370ebabbc30c6f59377ae8f73d76",
-            "tiiuae/falcon-7b-instruct": "f8dac3fff96d5debd43edf56fb4e1abcfffbef28",
-            "tiiuae/falcon-40b": "f1ba7d328c06aa6fbb4a8afd3c756f46d7e6b232",
-            "tiiuae/falcon-40b-instruct": "7475ff8cfc36ed9a962b658ae3c33391566a85a5",
-        }
-
-        if isinstance(pretrained_model_name_or_path, str) and pretrained_model_name_or_path.lower() in revision_dict:
-            revision = revision_dict.get(pretrained_model_name_or_path.lower())
-            logger.warning(
-                "The Falcon model was initialized without `trust_remote_code=True`, and will therefore leverage the "
-                f"transformers library implementation. {pretrained_model_name_or_path}'s revision is set to a version that doesn't "
-                f"leverage remote code ({revision}).\n\nIn order to override this, please set a revision manually or set "
-                "`trust_remote_code=True`."
-            )
-
-    return revision

@@ -71,13 +71,13 @@ class TextToAudioPipeline(Pipeline):
         if self.sampling_rate is None:
             # get sampling_rate from config and generation config
 
-            config = self.model.config.to_dict()
+            config = self.model.config
             gen_config = self.model.__dict__.get("generation_config", None)
             if gen_config is not None:
                 config.update(gen_config.to_dict())
 
             for sampling_rate_name in ["sample_rate", "sampling_rate"]:
-                sampling_rate = config.get(sampling_rate_name, None)
+                sampling_rate = getattr(config, sampling_rate_name, None)
                 if sampling_rate is not None:
                     self.sampling_rate = sampling_rate
 

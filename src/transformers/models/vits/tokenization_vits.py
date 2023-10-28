@@ -93,17 +93,6 @@ class VitsTokenizer(PreTrainedTokenizer):
         is_uroman=False,
         **kwargs,
     ) -> None:
-        super().__init__(
-            pad_token=pad_token,
-            unk_token=unk_token,
-            language=language,
-            add_blank=add_blank,
-            normalize=normalize,
-            phonemize=phonemize,
-            is_uroman=is_uroman,
-            **kwargs,
-        )
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
 
@@ -115,12 +104,24 @@ class VitsTokenizer(PreTrainedTokenizer):
 
         self.is_uroman = is_uroman
 
+        super().__init__(
+            pad_token=pad_token,
+            unk_token=unk_token,
+            language=language,
+            add_blank=add_blank,
+            normalize=normalize,
+            phonemize=phonemize,
+            is_uroman=is_uroman,
+            **kwargs,
+        )
+
     @property
     def vocab_size(self):
         return len(self.encoder)
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
         return vocab
 
     def normalize_text(self, input_string):

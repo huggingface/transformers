@@ -64,6 +64,8 @@ from transformers.testing_utils import (
     is_pt_flax_cross_test,
     is_pt_tf_cross_test,
     require_accelerate,
+    require_bitsandbytes,
+    require_flash_attn,
     require_safetensors,
     require_torch,
     require_torch_gpu,
@@ -274,6 +276,24 @@ class ModelTesterMixin:
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
                 self.assertTrue(torch.equal(p1, p2))
 
+    def test_keep_in_fp32_modules(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            if model_class._keep_in_fp32_modules is None:
+                return
+
+            model = model_class(config)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16)
+
+                for name, param in model.named_parameters():
+                    if any(n in model_class._keep_in_fp32_modules for n in name.split(".")):
+                        self.assertTrue(param.dtype == torch.float32)
+                    else:
+                        self.assertTrue(param.dtype == torch.float16, name)
+
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -329,9 +349,23 @@ class ModelTesterMixin:
             model.gradient_checkpointing_enable()
             self.assertTrue(model.is_gradient_checkpointing)
 
+            # Loop over all modules and check that relevant modules have gradient_checkpointing set to True
+            for n, m in model.named_modules():
+                if hasattr(m, "gradient_checkpointing"):
+                    self.assertTrue(
+                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to True"
+                    )
+
             # check disable works
             model.gradient_checkpointing_disable()
             self.assertFalse(model.is_gradient_checkpointing)
+
+            # Loop over all modules and check that relevant modules have gradient_checkpointing set to False
+            for n, m in model.named_modules():
+                if hasattr(m, "gradient_checkpointing"):
+                    self.assertFalse(
+                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
+                    )
 
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -544,6 +578,13 @@ class ModelTesterMixin:
             model = model_class(config)
             model.to(torch_device)
             model.gradient_checkpointing_enable()
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+            model.gradient_checkpointing_disable()
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": True})
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
@@ -1436,6 +1477,11 @@ class ModelTesterMixin:
 
             model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            # Check that resizing a model to a multiple of pad_to_multiple leads to a model of exactly that size
+            target_dimension = 128
+            model_embed = model.resize_token_embeddings(target_dimension, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0], target_dimension)
 
             with self.assertRaisesRegex(
                 ValueError,
@@ -2717,6 +2763,263 @@ class ModelTesterMixin:
                 num_params < 1000000
             ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
 
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_conversion(self):
+        import torch
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True
+                ).to(torch_device)
+
+                for _, module in model.named_modules():
+                    if "FlashAttention" in module.__class__.__name__:
+                        return
+
+                self.assertTrue(False, "FlashAttention2 modules not found in model")
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference(self):
+        import torch
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
+                )
+                model.to(torch_device)
+
+                dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[0, 1, 1, 1, 1]]).to(torch_device)
+
+                logits = model(dummy_input, output_hidden_states=True).hidden_states[-1]
+                logits_fa = model_fa(dummy_input, output_hidden_states=True).hidden_states[-1]
+
+                self.assertTrue(torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2))
+
+                output_fa = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                logits_fa = output_fa.hidden_states[-1]
+
+                output = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                logits = output.hidden_states[-1]
+
+                self.assertTrue(torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2))
+
+                # check with inference + dropout
+                model.train()
+                _ = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference_padding_right(self):
+        import torch
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
+                )
+                model.to(torch_device)
+
+                dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1, 0]]).to(torch_device)
+
+                logits = model(dummy_input, output_hidden_states=True).hidden_states[-1]
+                logits_fa = model_fa(dummy_input, output_hidden_states=True).hidden_states[-1]
+
+                self.assertTrue(torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2))
+
+                output_fa = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                logits_fa = output_fa.hidden_states[-1]
+
+                output = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                logits = output.hidden_states[-1]
+
+                self.assertTrue(torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2))
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_left_padding(self):
+        import torch
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False, low_cpu_mem_usage=True
+                ).to(torch_device)
+
+                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+
+                out = model.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
+                )
+
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
+                ).to(torch_device)
+
+                out_fa = model.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
+                )
+
+                self.assertTrue(torch.equal(out, out_fa))
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_padding_right(self):
+        import torch
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False, low_cpu_mem_usage=True
+                ).to(torch_device)
+
+                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
+
+                out = model.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
+                )
+
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
+                ).to(torch_device)
+
+                out_fa = model.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
+                )
+
+                self.assertTrue(torch.equal(out, out_fa))
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_use_cache(self):
+        import torch
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
+                ).to(torch_device)
+
+                # Just test that a large cache works as expected
+                _ = model.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=30, do_sample=False
+                )
+
+    @require_flash_attn
+    @require_torch_gpu
+    @require_bitsandbytes
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_fp32_ln(self):
+        import torch
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    use_flash_attention_2=True,
+                    low_cpu_mem_usage=True,
+                    load_in_4bit=True,
+                )
+
+                for _, param in model.named_parameters():
+                    # upcast only layer norms
+                    if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
+                        param.data = param.data.to(torch.float32)
+
+                _ = model(input_ids=dummy_input)
+
+                # with attention mask
+                _ = model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
+
 
 global_rng = random.Random()
 
@@ -2740,7 +3043,8 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
 def random_attention_mask(shape, rng=None, name=None):
     attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None)
     # make sure that at least one token is attended to for each batch
-    attn_mask[:, -1] = 1
+    # we choose the 1st token so this property of `at least one being non-zero` still holds after applying causal mask
+    attn_mask[:, 0] = 1
     return attn_mask
 
 

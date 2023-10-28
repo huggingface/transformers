@@ -623,9 +623,13 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
 
+        # Not relevant for Flax Models
+        _ = kwargs.pop("adapter_kwargs", None)
+
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(
@@ -1060,7 +1064,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(

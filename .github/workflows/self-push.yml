@@ -45,7 +45,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: [self-hosted, docker-gpu, '${{ matrix.machine_type }}']
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, push-ci]
     container:
       image: huggingface/transformers-all-latest-gpu-push-ci
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -60,7 +60,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: [self-hosted, docker-gpu, '${{ matrix.machine_type }}']
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, push-ci]
     container:
       image: huggingface/transformers-all-latest-gpu-push-ci
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -158,7 +158,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
         machine_type: [single-gpu]
-    runs-on: [self-hosted, docker-gpu, '${{ matrix.machine_type }}']
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, push-ci]
     container:
       image: huggingface/transformers-all-latest-gpu-push-ci
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -251,7 +251,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
         machine_type: [multi-gpu]
-    runs-on: [self-hosted, docker-gpu, '${{ matrix.machine_type }}']
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, push-ci]
     container:
       image: huggingface/transformers-all-latest-gpu-push-ci
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -344,7 +344,7 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [single-gpu]
-    runs-on: [self-hosted, docker-gpu, '${{ matrix.machine_type }}']
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, push-ci]
     container:
       image: huggingface/transformers-pytorch-deepspeed-latest-gpu-push-ci
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -434,7 +434,7 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [multi-gpu]
-    runs-on: [self-hosted, docker-gpu, '${{ matrix.machine_type }}']
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, push-ci]
     container:
       image: huggingface/transformers-pytorch-deepspeed-latest-gpu-push-ci
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/

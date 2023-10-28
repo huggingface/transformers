@@ -25,6 +25,7 @@ from torch import nn
 from ....activations import ACT2FN
 from ....file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ....integrations.deepspeed import is_deepspeed_zero3_enabled
+from ....modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ....modeling_outputs import BaseModelOutput, CausalLMOutput
 from ....modeling_utils import (
     PreTrainedModel,
@@ -55,21 +56,6 @@ MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "speechbrain/m-ctc-t-large",
     # See all M-CTC-T models at https://huggingface.co/models?filter=mctct
 ]
-
-
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 class MCTCTConv1dSubsampler(nn.Module):
@@ -504,10 +490,6 @@ class MCTCTPreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).long()
         return attention_mask
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (MCTCTEncoder)):
-            module.gradient_checkpointing = value
-
 
 MCTCT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
@@ -591,7 +573,7 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -616,18 +598,12 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
+                    layer_outputs = self._gradient_checkpointing_func(
+                        encoder_layer.__call__,
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
+                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(

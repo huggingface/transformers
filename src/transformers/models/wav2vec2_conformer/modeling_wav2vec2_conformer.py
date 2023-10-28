@@ -518,15 +518,8 @@ class Wav2Vec2ConformerFeatureEncoder(nn.Module):
 
         for conv_layer in self.conv_layers:
             if self._requires_grad and self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(conv_layer),
+                hidden_states = self._gradient_checkpointing_func(
+                    conv_layer.__call__,
                     hidden_states,
                 )
             else:
@@ -584,7 +577,7 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
         if (config.conv_depthwise_kernel_size - 1) % 2 == 1:
             raise ValueError("`config.conv_depthwise_kernel_size` should be a odd number for 'SAME' padding")
         self.layer_norm = nn.LayerNorm(config.hidden_size)
-        self.pointwise_conv1 = torch.nn.Conv1d(
+        self.pointwise_conv1 = nn.Conv1d(
             config.hidden_size,
             2 * config.hidden_size,
             kernel_size=1,
@@ -592,8 +585,8 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
             padding=0,
             bias=False,
         )
-        self.glu = torch.nn.GLU(dim=1)
-        self.depthwise_conv = torch.nn.Conv1d(
+        self.glu = nn.GLU(dim=1)
+        self.depthwise_conv = nn.Conv1d(
             config.hidden_size,
             config.hidden_size,
             config.conv_depthwise_kernel_size,
@@ -602,9 +595,9 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
             groups=config.hidden_size,
             bias=False,
         )
-        self.batch_norm = torch.nn.BatchNorm1d(config.hidden_size)
+        self.batch_norm = nn.BatchNorm1d(config.hidden_size)
         self.activation = ACT2FN[config.hidden_act]
-        self.pointwise_conv2 = torch.nn.Conv1d(
+        self.pointwise_conv2 = nn.Conv1d(
             config.hidden_size,
             config.hidden_size,
             kernel_size=1,
@@ -612,7 +605,7 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
             padding=0,
             bias=False,
         )
-        self.dropout = torch.nn.Dropout(config.conformer_conv_dropout)
+        self.dropout = nn.Dropout(config.conformer_conv_dropout)
 
     def forward(self, hidden_states):
         hidden_states = self.layer_norm(hidden_states)
@@ -798,7 +791,7 @@ class Wav2Vec2ConformerEncoderLayer(nn.Module):
 
         # Self-Attention
         self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
-        self.self_attn_dropout = torch.nn.Dropout(dropout)
+        self.self_attn_dropout = nn.Dropout(dropout)
         self.self_attn = Wav2Vec2ConformerSelfAttention(config)
 
         # Conformer Convolution
@@ -911,18 +904,12 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
+                    layer_outputs = self._gradient_checkpointing_func(
+                        layer.__call__,
                         hidden_states,
                         attention_mask,
                         relative_position_embeddings,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = layer(
@@ -1177,10 +1164,6 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
         attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (Wav2Vec2ConformerEncoder, Wav2Vec2ConformerFeatureEncoder)):
-            module.gradient_checkpointing = value
 
 
 WAV2VEC2_CONFORMER_START_DOCSTRING = r"""

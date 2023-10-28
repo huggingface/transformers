@@ -64,17 +64,17 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
         keep_accents (`bool`, *optional*, defaults to `False`):
             Whether or not to keep accents when tokenizing.
-        bos_token (`str`, *optional*):
-            The beginning of sequence token that can be used for downstream task, was not seen during pretraining. If
-            not provided, will default to '<s>' or '<|endoftext|>', depending on model size.
-        eos_token (`str`, *optional*):
-            The end of sequence token seen during pretraining. If not provided, will default to '<|endoftext|>'
-        unk_token (`str`, *optional*):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead. If not provided, will default to '<unk>'.
         pad_token (`str`, *optional*):
             The token used for padding, for example when batching sequences of different lengths. If not provided, will
             default to '<pad>' or '<unk>' depending on model size.
+        unk_token (`str`, *optional*):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead. If not provided, will default to '<unk>'.
+        eos_token (`str`, *optional*):
+            The end of sequence token seen during pretraining. If not provided, will default to '<|endoftext|>'
+        bos_token (`str`, *optional*):
+            The beginning of sequence token that can be used for downstream task, was not seen during pretraining. If
+            not provided, will default to '<s>' or '<|endoftext|>', depending on model size.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
@@ -103,7 +103,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["input_ids", "attention_mask"]
+    model_input_names = ["input_ids", "token_type_ids", "attention_mask"]
 
     def __init__(
         self,
@@ -138,18 +138,6 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             pad_token = "<pad>" if pad_token is None else pad_token
             bos_token = "<s>" if bos_token is None else bos_token
 
-        super().__init__(
-            do_lower_case=do_lower_case,
-            remove_space=remove_space,
-            keep_accents=keep_accents,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
-
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
         self.keep_accents = keep_accents
@@ -166,6 +154,18 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         # Regular expression to remove non-printing characters (e.g. some unicode control chars) in preprocessing
         self.non_printing_characters_re = re.compile(
             f"[{''.join(map(chr, list(range(0, 9)) + list(range(11, 32)) + list(range(127, 160)) + [160, 173, 8203]))}]"
+        )
+
+        super().__init__(
+            do_lower_case=do_lower_case,
+            remove_space=remove_space,
+            keep_accents=keep_accents,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            sp_model_kwargs=self.sp_model_kwargs,
+            **kwargs,
         )
 
     # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.__getstate__
@@ -321,6 +321,12 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         This chat template formats messages like an instant messenger chat log, with "User:" and "Bot:" strings
         preceding messages. BOS tokens are added between all messages.
         """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
         return (
             "{{ eos_token }}{{ bos_token }}"
             "{% for message in messages %}"

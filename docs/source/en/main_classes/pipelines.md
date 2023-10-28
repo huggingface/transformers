@@ -352,6 +352,12 @@ Pipelines available for computer vision tasks include the following.
     - __call__
     - all
 
+### ImageToImagePipeline
+
+[[autodoc]] ImageToImagePipeline
+    - __call__
+    - all
+
 ### ObjectDetectionPipeline
 
 [[autodoc]] ObjectDetectionPipeline
@@ -472,6 +478,12 @@ Pipelines available for multimodal tasks include the following.
 ### ImageToTextPipeline
 
 [[autodoc]] ImageToTextPipeline
+    - __call__
+    - all
+
+### MaskGenerationPipeline
+
+[[autodoc]] MaskGenerationPipeline
     - __call__
     - all
 

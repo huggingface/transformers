@@ -127,14 +127,6 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         do_clean_text=False,
         **kwargs,
     ):
-        super().__init__(
-            unk_token=unk_token,
-            pad_token=pad_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            do_clean_text=do_clean_text,
-            **kwargs,
-        )
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
@@ -149,6 +141,14 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         self.vocab, self.raw_vocab, self.ids_to_tokens, self.emoji = load_vocab_and_emoji(vocab_file, emoji_file)
         self.subword_tokenizer = SubWordJapaneseTokenizer(
             vocab=self.vocab, ids_to_tokens=self.ids_to_tokens, emoji=self.emoji
+        )
+        super().__init__(
+            unk_token=unk_token,
+            pad_token=pad_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            do_clean_text=do_clean_text,
+            **kwargs,
         )
 
     @property
@@ -180,8 +180,17 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         """
         A simple chat template that just adds BOS/EOS tokens around messages while discarding role information.
         """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
         return (
-            "{% for message in messages %}" "{{ bos_token + eos_token + message.content + eos_token }}" "{% endfor %}"
+            "{% for message in messages %}"
+            "{{ bos_token + eos_token + message.content + eos_token }}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %} {{ bos_token + eos_token }} {% endif %}"
         )
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
