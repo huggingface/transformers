@@ -192,9 +192,12 @@ def rotate_half(x):
 
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
-    cos = cos[position_ids].unsqueeze(1)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
-    sin = sin[position_ids].unsqueeze(1)
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
+    # The 'unsqueeze_dim' argument specifies along which dimension to unsqueeze cos[position_ids] and sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k.
+    # For example, note that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Now, if q and k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k.
+    # Similarly, if q and k have the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    cos = cos[position_ids].unsqueeze(unsqueeze_dim)
+    sin = sin[position_ids].unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
