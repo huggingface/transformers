@@ -294,7 +294,7 @@ For example, to use `torch.distributed.run`, you could do:
 
 ```bash
 python -m torch.distributed.run --nproc_per_node=8 --nnode=2 --node_rank=0 --master_addr=hostname1 \
---master_port=9901 your _program.py <normal cl args> --deepspeed ds_config.json
+--master_port=9901 your_program.py <normal cl args> --deepspeed ds_config.json
 ```
 
 You have to ssh to each node and run this same command on each one of them! There is no rush, the launcher will wait until both nodes will synchronize.
