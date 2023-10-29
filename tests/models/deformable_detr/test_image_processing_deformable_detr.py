@@ -21,8 +21,7 @@ import unittest
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
+from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
 
 if is_torch_available():
     import torch
@@ -127,7 +126,7 @@ class DeformableDetrImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class DeformableDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = DeformableDetrImageProcessor if is_vision_available() else None
 
     def setUp(self):

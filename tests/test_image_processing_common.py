@@ -289,6 +289,13 @@ class ImageProcessingTestMixin:
             tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
         )
 
+
+class AnnotationFormatTestMixin:
+
+    # this mixin adds a test to assert that usages of the
+    # to-be-deprecated `AnnotionFormat` continue to be
+    # supported for the time being
+
     def test_processor_can_use_legacy_annotation_format(self):
         image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
         fixtures_path = pathlib.Path(__file__).parent / "fixtures" / "tests_samples" / "COCO"
