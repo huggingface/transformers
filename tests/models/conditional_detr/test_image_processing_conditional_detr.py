@@ -23,6 +23,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
 
+
 if is_torch_available():
     import torch
 
