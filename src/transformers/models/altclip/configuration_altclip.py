@@ -61,12 +61,19 @@ class AltCLIPTextConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 514):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
+        type_vocab_size (`int`, *optional*, defaults to 1):
             The vocabulary size of the `token_type_ids` passed when calling [`AltCLIPTextModel`]
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        initializer_factor (`float`, *optional*, defaults to 0.02):
+            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+            testing).
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 1): The id of the *padding* token.
+        bos_token_id (`int`, *optional*, defaults to 0): The id of the *beginning-of-sequence* token.
+        eos_token_id (`Union[int, List[int]]`, *optional*, defaults to 2):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
@@ -171,7 +178,7 @@ class AltCLIPVisionConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
 
