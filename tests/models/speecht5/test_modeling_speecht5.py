@@ -1057,7 +1057,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             input_ids=inputs["input_ids"],
             speaker_embeddings=speaker_embeddings,
             attention_mask=inputs["attention_mask"],
-            return_concrete_lengths=True,
+            return_output_lengths=True,
         )
         self.assertEqual(spectrograms.shape, (3, 262, model.config.num_mel_bins))
         waveforms = vocoder(spectrograms)
@@ -1070,10 +1070,21 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             speaker_embeddings=speaker_embeddings,
             attention_mask=inputs["attention_mask"],
             vocoder=vocoder,
-            return_concrete_lengths=True,
+            return_output_lengths=True,
         )
         self.assertTrue(torch.allclose(waveforms, waveforms_with_vocoder, atol=1e-8))
         self.assertEqual(waveform_lengths, waveform_lengths_with_vocoder)
+
+        # Check waveform results are the same with return_concrete_lengths=True/False
+        set_seed(555)
+        waveforms_with_vocoder_no_lengths = model.generate_speech(
+            input_ids=inputs["input_ids"],
+            speaker_embeddings=speaker_embeddings,
+            attention_mask=inputs["attention_mask"],
+            vocoder=vocoder,
+            return_output_lengths=False,
+        )
+        self.assertTrue(torch.allclose(waveforms_with_vocoder_no_lengths, waveforms_with_vocoder, atol=1e-8))
 
         # Check results when batching are consistent with results without batching
         for i, text in enumerate(input_text):
@@ -1087,6 +1098,14 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             self.assertTrue(torch.allclose(spectrogram, spectrograms[i][: spectrogram_lengths[i]], atol=5e-3))
             waveform = vocoder(spectrogram)
             self.assertEqual(waveform.shape, waveforms[i][: waveform_lengths[i]].shape)
+            # Check whether waveforms are the same with/without passing vocoder
+            set_seed(555)
+            waveform_with_vocoder = model.generate_speech(
+                input_ids=inputs["input_ids"],
+                speaker_embeddings=speaker_embeddings,
+                vocoder=vocoder,
+            )
+            self.assertTrue(torch.allclose(waveform, waveform_with_vocoder, atol=1e-8))
 
 
 @require_torch

@@ -2554,7 +2554,7 @@ def _generate_speech(
     maxlenratio: float = 20.0,
     vocoder: Optional[nn.Module] = None,
     output_cross_attentions: bool = False,
-    return_concrete_lengths: bool = False,
+    return_output_lengths: bool = False,
 ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
     if speaker_embeddings is None:
         raise ValueError(
@@ -2651,8 +2651,8 @@ def _generate_speech(
             if len(result_spectrogram) >= bsz:
                 break
     spectrograms = [result_spectrogram[i] for i in range(len(result_spectrogram))]
-    if not return_concrete_lengths:
-        spectrogram = spectrograms[0]
+    if not return_output_lengths:
+        spectrogram = spectrograms[0] if bsz == 1 else torch.nn.utils.rnn.pad_sequence(spectrograms, batch_first=True)
         if vocoder is not None:
             outputs = vocoder(spectrogram)
         else:
@@ -2853,7 +2853,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         maxlenratio: float = 20.0,
         vocoder: Optional[nn.Module] = None,
         output_cross_attentions: bool = False,
-        return_concrete_lengths: bool = False,
+        return_output_lengths: bool = False,
         **kwargs,
     ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
         r"""
@@ -2884,12 +2884,12 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 spectrogram.
             output_cross_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of the decoder's cross-attention layers.
-            return_concrete_lengths (`bool`, *optional*, defaults to `False`):
+            return_output_lengths (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the concrete spectrogram/waveform lengths.
 
         Returns:
             `tuple(torch.FloatTensor)` comprising various elements depending on the inputs:
-            - when `return_concrete_lengths` is False
+            - when `return_output_lengths` is False
                 - **spectrogram** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
                 `(output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrogram.
                 - **waveform** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
@@ -2897,7 +2897,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
                 `torch.FloatTensor` of shape `(config.decoder_layers, config.decoder_attention_heads,
                 output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
-            - when `return_concrete_lengths` is True
+            - when `return_output_lengths` is True
                 - **spectrograms** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrograms that
                 are padded to the maximum length.
@@ -2921,7 +2921,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             maxlenratio,
             vocoder,
             output_cross_attentions,
-            return_concrete_lengths,
+            return_output_lengths,
         )
 
     @torch.no_grad()
@@ -2935,7 +2935,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         maxlenratio: float = 20.0,
         vocoder: Optional[nn.Module] = None,
         output_cross_attentions: bool = False,
-        return_concrete_lengths: bool = False,
+        return_output_lengths: bool = False,
     ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
         r"""
         Converts a sequence of input tokens into a sequence of mel spectrograms, which are subsequently turned into a
@@ -2970,12 +2970,12 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 spectrogram.
             output_cross_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of the decoder's cross-attention layers.
-            return_concrete_lengths (`bool`, *optional*, defaults to `False`):
+            return_output_lengths (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the concrete spectrogram/waveform lengths.
 
         Returns:
             `tuple(torch.FloatTensor)` comprising various elements depending on the inputs:
-            - when `return_concrete_lengths` is False
+            - when `return_output_lengths` is False
                 - **spectrogram** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
                 `(output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrogram.
                 - **waveform** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
@@ -2983,7 +2983,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
                 `torch.FloatTensor` of shape `(config.decoder_layers, config.decoder_attention_heads,
                 output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
-            - when `return_concrete_lengths` is True
+            - when `return_output_lengths` is True
                 - **spectrograms** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrograms that
                 are padded to the maximum length.
@@ -3007,7 +3007,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             maxlenratio,
             vocoder,
             output_cross_attentions,
-            return_concrete_lengths,
+            return_output_lengths,
         )
 
 
@@ -3172,7 +3172,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         maxlenratio: float = 20.0,
         vocoder: Optional[nn.Module] = None,
         output_cross_attentions: bool = False,
-        return_concrete_lengths: bool = False,
+        return_output_lengths: bool = False,
     ) -> torch.FloatTensor:
         r"""
         Converts a raw speech waveform into a sequence of mel spectrograms, which are subsequently turned back into a
@@ -3207,12 +3207,12 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
                 spectrogram.
             output_cross_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of the decoder's cross-attention layers.
-            return_concrete_lengths (`bool`, *optional*, defaults to `False`):
+            return_output_lengths (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the concrete spectrogram/waveform lengths.
 
         Returns:
             `tuple(torch.FloatTensor)` comprising various elements depending on the inputs:
-            - when `return_concrete_lengths` is False
+            - when `return_output_lengths` is False
                 - **spectrogram** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
                 `(output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrogram.
                 - **waveform** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
@@ -3220,7 +3220,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
                 - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
                 `torch.FloatTensor` of shape `(config.decoder_layers, config.decoder_attention_heads,
                 output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
-            - when `return_concrete_lengths` is True
+            - when `return_output_lengths` is True
                 - **spectrograms** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrograms that
                 are padded to the maximum length.
@@ -3247,7 +3247,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             maxlenratio,
             vocoder,
             output_cross_attentions,
-            return_concrete_lengths,
+            return_output_lengths,
         )
 
 
