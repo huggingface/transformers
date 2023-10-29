@@ -4410,15 +4410,6 @@ class GenerationMixin:
 
         # other auxiliary variables
         max_len = stopping_criteria[0].max_length
-        assistant_kv_indexing = (
-            1
-            if "bloom" in assistant_model.__class__.__name__.lower()
-            or (
-                assistant_model.config.architectures is not None
-                and "bloom" in assistant_model.config.architectures[0].lower()
-            )
-            else 0
-        )
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
@@ -4610,6 +4601,13 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
+
+            # Update attention_mask
+            if n_matches > 0 and model_kwargs.get("attention_mask", None) is not None:
+                attention_mask = model_kwargs["attention_mask"]
+                model_kwargs["attention_mask"] = torch.cat(
+                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], n_matches))], dim=-1
+                )
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id_tensor is not None:
