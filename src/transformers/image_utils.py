@@ -80,7 +80,7 @@ class DeprecatedEnumMeta(EnumMeta):
             f"`{cls.__name__}` is deprecated and will be removed in a forthcoming version. "
             f"Please use `transformers.image_utils.AnnotationFormat` instead.",
             FutureWarning,
-            stacklevel=2
+            stacklevel=2,
         )
 
 
