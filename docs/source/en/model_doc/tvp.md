@@ -126,7 +126,7 @@ def get_resize_size(image, max_size):
     size = {"height": int(new_height), "width": int(new_width)}
     return size
 
-file = hf_hub_download(repo_id="Intel/tvp_demo", filename="3MSZA.mp4", repo_type="dataset")
+file = hf_hub_download(repo_id="Intel/tvp_demo", filename="AK2KG.mp4", repo_type="dataset")
 model = TvpForVideoGrounding.from_pretrained("Intel/tvp-base")
 
 decoder_kwargs = dict(
@@ -139,7 +139,7 @@ decoder_kwargs = dict(
 )
 raw_sampled_frms = decode(**decoder_kwargs).permute(0, 3, 1, 2)
 
-text = "person turn a light on."
+text = "a person is sitting on a bed."
 processor = AutoProcessor.from_pretrained("Intel/tvp-base")
 size = get_resize_size(raw_sampled_frms, model.config.max_img_size)
 model_inputs = processor(
@@ -147,7 +147,7 @@ model_inputs = processor(
 )
 
 model_inputs["pixel_values"] = model_inputs["pixel_values"].to(model.dtype)
-model_inputs["labels"] = torch.tensor([30.96, 24.3, 30.4])
+model_inputs["labels"] = torch.tensor([18.1, 0.0, 6.8])
 output = model(**model_inputs)
 print(f"The model's output is {output}")
 
