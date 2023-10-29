@@ -81,7 +81,7 @@ class AnnotionFormat(ExplicitEnum):
         warnings.warn(
             f"`{self.__class__.__name__}` is deprecated and will be removed in a forthcoming version. "
             f"Please use `transformers.image_utils.AnnotationFormat` instead",
-            FutureWarning
+            FutureWarning,
         )
 
 
@@ -696,13 +696,10 @@ def promote_annotation_format(annotation_format: Union[AnnotionFormat, Annotatio
 def validate_annotations(
     annotation_format: AnnotationFormat,
     supported_annotation_formats: Tuple[AnnotationFormat, ...],
-    annotations: List[Dict]
+    annotations: List[Dict],
 ) -> None:
-
     if promote_annotation_format(annotation_format) not in supported_annotation_formats:
-        raise ValueError(
-            f"Unsupported annotation format: {format} must be one of {supported_annotation_formats}"
-        )
+        raise ValueError(f"Unsupported annotation format: {format} must be one of {supported_annotation_formats}")
 
     if promote_annotation_format(annotation_format) is AnnotationFormat.COCO_DETECTION:
         if not valid_coco_detection_annotations(annotations):
