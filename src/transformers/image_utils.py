@@ -16,6 +16,7 @@
 import base64
 import os
 import warnings
+from enum import EnumMeta
 from io import BytesIO
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -72,17 +73,19 @@ class AnnotationFormat(ExplicitEnum):
     COCO_PANOPTIC = "coco_panoptic"
 
 
-class AnnotionFormat(ExplicitEnum):
-    COCO_DETECTION = AnnotationFormat.COCO_DETECTION.value
-    COCO_PANOPTIC = AnnotationFormat.COCO_PANOPTIC.value
-
-    def __init__(self, *args, **kwargs):
+class DeprecatedEnumMeta(EnumMeta):
+    def __init__(cls, *args, **kwargs):
         super().__init__(*args, **kwargs)
         warnings.warn(
-            f"`{self.__class__.__name__}` is deprecated and will be removed in a forthcoming version. "
-            f"Please use `transformers.image_utils.AnnotationFormat` instead",
+            f"`{cls.__name__}` is deprecated and will be removed in a forthcoming version. "
+            f"Please use `transformers.image_utils.AnnotationFormat` instead.",
             FutureWarning,
         )
+
+
+class AnnotionFormat(ExplicitEnum, metaclass=DeprecatedEnumMeta):
+    COCO_DETECTION = AnnotationFormat.COCO_DETECTION.value
+    COCO_PANOPTIC = AnnotationFormat.COCO_PANOPTIC.value
 
 
 AnnotationType = Dict[str, Union[int, str, List[Dict]]]
