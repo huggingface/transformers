@@ -34,6 +34,8 @@ from ...image_transforms import (
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
+    AnnotationFormat,
+    AnnotionFormat,  # noqa: F401
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -43,8 +45,6 @@ from ...image_utils import (
     is_scaled_image,
     to_numpy_array,
     valid_images,
-    AnnotationFormat,
-    AnnotionFormat,  # pylint: disable=unused-import
     validate_annotations,
 )
 from ...utils import (
