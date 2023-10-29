@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 from torch import nn
@@ -107,7 +107,6 @@ class TvpVideoGroundingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
     logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -127,6 +126,15 @@ class TvpLoss(nn.Module):
     def __init__(self, losses):
         super().__init__()
         self.losses = losses
+        self.loss_map = {
+            "IoU": self.loss_IoU,
+            "distance": self.loss_distance,
+            "duration": self.loss_duration,
+        }
+
+        for loss in self.losses:
+            if loss not in self.loss_map:
+                raise ValueError(f"Loss {loss} not supported")
 
     def loss_IoU(self, start_time, end_time, candidates_start_time, candidates_end_time, duration):
         inter = torch.min(candidates_end_time, end_time) - torch.max(candidates_start_time, start_time)
@@ -152,16 +160,6 @@ class TvpLoss(nn.Module):
 
         return duration_diff
 
-    def get_loss(self, loss, start_time, end_time, candidates_start_time, candidates_end_time, duration):
-        loss_map = {
-            "IoU": self.loss_IoU,
-            "distance": self.loss_distance,
-            "duration": self.loss_duration,
-        }
-        if loss not in loss_map:
-            raise ValueError(f"Loss {loss} not supported")
-        return loss_map[loss](start_time, end_time, candidates_start_time, candidates_end_time, duration)
-
     def forward(self, logits, labels):
         """
         This performs the loss computation.
@@ -180,7 +178,7 @@ class TvpLoss(nn.Module):
         losses_dict = {}
         for loss in self.losses:
             losses_dict.update(
-                {loss: self.get_loss(loss, start_time, end_time, candidates_start_time, candidates_end_time, duration)}
+                {loss: self.loss_map[loss](start_time, end_time, candidates_start_time, candidates_end_time, duration)}
             )
 
         return losses_dict
@@ -190,18 +188,14 @@ class TvpVisionModel(nn.Module):
     def __init__(self, config):
         super(TvpVisionModel, self).__init__()
         self.backbone = AutoBackbone.from_config(config.backbone_config)
-        self.grid_encoder = nn.Sequential(
-            nn.Conv2d(
-                config.backbone_config.hidden_sizes[-1],
-                config.hidden_size,
-                kernel_size=3,
-                stride=1,
-                padding=1,
-                groups=1,
-                bias=False,
-            ),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.ReLU(inplace=True),
+        self.grid_encoder_conv = nn.Conv2d(
+            config.backbone_config.hidden_sizes[-1],
+            config.hidden_size,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            groups=1,
+            bias=False,
         )
         self.config = config
 
@@ -210,7 +204,9 @@ class TvpVisionModel(nn.Module):
         # (batch_size * num_frames, num_channels, height, width)
         pixel_values = pixel_values.view(batch_size * num_frames, num_channels, height, width)
         grid_feat_outputs = self.backbone(pixel_values)["feature_maps"][0]
-        grid = self.grid_encoder(grid_feat_outputs)
+        grid = self.grid_encoder_conv(grid_feat_outputs)
+        grid = nn.functional.max_pool2d(grid, kernel_size=2, stride=2)
+        grid = nn.functional.relu(grid, inplace=True)
         new_channel, new_height, new_width = grid.shape[-3:]
         # (batch_size, num_frames, num_channels, height, width)
         grid = grid.view(batch_size, num_frames, new_channel, new_height, new_width)
@@ -369,7 +365,7 @@ class TvpAttention(nn.Module):
         self.all_head_size = self.attention_head_size * self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    # Copied from Llama
+    # Copied from transformers.models.llama.modeling_llama.LlamaAttention._shape
     def _shape(self, tensor: torch.Tensor, sequence_length: int, batch_size: int):
         return (
             tensor.view(batch_size, sequence_length, self.num_attention_heads, self.attention_head_size)
@@ -401,7 +397,7 @@ class TvpAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -550,7 +546,7 @@ class TvpEncoder(nn.Module):
         )
 
 
-# Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py#L654
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Tvp
 class TvpPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -644,12 +640,10 @@ class TvpTransformer(TvpPreTrainedModel):
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         text_embedding_output = self.embeddings(input_ids=input_ids)  # (batch_size, sequence_length, hidden_size)
-        visual_embedding_output = self.visual_embeddings(
-            pixel_values
-        )  # (batch_size, visual_sequence_length, hidden_size)
-        visual_attention_mask = attention_mask.new_ones(
-            visual_embedding_output.shape[:2]
-        )  # (batch_size, visual_sequence_length)
+        # (batch_size, visual_sequence_length, hidden_size)
+        visual_embedding_output = self.visual_embeddings(pixel_values)
+        # (batch_size, visual_sequence_length)
+        visual_attention_mask = attention_mask.new_ones(visual_embedding_output.shape[:2])
         pt_mask = torch.ones(attention_mask.shape[0], 10)
         attention_mask = torch.cat([pt_mask.long(), attention_mask, visual_attention_mask], dim=-1)
         text_prompt = self.text_prompt.expand(text_embedding_output.shape[0], -1, -1)
@@ -683,86 +677,71 @@ class TvpTransformer(TvpPreTrainedModel):
         )
 
 
-# Pad single images in the surroundings.
-class TvpPadPrompter(nn.Module):
-    def __init__(self, image_size, prompt_size):
-        super(TvpPadPrompter, self).__init__()
-        pad_size = prompt_size
-        image_size = image_size
-
-        self.base_size = image_size - pad_size * 2
-        self.pad_up = nn.Parameter(torch.randn([1, 1, 3, pad_size, image_size]))
-        self.pad_down = nn.Parameter(torch.randn([1, 1, 3, pad_size, image_size]))
-        self.pad_left = nn.Parameter(torch.randn([1, 1, 3, image_size - pad_size * 2, pad_size]))
-        self.pad_right = nn.Parameter(torch.randn([1, 1, 3, image_size - pad_size * 2, pad_size]))
-
-    def forward(self, x):
-        base = torch.zeros(1, 1, 3, self.base_size, self.base_size)
-        prompt = torch.cat([self.pad_left, base, self.pad_right], dim=4)
-        prompt = torch.cat([self.pad_up, prompt, self.pad_down], dim=3)
-        prompt = torch.cat(x.size(1) * [prompt], dim=1)
-        prompt = torch.cat(x.size(0) * [prompt])
-        return prompt
-
-
-# Pad single images only at the bottom.
-class TvpDownPadPrompter(nn.Module):
-    def __init__(self, image_size, pad_size):
-        super(TvpDownPadPrompter, self).__init__()
-        self.pad_size = pad_size
-        self.image_size = image_size
-
-        self.pad_down = nn.Parameter(torch.randn([1, 1, 3, pad_size, image_size]))
-
-    def forward(self, x):
-        prompt = torch.zeros([x.shape[0], x.shape[1], 3, self.image_size, self.image_size])
-        start_point = self.image_size - self.pad_size
-        prompt[:, :, :, start_point : self.image_size, :] = self.pad_down
-        return prompt
-
-
 # Pad frames extracted from videos only at the bottom.
 class TvpFrameDownPadPrompter(nn.Module):
-    def __init__(self, image_size, pad_size, frame_num):
+    def __init__(self, image_size, visual_prompt_size, frame_num, max_img_size, visual_prompter_apply):
+        if visual_prompter_apply not in ("add", "replace", "remove"):
+            raise ValueError("`visual_prompter_apply` must be in (add, replace, remove)")
+
         super(TvpFrameDownPadPrompter, self).__init__()
-        self.pad_size = pad_size
+        self.visual_prompt_size = visual_prompt_size
         self.image_size = image_size
         self.frame_num = frame_num
+        self.max_img_size = max_img_size
+        self.visual_prompter_apply = visual_prompter_apply
 
-        self.pad_down = nn.Parameter(torch.randn([1, frame_num, 3, pad_size, image_size]))
+        self.pad_down = nn.Parameter(torch.randn([1, frame_num, 3, visual_prompt_size, image_size]))
 
-    def forward(self, x):
-        prompt = torch.zeros([x.shape[0], x.shape[1], 3, self.image_size, self.image_size])
-        start_point = self.image_size - self.pad_size
-        prompt[:, :, :, start_point : self.image_size, :] = self.pad_down
-        return prompt
+    def forward(self, pixel_values):
+        if self.visual_prompter_apply != "add":
+            visual_prompt_mask = torch.ones([self.max_img_size, self.max_img_size], dtype=pixel_values.dtype)
+            visual_prompt_mask[self.max_img_size - self.visual_prompt_size : self.max_img_size, :] = 0.0
+            pixel_values *= visual_prompt_mask
+        if self.visual_prompter_apply != "remove":
+            prompt = torch.zeros([pixel_values.shape[0], pixel_values.shape[1], 3, self.image_size, self.image_size])
+            start_point = self.image_size - self.visual_prompt_size
+            prompt[:, :, :, start_point : self.image_size, :] = self.pad_down
+            pixel_values += prompt.to(pixel_values.dtype)
+        return pixel_values
 
 
 # Pad frames extracted from videos in the surroundings.
 class TvpFramePadPrompter(nn.Module):
-    def __init__(self, image_size, prompt_size, frame_num):
+    def __init__(self, image_size, prompt_size, frame_num, max_img_size, visual_prompter_apply):
+        if visual_prompter_apply not in ("add", "replace", "remove"):
+            raise ValueError("`visual_prompter_apply` must be in (add, replace, remove)")
+
         super(TvpFramePadPrompter, self).__init__()
-        pad_size = prompt_size
+        visual_prompt_size = prompt_size
         image_size = image_size
         self.frame_num = frame_num
+        self.max_img_size = max_img_size
+        self.visual_prompter_apply = visual_prompter_apply
 
-        self.base_size = image_size - pad_size * 2
-        self.pad_up = nn.Parameter(torch.randn([1, frame_num, 3, pad_size, image_size]))
-        self.pad_down = nn.Parameter(torch.randn([1, frame_num, 3, pad_size, image_size]))
-        self.pad_left = nn.Parameter(torch.randn([1, frame_num, 3, image_size - pad_size * 2, pad_size]))
-        self.pad_right = nn.Parameter(torch.randn([1, frame_num, 3, image_size - pad_size * 2, pad_size]))
+        self.base_size = image_size - visual_prompt_size * 2
+        self.pad_up = nn.Parameter(torch.randn([1, frame_num, 3, visual_prompt_size, image_size]))
+        self.pad_down = nn.Parameter(torch.randn([1, frame_num, 3, visual_prompt_size, image_size]))
+        self.pad_left = nn.Parameter(
+            torch.randn([1, frame_num, 3, image_size - visual_prompt_size * 2, visual_prompt_size])
+        )
+        self.pad_right = nn.Parameter(
+            torch.randn([1, frame_num, 3, image_size - visual_prompt_size * 2, visual_prompt_size])
+        )
 
-    def forward(self, x):
-        base = torch.zeros(1, self.frame_num, 3, self.base_size, self.base_size)
-        prompt = torch.cat([self.pad_left, base, self.pad_right], dim=4)
-        prompt = torch.cat([self.pad_up, prompt, self.pad_down], dim=3)
-        prompt = torch.cat(x.size(0) * [prompt])
-        return prompt
+    def forward(self, pixel_values):
+        if self.visual_prompter_apply != "add":
+            visual_prompt_mask = torch.ones([self.max_img_size, self.max_img_size], dtype=pixel_values.dtype)
+            pixel_values *= visual_prompt_mask
+        if self.visual_prompter_apply != "remove":
+            base = torch.zeros(1, self.frame_num, 3, self.base_size, self.base_size)
+            prompt = torch.cat([self.pad_left, base, self.pad_right], dim=4)
+            prompt = torch.cat([self.pad_up, prompt, self.pad_down], dim=3)
+            prompt = torch.cat(pixel_values.size(0) * [prompt])
+            pixel_values += prompt.to(pixel_values.dtype)
+        return pixel_values
 
 
-prompter_map = {
-    "downpad": TvpDownPadPrompter,
-    "pad": TvpPadPrompter,
+TVP_PROMPTER_CLASSES_MAPPING = {
     "framedownpad": TvpFrameDownPadPrompter,
     "framepad": TvpFramePadPrompter,
 }
@@ -778,11 +757,15 @@ class TvpModel(TvpPreTrainedModel):
         self.config = config
         self.vision_model = TvpVisionModel(config)
         self.transformer = TvpTransformer(config)
-        if config.visual_prompter_type not in prompter_map:
-            raise ValueError("`visual_prompter_type` must be in (downpad, pad, framedownpad, framepad)")
+        if config.visual_prompter_type not in TVP_PROMPTER_CLASSES_MAPPING:
+            raise ValueError("`visual_prompter_type` must be in (framedownpad, framepad)")
         else:
-            self.visual_prompter = prompter_map[config.visual_prompter_type](
-                config.max_img_size, config.pad_size, config.num_frm
+            self.visual_prompter = TVP_PROMPTER_CLASSES_MAPPING[config.visual_prompter_type](
+                config.max_img_size,
+                config.visual_prompt_size,
+                config.num_frames,
+                config.max_img_size,
+                config.visual_prompter_apply,
             )
 
         self.post_init()
@@ -817,27 +800,7 @@ class TvpModel(TvpPreTrainedModel):
         >>> output = model(text_inputs.input_ids, pixel_values, text_inputs.attention_mask)
         ```"""
         # Add visual prompt, it compensates for the spatiotemporal information loss in 2D visual features.
-        if self.config.visual_prompter_apply not in ("add", "replace", "remove"):
-            raise ValueError("`visual_prompter_apply` must be in (add, replace, remove)")
-
-        if self.config.visual_prompter_apply != "add":
-            visual_prompter_mask = torch.ones(
-                [self.config.max_img_size, self.config.max_img_size], dtype=pixel_values.dtype
-            )
-            start_point = self.config.pad_size
-            end_point = self.config.max_img_size - self.config.pad_size
-            if "downpad" in self.config.visual_prompter_type:
-                visual_prompter_mask[end_point : self.config.max_img_size, :] = 0.0
-            elif self.config.visual_prompter_type == "pad":
-                visual_prompter_mask[end_point : self.config.max_img_size, :] = 0.0
-                visual_prompter_mask[:start_point, :] = 0.0
-                visual_prompter_mask[:, end_point : self.config.max_img_size] = 0.0
-                visual_prompter_mask[:, :start_point] = 0.0
-
-            pixel_values *= visual_prompter_mask
-
-        if self.config.visual_prompter_apply != "remove":
-            pixel_values += self.visual_prompter(pixel_values).to(pixel_values.dtype)
+        pixel_values = self.visual_prompter(pixel_values)
 
         pixel_values = self.vision_model(pixel_values)
         outputs = self.transformer(
@@ -860,10 +823,10 @@ class TvpVideoGroundingHead(nn.Module):
         self.activation_0 = nn.ReLU(True)
         self.activation_1 = nn.Sigmoid()
 
-    def forward(self, x):
-        x = self.activation_0(self.layer_0(x))
-        x = self.activation_1(self.layer_1(x))
-        return x
+    def forward(self, pooler_output):
+        logits = self.activation_0(self.layer_0(pooler_output))
+        logits = self.activation_1(self.layer_1(logits))
+        return logits
 
 
 @add_start_docstrings(
@@ -932,7 +895,6 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
 
         if labels is None:
             loss = None
-            loss_dict = None
         else:
             losses = ["IoU", "distance", "duration"]
             criterion = TvpLoss(losses)
@@ -945,15 +907,11 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         if not return_dict:
             outputs = (logits,) + outputs[2:]
             if loss is not None:
-                outputs = (
-                    loss,
-                    loss_dict,
-                ) + outputs
+                outputs = (loss,) + outputs
             return outputs
 
         return TvpVideoGroundingOutput(
             loss=loss,
-            loss_dict=loss_dict,
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,

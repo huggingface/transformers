@@ -52,12 +52,12 @@ class TvpConfig(PretrainedConfig):
         visual_prompter_apply (`str`, *optional*, defaults to `"replace"`):
             The way of applying visual prompt. Replace means use the value of prompt to change the original value in
             visual inputs.
+        visual_prompt_size (`int`, *optional*, defaults to 96):
+            The size of visual prompt.
         max_img_size (`int`, *optional*, defaults to 448):
             The maximum size of image.
-        pad_size (`int`, *optional*, defaults to 96):
-            The maximum size of padding.
-        num_frm (`int`, *optional*, defaults to 48):
-            There are num_frm frames extracted from a video.
+        num_frames (`int`, *optional*, defaults to 48):
+            There are num_frames frames extracted from a video.
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the Tvp text model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`TvpModel`].
@@ -98,9 +98,9 @@ class TvpConfig(PretrainedConfig):
         beta=0.1,
         visual_prompter_type="framepad",
         visual_prompter_apply="replace",
+        visual_prompt_size=96,
         max_img_size=448,
-        pad_size=96,
-        num_frm=48,
+        num_frames=48,
         vocab_size=30522,
         hidden_size=768,
         intermediate_size=3072,
@@ -131,9 +131,9 @@ class TvpConfig(PretrainedConfig):
         self.beta = beta
         self.visual_prompter_type = visual_prompter_type
         self.visual_prompter_apply = visual_prompter_apply
+        self.visual_prompt_size = visual_prompt_size
         self.max_img_size = max_img_size
-        self.pad_size = pad_size
-        self.num_frm = num_frm
+        self.num_frames = num_frames
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size

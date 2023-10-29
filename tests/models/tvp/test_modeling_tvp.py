@@ -54,9 +54,9 @@ class TVPModelTester:
         beta=0.1,
         visual_prompter_type="framepad",
         visual_prompter_apply="replace",
-        num_frm=2,
+        num_frames=2,
         max_img_size=448,
-        pad_size=96,
+        visual_prompt_size=96,
         vocab_size=100,
         hidden_size=32,
         intermediate_size=32,
@@ -80,9 +80,9 @@ class TVPModelTester:
         self.beta = beta
         self.visual_prompter_type = visual_prompter_type
         self.visual_prompter_apply = visual_prompter_apply
-        self.num_frm = num_frm
+        self.num_frames = num_frames
         self.max_img_size = max_img_size
-        self.pad_size = pad_size
+        self.visual_prompt_size = visual_prompt_size
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -105,7 +105,7 @@ class TVPModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
         pixel_values = floats_tensor(
-            [self.batch_size, self.num_frm, self.num_channels, self.max_img_size, self.max_img_size]
+            [self.batch_size, self.num_frames, self.num_channels, self.max_img_size, self.max_img_size]
         )
 
         config = self.get_config()
@@ -128,9 +128,9 @@ class TVPModelTester:
             beta=self.beta,
             visual_prompter_type=self.visual_prompter_type,
             visual_prompter_apply=self.visual_prompter_apply,
-            num_frm=self.num_frm,
+            num_frames=self.num_frames,
             max_img_size=self.max_img_size,
-            pad_size=self.pad_size,
+            visual_prompt_size=self.visual_prompt_size,
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,

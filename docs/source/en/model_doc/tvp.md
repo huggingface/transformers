@@ -18,13 +18,7 @@ The text-visual prompting (TVP) framework was proposed in the paper [Text-Visual
 
 The abstract from the paper is the following:
 
-*In this paper, we study the problem of temporal video grounding (TVG), which aims to predict the starting/ending time points of moments described by a text sentence within a long untrimmed video. Benefiting
-from fine-grained 3D visual features, the TVG techniques have achieved remarkable progress in recent years. However, the high complexity of 3D convolutional neural networks (CNNs) makes extracting dense 3D
-visual features time-consuming, which calls for intensive memory and computing resources. Towards efficient TVG, we propose a novel text-visual prompting (TVP) framework, which incorporates optimized
-perturbation patterns (that we call ‘prompts’) into both visual inputs and textual features of a TVG model. In sharp contrast to 3D CNNs, we show that TVP allows us to effectively co-train vision encoder
-and language encoder in a 2D TVG model and improves the performance of cross-modal feature fusion using only low-complexity sparse 2D visual features. Further, we propose a Temporal-Distance
-IoU (TDIoU) loss for efficient learning of TVG. Experiments on two benchmark datasets, Charades-STA and ActivityNet Captions datasets, empirically show that the proposed TVP significantly boosts
-the performance of 2D TVG (e.g., 9.79% improvement on Charades-STA and 30.77% improvement on ActivityNet Captions) and achieves 5× inference acceleration over TVG using 3D visual features.*
+*In this paper, we study the problem of temporal video grounding (TVG), which aims to predict the starting/ending time points of moments described by a text sentence within a long untrimmed video. Benefiting from fine-grained 3D visual features, the TVG techniques have achieved remarkable progress in recent years. However, the high complexity of 3D convolutional neural networks (CNNs) makes extracting dense 3D visual features time-consuming, which calls for intensive memory and computing resources. Towards efficient TVG, we propose a novel text-visual prompting (TVP) framework, which incorporates optimized perturbation patterns (that we call ‘prompts’) into both visual inputs and textual features of a TVG model. In sharp contrast to 3D CNNs, we show that TVP allows us to effectively co-train vision encoder and language encoder in a 2D TVG model and improves the performance of cross-modal feature fusion using only low-complexity sparse 2D visual features. Further, we propose a Temporal-Distance IoU (TDIoU) loss for efficient learning of TVG. Experiments on two benchmark datasets, Charades-STA and ActivityNet Captions datasets, empirically show that the proposed TVP significantly boosts the performance of 2D TVG (e.g., 9.79% improvement on Charades-STA and 30.77% improvement on ActivityNet Captions) and achieves 5× inference acceleration over TVG using 3D visual features.*
 
 TVP framework is an effective and efficient framework to train time-efficient 2D TVG models, in which we leverage TVP (text-visual prompting) to improve the utility of sparse 2D visual features without resorting to costly 3D features. To the best of our knowledge, it is the first work to expand the application of prompt learning for resolving TVG problems.
 
@@ -138,7 +132,7 @@ model = TvpForVideoGrounding.from_pretrained("Intel/tvp-base")
 decoder_kwargs = dict(
     container=av.open(file, metadata_errors="ignore"),
     sampling_rate=1,
-    num_frames=model.config.num_frm,
+    num_frames=model.config.num_frames,
     clip_idx=0,
     num_clips=1,
     target_fps=3,
@@ -148,13 +142,13 @@ raw_sampled_frms = decode(**decoder_kwargs).permute(0, 3, 1, 2)
 text = "person turn a light on."
 processor = AutoProcessor.from_pretrained("Intel/tvp-base")
 size = get_resize_size(raw_sampled_frms, model.config.max_img_size)
-data = processor(
+model_inputs = processor(
     text=[text], videos=list(raw_sampled_frms.numpy()), return_tensors="pt", max_text_length=100, size=size
 )
 
-data["pixel_values"] = data["pixel_values"].to(model.dtype)
-data["labels"] = torch.tensor([30.96, 24.3, 30.4])
-output = model(**data)
+model_inputs["pixel_values"] = model_inputs["pixel_values"].to(model.dtype)
+model_inputs["labels"] = torch.tensor([30.96, 24.3, 30.4])
+output = model(**model_inputs)
 print(f"The model's output is {output}")
 
 def get_video_duration(filename):
@@ -173,7 +167,7 @@ print(f"The time slot of the video corresponding to the text \"{text}\" is from 
 ```
 
 
-This model was contributed by [Jiqing Feng](https://huggingface.co/Jiqing). The original code can be found [here](xxx).
+This model was contributed by [Jiqing Feng](https://huggingface.co/Jiqing). The original code can be found [here](https://github.com/intel/TVP).
 
 
 Tips:

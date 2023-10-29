@@ -98,10 +98,9 @@ class TvpProcessor(ProcessorMixin):
                 max_length=max_text_length,
                 pad_to_max_length=True,
                 return_tensors=return_tensors,
+                return_token_type_ids=False,
                 **kwargs,
             )
-            # Tvp model do not need token_type_ids currently
-            del textual_input["token_type_ids"]
             encoding.update(textual_input)
 
         if videos is not None:
