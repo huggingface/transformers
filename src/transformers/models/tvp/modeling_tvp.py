@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
+import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -365,7 +366,6 @@ class TvpAttention(nn.Module):
         self.all_head_size = self.attention_head_size * self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaAttention._shape
     def _shape(self, tensor: torch.Tensor, sequence_length: int, batch_size: int):
         return (
             tensor.view(batch_size, sequence_length, self.num_attention_heads, self.attention_head_size)
@@ -553,7 +553,7 @@ class TvpPooler(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
