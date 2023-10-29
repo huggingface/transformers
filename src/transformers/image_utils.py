@@ -31,7 +31,7 @@ from .utils import (
     is_torch_tensor,
     is_vision_available,
     requires_backends,
-    to_numpy, logging,
+    to_numpy,
 )
 from .utils.constants import (  # noqa: F401
     IMAGENET_DEFAULT_MEAN,
@@ -41,9 +41,6 @@ from .utils.constants import (  # noqa: F401
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
 )
-
-
-logger = logging.get_logger(__name__)
 
 
 if is_vision_available():
