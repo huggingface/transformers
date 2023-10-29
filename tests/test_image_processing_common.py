@@ -19,8 +19,7 @@ import pathlib
 import tempfile
 
 from transformers import BatchFeature
-
-from transformers.image_utils import AnnotionFormat, AnnotationFormat
+from transformers.image_utils import AnnotationFormat, AnnotionFormat
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
