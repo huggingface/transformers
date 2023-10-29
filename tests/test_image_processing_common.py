@@ -291,7 +291,6 @@ class ImageProcessingTestMixin:
 
 
 class AnnotationFormatTestMixin:
-
     # this mixin adds a test to assert that usages of the
     # to-be-deprecated `AnnotionFormat` continue to be
     # supported for the time being
