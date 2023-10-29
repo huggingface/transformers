@@ -42,9 +42,10 @@ from ...image_utils import (
     is_batched,
     is_scaled_image,
     to_numpy_array,
-    valid_coco_detection_annotations,
-    valid_coco_panoptic_annotations,
     valid_images,
+    AnnotationFormat,
+    AnnotionFormat,  # pylint: disable=unused-import
+    validate_annotations,
 )
 from ...utils import (
     is_flax_available,
@@ -57,7 +58,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
-from ...utils.generic import ExplicitEnum, TensorType
+from ...utils.generic import TensorType
 
 
 if is_torch_available():
@@ -72,12 +73,6 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
-
-class AnnotationFormat(ExplicitEnum):
-    COCO_DETECTION = "coco_detection"
-    COCO_PANOPTIC = "coco_panoptic"
-
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
@@ -896,22 +891,7 @@ class DetaImageProcessor(BaseImageProcessor):
 
         format = AnnotationFormat(format)
         if annotations is not None:
-            if format == AnnotationFormat.COCO_DETECTION and not valid_coco_detection_annotations(annotations):
-                raise ValueError(
-                    "Invalid COCO detection annotations. Annotations must a dict (single image) or list of dicts "
-                    "(batch of images) with the following keys: `image_id` and `annotations`, with the latter "
-                    "being a list of annotations in the COCO format."
-                )
-            elif format == AnnotationFormat.COCO_PANOPTIC and not valid_coco_panoptic_annotations(annotations):
-                raise ValueError(
-                    "Invalid COCO panoptic annotations. Annotations must a dict (single image) or list of dicts "
-                    "(batch of images) with the following keys: `image_id`, `file_name` and `segments_info`, with "
-                    "the latter being a list of annotations in the COCO format."
-                )
-            elif format not in SUPPORTED_ANNOTATION_FORMATS:
-                raise ValueError(
-                    f"Unsupported annotation format: {format} must be one of {SUPPORTED_ANNOTATION_FORMATS}"
-                )
+            validate_annotations(format, SUPPORTED_ANNOTATION_FORMATS, annotations)
 
         if (
             masks_path is not None

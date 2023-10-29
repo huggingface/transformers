@@ -159,6 +159,28 @@ class DetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
         self.assertEqual(image_processor.do_pad, False)
 
+    def test_should_raise_if_annotation_format_invalid(self):
+        image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
+
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+            detection_target = json.loads(f.read())
+
+        annotations = {"image_id": 39769, "annotations": detection_target}
+
+        params = {
+            "images": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
+            "annotations": annotations,
+            "return_tensors": "pt",
+        }
+
+        image_processor_params = {**image_processor_dict, **{"format": "_INVALID_FORMAT_"}}
+        image_processor = self.image_processing_class(**image_processor_params)
+
+        with self.assertRaises(ValueError) as e:
+            image_processor(**params)
+
+        self.assertTrue(str(e.exception).startswith("_INVALID_FORMAT_ is not a valid AnnotationFormat"))
+
     def test_valid_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
