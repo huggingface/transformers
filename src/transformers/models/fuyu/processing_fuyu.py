@@ -26,7 +26,10 @@ from ...utils import TensorType, is_torch_available, is_torch_device, is_vision_
 
 
 if is_torch_available() and is_vision_available():
-    from .image_processing_fuyu import FuyuImageProcessor
+    from .image_processing_fuyu import FuyuBatchFeature
+
+    if is_vision_available():
+        from .image_processing_fuyu import FuyuImageProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -323,42 +326,6 @@ def scale_bbox_to_transformed_image(top: float, left: float, bottom: float, righ
     return [top_scaled, left_scaled, bottom_scaled, right_scaled]
 
 
-class FuyuBatchEncoding(BatchEncoding):
-    """
-    The batch encoding needed by Fuyu model are a dictionary with two tensors and a list of tensors. This class
-    inherits from BatchEncoding to allow casting tensors within a list to a device.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def to(self, device: Union[str, "torch.device"]) -> "FuyuBatchEncoding":
-        """
-        Send all values to device by calling `v.to(device)` (PyTorch only).
-
-        Args:
-            device (`str` or `torch.device`): The device to put the tensors on.
-
-        Returns:
-            [`FuyuBatchEncoding`]: The same instance after modification.
-        """
-        requires_backends(self, ["torch"])
-
-        # This check catches things like APEX blindly calling "to" on all inputs to a module
-        # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
-        # into a HalfTensor
-        if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
-            for batch_key, batch_element in self.data.items():
-                if isinstance(batch_element, list):
-                    moved_element = [item.to("cuda") for item in batch_element]
-                else:
-                    moved_element = batch_element.to(device=device)
-                self.data[batch_key] = moved_element
-        else:
-            logger.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
-        return self
-
-
 class FuyuProcessor(ProcessorMixin):
     r"""
     Constructs a Fuyu processor which wraps a Fuyu image processor and a Llama tokenizer into a single processor.
@@ -520,7 +487,7 @@ class FuyuProcessor(ProcessorMixin):
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
-    ) -> FuyuBatchEncoding:
+    ) -> FuyuBatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to
@@ -547,6 +514,7 @@ class FuyuProcessor(ProcessorMixin):
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model when
               `return_attention_mask=True`.
         """
+        requires_backends(self, ["torch"])
 
         # --- Check input validity ---
         if not return_attention_mask:
@@ -587,10 +555,8 @@ class FuyuProcessor(ProcessorMixin):
 
         # --- Preprocess images using self.image_processor ---
 
-        # batch_images, image_unpadded_heights, image_unpadded_widths = self.image_processor.preprocess(images)
-        image_encoding = self.image_processor.preprocess(
-            images, return_tensors="pt"
-        )  # We shouldn't need to hard code "pt" here
+        # FIXME - We hard code "pt" here because the rest of the processing assumes torch tensors
+        image_encoding = self.image_processor.preprocess(images, return_tensors="pt")
         # Double check this - should this be a list of list of tensors of list of tensors?
         batch_images = image_encoding["images"]
         image_unpadded_heights = image_encoding["image_unpadded_heights"]
@@ -613,8 +579,8 @@ class FuyuProcessor(ProcessorMixin):
             sample_encoding = self.get_sample_encoding(
                 prompts=[prompt],
                 batch_images=[image],
-                image_unpadded_heights=image_unpadded_height.unsqueeze(0),
-                image_unpadded_widths=image_unpadded_width.unsqueeze(0),
+                image_unpadded_heights=torch.tensor([image_unpadded_height]),
+                image_unpadded_widths=torch.tensor([image_unpadded_width]),
                 image_placeholder_id=image_placeholder_id,
                 image_newline_id=image_newline_id,
                 tensor_batch_images=tensor_batch_image.unsqueeze(0),
@@ -623,8 +589,7 @@ class FuyuProcessor(ProcessorMixin):
         batch_encoding = self._left_pad_inputs_with_attention_mask(
             model_inputs=all_encodings, return_attention_mask=return_attention_mask
         )
-
-        return FuyuBatchEncoding(data=batch_encoding)
+        return FuyuBatchFeature(data=batch_encoding)
 
     def batch_decode(self, *args, **kwargs):
         """

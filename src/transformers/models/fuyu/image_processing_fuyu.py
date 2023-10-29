@@ -56,9 +56,9 @@ logger = logging.get_logger(__name__)
 
 class FuyuBatchFeature(BatchFeature):
     """
-    BatchFeature class for Fuyu image processor.
+    BatchFeature class for Fuyu image processor and processor.
 
-    The outputs of the image processor are not a dictionary of tensors, but rather a dictionary of lists of tensors.
+    The outputs are not a dictionary of tensors, but rather a dictionary of lists of tensors.
     """
 
     def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
@@ -93,12 +93,15 @@ class FuyuBatchFeature(BatchFeature):
 
         # Do the tensor conversion in batch
         for key, value in self.items():
-            if key == "images":
+            if isinstance(value, list) and isinstance(value[0], list):
                 # List[List[Any]] -> List[List[Tensor]]
-                self[key] = [[_safe_convert_tensor(img) for img in images] for images in value]
-            else:
+                self[key] = [[_safe_convert_tensor(elem) for elem in elems] for elems in value]
+            elif isinstance(value, list):
                 # List[Any] -> List[Tensor]
-                self[key] = [_safe_convert_tensor(val) for val in value]
+                self[key] = [_safe_convert_tensor(elem) for elem in value]
+            else:
+                # Any -> Tensor
+                self[key] = _safe_convert_tensor(value)
         return self
 
     def to(self, *args, **kwargs) -> "BatchFeature":
@@ -145,12 +148,15 @@ class FuyuBatchFeature(BatchFeature):
 
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
         for k, v in self.items():
-            if k == "images":
+            if isinstance(v, list) and isinstance(v[0], list):
                 # Data structure is a list of lists
                 new_v = []
-                for elem in v:
-                    new_v.append(_to(elem))
+                for elems in v:
+                    new_v.append([_to(elem) for elem in elems])
                 new_data[k] = new_v
+            elif isinstance(v, list):
+                # Data structure is a list
+                new_data[k] = [_to(elem) for elem in v]
             else:
                 new_data[k] = _to(v)
         self.data = new_data
