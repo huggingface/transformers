@@ -513,11 +513,11 @@ class TvpEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
-                    head_mask[i],
+                    (head_mask[i] if head_mask is not None else None),
                     output_attentions,
                 )
             else:
@@ -588,10 +588,6 @@ class TvpPreTrainedModel(PreTrainedModel):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
                 nn.init.constant_(module.bias, 0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, TvpEncoder):
-            module.gradient_checkpointing = value
 
 
 class TvpTransformer(TvpPreTrainedModel):
