@@ -80,6 +80,7 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "FuyuForCausalLM",  # Not tested fort now
     "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
     "UMT5EncoderModel",  # Building part of bigger (tested) model.
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
@@ -112,6 +113,9 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "BarkCausalModel",  # Building part of bigger (tested) model.
     "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
+    "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
+    "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
+    "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
     "TvpTransformer",  # No need to test it as it is tested by TvpModel model.
 ]
 
@@ -282,6 +286,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
     "VitMatteForImageMatting",
+    "SeamlessM4TTextToUnitModel",
+    "SeamlessM4TTextToUnitForConditionalGeneration",
+    "SeamlessM4TCodeHifiGan",
+    "SeamlessM4TForSpeechToSpeech",  # no auto class for speech-to-speech
     "TvpForVideoGrounding",
 ]
 

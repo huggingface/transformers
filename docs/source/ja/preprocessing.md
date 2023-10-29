@@ -64,8 +64,8 @@ pip install datasets
 
 次に、テキストをトークナイザに渡します：
 
-```python
->>> encoded_input = tokenizer("魔法使いの事には干渉しないでください、彼らは微妙で怒りっぽいです。")
+```py
+>>> encoded_input = tokenizer("Do not meddle in the affairs of wizards, for they are subtle and quick to anger.")
 >>> print(encoded_input)
 {'input_ids': [101, 2079, 2025, 19960, 10362, 1999, 1996, 3821, 1997, 16657, 1010, 2005, 2027, 2024, 11259, 1998, 4248, 2000, 4963, 1012, 102],
  'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -90,11 +90,11 @@ pip install datasets
 
 複数の文章を前処理する場合、トークナイザにリストとして渡してください：
 
-```python
+```py
 >>> batch_sentences = [
-...     "でも、セカンドブレックファーストはどうなるの？",
-...     "ピップ、セカンドブレックファーストのことを知っているかどうかはわからないと思うよ。",
-...     "イレブンジーズはどうなの？",
+...     "But what about second breakfast?",
+...     "Don't think he knows about second breakfast, Pip.",
+...     "What about elevensies?",
 ... ]
 >>> encoded_inputs = tokenizer(batch_sentences)
 >>> print(encoded_inputs)
@@ -116,11 +116,11 @@ pip install datasets
 
 バッチ内の短いシーケンスを最長のシーケンスに合わせるために、`padding`パラメータを`True`に設定します：
 
-```python
+```py
 >>> batch_sentences = [
-...     "でもセカンドブレックファーストはどうなるの？",
-...     "セカンドブレックファーストについては知らないと思う、ピップ。",
-...     "イレブンジーズはどうなの？",
+...     "But what about second breakfast?",
+...     "Don't think he knows about second breakfast, Pip.",
+...     "What about elevensies?",
 ... ]
 >>> encoded_input = tokenizer(batch_sentences, padding=True)
 >>> print(encoded_input)
@@ -143,11 +143,11 @@ pip install datasets
 
 モデルが受け入れる最大の長さにシーケンスを切り詰めるには、`truncation`パラメータを`True`に設定します：
 
-```python
+```py
 >>> batch_sentences = [
-...     "でも、セカンドブレックファーストはどうなるの？",
-...     "セカンドブレックファーストについては知らないと思う、ピップ。",
-...     "イレブンジーズはどうなの？",
+...     "But what about second breakfast?",
+...     "Don't think he knows about second breakfast, Pip.",
+...     "What about elevensies?",
 ... ]
 >>> encoded_input = tokenizer(batch_sentences, padding=True, truncation=True)
 >>> print(encoded_input)
@@ -177,11 +177,11 @@ pip install datasets
 <frameworkcontent>
 <pt>
 
-```python
+```py
 >>> batch_sentences = [
-...     "でも、セカンドブレックファーストはどうなるの？",
-...     "ピップ、セカンドブレックファーストについては知っていないと思うよ。",
-...     "イレブンジーズはどうなの？",
+...     "But what about second breakfast?",
+...     "Don't think he knows about second breakfast, Pip.",
+...     "What about elevensies?",
 ... ]
 >>> encoded_input = tokenizer(batch_sentences, padding=True, truncation=True, return_tensors="pt")
 >>> print(encoded_input)

@@ -138,6 +138,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [FNet](model_doc/fnet)                          |       ✅        |         ❌         |      ❌      |
 |                      [FocalNet](model_doc/focalnet)                      |       ✅        |         ❌         |      ❌      |
 |                  [Funnel Transformer](model_doc/funnel)                  |       ✅        |         ✅         |      ❌      |
+|                          [Fuyu](model_doc/fuyu)                          |       ✅        |         ❌         |      ❌      |
 |                           [GIT](model_doc/git)                           |       ✅        |         ❌         |      ❌      |
 |                          [GLPN](model_doc/glpn)                          |       ✅        |         ❌         |      ❌      |
 |                       [GPT Neo](model_doc/gpt_neo)                       |       ✅        |         ❌         |      ✅      |
@@ -235,6 +236,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [RoFormer](model_doc/roformer)                      |       ✅        |         ✅         |      ✅      |
 |                          [RWKV](model_doc/rwkv)                          |       ✅        |         ❌         |      ❌      |
 |                           [SAM](model_doc/sam)                           |       ✅        |         ✅         |      ❌      |
+|                  [SeamlessM4T](model_doc/seamless_m4t)                   |       ✅        |         ❌         |      ❌      |
 |                     [SegFormer](model_doc/segformer)                     |       ✅        |         ✅         |      ❌      |
 |                           [SEW](model_doc/sew)                           |       ✅        |         ❌         |      ❌      |
 |                         [SEW-D](model_doc/sew-d)                         |       ✅        |         ❌         |      ❌      |
