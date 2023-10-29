@@ -80,7 +80,8 @@ class AnnotionFormat(ExplicitEnum):
         super().__init__(*args, **kwargs)
         warnings.warn(
             f"`{self.__class__.__name__}` is deprecated and will be removed in a forthcoming version. "
-            f"Please use `transformers.image_utils.AnnotationFormat` instead"
+            f"Please use `transformers.image_utils.AnnotationFormat` instead",
+            FutureWarning
         )
 
 
