@@ -79,6 +79,7 @@ OBJECTS_TO_IGNORE = [
     "AlbertTokenizerFast",
     "AlignTextModel",
     "AlignVisionConfig",
+    "AltCLIPVisionConfig",
     "AudioClassificationPipeline",
     "AutoformerConfig",
     "AutomaticSpeechRecognitionPipeline",
