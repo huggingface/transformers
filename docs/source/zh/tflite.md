@@ -18,15 +18,15 @@ rendered properly in your Markdown viewer.
 
 [TensorFlow Lite](https://www.tensorflow.org/lite/guide) 是一个轻量级框架，用于资源受限的设备上，如手机、嵌入式系统和物联网（IoT）设备，部署机器学习模型。TFLite 旨在在计算能力、内存和功耗有限的设备上优化和高效运行模型。模型以一种特殊的高效可移植格式表示，其文件扩展名为 `.tflite`。
 
-🤗 Optimum 通过 `exporters.tflite` 模块提供将 🤗 Transformers 模型导出至 TFLite 格式的功能。请参考 [🤗 Optimum 文档](https://huggingface.co/docs/optimum/exporters/tflite/overview)以获取支持的模型架构列表。
+🤗 Optimum 通过 `exporters.tflite` 模块提供将 🤗 Transformers 模型导出至 TFLite 格式的功能。请参考 [🤗 Optimum 文档](https://huggingface.co/docs/optimum/exporters/tflite/overview) 以获取支持的模型架构列表。
 
 要将模型导出为 TFLite 格式，请安装所需的依赖项：
- 
+
 ```bash
 pip install optimum[exporters-tf]
 ```
 
-请参阅 [🤗 Optimum 文档](https://huggingface.co/docs/optimum/main/en/exporters/tflite/usage_guides/export_a_model)以查看所有可用参数，或者在命令行中查看帮助：
+请参阅 [🤗 Optimum 文档](https://huggingface.co/docs/optimum/main/en/exporters/tflite/usage_guides/export_a_model) 以查看所有可用参数，或者在命令行中查看帮助：
 
 ```bash
 optimum-cli export tflite --help
@@ -49,6 +49,6 @@ Validating TFLite model...
 The TensorFlow Lite export succeeded with the warning: The maximum absolute difference between the output of the reference model and the TFLite exported model is not within the set tolerance 1e-05:
 - logits: max diff = 5.817413330078125e-05.
  The exported model was saved at: bert_tflite
- ```
+```
 
 上面的示例说明了从 🤗 Hub 导出检查点的过程。导出本地模型时，首先需要确保将模型的权重和分词器文件保存在同一目录（`local_path`）中。在使用 CLI（命令行）时，将 `local_path` 传递给 `model` 参数，而不是 🤗 Hub 上的检查点名称。
