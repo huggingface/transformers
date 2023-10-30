@@ -95,9 +95,9 @@ def replace_with_awq_linear(
         if len(list(module.children())) > 0:
             _, has_been_replaced = replace_with_awq_linear(
                 module,
-                modules_to_not_convert,
-                current_key_name,
-                quantization_config,
+                modules_to_not_convert=modules_to_not_convert,
+                current_key_name=current_key_name,
+                quantization_config=quantization_config,
                 has_been_replaced=has_been_replaced,
             )
         # Remove the last key for recursion
