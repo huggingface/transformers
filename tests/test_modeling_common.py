@@ -596,8 +596,26 @@ class ModelTesterMixin:
                 if v.requires_grad:
                     self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
 
-            # Scenario - 2 with `use_reentrant=True`
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        # Scenario - 2 with `use_reentrant=True` - this is the default value that is used in pytorch's
+        # torch.utils.checkpoint.checkpoint
+        if not self.model_tester.is_training:
+            return
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.use_cache = False
+            config.return_dict = True
+
+            if (
+                model_class.__name__
+                in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
+                or not model_class.supports_gradient_checkpointing
+            ):
+                continue
+            # Scenario - 1 default behaviour
             model = model_class(config)
+
             model.to(torch_device)
             model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": True})
             model.train()
@@ -617,7 +635,24 @@ class ModelTesterMixin:
                 if v.requires_grad:
                     self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
 
-            # Scenario - 3 with `use_reentrant=False`
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        # Scenario - 3 with `use_reentrant=False` pytorch suggests users to use this value for
+        # future releases: https://pytorch.org/docs/stable/checkpoint.html
+        if not self.model_tester.is_training:
+            return
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.use_cache = False
+            config.return_dict = True
+
+            if (
+                model_class.__name__
+                in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
+                or not model_class.supports_gradient_checkpointing
+            ):
+                continue
+
             model = model_class(config)
             model.to(torch_device)
             model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
