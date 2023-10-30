@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch GPTBigCode model."""
 import math
+import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -86,9 +87,9 @@ def masked_softmax(x: torch.Tensor, mask: torch.Tensor, mask_value: torch.Tensor
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(padding_mask):
-    seqlens_in_batch = padding_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(padding_mask.flatten(), as_tuple=False).flatten()
+def _get_unpad_data(attention_mask):
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
     return (
@@ -101,8 +102,9 @@ def _get_unpad_data(padding_mask):
 class GPTBigCodeAttention(nn.Module):
     def __init__(self, config, is_cross_attention=False, layer_idx=None):
         super().__init__()
-        self.mask_value = None
+        self.config = config
 
+        self.mask_value = None
         self.multi_query = config.multi_query
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -110,6 +112,8 @@ class GPTBigCodeAttention(nn.Module):
         self.kv_heads = 1 if self.multi_query else self.num_heads
         self.kv_dim = self.kv_heads * self.head_dim
         self.split_size = self.embed_dim
+        self.is_causal = True
+
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
                 f"`embed_dim` must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
@@ -231,13 +235,17 @@ class GPTBigCodeAttention(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = False,
-        padding_mask: Optional[torch.LongTensor] = None,
-        encoder_padding_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = False,
+        **kwargs,
     ) -> Union[
         Tuple[torch.Tensor, Optional[torch.Tensor]],
         Tuple[torch.Tensor, Optional[torch.Tensor], Tuple[torch.Tensor, ...]],
     ]:
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
+
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn") or not self.is_cross_attention:
                 raise ValueError(
@@ -300,13 +308,20 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = False,
-        padding_mask: Optional[torch.LongTensor] = None,
-        encoder_padding_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = False,
+        **kwargs,
     ) -> Union[
         Tuple[torch.Tensor, Optional[torch.Tensor]],
         Tuple[torch.Tensor, Optional[torch.Tensor], Tuple[torch.Tensor, ...]],
     ]:
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
+
+            # overwrite attention_mask with padding_mask
+            attention_mask = kwargs.pop("padding_mask")
+
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn") or not self.is_cross_attention:
                 raise ValueError(
@@ -316,7 +331,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
 
             query = self.q_attn(hidden_states)
             key_value = self.c_attn(encoder_hidden_states)
-            padding_mask = encoder_padding_mask
+            attention_mask = encoder_attention_mask
         elif self.multi_query:
             query, key_value = self.c_attn(hidden_states).split((self.embed_dim, 2 * self.kv_dim), dim=2)
         else:
@@ -365,7 +380,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
         input_dtype = query.dtype
         if input_dtype == torch.float32:
             # Handle the case where the model is quantized
-            target_dtype = getattr(self.config, "_pre_quantization_dtype", self.query_key_value.weight.dtype)
+            target_dtype = getattr(self.config, "_pre_quantization_dtype", self.c_attn.weight.dtype)
 
             logger.warning_once(
                 f"The input hidden states seems to be silently casted in float32, this might be related to"
@@ -377,7 +392,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
             value = value.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query, key, value, padding_mask, query_length, dropout=attn_dropout, softmax_scale=softmax_scale
+            query, key, value, attention_mask, query_length, dropout=attn_dropout, softmax_scale=softmax_scale
         )
 
         attn_weights_reshaped = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
@@ -399,7 +414,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, padding_mask, query_length, dropout=0.0, softmax_scale=None
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -412,7 +427,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
                 Input key states to be passed to Flash Attention API
             value_states (`torch.Tensor`):
                 Input value states to be passed to Flash Attention API
-            padding_mask (`torch.Tensor`):
+            attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
             dropout (`int`, *optional*):
@@ -421,10 +436,10 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
         # Contains at least one padding token in the sequence
-        if padding_mask is not None:
+        if attention_mask is not None:
             batch_size = query_states.shape[0]
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, padding_mask, query_length
+                query_states, key_states, value_states, attention_mask, query_length
             )
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
@@ -440,27 +455,31 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=True,
+                causal=self.is_causal,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=self.is_causal
             )
 
         return attn_output
 
-    def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
-        batch_size, kv_seq_len, kv_num_heads, head_dim = key_layer.shape
-        query_num_heads = query_layer.shape[2]
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
+        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
-        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, kv_num_heads, head_dim), indices_k)
-        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, kv_num_heads, head_dim), indices_k)
+        key_layer = index_first_axis(
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        value_layer = index_first_axis(
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, query_num_heads, head_dim), indices_k
+                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -474,8 +493,8 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
             query_layer = query_layer.squeeze(1)
         else:
             # The -q_len: slice assumes left padding.
-            padding_mask = padding_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, padding_mask)
+            attention_mask = attention_mask[:, -query_length:]
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
 
         return (
             query_layer,
@@ -540,8 +559,6 @@ class GPTBigCodeBlock(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = False,
-        padding_mask: Optional[torch.LongTensor] = None,
-        encoder_padding_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Union[
         Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
@@ -555,8 +572,6 @@ class GPTBigCodeBlock(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            padding_mask=padding_mask,
-            encoder_padding_mask=encoder_padding_mask,
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
@@ -579,8 +594,6 @@ class GPTBigCodeBlock(nn.Module):
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 output_attentions=output_attentions,
-                padding_mask=padding_mask,
-                encoder_padding_mask=encoder_padding_mask,
             )
             attn_output = cross_attn_outputs[0]
             # residual connection
@@ -819,13 +832,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         else:
             past_length = past_key_values[0].size(-2)
 
-        padding_mask = None
-        if attention_mask is not None and 0 in attention_mask:
-            padding_mask = attention_mask
-        encoder_padding_mask = None
-        if encoder_attention_mask is not None and 0 in encoder_attention_mask:
-            encoder_padding_mask = encoder_attention_mask
-
         if attention_mask is not None and len(attention_mask.shape) == 2 and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
@@ -841,28 +847,38 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         key_length = past_length + query_length
         self_attention_mask = self.bias[None, key_length - query_length : key_length, :key_length]
 
-        if attention_mask is not None:
-            self_attention_mask = self_attention_mask * attention_mask.view(batch_size, 1, -1).to(
-                dtype=torch.bool, device=self_attention_mask.device
+        if getattr(self.config, "_flash_attn_2_enabled", False):
+            # 2d mask is passed through the layers
+            attention_mask = attention_mask.bool() if (attention_mask is not None and 0 in attention_mask) else None
+            encoder_attention_mask = (
+                encoder_attention_mask.bool()
+                if (encoder_attention_mask is not None and 0 in encoder_attention_mask)
+                else None
             )
-
-        # MQA models: (batch_size, query_length, n_heads, key_length)
-        # MHA models: (batch_size, n_heads, query_length, key_length)
-        attention_mask = self_attention_mask.unsqueeze(2 if self.multi_query else 1)
-
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if (
-            self.config.add_cross_attention
-            and encoder_hidden_states is not None
-            and encoder_attention_mask is not None
-        ):
-            if encoder_attention_mask.dim() == 2:
-                encoder_attention_mask.unsqueeze(1)
-            assert encoder_attention_mask.dim() == 3
-            encoder_attention_mask = encoder_attention_mask.bool().unsqueeze(2 if self.multi_query else 1)
         else:
-            encoder_attention_mask = None
+            # 4d mask is passed through the layers
+            if attention_mask is not None:
+                self_attention_mask = self_attention_mask * attention_mask.view(batch_size, 1, -1).to(
+                    dtype=torch.bool, device=self_attention_mask.device
+                )
+
+            # MQA models: (batch_size, query_length, n_heads, key_length)
+            # MHA models: (batch_size, n_heads, query_length, key_length)
+            attention_mask = self_attention_mask.unsqueeze(2 if self.multi_query else 1)
+
+            # If a 2D or 3D attention mask is provided for the cross-attention
+            # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
+            if (
+                self.config.add_cross_attention
+                and encoder_hidden_states is not None
+                and encoder_attention_mask is not None
+            ):
+                if encoder_attention_mask.dim() == 2:
+                    encoder_attention_mask.unsqueeze(1)
+                assert encoder_attention_mask.dim() == 3
+                encoder_attention_mask = encoder_attention_mask.bool().unsqueeze(2 if self.multi_query else 1)
+            else:
+                encoder_attention_mask = None
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -913,8 +929,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
                     encoder_attention_mask=encoder_attention_mask,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
-                    padding_mask=padding_mask,
-                    encoder_padding_mask=encoder_padding_mask,
                 )
 
             hidden_states = outputs[0]
