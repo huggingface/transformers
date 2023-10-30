@@ -13,7 +13,7 @@
 # limitations under the License.
 "AWQ (Activation aware Weight Quantization) integration file"
 from ..utils import is_accelerate_available, is_auto_awq_available, is_torch_available
-from ..utils.quantization_config import AWQBackend, AWQLinearVersion
+from ..utils.quantization_config import AwqBackendPackingMethod, AWQLinearVersion
 
 
 if is_torch_available():
@@ -39,7 +39,7 @@ def replace_with_awq_linear(
     Args:
         model (`torch.nn.Module`):
             The model to convert, can be any `torch.nn.Module` instance.
-        quantization_config (`AWQConfig`):
+        quantization_config (`AwqConfig`):
             The quantization config object that contains the quantization parameters.
         modules_to_not_convert (`list`, `optional`):
             A list of modules to not convert. If a module name is in the list (e.g. `lm_head`), it will not be
@@ -56,9 +56,9 @@ def replace_with_awq_linear(
     backend = quantization_config.backend
 
     if is_auto_awq_available():
-        if backend == AWQBackend.AUTOAWQ:
+        if backend == AwqBackendPackingMethod.AUTOAWQ:
             from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
-        elif backend == AWQBackend.LLMAWQ:
+        elif backend == AwqBackendPackingMethod.LLMAWQ:
             from awq.quantize.qmodule import WQLinear
 
     for name, module in model.named_children():
@@ -73,7 +73,7 @@ def replace_with_awq_linear(
                     in_features = module.in_features
                     out_features = module.out_features
 
-                    if backend == AWQBackend.AUTOAWQ:
+                    if backend == AwqBackendPackingMethod.AUTOAWQ:
                         target_cls = (
                             WQLinear_GEMM if quantization_config.version == AWQLinearVersion.GEMM else WQLinear_GEMV
                         )

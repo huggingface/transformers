@@ -45,7 +45,7 @@ class AWQLinearVersion(str, Enum):
     GEMV = "GEMV"
 
 
-class AWQBackend(str, Enum):
+class AwqBackendPackingMethod(str, Enum):
     AUTOAWQ = "autoawq"
     LLMAWQ = "llm-awq"
 
@@ -432,7 +432,7 @@ class GPTQConfig(QuantizationConfigMixin):
 
 
 @dataclass
-class AWQConfig(QuantizationConfigMixin):
+class AwqConfig(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `auto-awq` library awq quantization relying on auto_awq backend.
@@ -477,12 +477,12 @@ class AWQConfig(QuantizationConfigMixin):
         if not torch.cuda.is_available():
             raise ValueError("AWQ is only available on GPU")
 
-        if self.backend not in [AWQBackend.AUTOAWQ, AWQBackend.LLMAWQ]:
+        if self.backend not in [AwqBackendPackingMethod.AUTOAWQ, AwqBackendPackingMethod.LLMAWQ]:
             raise ValueError(
-                f"Only support quantization backend in {AWQBackend.AUTOAWQ} and {AWQBackend.LLMAWQ} - not recognized backend {self.backend}"
+                f"Only support quantization backend in {AwqBackendPackingMethod.AUTOAWQ} and {AwqBackendPackingMethod.LLMAWQ} - not recognized backend {self.backend}"
             )
 
-        if self.backend == AWQBackend.LLMAWQ:
+        if self.backend == AwqBackendPackingMethod.LLMAWQ:
             compute_capability = torch.cuda.get_device_capability()
             major, minor = compute_capability
             if major < 8:

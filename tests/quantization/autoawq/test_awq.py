@@ -16,7 +16,7 @@
 import tempfile
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, AWQConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, AwqConfig
 from transformers.testing_utils import (
     require_accelerate,
     require_auto_awq,
@@ -27,26 +27,26 @@ from transformers.testing_utils import (
 
 
 @require_torch_gpu
-class AWQConfigTest(unittest.TestCase):
+class AwqConfigTest(unittest.TestCase):
     def test_wrong_backend(self):
         """
         Simple test that checks if a user passes a wrong backend an error is raised
         """
         # This should work fine
-        _ = AWQConfig(w_bit=4)
+        _ = AwqConfig(w_bit=4)
 
         with self.assertRaises(ValueError):
-            AWQConfig(w_bit=4, backend="")
+            AwqConfig(w_bit=4, backend="")
 
         # LLMAWQ does not work on a T4
         with self.assertRaises(ValueError):
-            AWQConfig(w_bit=4, backend="llm-awq")
+            AwqConfig(w_bit=4, backend="llm-awq")
 
     def test_to_dict(self):
         """
         Simple test that checks if one uses a config and converts it to a dict, the dict is the same as the config object
         """
-        quantization_config = AWQConfig(w_bit=4)
+        quantization_config = AwqConfig(w_bit=4)
         config_to_dict = quantization_config.to_dict()
 
         for key in config_to_dict:
@@ -57,7 +57,7 @@ class AWQConfigTest(unittest.TestCase):
         Simple test that checks if one uses a dict and converts it to a config object, the config object is the same as the dict
         """
         dict = {"w_bit": 2, "zero_point": False, "backend": "autoawq"}
-        quantization_config = AWQConfig.from_dict(dict)
+        quantization_config = AwqConfig.from_dict(dict)
 
         self.assertEqual(dict["w_bit"], quantization_config.w_bit)
         self.assertEqual(dict["zero_point"], quantization_config.zero_point)
@@ -68,7 +68,7 @@ class AWQConfigTest(unittest.TestCase):
 @require_torch_gpu
 @require_auto_awq
 @require_accelerate
-class AWQTest(unittest.TestCase):
+class AwqTest(unittest.TestCase):
     # TODO: @younesbelkada change it to `TheBloke/Mistral-7B-v0.1-AWQ` in the future
     model_name = "ybelkada/test-mistral-7b-v0.1-awq"
     dummy_transformers_model_name = "bigscience/bloom-560m"
@@ -131,7 +131,7 @@ class AWQTest(unittest.TestCase):
         """
         Simple test that checks if one passes a quantization config to quantize a model, it raises an error
         """
-        quantization_config = AWQConfig(w_bit=4)
+        quantization_config = AwqConfig(w_bit=4)
 
         with self.assertRaises(ValueError) as context:
             _ = AutoModelForCausalLM.from_pretrained(
@@ -140,5 +140,5 @@ class AWQTest(unittest.TestCase):
 
         self.assertEqual(
             str(context.exception),
-            "You cannot pass an `AWQConfig` when loading a model as you can only use AWQ models for inference. To quantize transformers models with AWQ algorithm, please refer to our quantization docs.",
+            "You cannot pass an `AwqConfig` when loading a model as you can only use AWQ models for inference. To quantize transformers models with AWQ algorithm, please refer to our quantization docs.",
         )

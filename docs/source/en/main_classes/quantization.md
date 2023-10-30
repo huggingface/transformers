@@ -103,9 +103,9 @@ From the results it appears that AWQ quantization method is the fastest quantiza
 
 Check out how to use this integration throughout this [Google Colab demo](https://colab.research.google.com/drive/1HzZH89yAXJaZgwJDhQj9LqSBux932BvY)!
 
-### AWQConfig
+### AwqConfig
 
-[[autodoc]] AWQConfig
+[[autodoc]] AwqConfig
 
 ## `AutoGPTQ` Integration
 

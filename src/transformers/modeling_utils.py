@@ -90,7 +90,7 @@ from .utils.import_utils import (
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
 )
-from .utils.quantization_config import AWQConfig, BitsAndBytesConfig, GPTQConfig, QuantizationMethod
+from .utils.quantization_config import AwqConfig, BitsAndBytesConfig, GPTQConfig, QuantizationMethod
 from .utils.versions import require_version_core
 
 
@@ -2684,7 +2684,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if quantization_method_from_args == QuantizationMethod.AWQ:
                 raise ValueError(
-                    "You cannot pass an `AWQConfig` when loading a model as you can only use AWQ models"
+                    "You cannot pass an `AwqConfig` when loading a model as you can only use AWQ models"
                     " for inference. To quantize transformers models with AWQ algorithm, please refer to our"
                     " quantization docs: https://huggingface.co/docs/transformers/main_classes/quantization "
                 )
@@ -3294,7 +3294,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             modules_to_not_convert = get_keys_to_not_convert(model)
 
             if quantization_config is None:
-                quantization_config = AWQConfig.from_dict(config.quantization_config)
+                quantization_config = AwqConfig.from_dict(config.quantization_config)
 
             model, _ = replace_with_awq_linear(
                 model, quantization_config=quantization_config, modules_to_not_convert=modules_to_not_convert
