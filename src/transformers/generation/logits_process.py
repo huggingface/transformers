@@ -1749,3 +1749,35 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         unconditional_logits = torch.nn.functional.log_softmax(logits[:, -1], dim=-1)
         out = self.guidance_scale * (scores - unconditional_logits) + unconditional_logits
         return out
+
+
+class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
+    r"""This processor ensures that the EOS token is selected if its probability is greater than the `min_eos_p`.
+
+    Args:
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+        min_eos_p (`float`, *optional*):
+            Minimum end of speech threshold.
+    """
+
+    def __init__(self, eos_token_id: Union[int, List[int]], min_eos_p: float):
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
+        self.eos_token_id = eos_token_id
+        if min_eos_p is not None and min_eos_p <= 0:
+            raise ValueError(f"`min_eos_p` has to be a positive float, but is {min_eos_p}")
+        self.min_eos_p = min_eos_p
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if self.min_eos_p:
+            probs = torch.nn.functional.softmax(scores.float(), dim=-1)
+            # create scores full of -inf except for the eos_token_id
+            early_stop_scores = torch.ones_like(scores) * -float("inf")
+            early_stop_scores[:, self.eos_token_id] = scores[:, self.eos_token_id]
+
+            do_early_stop = probs[:, self.eos_token_id] > self.min_eos_p
+            scores = torch.where(do_early_stop, early_stop_scores, scores)
+
+        return scores

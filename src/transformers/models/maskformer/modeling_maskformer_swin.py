@@ -688,7 +688,7 @@ class MaskFormerSwinEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-                layer_hidden_states, output_dimensions, layer_all_hidden_states = self.gradient_checkpointing_func(
+                layer_hidden_states, output_dimensions, layer_all_hidden_states = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     hidden_states,
                     layer_head_mask,
@@ -747,11 +747,6 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, MaskFormerSwinEncoder):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
