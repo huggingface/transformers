@@ -487,7 +487,7 @@ class FuyuProcessor(ProcessorMixin):
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
-    ) -> FuyuBatchFeature:
+    ) -> "FuyuBatchFeature":
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to
