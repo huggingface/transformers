@@ -100,6 +100,7 @@ from . import (
     gptj,
     gptsan_japanese,
     graphormer,
+    massformer,
     groupvit,
     herbert,
     hubert,

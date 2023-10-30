@@ -752,6 +752,8 @@
       sections:
       - local: model_doc/graphormer
         title: Graphormer
+      - local: model_doc/transformer
+        title: MassFormer
       title: Graph models
     title: Models
   - sections:

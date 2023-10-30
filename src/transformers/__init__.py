@@ -359,6 +359,7 @@ _import_structure = {
         "GPTSanJapaneseTokenizer",
     ],
     "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
+    "models.massformer": ["MASSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MassFormerConfig"],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
@@ -1974,6 +1975,14 @@ else:
             "GraphormerForGraphClassification",
             "GraphormerModel",
             "GraphormerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.massformer"].extend(
+        [
+            "MASSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MassFormerForGraphClassification",
+            "MassFormerModel",
+            "MassFormerPreTrainedModel",
         ]
     )
     _import_structure["models.groupvit"].extend(
@@ -4532,6 +4541,7 @@ if TYPE_CHECKING:
         GPTSanJapaneseTokenizer,
     )
     from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
+    from .models.massformer import MASSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MassFormerConfig
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroupViTConfig,
@@ -5926,6 +5936,12 @@ if TYPE_CHECKING:
             GraphormerForGraphClassification,
             GraphormerModel,
             GraphormerPreTrainedModel,
+        )
+        from .models.massformer import (
+            MASSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MassFormerForGraphClassification,
+            MassFormerModel,
+            MassFormerPreTrainedModel,
         )
         from .models.groupvit import (
             GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,

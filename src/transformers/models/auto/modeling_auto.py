@@ -105,6 +105,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gptj", "GPTJModel"),
         ("gptsan-japanese", "GPTSanJapaneseForConditionalGeneration"),
         ("graphormer", "GraphormerModel"),
+        ("transformer", "MassFormerModel"),
         ("groupvit", "GroupViTModel"),
         ("hubert", "HubertModel"),
         ("ibert", "IBertModel"),
