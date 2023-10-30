@@ -39,20 +39,15 @@ if is_torch_available():
     import torch
 
 
-BBOX_OPEN_STRING = "<0x00>"  # <bbox>
-BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
-POINT_OPEN_STRING = "<0x02>"  # <point>
-POINT_CLOSE_STRING = "<0x03>"  # </point>
-
 TEXT_REPR_BBOX_OPEN = "<box>"
 TEXT_REPR_BBOX_CLOSE = "</box>"
 TEXT_REPR_POINT_OPEN = "<point>"
 TEXT_REPR_POINT_CLOSE = "</point>"
 
-TOKEN_BBOX_OPEN_STRING = BBOX_OPEN_STRING = "<0x00>"  # <bbox>
-BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
-TOKEN_BBOX_CLOSE_STRING = TOKEN_POINT_OPEN_STRING = POINT_OPEN_STRING = "<0x02>"  # <point>
-TOKEN_POINT_CLOSE_STRING = POINT_CLOSE_STRING = "<0x03>"  # </point>
+TOKEN_BBOX_OPEN_STRING = "<0x00>"  # <bbox>
+TOKEN_BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
+TOKEN_POINT_OPEN_STRING = "<0x02>"  # <point>
+TOKEN_POINT_CLOSE_STRING = "<0x03>"  # </point>
 BEGINNING_OF_ANSWER_STRING = "<0x04>"  # <boa>
 
 
@@ -624,8 +619,8 @@ class FuyuProcessor(ProcessorMixin):
             return min(max_height/height, max_width/width)
 
         def tokens_to_box(tokens, original_size):
-            bbox_start = self.tokenizer.convert_tokens_to_ids(BBOX_OPEN_STRING)
-            bbox_end = self.tokenizer.convert_tokens_to_ids(BBOX_CLOSE_STRING)
+            bbox_start = self.tokenizer.convert_tokens_to_ids(TOKEN_BBOX_OPEN_STRING)
+            bbox_end = self.tokenizer.convert_tokens_to_ids(TOKEN_BBOX_CLOSE_STRING)
             try:
                 # Assumes a single box output per sequence
                 bbox_start_pos = (tokens == bbox_start).nonzero(as_tuple=True)[0].item()
