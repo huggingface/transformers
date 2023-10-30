@@ -16,7 +16,7 @@
 
 import argparse
 
-import bros  # original repo
+# import bros  # original repo
 import torch
 
 from transformers import BrosConfig, BrosModel, BrosProcessor
