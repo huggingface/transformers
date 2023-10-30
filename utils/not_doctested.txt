@@ -1,3 +1,6 @@
+src/transformers/models/bros/convert_bros_to_pytorch.py
+src/transformers/models/persimmon/modeling_persimmon.py
+docs/source/en/tasks/idefics.md
 docs/source/en/_config.py
 docs/source/en/accelerate.md
 docs/source/en/add_new_model.md
