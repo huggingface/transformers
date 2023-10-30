@@ -3,7 +3,7 @@ name: Doctests
 on:
   push:
     branches:
-      - doctest*
+      - skip_idefics_doctest
   repository_dispatch:
   schedule:
     - cron: "17 2 * * *"
