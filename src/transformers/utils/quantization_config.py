@@ -445,7 +445,8 @@ class AwqConfig(QuantizationConfigMixin):
         zero_point (`bool`, *optional*, defaults to `True`):
             Whether to use zero point quantization.
         version (`AWQLinearVersion`, *optional*, defaults to `"AWQLinearVersion.GEMM"`):
-            The version of the quantization algorithm to use. GEMM is better for big batch_size (e.g. >= 8) otherwise, GEMV is better (e.g. < 8 )
+            The version of the quantization algorithm to use. GEMM is better for big batch_size (e.g. >= 8) otherwise,
+            GEMV is better (e.g. < 8 )
         backend (`AwqBackendPackingMethod`, *optional*, defaults to `"AwqBackendPackingMethod.AUTOAWQ"`):
             The quantization backend. Some models might be quantized using `llm-awq` backend. This is useful for users
             that quantize their own models using `llm-awq` library.

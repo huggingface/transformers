@@ -21,9 +21,15 @@ from transformers.testing_utils import (
     require_accelerate,
     require_auto_awq,
     require_torch_gpu,
+    require_torch_multi_gpu,
     slow,
     torch_device,
 )
+from transformers.utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 @require_torch_gpu
@@ -76,6 +82,7 @@ class AwqTest(unittest.TestCase):
     input_text = "Hello my name is"
 
     EXPECTED_OUTPUT = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
+    EXPECTED_OUTPUT_BF16 = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Exercise and Sport Science with a"
 
     device_map = "cuda"
 
@@ -99,6 +106,19 @@ class AwqTest(unittest.TestCase):
 
         output = self.quantized_model.generate(**input_ids, max_new_tokens=40)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+    def test_quantized_model_bf16(self):
+        """
+        Simple test that checks if the quantized model is working properly with bf16
+        """
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+
+        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=40)
+        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_BF16)
 
     def test_quantized_model_no_device_map(self):
         """
@@ -137,5 +157,20 @@ class AwqTest(unittest.TestCase):
 
         self.assertEqual(
             str(context.exception),
-            "You cannot pass an `AwqConfig` when loading a model as you can only use AWQ models for inference. To quantize transformers models with AWQ algorithm, please refer to our quantization docs.",
+            "You cannot pass an `AwqConfig` when loading a model as you can only use AWQ models for inference. To quantize transformers models with AWQ algorithm, please refer to our quantization docs: https://huggingface.co/docs/transformers/main_classes/quantization ",
         )
+
+    @require_torch_multi_gpu
+    def test_quantized_model_multi_gpu(self):
+        """
+        Simple test that checks if the quantized model is working properly with multiple GPUs
+        """
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+
+        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
+
+        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=40)
+
+        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
