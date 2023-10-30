@@ -119,7 +119,7 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
             transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
 
         unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
-        unittest.TestCase().assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
+        unittest.TestCase().assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
 
         # force batch_decode to internally create a spawn pool, which should trigger a warning if different than fork
         multiprocessing.set_start_method("spawn", force=True)
@@ -127,7 +127,7 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
             transcription = processor.batch_decode(logits.cpu().numpy()).text
 
         unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
-        unittest.TestCase().assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
+        unittest.TestCase().assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
     except Exception:
         error = f"{traceback.format_exc()}"
 
@@ -1878,7 +1878,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         with multiprocessing.get_context("fork").Pool(2) as pool:
             transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
 
-        self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
+        self.assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
 
         # user-managed pool + num_processes should trigger a warning
         with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl, multiprocessing.get_context("fork").Pool(
@@ -1889,7 +1889,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertIn("num_process", cl.out)
         self.assertIn("it will be ignored", cl.out)
 
-        self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
+        self.assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
 
     @require_pyctcdecode
     @require_torchaudio
