@@ -615,8 +615,8 @@ class FuyuProcessor(ProcessorMixin):
         def scale_factor_to_fit(original_size, target_size=None):
             height, width = original_size
             if target_size is None:
-                max_height = self.image_processor.target_height
-                max_width = self.image_processor.target_width
+                max_height = self.image_processor.size["height"]
+                max_width = self.image_processor.size["width"]
             else:
                 max_height, max_width = target_size
             if width <= max_width and height <= max_height:
@@ -653,7 +653,7 @@ class FuyuProcessor(ProcessorMixin):
             return tokens
 
         if target_sizes is None:
-            target_sizes = ((self.image_processor.target_height, self.image_processor.target_width),) * len(outputs)
+            target_sizes = ((self.image_processor.size["height"], self.image_processor.size["width"]),) * len(outputs)
 
         if len(outputs) != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as output sequences")
