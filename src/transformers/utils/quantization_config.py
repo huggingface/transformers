@@ -299,6 +299,11 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         return serializable_config_dict
 
 
+class ExllamaVersion(int, Enum):
+    ONE = 1
+    TWO = 2
+
+
 @dataclass
 class GPTQConfig(QuantizationConfigMixin):
     """
@@ -349,8 +354,8 @@ class GPTQConfig(QuantizationConfigMixin):
         max_input_length (`int`, *optional*):
             The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
             length. It is specific to the exllama backend with act-order.
-        use_exllama_v2 (`bool`, *optional*, defaults to `False`):
-            Whether to use exllamav2 backend. Only works with `bits` = 4.
+        exllama_version (`ExllamaVersion`, *optional*, defaults to `ExllamaVersion.ONE`):
+            The version of exllama kernel to use.
     """
 
     def __init__(
@@ -371,7 +376,7 @@ class GPTQConfig(QuantizationConfigMixin):
         pad_token_id: Optional[int] = None,
         use_exllama: bool = True,
         max_input_length: Optional[int] = None,
-        use_exllama_v2: bool = False,
+        exllama_version: ExllamaVersion = ExllamaVersion.ONE,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
@@ -391,13 +396,13 @@ class GPTQConfig(QuantizationConfigMixin):
         self.pad_token_id = pad_token_id
         self.use_exllama = use_exllama
         self.max_input_length = max_input_length
-        self.use_exllama_v2 = use_exllama_v2
+        self.exllama_version = exllama_version
         self.disable_exllama = kwargs.get("disable_exllama", None)
         self.post_init()
 
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["use_exllama", "use_exllama_v2", "use_cuda_fp16", "max_input_length"]
+        loading_attibutes = ["disable_exllama", "use_exllama", "exllama_version", "use_cuda_fp16", "max_input_length"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
 
@@ -426,25 +431,24 @@ class GPTQConfig(QuantizationConfigMixin):
         if self.bits == 4:
             if self.disable_exllama is not None:
                 logger.warning(
-                    "Using `disable_exllama` is deprecated and will be removed in future version. Use `use_exllama` instead."
+                    "Using `disable_exllama` is deprecated and will be removed in version 4.37. Use `use_exllama` instead and specify the version with `exllama_version`."
+                    "The value of `use_exllama` will be overwritten by the one you passed in `disable_exllama`. "
                 )
                 self.use_exllama = not self.disable_exllama
 
-            if self.use_exllama_v2:
-                optimum_version = version.parse(importlib.metadata.version("optimum"))
-                autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
-                if optimum_version <= version.parse("1.13.2") or autogptq_version <= version.parse("0.4.2"):
-                    raise ValueError(
-                        f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
-                    )
-                self.use_exllama = False
-                logger.warning("You have activated exllamav2 kernels. Exllama kernels will be disabled.")
-
             if self.use_exllama:
-                logger.warning(
-                    "You have activated exllama backend. Note that you can get better inference "
-                    "speed using exllamav2 kernel by setting `use_exllama_v2=True`."
-                )
+                if self.exllama_version == ExllamaVersion.ONE:
+                    logger.warning(
+                        "You have activated exllama backend. Note that you can get better inference "
+                        "speed using exllamav2 kernel by setting `exllama_version=2`."
+                    )
+                if self.exllama_version == ExllamaVersion.TWO:
+                    optimum_version = version.parse(importlib.metadata.version("optimum"))
+                    autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
+                    if optimum_version <= version.parse("1.13.2") or autogptq_version <= version.parse("0.4.2"):
+                        raise ValueError(
+                            f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
+                        )
 
     def to_dict_optimum(self):
         """
@@ -452,8 +456,8 @@ class GPTQConfig(QuantizationConfigMixin):
         """
         quant_dict = self.to_dict()
         # make it compatible with optimum config
-        quant_dict["disable_exllama"] = not self.use_exllama
-        quant_dict["disable_exllamav2"] = not self.use_exllama_v2
+        quant_dict["disable_exllama"] = not (self.use_exllama and self.exllama_version == ExllamaVersion.ONE)
+        quant_dict["disable_exllamav2"] = not (self.use_exllama and self.exllama_version == ExllamaVersion.TWO)
         return quant_dict
 
     @classmethod
@@ -461,13 +465,16 @@ class GPTQConfig(QuantizationConfigMixin):
         """
         Get compatible class with optimum gptq config dict
         """
+
         if "disable_exllama" in config_dict:
             config_dict["use_exllama"] = not config_dict["disable_exllama"]
+            config_dict["exllama_version"] = ExllamaVersion.ONE
             # switch to None to not trigger the warning
             config_dict["disable_exllama"] = None
 
         if "disable_exllamav2" in config_dict:
-            config_dict["use_exllama_v2"] = not config_dict["disable_exllamav2"]
+            config_dict["use_exllama"] = config_dict.get("use_exllama", False) or not config_dict["disable_exllamav2"]
+            config_dict["exllama_version"] = ExllamaVersion.TWO
 
         config = cls(**config_dict)
         return config
