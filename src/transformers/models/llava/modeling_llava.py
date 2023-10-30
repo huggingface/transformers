@@ -696,7 +696,7 @@ class LlavaModel(LlavaPreTrainedModel):
         self.post_init()
 
     def get_model(self):
-        return self.text_model
+        return self.text_model.model
 
     def prepare_inputs_labels_for_multimodal(
         self,
@@ -721,7 +721,7 @@ class LlavaModel(LlavaPreTrainedModel):
         new_input_embeds = []
         new_labels = [] if labels is not None else None
         cur_image_idx = 0
-        image_features = self.model.mm_projector(images)
+        image_features = self.text_model.mm_projector(images)
         for batch_idx, cur_input_ids in enumerate(input_ids):
             if (cur_input_ids == IMAGE_TOKEN_INDEX).sum() == 0:
                 if self.config.vision_config.projector == "Linear":
@@ -740,7 +740,7 @@ class LlavaModel(LlavaPreTrainedModel):
                         device=image_features.device,
                         dtype=image_features.dtype,
                     )
-                    inter = self.model.mm_projector(dummy_feature)
+                    inter = self.text_model.mm_projector(dummy_feature)
                     cur_input_embeds = cur_input_embeds + (0.0 * inter).sum()
 
                 new_input_embeds.append(cur_input_embeds)
@@ -947,7 +947,7 @@ class LlavaModel(LlavaPreTrainedModel):
             input_ids, attention_mask, past_key_values, labels, pixel_values
         )
 
-        outputs = self.text_model(
+        outputs = self.text_model.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
@@ -958,9 +958,14 @@ class LlavaModel(LlavaPreTrainedModel):
             return_dict=return_dict,
         )
 
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
+        if not return_dict:  
+            return tuple(v for v in [outputs.last_hidden_state,
+              outputs.past_key_values,
+              outputs.hidden_states,
+              outputs.attentions] if v is not None)
+
+        return BaseModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
@@ -1043,6 +1048,7 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            pixel_values = pixel_values,
             return_dict=return_dict,
         )
 
@@ -1095,4 +1101,5 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
             }
         )
         return model_inputs
+
 

@@ -1,27 +1,12 @@
-# coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""Convert ViT and non-distilled DeiT checkpoints from the timm library."""
-
-
 import argparse
 from collections import OrderedDict
 from pathlib import Path
+import os
 
 import requests
 import torch
 from PIL import Image
+import json
 
 from transformers import LlavaConfig, LlavaProcessor, LlavaForCausalLM
 from transformers.utils import logging
@@ -35,6 +20,9 @@ def remove_classification_head_(state_dict):
     for k in ignore_keys:
         state_dict.pop(k, None)
 
+def write_json(text, path):
+    with open(path, "w") as f:
+        json.dump(text, f)
 
 def rename_key(state_dict, old, new):
     if old in state_dict:
@@ -62,80 +50,80 @@ def convert_llava_checkpoint(
 
     # load original models
     llava_state_dict = OrderedDict()
-    llava_state_dict = torch.load(checkpoint_path_llava_1, map_location="gpu")
+    llava_state_dict = torch.load(checkpoint_path_llava_1, map_location="cpu")
+    rename_keys = []
     for i in llava_state_dict:
-        i = i.replace("model","model.text_model")
-    llava_state_dict.update(torch.load(checkpoint_path_llava_2, map_location="gpu"))
+        rename_keys.append((i, "model.text_model."+i))
+
+    for src, dest in rename_keys:
+        rename_key(llava_state_dict, src, dest)
+        
+    index_dict = {"weight_map": {}}
+    param_count = 0
+    filename = "pytorch_model-00001-of-00002.bin"
+    for k, v in llava_state_dict.items():                                                               
+        index_dict["weight_map"][k] = filename
+        param_count += v.numel()
+    torch.save(llava_state_dict, os.path.join("./temp", filename))
+    
+    llava_state_dict = None
+    rename_keys = None
+        
+    llava_state_dict = OrderedDict()
+    llava_state_dict = torch.load(checkpoint_path_llava_2, map_location="cpu")
+    rename_keys = []
     for i in llava_state_dict:
-        i = i.replace("model","model.text_model")
+        rename_keys.append((i, "model.text_model."+i))
 
-    state_dict = OrderedDict()
-    state_dict.update(torch.load(checkpoint_path_clip, map_location="gpu"))
+    for src, dest in rename_keys:
+        rename_key(llava_state_dict, src, dest)
+    print("here")
+    llava_state_dict.update(torch.load(checkpoint_path_clip, map_location="cpu"))
+    print("another")
+    rename_keys = []
+    for i in llava_state_dict:
+        if "text_model" not in i:
+            rename_keys.append((i, "model.vision_model."+i))
+        
+    for src, dest in rename_keys:
+        rename_key(llava_state_dict, src, dest)
+    
+    index_dict = {"weight_map": {}}
+    filename = "pytorch_model-00002-of-00002.bin"
+    for k, v in llava_state_dict.items():                                                               
+        index_dict["weight_map"][k] = filename
+        param_count += v.numel()
+    torch.save(llava_state_dict, os.path.join("./temp", filename))
+    
+    index_dict["metadata"] = {"total_size": param_count * 2}
+    write_json(index_dict, os.path.join("./temp", "pytorch_model.bin.index.json"))
+    
+    llava_state_dict = None
+    rename_keys = None
 
-    for i in state_dict:
-        i = i.replace("model","model.vision_model")
+    config = LlavaConfig()
+    config.save_pretrained("./temp")
+
+    #print("Loading the checkpoint in a Llama model.")
+    model = LlavaForCausalLM.from_pretrained("./temp", torch_dtype=torch.bfloat16, 
+    low_cpu_mem_usage=True,device_map="cuda")
+    # Avoid saving this as part of the config.
+    #del model.config._name_or_path
+    model.config.torch_dtype = torch.float16
+    print("Saving in the Transformers format.")
+    model.save_pretrained("./new", safe_serialization=True)
 
     
-    state_dict.update(llava_state_dict)
-
-    model = LlavaForCausalLM(config)
-    model.eval()
-
-
-    # load state_dict of original model, remove and rename some keys
-    #rename_keys = create_rename_keys(depths())
-    #print(rename_keys)
-    #for src, dest in rename_keys:
-    #    rename_key(state_dict, src, dest)
-    model.load_state_dict(state_dict)
-    print(model)
-
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-
-    image_processor = LlavaProcessor(size=config.image_size)
-    # encoding = image_processor(images=prepare_img(), return_tensors="pt")
-    # pixel_values = encoding["pixel_values"]
-    # outputs = model(pixel_values)
-
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving image processor to {pytorch_dump_folder_path}")
-    image_processor.save_pretrained(pytorch_dump_folder_path)
-
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    # Required parameters
-    parser.add_argument(
-        "--checkpoint_path_clip",
-        default="./raft-things.pth",
-        type=str,
-        help="Path to the original state dict (.pth file).",
-    )
-    parser.add_argument(
-        "--checkpoint_path_llava_1",
-        default="./recurrent_flow_completion.pth",
-        type=str,
-        help="Path to the original state dict (.pth file).",
-    )
-    parser.add_argument(
-        "--checkpoint_path_llava_2",
-        default="./recurrent_flow_completion.pth",
-        type=str,
-        help="Path to the original state dict (.pth file).",
-    )
-
-    parser.add_argument(
-        "--pytorch_dump_folder_path", default="./", type=str, help="Path to the output PyTorch model directory."
-    )
-
-    args = parser.parse_args()
+    checkpoint_path_llava_1 = "./pytorch_model-00001-of-00002.bin"
+    checkpoint_path_llava_2 = "./pytorch_model-00002-of-00002.bin"
+    checkpoint_path_clip = "./pytorch_model.bin"
+    pytorch_dump_folder_path = "./"
+    
     convert_llava_checkpoint(
-        args.checkpoint_path_llava_1,
-        args.checkpoint_path_llava_2,
-        args.checkpoint_path_clip,
-        args.pytorch_dump_folder_path,
+        checkpoint_path_llava_1,
+        checkpoint_path_llava_2,
+        checkpoint_path_clip,
+        pytorch_dump_folder_path,
     )
+

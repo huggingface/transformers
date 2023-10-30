@@ -53,7 +53,7 @@ class LlavaProcessor(ProcessorMixin):
     """
     attributes = ["image_processor", "tokenizer"]
     tokenizer_class = "AutoTokenizer"
-    image_processor_class = "CLIPImageProcessor"
+    image_processor_class = " CLIPImageProcessor"
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
@@ -148,7 +148,7 @@ class LlavaProcessor(ProcessorMixin):
 
             else:
                 image_encoding = self.image_processor.preprocess(images, return_tensors=return_tensors)["pixel_values"]
-
+            
             dummy["pixel_values"] = image_encoding
             encoding.update(dummy)
         return encoding
@@ -193,4 +193,5 @@ class LlavaProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
 

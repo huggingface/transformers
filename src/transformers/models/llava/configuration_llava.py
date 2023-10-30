@@ -78,14 +78,15 @@ class LlavaVisionConfig(PretrainedConfig):
         use_cache: bool = True,
         vocab_size: int = 50282,
         projector: str = "Linear",
-        hidden_size=768,
-        intermediate_size=3072,
-        projection_dim=512,
-        num_hidden_layers=12,
-        num_attention_heads=12,
+        hidden_size=1024,
+        intermediate_size=4096,
+        projection_dim=768,
+        proj_hidden_size = 4096,
+        num_hidden_layers=24,
+        num_attention_heads=16,
         num_channels=3,
-        image_size=224,
-        patch_size=32,
+        image_size=336,
+        patch_size=14,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
@@ -112,6 +113,7 @@ class LlavaVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.proj_hidden_size = proj_hidden_size
         super().__init__(**kwargs)
 
     @classmethod
@@ -215,4 +217,5 @@ class LlavaConfig(PretrainedConfig):
             vision_config=vision_config.to_dict(),
             **kwargs,
         )
+
 
