@@ -750,7 +750,7 @@ NEFTune is a technique to boost the performance of chat models and was introduce
 <img src="https://huggingface.co/datasets/trl-internal-testing/example-images/resolve/main/images/neft-screenshot.png">
 </div>
 
-To use it in `Trainer`` simply pass `neftune_noise_alpha`` when creating your `TrainingArguments` instance. Note that to avoid any surprising behaviour, NEFTune is disabled after training to retrieve back the original behaviour of the embedding layer.
+To use it in `Trainer` simply pass `neftune_noise_alpha` when creating your `TrainingArguments` instance. Note that to avoid any surprising behaviour, NEFTune is disabled after training to retrieve back the original behaviour of the embedding layer.
 
 ```python
 from transformers import Trainer, TrainingArguments
