@@ -652,6 +652,21 @@ class Trainer:
         self.neftune_hook_handle = hook_handle
         return model
 
+    def _deactivate_neftune(self, model):
+        """
+        Deactivates the neftune method. Make sure to call `_activate_neftune` first.
+        """
+        if not hasattr(self, "neftune_hook_handle"):
+            raise ValueError("Neftune is not activated make sure to call `trainer._activate_neftune()` first")
+
+        if is_peft_available() and isinstance(model, PeftModel):
+            embeddings = unwrap_model(model.base_model).get_input_embeddings()
+        else:
+            embeddings = unwrap_model(model).get_input_embeddings()
+
+        self.neftune_hook_handle.remove()
+        del embeddings.neftune_noise_alpha
+
     def add_callback(self, callback):
         """
         Add a callback to the current list of [`~transformer.TrainerCallback`].
@@ -1981,13 +1996,7 @@ class Trainer:
         # After training we make sure to retrieve back the original forward pass method
         # for the embedding layer by removing the forward post hook.
         if self.neftune_noise_alpha is not None:
-            if is_peft_available() and isinstance(self.model, PeftModel):
-                embeddings = unwrap_model(self.model.base_model).get_input_embeddings()
-            else:
-                embeddings = unwrap_model(self.model).get_input_embeddings()
-
-            self.neftune_hook_handle.remove()
-            del embeddings.neftune_noise_alpha
+            self._deactivate_neftune(self.model)
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
