@@ -844,7 +844,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # Trainer without inf/nan filter
         args = TrainingArguments(
-            "./test", learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=False, neftune_noise_alpha=0.4
+            "./test", learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, neftune_noise_alpha=0.4
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
@@ -854,13 +854,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         emb1 = trainer.model.get_input_embeddings()(dummy_input)
         emb2 = trainer.model.get_input_embeddings()(dummy_input)
+
         self.assertFalse(torch.allclose(emb1, emb2), "Neftune noise is not applied!")
 
         # redefine the model
         tiny_gpt2 = GPT2LMHeadModel(config)
         # Trainer without inf/nan filter
         args = TrainingArguments(
-            "./test", learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=False, neftune_noise_alpha=0.4
+            "./test", learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, neftune_noise_alpha=0.4
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
@@ -868,8 +869,16 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
 
         # Make sure forward pass works fine
-        _ = trainer.model(torch.LongTensor([[1, 0, 1]]).to(torch_device))
+        _ = trainer.model(dummy_input)
         self.assertTrue(len(trainer.model.get_input_embeddings()._forward_hooks) == 0)
+
+        trainer.model.eval()
+
+        # Check that we get identical embeddings just in case
+        emb1 = trainer.model.get_input_embeddings()(dummy_input)
+        emb2 = trainer.model.get_input_embeddings()(dummy_input)
+
+        self.assertTrue(torch.allclose(emb1, emb2), "Neftune noise is still applied!")
 
     def test_logging_inf_nan_filter(self):
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
