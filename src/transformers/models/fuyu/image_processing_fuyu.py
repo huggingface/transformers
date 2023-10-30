@@ -426,8 +426,8 @@ class FuyuImageProcessor(BaseImageProcessor):
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         patch_size = patch_size if patch_size is not None else self.patch_size
 
-        if isinstance(images, list) and isinstance(images[0], list):
-            raise ValueError("Batch sizes of more than 1 are not yet supported.")
+        if isinstance(images, list) and any(len(elem) >= 2 and isinstance(elem, list) for elem in images):
+            raise ValueError("Multiple images for a single sample are not yet supported.")
 
         images = make_list_of_images(images)
 
@@ -560,7 +560,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         image_newline_id: int,
         variable_sized: bool,
         patch_size: Optional[Dict[str, int]] = None,
-    ) -> dict:
+    ) -> FuyuBatchFeature:
         """Process images for model input. In particular, variable-sized images are handled here.
 
         Args:
@@ -624,7 +624,12 @@ class FuyuImageProcessor(BaseImageProcessor):
                     if variable_sized:
                         # Now terminate each line with |NEWLINE|.
                         tensor_of_image_ids = tensor_of_image_ids.reshape(-1, image_width // patch_width)
-                        newline_ids = torch.full([tensor_of_image_ids.shape[0], 1], image_newline_id, dtype=torch.int32, device=image_input.device)
+                        newline_ids = torch.full(
+                            [tensor_of_image_ids.shape[0], 1],
+                            image_newline_id,
+                            dtype=torch.int32,
+                            device=image_input.device,
+                        )
                         tensor_of_image_ids = torch.cat([tensor_of_image_ids, newline_ids], dim=1)
                         tensor_of_image_ids = tensor_of_image_ids.reshape(-1)
 
@@ -669,10 +674,12 @@ class FuyuImageProcessor(BaseImageProcessor):
             image_patch_indices_per_batch.append(per_batch_indices)
             image_patch_indices_per_subsequence.append(per_subsequence_indices)
 
-        return {
-            "images": images,
-            "image_input_ids": batch_image_input_ids,
-            "image_patches": batch_image_patches,
-            "image_patch_indices_per_batch": image_patch_indices_per_batch,
-            "image_patch_indices_per_subsequence": image_patch_indices_per_subsequence,
-        }
+        return FuyuBatchFeature(
+            data={
+                "images": images,
+                "image_input_ids": batch_image_input_ids,
+                "image_patches": batch_image_patches,
+                "image_patch_indices_per_batch": image_patch_indices_per_batch,
+                "image_patch_indices_per_subsequence": image_patch_indices_per_subsequence,
+            }
+        )
