@@ -25,4 +25,6 @@
     title: 使用特定于模型的 API
   - local: custom_models
     title: 共享自定义模型
+  - local: serialization
+    title: 导出为 ONNX
   title: 开发者指南
