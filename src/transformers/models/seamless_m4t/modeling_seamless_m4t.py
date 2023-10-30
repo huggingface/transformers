@@ -24,7 +24,6 @@ import torch
 import torch.utils.checkpoint
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
-from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
@@ -1814,7 +1813,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
-                    layer_outputs = checkpoint(
+                    layer_outputs = self._gradient_checkpointing_func(
                         encoder_layer.forward,
                         hidden_states,
                         attention_mask,
