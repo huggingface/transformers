@@ -22,11 +22,12 @@ from parameterized import parameterized
 
 from transformers import PersimmonConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_torch, 
     require_torch_accelerator, 
     require_torch_fp16, 
     slow, 
-    torch_device
+    torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -419,7 +420,7 @@ class PersimmonIntegrationTest(unittest.TestCase):
         # fmt: on
         torch.testing.assert_close(out.cpu()[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         del model
         gc.collect()
 
@@ -440,6 +441,6 @@ class PersimmonIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         del model
         gc.collect()

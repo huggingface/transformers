@@ -28,6 +28,7 @@ from datasets import load_dataset
 
 from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
+    backend_empty_cache,
     CaptureLogger,
     is_pt_flax_cross_test,
     is_pyctcdecode_available,
@@ -1455,7 +1456,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
