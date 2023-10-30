@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+"AWQ (Activation aware Weight Quantization) integration file"
 from ..utils import is_accelerate_available, is_auto_awq_available, is_torch_available
 from ..utils.quantization_config import AWQBackend, AWQLinearVersion
 
