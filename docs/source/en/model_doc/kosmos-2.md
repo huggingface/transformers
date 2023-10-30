@@ -60,11 +60,11 @@ The abstract from the paper is the following:
 >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 >>> processed_text = processor.post_process_generation(generated_text, cleanup_and_extract=False)
 >>> processed_text
-<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863></object> warming himself by<phrase> a fire</phrase><object><patch_index_0005><patch_index_0911></object>.
+'<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863></object> warming himself by<phrase> a fire</phrase><object><patch_index_0005><patch_index_0911></object>.'
 
 >>> caption, entities = processor.post_process_generation(generated_text)
 >>> caption
-An image of a snowman warming himself by a fire.
+'An image of a snowman warming himself by a fire.'
 
 >>> entities
 [('a snowman', (12, 21), [(0.390625, 0.046875, 0.984375, 0.828125)]), ('a fire', (41, 47), [(0.171875, 0.015625, 0.484375, 0.890625)])]
