@@ -2753,7 +2753,7 @@ class Trainer:
 
         if labels is not None:
             if is_peft_available() and isinstance(model, PeftModel):
-                model_name = unwrap_model(model.base_model)._get_name()
+                model_name = unwrap_model(model.base_model.model)._get_name()
             else:
                 model_name = unwrap_model(model)._get_name()
             if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
