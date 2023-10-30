@@ -265,11 +265,6 @@ class EncoderDecoderModel(PreTrainedModel):
                 self.encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
             )
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        # call both encoder and decoder function on gradient checkpointing
-        self.encoder._set_gradient_checkpointing(module, value=value)
-        self.decoder._set_gradient_checkpointing(module, value=value)
-
     def get_encoder(self):
         return self.encoder
 

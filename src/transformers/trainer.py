@@ -200,6 +200,11 @@ if is_accelerate_available():
             save_fsdp_model,
             save_fsdp_optimizer,
         )
+    DATA_SAMPLERS = [RandomSampler]
+    if version.parse(accelerate_version) > version.parse("0.23.0"):
+        from accelerate.data_loader import SeedableRandomSampler
+
+        DATA_SAMPLERS += [SeedableRandomSampler]
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
@@ -1611,7 +1616,12 @@ class Trainer:
 
         # Activate gradient checkpointing if needed
         if args.gradient_checkpointing:
-            self.model.gradient_checkpointing_enable()
+            if args.gradient_checkpointing_kwargs is None:
+                gradient_checkpointing_kwargs = {}
+            else:
+                gradient_checkpointing_kwargs = args.gradient_checkpointing_kwargs
+
+            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
 
         model = self._wrap_model(self.model_wrapped)
 
@@ -1738,7 +1748,10 @@ class Trainer:
         if not args.ignore_data_skip:
             for epoch in range(epochs_trained):
                 sampler = get_dataloader_sampler(train_dataloader)
-                is_random_sampler = isinstance(sampler, RandomSampler)
+                sampler_kinds = [RandomSampler]
+                if version.parse(accelerate_version) > version.parse("0.23.0"):
+                    sampler_kinds.append(SeedableRandomSampler)
+                is_random_sampler = isinstance(sampler, tuple(sampler_kinds))
                 if is_torch_less_than_1_11 or not is_random_sampler:
                     # We just need to begin an iteration to create the randomization of the sampler.
                     for _ in train_dataloader:
@@ -1752,6 +1765,8 @@ class Trainer:
         total_batched_samples = 0
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_iterator = train_dataloader
+            if hasattr(epoch_iterator, "set_epoch"):
+                epoch_iterator.set_epoch(epoch)
 
             # Reset the past mems state at the beginning of each epoch if necessary.
             if args.past_index >= 0:
@@ -1835,12 +1850,6 @@ class Trainer:
 
                         if is_sagemaker_mp_enabled() and args.fp16:
                             self.optimizer.clip_master_grads(args.max_grad_norm)
-                        elif hasattr(self.optimizer, "clip_grad_norm"):
-                            # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
-                            self.optimizer.clip_grad_norm(args.max_grad_norm)
-                        elif hasattr(model, "clip_grad_norm_"):
-                            # Some models (like FullyShardedDDP) have a specific way to do gradient clipping
-                            model.clip_grad_norm_(args.max_grad_norm)
                         elif self.use_apex:
                             # Revert to normal clipping otherwise, handling Apex or full precision
                             nn.utils.clip_grad_norm_(
@@ -1901,7 +1910,7 @@ class Trainer:
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         if args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
-            # Wait for everyone to get here so we are sur the model has been saved by process 0.
+            # Wait for everyone to get here so we are sure the model has been saved by process 0.
             if is_torch_tpu_available():
                 xm.rendezvous("load_best_model_at_end")
             elif args.parallel_mode == ParallelMode.DISTRIBUTED:
@@ -3550,7 +3559,7 @@ class Trainer:
             commit_message=commit_message,
             token=self.args.hub_token,
             run_as_future=True,
-            ignore_patterns=["_*", "**/*"],
+            ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
         )
 
         push_jobs = [model_push_job]
@@ -3620,14 +3629,13 @@ class Trainer:
 
         # Wait for the current upload to be finished.
         self._finish_current_push()
-
         return upload_folder(
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,
             commit_message=commit_message,
             token=self.args.hub_token,
             run_as_future=not blocking,
-            ignore_patterns=["_*", "**/*"],
+            ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
         )
 
     #

@@ -13,6 +13,8 @@
     title: 预处理
   - local: pipeline_tutorial
     title: pipeline教程
+  - local: transformers_agents
+    title: transformers_agents教程
   title: 教程
 - sections:
   - local: fast_tokenizers
@@ -21,4 +23,6 @@
     title: 使用多语言模型进行推理
   - local: create_a_model
     title: 使用特定于模型的 API
+  - local: custom_models
+    title: 共享自定义模型
   title: 开发者指南
