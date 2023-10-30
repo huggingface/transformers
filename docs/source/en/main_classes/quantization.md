@@ -37,6 +37,8 @@ Currently the integration with 🤗 Transformers is only available for models th
 
 You can load a quantized model from the Hub by using `from_pretrained` method. Make sure that the pushed weights are quantized, by checking that the attribute `quantization_config` is present in the model configuration object. You can confirm that the model is quantized to AWQ format by checking the field `quantization_config.quantization_method` which should be set to `"awq"`. Note that loading the model will set other weights in `float16` by default for performance reasons. If you want to change that behavior, you can pass `torch_dtype` argument to `torch.float32` or `torch.bfloat16`.
 
+## Example usage
+
 First, you need to install [`autoawq`](https://github.com/casper-hansen/AutoAWQ) library
 
 ```bash
