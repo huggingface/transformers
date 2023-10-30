@@ -31,7 +31,7 @@ def replace_with_awq_linear(
     has_been_replaced=False,
 ):
     """
-    Public method that applies recursion for module replacement. `accelerate` is needed to use this method. Returns the
+    Public method that recursively replaces the Linear layers of the given model with AWQ quantized layers.  `accelerate` is needed to use this method. Returns the
     converted model and a boolean that indicates if the conversion has been successfull or not.
 
     During the module replacement, we also infer the backend to use through the `quantization_config` object.
