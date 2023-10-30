@@ -91,7 +91,7 @@ class ViTPoseConfig(PretrainedConfig):
 
     def __init__(
         self,
-        img_size = (750, 500),
+        img_size = (256, 192),
         patch_size=16,
         embed_dim = 384,
         depth = 12,

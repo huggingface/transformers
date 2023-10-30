@@ -19,6 +19,7 @@ import argparse
 import json
 from pathlib import Path
 
+from torchvision.transforms.functional import to_pil_image
 import requests
 import timm
 import torch
@@ -42,27 +43,27 @@ def create_rename_keys(config, base_model=False):
 
     rename_keys.extend(
         [
-            ("backbone.cls_token","vitpose.backbone.cls_token"),
-            ("backbone.pos_embed","vitpose.backbone.position_embeddings"),
-            ("backbone.patch_embed.proj.weight","vitpose.backbone.patch_embeddings.projection.weight"),
-            ("backbone.patch_embed.proj.bias","vitpose.backbone.patch_embeddings.projection.bias"),
+            ("backbone.cls_token","vitpose.embeddings.cls_token"),
+            ("backbone.pos_embed","vitpose.embeddings.position_embeddings"),
+            ("backbone.patch_embed.proj.weight","vitpose.embeddings.patch_embeddings.projection.weight"),
+            ("backbone.patch_embed.proj.bias","vitpose.embeddings.patch_embeddings.projection.bias"),
         ]
     )
 
     for i in range(config.depth):
        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-       rename_keys.append((f"backbone.blocks.{i}.norm1.weight", f"vitpose.backbone.blocks.{i}.norm1.weight"))
-       rename_keys.append((f"backbone.blocks.{i}.norm1.bias", f"vitpose.backbone.blocks.{i}.norm1.bias"))
-       rename_keys.append((f"backbone.blocks.{i}.attn.qkv.weight", f"vitpose.backbone.blocks.{i}.attn.qkv.weight"))
-       rename_keys.append((f"backbone.blocks.{i}.attn.qkv.bias", f"vitpose.backbone.blocks.{i}.attn.qkv.bias"))
-       rename_keys.append((f"backbone.blocks.{i}.attn.proj.weight", f"vitpose.backbone.blocks.{i}.attn.proj.weight"))
-       rename_keys.append((f"backbone.blocks.{i}.attn.proj.bias", f"vitpose.backbone.blocks.{i}.attn.proj.bias"))
-       rename_keys.append((f"backbone.blocks.{i}.norm2.weight", f"vitpose.backbone.blocks.{i}.norm2.weight"))
-       rename_keys.append((f"backbone.blocks.{i}.norm2.bias", f"vitpose.backbone.blocks.{i}.norm2.bias"))
-       rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.weight", f"vitpose.backbone.blocks.{i}.mlp.fc1.weight"))
-       rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.bias", f"vitpose.backbone.blocks.{i}.mlp.fc1.bias"))
-       rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.weight", f"vitpose.backbone.blocks.{i}.mlp.fc2.weight"))
-       rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.bias", f"vitpose.backbone.blocks.{i}.mlp.fc2.bias"))
+       rename_keys.append((f"backbone.blocks.{i}.norm1.weight", f"vitpose.encoder.blocks.{i}.norm1.weight"))
+       rename_keys.append((f"backbone.blocks.{i}.norm1.bias", f"vitpose.encoder.blocks.{i}.norm1.bias"))
+       rename_keys.append((f"backbone.blocks.{i}.attn.qkv.weight", f"vitpose.encoder.blocks.{i}.attn.qkv.weight"))
+       rename_keys.append((f"backbone.blocks.{i}.attn.qkv.bias", f"vitpose.encoder.blocks.{i}.attn.qkv.bias"))
+       rename_keys.append((f"backbone.blocks.{i}.attn.proj.weight", f"vitpose.encoder.blocks.{i}.attn.proj.weight"))
+       rename_keys.append((f"backbone.blocks.{i}.attn.proj.bias", f"vitpose.encoder.blocks.{i}.attn.proj.bias"))
+       rename_keys.append((f"backbone.blocks.{i}.norm2.weight", f"vitpose.encoder.blocks.{i}.norm2.weight"))
+       rename_keys.append((f"backbone.blocks.{i}.norm2.bias", f"vitpose.encoder.blocks.{i}.norm2.bias"))
+       rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.weight", f"vitpose.encoder.blocks.{i}.mlp.fc1.weight"))
+       rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.bias", f"vitpose.encoder.blocks.{i}.mlp.fc1.bias"))
+       rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.weight", f"vitpose.encoder.blocks.{i}.mlp.fc2.weight"))
+       rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.bias", f"vitpose.encoder.blocks.{i}.mlp.fc2.bias"))
 
 
     for i in range(5):
@@ -80,8 +81,8 @@ def create_rename_keys(config, base_model=False):
         [
             ("keypoint_head.final_layer.weight", "vitpose.keypoint_head.final_layer.weight"),
             ("keypoint_head.final_layer.bias", "vitpose.keypoint_head.final_layer.bias"),
-            ("backbone.last_norm.weight", "vitpose.backbone.last_norm.weight"),
-            ("backbone.last_norm.bias", "vitpose.backbone.last_norm.bias"),
+            ("backbone.last_norm.weight", "vitpose.layernorm.weight"),
+            ("backbone.last_norm.bias", "vitpose.layernorm.bias"),
         ]
     )
 
@@ -155,6 +156,7 @@ def rename_key(state_dict, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    url = "https://images.pexels.com/photos/4045762/pexels-photo-4045762.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
@@ -253,6 +255,9 @@ def convert_vitpose_checkpoint(pytorch_dump_folder_path):
     encoding = image_processor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values, bboxes)
+
+    show = image_processor.post_processing(prepare_img(), outputs)
+    to_pil_image(show).save("pred.jpg")
 
    # if base_model:
    #     timm_pooled_output = timm_model.forward_features(pixel_values)
