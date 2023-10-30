@@ -295,6 +295,7 @@ docs/source/en/serialization.md
 docs/source/en/tasks/asr.md
 docs/source/en/tasks/audio_classification.md
 docs/source/en/tasks/document_question_answering.md
+docs/source/en/tasks/idefics.md
 docs/source/en/tasks/image_captioning.md
 docs/source/en/tasks/image_classification.md
 docs/source/en/tasks/language_modeling.md
