@@ -475,6 +475,127 @@ def spectrogram(
 
     return spectrogram
 
+# This version of the spectrogram function is specifically optimized for batch processing.
+# It leverages broadcasting to efficiently handle multiple inputs simultaneously.
+def spectrogram_batch(
+    waveform: np.ndarray,
+    window: np.ndarray,
+    frame_length: int,
+    hop_length: int,
+    fft_length: Optional[int] = None,
+    power: Optional[float] = 1.0,
+    center: bool = True,
+    pad_mode: str = "reflect",
+    onesided: bool = True,
+    preemphasis: Optional[float] = None,
+    mel_filters: Optional[np.ndarray] = None,
+    mel_floor: float = 1e-10,
+    log_mel: Optional[str] = None,
+    reference: float = 1.0,
+    min_value: float = 1e-10,
+    db_range: Optional[float] = None,
+    remove_dc_offset: Optional[bool] = None,
+    dtype: np.dtype = np.float32,
+) -> np.ndarray:
+    window_length = len(window)
+
+    if fft_length is None:
+        fft_length = frame_length
+
+    if frame_length > fft_length:
+        raise ValueError(
+            f"frame_length ({frame_length}) may not be larger than fft_length ({fft_length})"
+        )
+
+    if window_length != frame_length:
+        raise ValueError(
+            f"Length of the window ({window_length}) must equal frame_length ({frame_length})"
+        )
+
+    if hop_length <= 0:
+        raise ValueError("hop_length must be greater than zero")
+
+    # Check the dimensions of the waveform
+    if waveform.ndim != 2:
+        raise ValueError(
+            f"Input waveform must have two dimensions (batch, time), shape is {waveform.shape}"
+        )
+
+    # Check if waveform is complex
+    if np.iscomplexobj(waveform):
+        raise ValueError("Complex-valued input waveforms are not currently supported")
+
+    # Center pad the waveform
+    if center:
+        padding = [(0, 0), (int(frame_length // 2), int(frame_length // 2))]
+        waveform = np.pad(waveform, padding, mode=pad_mode)
+
+    # Promote to float64, since np.fft uses float64 internally
+    waveform = waveform.astype(np.float64)
+    window = window.astype(np.float64)
+
+    # Split waveform into frames of frame_length size
+    num_frames = int(1 + np.floor((waveform.shape[1] - frame_length) / hop_length))
+    num_batches = waveform.shape[0]
+
+    num_frequency_bins = (fft_length // 2) + 1 if onesided else fft_length
+    spectrogram = np.empty(
+        (num_batches, num_frames, num_frequency_bins), dtype=np.complex64
+    )
+
+    # rfft is faster than fft
+    fft_func = np.fft.rfft if onesided else np.fft.fft
+    buffer = np.zeros((num_batches, fft_length))
+
+    for frame_idx in range(num_frames):
+        timestep = frame_idx * hop_length
+        buffer[:, :frame_length] = waveform[:, timestep : timestep + frame_length]
+
+        if remove_dc_offset:
+            buffer[:, :frame_length] -= buffer[:, :frame_length].mean(
+                axis=1, keepdims=True
+            )
+
+        if preemphasis is not None:
+            buffer[:, 1:frame_length] -= preemphasis * buffer[:, : frame_length - 1]
+            buffer[:, 0] *= 1 - preemphasis
+
+        buffer[:, :frame_length] *= window
+
+        spectrogram[:, frame_idx] = fft_func(buffer)
+
+    # Note: ** is much faster than np.power
+    if power is not None:
+        spectrogram = np.abs(spectrogram, dtype=np.float64) ** power
+
+    # Apply mel filters if provided
+    if mel_filters is not None:
+        result = np.tensordot(spectrogram, mel_filters.T, axes=([2], [1]))
+        spectrogram = np.maximum(mel_floor, result)
+
+    # Convert to log scale if specified
+    if power is not None and log_mel is not None:
+        if log_mel == "log":
+            spectrogram = np.log(spectrogram)
+        elif log_mel == "log10":
+            spectrogram = np.log10(spectrogram)
+        elif log_mel == "dB":
+            if power == 1.0:
+                spectrogram = amplitude_to_db(
+                    spectrogram, reference, min_value, db_range
+                )
+            elif power == 2.0:
+                spectrogram = power_to_db(spectrogram, reference, min_value, db_range)
+            else:
+                raise ValueError(
+                    f"Cannot use log_mel option '{log_mel}' with power {power}"
+                )
+        else:
+            raise ValueError(f"Unknown log_mel option: {log_mel}")
+
+    spectrogram = np.asarray(spectrogram, dtype).transpose(0, 2, 1)
+
+    return spectrogram
 
 def power_to_db(
     spectrogram: np.ndarray,
