@@ -57,12 +57,16 @@ def replace_with_awq_linear(
         raise ValueError(
             "AWQ (either `autoawq` or `llmawq`) is not available. Please install it with `pip install autoawq` or check out the installation guide in https://github.com/mit-han-lab/llm-awq"
         )
-        
+
     if backend == AwqBackendPackingMethod.AUTOAWQ:
         from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
     elif backend == AwqBackendPackingMethod.LLMAWQ:
         from awq.quantize.qmodule import WQLinear
 
+    if backend == AwqBackendPackingMethod.AUTOAWQ:
+        target_cls = WQLinear_GEMM if quantization_config.version == AWQLinearVersion.GEMM else WQLinear_GEMV
+    else:
+        target_cls = WQLinear
 
     for name, module in model.named_children():
         if current_key_name is None:
@@ -74,13 +78,6 @@ def replace_with_awq_linear(
             if not any(key in ".".join(current_key_name) for key in modules_to_not_convert):
                 in_features = module.in_features
                 out_features = module.out_features
-
-                if backend == AwqBackendPackingMethod.AUTOAWQ:
-                    target_cls = (
-                        WQLinear_GEMM if quantization_config.version == AWQLinearVersion.GEMM else WQLinear_GEMV
-                    )
-                else:
-                    target_cls = WQLinear
 
                 model._modules[name] = target_cls(
                     w_bit=quantization_config.bits,
