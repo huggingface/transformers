@@ -39,6 +39,7 @@ from transformers.testing_utils import (  # noqa: F401
     is_staging_test,
     require_safetensors,
     require_tf,
+    require_torch,
     slow,
 )
 from transformers.utils import SAFE_WEIGHTS_NAME, TF2_WEIGHTS_INDEX_NAME, TF2_WEIGHTS_NAME, logging
@@ -494,6 +495,30 @@ class TFModelUtilsTest(unittest.TestCase):
 
         # Check models are equal
         for p1, p2 in zip(safetensors_model.weights, tf_model.weights):
+            self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
+    @require_safetensors
+    def test_safetensors_tf_from_tf(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+            new_model = TFBertModel.from_pretrained(tmp_dir)
+
+        for p1, p2 in zip(model.weights, new_model.weights):
+            self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
+    @require_safetensors
+    @is_pt_tf_cross_test
+    def test_safetensors_tf_from_torch(self):
+        hub_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+            new_model = TFBertModel.from_pretrained(tmp_dir)
+
+        for p1, p2 in zip(hub_model.weights, new_model.weights):
             self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
 
