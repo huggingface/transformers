@@ -3299,6 +3299,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model, _ = replace_with_awq_linear(
                 model, quantization_config=quantization_config, modules_to_not_convert=modules_to_not_convert
             )
+            model._is_quantized_training_enabled = False
 
         if quantization_method_from_config is not None:
             model.quantization_method = quantization_method_from_config
