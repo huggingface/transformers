@@ -653,6 +653,7 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 fx_model.params = fx_state
 
                 with torch.no_grad():
+                    pt_model.to(torch_device)
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
 
                 # convert inputs to Flax
@@ -660,7 +661,7 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 fx_outputs = fx_model(**fx_inputs).to_tuple()
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+                    self.assert_almost_equals(fx_output, pt_output.cpu().numpy(), 4e-2)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
@@ -671,7 +672,7 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
                 )
                 for fx_output_loaded, pt_output in zip(fx_outputs_loaded[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
+                    self.assert_almost_equals(fx_output_loaded, pt_output.cpu().numpy(), 4e-2)
 
     # overwrite from common since FlaxCLIPModel returns nested output
     # which is not supported in the common test
@@ -712,6 +713,7 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
 
                 with torch.no_grad():
+                    pt_model.to(torch_device)
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
 
                 fx_inputs = {k: np.array(v.to("cpu")) for k, v in pt_inputs.items() if torch.is_tensor(v)}
@@ -720,20 +722,21 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
 
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+                    self.assert_almost_equals(fx_output, pt_output.cpu().numpy(), 4e-2)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
                     pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
 
                 with torch.no_grad():
+                    pt_model_loaded.to(torch_device)
                     pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
 
                 self.assertEqual(
                     len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
                 )
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+                    self.assert_almost_equals(fx_output, pt_output.cpu().numpy(), 4e-2)
 
     @slow
     def test_model_from_pretrained(self):
