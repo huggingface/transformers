@@ -196,20 +196,11 @@ class PatchTSMixerNormLayer(nn.Module):
                 ),
             )  # inputs_reshaped: [batch_size*num_channels, num_patches, num_features]
 
-            inputs_reshaped = self.norm(
-                inputs_reshaped
-            )  # inputs_reshaped: [batch_size*num_channels, num_patches, num_features]
-            # put back data to the original shape
+            # inputs_reshaped: [batch_size*num_channels, num_patches, num_features]
+            inputs_reshaped = self.norm(inputs_reshaped)
 
-            inputs = torch.reshape(
-                inputs_reshaped,
-                (
-                    inputs.shape[0],
-                    inputs.shape[1],
-                    inputs.shape[2],
-                    inputs.shape[3],
-                ),
-            )
+            # put back data to the original shape
+            inputs = torch.reshape(inputs_reshaped, inputs.shape)
 
         else:
             inputs = self.norm(inputs)
@@ -484,23 +475,14 @@ class PatchMixerBlock(nn.Module):
         hidden_state = self.norm(hidden_state)
 
         if self.config.self_attn:
-            hidden_state_reshaped = hidden_state
-            hidden_state_reshaped = torch.reshape(
-                hidden_state,
-                (hidden_state.shape[0] * hidden_state.shape[1], hidden_state.shape[2], hidden_state.shape[3]),
-            )
-            #  (batch_size, n_vars, num_patches, num_features)
+            batch_size, n_vars, num_patches, num_features = hidden_state.shape
+            hidden_state_reshaped = hidden_state.reshape(batch_size * n_vars, num_patches, num_features)
 
             x_attn, _, _ = self.self_attn_layer(hidden_state_reshaped, output_attentions=False)
-
-            x_attn = torch.reshape(
-                x_attn, (hidden_state.shape[0], hidden_state.shape[1], hidden_state.shape[2], hidden_state.shape[3])
-            )
-            #  (batch_size, n_vars, num_patches, num_features) if common_channel
+            x_attn = x_attn.reshape(batch_size, n_vars, num_patches, num_features)
 
         # Transpose so that num_patches is the last dimension
         hidden_state = hidden_state.transpose(2, 3)
-
         hidden_state = self.mlp(hidden_state)
 
         if self.config.gated_attn:
