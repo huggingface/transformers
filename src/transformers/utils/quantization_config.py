@@ -432,7 +432,7 @@ class GPTQConfig(QuantizationConfigMixin):
             if self.disable_exllama is not None:
                 logger.warning(
                     "Using `disable_exllama` is deprecated and will be removed in version 4.37. Use `use_exllama` instead and specify the version with `exllama_version`."
-                    "The value of `use_exllama` will be overwritten by the one you passed in `disable_exllama`. "
+                    "The value of `use_exllama` will be overwritten by `disable_exllama` passed in `GPTQConfig` or stored in your config file."
                 )
                 self.use_exllama = not self.disable_exllama
 
