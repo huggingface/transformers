@@ -2659,6 +2659,10 @@ def _generate_speech(
             outputs = spectrogram
         if output_cross_attentions:
             cross_attentions = torch.cat(cross_attentions, dim=2)
+            if bsz > 1:
+                cross_attentions = cross_attentions.view(
+                    bsz, int(cross_attentions.size(0) / bsz), *cross_attentions.size()[-3:]
+                )
             outputs = (outputs, cross_attentions)
     else:
         # batched return values should also include the spectrogram/waveform lengths
