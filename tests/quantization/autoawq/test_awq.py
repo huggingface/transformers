@@ -75,10 +75,7 @@ class AwqTest(unittest.TestCase):
 
     input_text = "Hello my name is"
 
-    EXPECTED_OUTPUTS = set()
-    EXPECTED_OUTPUTS.add(
-        "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
-    )
+    EXPECTED_OUTPUT ="Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
 
     device_map = "cuda"
 
@@ -101,7 +98,7 @@ class AwqTest(unittest.TestCase):
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
         output = self.quantized_model.generate(**input_ids, max_new_tokens=40)
-        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def test_quantized_model_no_device_map(self):
         """
@@ -112,7 +109,7 @@ class AwqTest(unittest.TestCase):
         quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name).to(torch_device)
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
 
-        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def test_save_pretrained(self):
         """
@@ -125,7 +122,7 @@ class AwqTest(unittest.TestCase):
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
             output = model.generate(**input_ids, max_new_tokens=40)
-            self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def test_raise_quantization(self):
         """
