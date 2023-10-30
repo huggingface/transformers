@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 AWQ method has been introduced in the [*AWQ: Activation-aware Weight Quantization for LLM Compression and Acceleration* paper](https://arxiv.org/abs/2306.00978). With AWQ you can run models in 4-bit precision, while preserving its original quality (i.e. no performance degradation) with a superior throughput that other quantization methods presented below - reaching similar throughput as pure `float16` inference.
 
-We integrated the method for anyone to load and use AWQ weights that are pushed on the Hub or saved on a local path. Note that using AWQ quantization requires to have access to a NVIDIA GPU. CPU inference is not supported yet. 
+We now support inference with any AWQ model, meaning anyone can load and use AWQ weights that are pushed on the Hub or saved locally. Note that using AWQ requires to have access to a NVIDIA GPU. CPU inference is not supported yet. 
 
 ### Quantizing a model
 
