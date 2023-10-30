@@ -554,7 +554,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         image_newline_id: int,
         variable_sized: bool,
         patch_size: Optional[Dict[str, int]] = None,
-    ) -> dict:
+    ) -> FuyuBatchFeature:
         """Process images for model input. In particular, variable-sized images are handled here.
 
         Args:
@@ -668,10 +668,12 @@ class FuyuImageProcessor(BaseImageProcessor):
             image_patch_indices_per_batch.append(per_batch_indices)
             image_patch_indices_per_subsequence.append(per_subsequence_indices)
 
-        return {
-            "images": images,
-            "image_input_ids": batch_image_input_ids,
-            "image_patches": batch_image_patches,
-            "image_patch_indices_per_batch": image_patch_indices_per_batch,
-            "image_patch_indices_per_subsequence": image_patch_indices_per_subsequence,
-        }
+        return FuyuBatchFeature(
+            data={
+                "images": images,
+                "image_input_ids": batch_image_input_ids,
+                "image_patches": batch_image_patches,
+                "image_patch_indices_per_batch": image_patch_indices_per_batch,
+                "image_patch_indices_per_subsequence": image_patch_indices_per_subsequence,
+            }
+        )

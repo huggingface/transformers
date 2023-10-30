@@ -25,7 +25,7 @@ from ...tokenization_utils_base import PaddingStrategy, TruncationStrategy
 from ...utils import TensorType, is_torch_available, is_vision_available, logging, requires_backends
 
 
-if is_torch_available() and is_vision_available():
+if is_torch_available():
     from .image_processing_fuyu import FuyuBatchFeature
 
     if is_vision_available():
