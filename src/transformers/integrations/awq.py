@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 "AWQ (Activation aware Weight Quantization) integration file"
-from ..utils import is_accelerate_available, is_auto_awq_available, is_torch_available
+from ..utils import is_auto_awq_available, is_torch_available
 from ..utils.quantization_config import AwqBackendPackingMethod, AWQLinearVersion
 
 
 if is_torch_available():
     import torch.nn as nn
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 
 def replace_with_awq_linear(
@@ -56,11 +53,6 @@ def replace_with_awq_linear(
 
     backend = quantization_config.backend
 
-    if not is_accelerate_available():
-        raise ValueError(
-            "This method requires `accelerate` to be installed. Please install it with `pip install accelerate`"
-        )
-
     if is_auto_awq_available():
         if backend == AwqBackendPackingMethod.AUTOAWQ:
             from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
@@ -79,29 +71,28 @@ def replace_with_awq_linear(
         if isinstance(module, nn.Linear) and name not in modules_to_not_convert:
             # Check if the current key is not in the `modules_to_not_convert`
             if not any(key in ".".join(current_key_name) for key in modules_to_not_convert):
-                with init_empty_weights():
-                    in_features = module.in_features
-                    out_features = module.out_features
+                in_features = module.in_features
+                out_features = module.out_features
 
-                    if backend == AwqBackendPackingMethod.AUTOAWQ:
-                        target_cls = (
-                            WQLinear_GEMM if quantization_config.version == AWQLinearVersion.GEMM else WQLinear_GEMV
-                        )
-                    else:
-                        target_cls = WQLinear
-
-                    model._modules[name] = target_cls(
-                        w_bit=quantization_config.bits,
-                        group_size=quantization_config.group_size,
-                        in_features=in_features,
-                        out_features=out_features,
-                        bias=module.bias is not None,
-                        dev=module.weight.device,
+                if backend == AwqBackendPackingMethod.AUTOAWQ:
+                    target_cls = (
+                        WQLinear_GEMM if quantization_config.version == AWQLinearVersion.GEMM else WQLinear_GEMV
                     )
-                    has_been_replaced = True
+                else:
+                    target_cls = WQLinear
 
-                    # Force requires grad to False to avoid unexpected errors
-                    model._modules[name].requires_grad_(False)
+                model._modules[name] = target_cls(
+                    w_bit=quantization_config.bits,
+                    group_size=quantization_config.group_size,
+                    in_features=in_features,
+                    out_features=out_features,
+                    bias=module.bias is not None,
+                    dev=module.weight.device,
+                )
+                has_been_replaced = True
+
+                # Force requires grad to False to avoid unexpected errors
+                model._modules[name].requires_grad_(False)
         if len(list(module.children())) > 0:
             _, has_been_replaced = replace_with_awq_linear(
                 module,

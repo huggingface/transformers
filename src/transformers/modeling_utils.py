@@ -3296,10 +3296,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if quantization_config is None:
                 quantization_config = AwqConfig.from_dict(config.quantization_config)
 
-            model, _ = replace_with_awq_linear(
+            model, has_been_replaced = replace_with_awq_linear(
                 model, quantization_config=quantization_config, modules_to_not_convert=modules_to_not_convert
             )
             model._is_quantized_training_enabled = False
+
+            if not has_been_replaced:
+                logger.warning(
+                    "You are loading an AWQ model but no linear modules were found in your model."
+                    " Please double check your model architecture, or submit an issue on github if you think this is"
+                    " a bug."
+                )
 
         if quantization_method_from_config is not None:
             model.quantization_method = quantization_method_from_config

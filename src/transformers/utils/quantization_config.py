@@ -456,8 +456,8 @@ class AwqConfig(QuantizationConfigMixin):
         bits: int,
         group_size: int = 128,
         zero_point: bool = True,
-        version: AWQLinearVersion = "AWQLinearVersion.GEMM",
-        backend: AwqBackendPackingMethod = "AwqBackendPackingMethod.AUTOAWQ",
+        version: AWQLinearVersion = AWQLinearVersion.GEMM,
+        backend: AwqBackendPackingMethod = AwqBackendPackingMethod.AUTOAWQ,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AWQ
