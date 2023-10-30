@@ -124,6 +124,25 @@ class MixedInt8Test(BaseMixedInt8Test):
         gc.collect()
         torch.cuda.empty_cache()
 
+    @unittest.skip("Un-skip once https://github.com/mosaicml/llm-foundry/issues/703 is resolved")
+    def test_get_keys_to_not_convert_trust_remote_code(self):
+        r"""
+        Test the `get_keys_to_not_convert` function with `trust_remote_code` models.
+        """
+        from accelerate import init_empty_weights
+
+        from transformers.integrations.bitsandbytes import get_keys_to_not_convert
+
+        model_id = "mosaicml/mpt-7b"
+        config = AutoConfig.from_pretrained(
+            model_id, trust_remote_code=True, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7"
+        )
+        with init_empty_weights():
+            model = AutoModelForCausalLM.from_config(
+                config, trust_remote_code=True, code_revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7"
+            )
+        self.assertEqual(get_keys_to_not_convert(model), ["transformer.wte"])
+
     def test_get_keys_to_not_convert(self):
         r"""
         Test the `get_keys_to_not_convert` function.
@@ -134,17 +153,6 @@ class MixedInt8Test(BaseMixedInt8Test):
         from transformers.integrations.bitsandbytes import get_keys_to_not_convert
 
         model_id = "mosaicml/mpt-7b"
-        # TODO: to revert once: https://huggingface.co/mosaicml/mpt-7b/discussions/83 is fixed
-        # config = AutoConfig.from_pretrained(
-        #     model_id, trust_remote_code=True, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7"
-        # )
-        # with init_empty_weights():
-        #     model = AutoModelForCausalLM.from_config(
-        #         config, trust_remote_code=True, code_revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7"
-        #     )
-        # self.assertEqual(get_keys_to_not_convert(model), ["transformer.wte"])
-
-        # without trust_remote_code
         config = AutoConfig.from_pretrained(model_id, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7")
         with init_empty_weights():
             model = MptForCausalLM(config)
