@@ -16,11 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Model outputs
 
-All models have outputs that are instances of subclasses of [`~utils.ModelOutput`]. Those are
-data structures containing all the information returned by the model, but that can also be used as tuples or
-dictionaries.
+すべてのモデルには、[`~utils.ModelOutput`] のサブクラスのインスタンスである出力があります。それらは
+モデルによって返されるすべての情報を含むデータ構造ですが、タプルまたは
+辞書。
 
-Let's see how this looks in an example:
+これがどのようになるかを例で見てみましょう。
 
 ```python
 from transformers import BertTokenizer, BertForSequenceClassification
@@ -34,38 +34,38 @@ labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
 outputs = model(**inputs, labels=labels)
 ```
 
-The `outputs` object is a [`~modeling_outputs.SequenceClassifierOutput`], as we can see in the
-documentation of that class below, it means it has an optional `loss`, a `logits`, an optional `hidden_states` and
-an optional `attentions` attribute. Here we have the `loss` since we passed along `labels`, but we don't have
-`hidden_states` and `attentions` because we didn't pass `output_hidden_states=True` or
-`output_attentions=True`.
+`outputs`オブジェクトは[`~modeling_outputs.SequenceClassifierOutput`]である。
+これは、オプションで `loss`、`logits`、オプションで `hidden_states`、オプションで `attentions` 属性を持つことを意味します。
+オプションの `attentions` 属性を持つことを意味する。ここでは、`labels`を渡したので`loss`があるが、`hidden_states`と`attentions`はない。
+`output_hidden_states=True`や`output_attentions=True`を渡していないので、`hidden_states`と`attentions`はない。
+`output_attentions=True`を渡さなかったからだ。
 
 <Tip>
 
-When passing `output_hidden_states=True` you may expect the `outputs.hidden_states[-1]` to match `outputs.last_hidden_states` exactly.
-However, this is not always the case. Some models apply normalization or subsequent process to the last hidden state when it's returned.
+`output_hidden_states=True`を渡すと、`outputs.hidden_states[-1]`が `outputs.last_hidden_states` と正確に一致することを期待するかもしれない。
+しかし、必ずしもそうなるとは限りません。モデルによっては、最後に隠された状態が返されたときに、正規化やその後の処理を適用するものもあります。
 
 </Tip>
 
 
-You can access each attribute as you would usually do, and if that attribute has not been returned by the model, you
-will get `None`. Here for instance `outputs.loss` is the loss computed by the model, and `outputs.attentions` is
-`None`.
+通常と同じように各属性にアクセスできます。その属性がモデルから返されなかった場合は、
+は `None`を取得します。ここで、たとえば`outputs.loss`はモデルによって計算された損失であり、`outputs.attentions`は
+`None`。
 
-When considering our `outputs` object as tuple, it only considers the attributes that don't have `None` values.
-Here for instance, it has two elements, `loss` then `logits`, so
+`outputs`オブジェクトをタプルとして考える場合、`None`値を持たない属性のみが考慮されます。
+たとえば、ここには 2 つの要素、`loss`、次に`logits`があります。
 
 ```python
 outputs[:2]
 ```
 
-will return the tuple `(outputs.loss, outputs.logits)` for instance.
+たとえば、タプル `(outputs.loss, Outputs.logits)` を返します。
 
-When considering our `outputs` object as dictionary, it only considers the attributes that don't have `None`
-values. Here for instance, it has two keys that are `loss` and `logits`.
+`outputs`オブジェクトを辞書として考慮する場合、「None」を持たない属性のみが考慮されます。
+価値観。たとえば、ここには`loss` と `logits`という 2 つのキーがあります。
 
-We document here the generic model outputs that are used by more than one model type. Specific output types are
-documented on their corresponding model page.
+ここでは、複数のモデル タイプで使用される汎用モデルの出力を文書化します。具体的な出力タイプは次のとおりです。
+対応するモデルのページに記載されています。
 
 ## ModelOutput
 

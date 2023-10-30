@@ -48,6 +48,7 @@ Note that GPTQ integration supports for now only text models and you may encount
 GPTQ is a quantization method that requires weights calibration before using the quantized models. If you want to quantize transformers model from scratch, it might take some time before producing the quantized model (~5 min on a Google colab for `facebook/opt-350m` model). 
 
 Hence, there are two different scenarios where you want to use GPTQ-quantized models. The first use case would be to load models that has been already quantized by other users that are available on the Hub, the second use case would be to quantize your model from scratch and save it or push it on the Hub so that other users can also use it.
+
 #### GPTQ Configuration
 
 In order to load and quantize a model, you need to create a [`GPTQConfig`]. You need to pass the number of `bits`, a `dataset` in order to calibrate the quantization and the `tokenizer` of the model in order prepare the dataset.
@@ -59,6 +60,7 @@ gptq_config = GPTQConfig(bits=4, dataset = "c4", tokenizer=tokenizer)
 ```
 
 Note that you can pass your own dataset as a list of string. However, it is highly recommended to use the dataset from the GPTQ paper. 
+
 ```python
 dataset = ["auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."]
 quantization = GPTQConfig(bits=4, dataset = dataset, tokenizer=tokenizer)
@@ -71,14 +73,17 @@ You can quantize a model by using `from_pretrained` and setting the `quantizatio
 ```python
 from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=gptq_config)
+
 ```
 Note that you will need a GPU to quantize a model. We will put the model in the cpu and move the modules back and forth to the gpu in order to quantize them.
 
 If you want to maximize your gpus usage while using cpu offload, you can set `device_map = "auto"`.
+
 ```python
 from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=gptq_config)
 ```
+
 Note that disk offload is not supported. Furthermore, if you are out of memory because of the dataset, you may have to pass `max_memory` in `from_pretained`. Checkout this [guide](https://huggingface.co/docs/accelerate/usage_guides/big_modeling#designing-a-device-map) to learn more about `device_map` and `max_memory`.
 
 <Tip warning={true}>
@@ -95,12 +100,14 @@ tokenizer.push_to_hub("opt-125m-gptq")
 ```
 
 If you want to save your quantized model on your local machine, you can also do it with `save_pretrained`: 
+
 ```python
 quantized_model.save_pretrained("opt-125m-gptq")
 tokenizer.save_pretrained("opt-125m-gptq")
 ```
 
-Note that if you have quantized your model with a `device_map`, make sure to move the entire model to one of your gpus or the `cpu` before saving it. 
+Note that if you have quantized your model with a `device_map`, make sure to move the entire model to one of your gpus or the `cpu` before saving it.
+
 ```python
 quantized_model.to("cpu")
 quantized_model.save_pretrained("opt-125m-gptq")
@@ -117,6 +124,7 @@ model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq")
 ```
 
 If you want to load a model faster and without allocating more memory than needed, the `device_map` argument also works with quantized model. Make sure that you have `accelerate` library installed.
+
 ```python
 from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto")
@@ -336,6 +344,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model = AutoModelForCausalLM.from_pretrained("{your_username}/bloom-560m-8bit", device_map="auto")
 ```
+
 Note that in this case, you don't need to specify the arguments `load_in_8bit=True`, but you need to make sure that `bitsandbytes` and `accelerate` are installed.
 Note also that `device_map` is optional but setting `device_map = 'auto'` is prefered for inference as it will dispatch efficiently the model on the available ressources.
 
@@ -356,6 +365,7 @@ quantization_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
 ```
 
 Let's say you want to load `bigscience/bloom-1b7` model, and you have just enough GPU RAM to fit the entire model except the `lm_head`. Therefore write a custom device_map as follows:
+
 ```python
 device_map = {
     "transformer.word_embeddings": 0,
