@@ -107,7 +107,7 @@ In Computer Vision:
 In Audio:
 - [Automatic Speech Recognition with Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base-960h)
 - [Keyword Spotting with Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks)
-- [Audio Classification with Audio Spectrogram Transformer](https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593)
+- [Audio Classification with an Audio Spectrogram Transformer](https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593)
 
 In Multimodal tasks:
 - [Table Question Answering with TAPAS](https://huggingface.co/google/tapas-base-finetuned-wtq)
