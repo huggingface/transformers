@@ -480,7 +480,7 @@ class AwqConfig(QuantizationConfigMixin):
 
         if self.backend not in [AwqBackendPackingMethod.AUTOAWQ, AwqBackendPackingMethod.LLMAWQ]:
             raise ValueError(
-                f"Only support quantization backend in {AwqBackendPackingMethod.AUTOAWQ} and {AwqBackendPackingMethod.LLMAWQ} - not recognized backend {self.backend}"
+                f"Only supported quantization backends in {AwqBackendPackingMethod.AUTOAWQ} and {AwqBackendPackingMethod.LLMAWQ} - not recognized backend {self.backend}"
             )
 
         if self.backend == AwqBackendPackingMethod.LLMAWQ:
