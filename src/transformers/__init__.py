@@ -388,6 +388,11 @@ _import_structure = {
         "JukeboxTokenizer",
         "JukeboxVQVAEConfig",
     ],
+    "models.kosmos2": [
+        "KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Kosmos2Config",
+        "Kosmos2Processor",
+    ],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.layoutlmv2": [
         "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2052,6 +2057,14 @@ else:
             "JukeboxPreTrainedModel",
             "JukeboxPrior",
             "JukeboxVQVAE",
+        ]
+    )
+    _import_structure["models.kosmos2"].extend(
+        [
+            "KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Kosmos2ForConditionalGeneration",
+            "Kosmos2Model",
+            "Kosmos2PreTrainedModel",
         ]
     )
     _import_structure["models.layoutlm"].extend(
@@ -4576,6 +4589,11 @@ if TYPE_CHECKING:
         JukeboxTokenizer,
         JukeboxVQVAEConfig,
     )
+    from .models.kosmos2 import (
+        KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Kosmos2Config,
+        Kosmos2Processor,
+    )
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.layoutlmv2 import (
         LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6003,6 +6021,12 @@ if TYPE_CHECKING:
             JukeboxPreTrainedModel,
             JukeboxPrior,
             JukeboxVQVAE,
+        )
+        from .models.kosmos2 import (
+            KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Kosmos2ForConditionalGeneration,
+            Kosmos2Model,
+            Kosmos2PreTrainedModel,
         )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -20,7 +20,6 @@ from typing import Dict, List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -343,7 +342,7 @@ class Pix2StructVisionEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self.gradient_checkpointing_func(
+                layer_outputs = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     hidden_states,
                     attention_mask,
@@ -556,11 +555,6 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _set_gradient_checkpointing(self, module: Pix2StructVisionEncoder, gradient_checkpointing_func=None) -> None:
-        if isinstance(module, (Pix2StructVisionEncoder, Pix2StructVisionAttention)):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
     def get_input_embeddings(self):
         return self.embeddings.patch_projection
@@ -1315,11 +1309,6 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
     supports_gradient_checkpointing = True
 
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (Pix2StructTextAttention, Pix2StructTextModel)):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
     def __init__(self, config):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -1491,7 +1480,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
-                layer_outputs = checkpoint(
+                layer_outputs = self._gradient_checkpointing_func(
                     layer_module.forward,
                     hidden_states,
                     extended_attention_mask,
