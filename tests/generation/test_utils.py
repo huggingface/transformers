@@ -1822,6 +1822,53 @@ class GenerationTesterMixin:
                 outputs_from_embeds_wo_ids[:, 1:].tolist(),
             )
 
+    def test_generate_continue_from_past_key_values(self):
+        # Tests that we can continue generating from past key values, returned from a previous `generate` call
+        for model_class in self.all_generative_model_classes:
+            config, inputs_ids, _, _ = self._get_input_ids_and_config()
+
+            # If it doesn't support cache, pass the test
+            if not hasattr(config, "use_cache"):
+                return
+            config.use_cache = True
+
+            model = model_class(config).to(torch_device)
+            model.eval()
+
+            # If "past_key_values" is not returned, pass the test (e.g. RWKV uses a different cache name and format)
+            outputs = model(inputs_ids)
+            if "past_key_values" not in outputs:
+                return
+
+            # Let's force it to always generate to max length
+            config.pad_token_id = config.eos_token_id = -1
+
+            # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
+            outputs = model.generate(inputs_ids, do_sample=False, max_new_tokens=10, return_dict_in_generate=True)
+
+            # Let's generate again, but passing the past key values in between (9 + 1 = 10 tokens)
+            outputs_cached = model.generate(
+                inputs_ids, do_sample=False, max_new_tokens=9, return_dict_in_generate=True
+            )
+            outputs_cached = model.generate(
+                outputs_cached.sequences,  # continue from the 9 tokens generated previously
+                do_sample=False,
+                past_key_values=outputs_cached.past_key_values,
+                max_new_tokens=1,
+                return_dict_in_generate=True,
+            )
+
+            # The two sets should be equal to each other
+            self.assertListEqual(outputs.sequences.tolist(), outputs_cached.sequences.tolist())
+            for layer_idx in range(len(outputs_cached.past_key_values)):
+                for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
+                    self.assertTrue(
+                        torch.allclose(
+                            outputs.past_key_values[layer_idx][kv_idx],
+                            outputs_cached.past_key_values[layer_idx][kv_idx],
+                        )
+                    )
+
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
         num_sequences_in_output = batch_size * num_return_sequences
