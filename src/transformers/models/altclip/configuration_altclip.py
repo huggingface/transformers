@@ -161,12 +161,14 @@ class AltCLIPVisionConfig(PretrainedConfig):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        projection_dim (`<fill_type>`, *optional*, defaults to 512): <fill_docstring>
+        projection_dim (`int`, *optional*, defaults to 512):
+            Dimentionality of text and vision projection layers.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 32):
