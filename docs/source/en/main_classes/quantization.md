@@ -31,7 +31,7 @@ We advise users to look at different existing tools in the ecosystem to quantize
 - Intel neural compressor from Intel - through [`optimum-intel`](https://huggingface.co/docs/optimum/main/en/intel/optimization_inc)
 
 Many other tools might exist in the ecosystem, please feel free to open a PR to add them to the list.
-Currently the integration with 🤗 Transformers is only available for models that has been quantized using `autoawq` library and `llm-awq`. Most of the models quantized with `auto-awq` can be found under [`TheBloke`](https://huggingface.co/TheBloke) namespace of 🤗 Hub, and to quantize models with `llm-awq` please refer to the `convert_to_hf.py` script in the examples folder of [`llm-awq`](https://github.com/mit-han-lab/llm-awq/).
+Currently the integration with 🤗 Transformers is only available for models that have been quantized using `autoawq` library and `llm-awq`. Most of the models quantized with `auto-awq` can be found under [`TheBloke`](https://huggingface.co/TheBloke) namespace of 🤗 Hub, and to quantize models with `llm-awq` please refer to the [`convert_to_hf.py`](https://github.com/mit-han-lab/llm-awq/blob/main/examples/convert_to_hf.py) script in the examples folder of [`llm-awq`](https://github.com/mit-han-lab/llm-awq/).
 
 ### Load a quantized model
 
