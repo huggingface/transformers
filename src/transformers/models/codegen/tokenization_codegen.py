@@ -133,16 +133,20 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
-        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        bos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
+        pad_token (`str`, *optional*):
+            The token used for padding, for example when batching sequences of different lengths.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (CodeGen tokenizer detect beginning of words by the preceding space).
+        add_bos_token (`bool`, *optional*, defaults to `False`):
+            Whether to add a beginning of sequence token at the start of sequences.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

@@ -200,7 +200,7 @@ def parse_args():
         "--use_auth_token",
         type=bool,
         default=None,
-        help="The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`.",
+        help="The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
     )
     parser.add_argument(
         "--trust_remote_code",
@@ -385,7 +385,10 @@ def main():
     args = parse_args()
 
     if args.use_auth_token is not None:
-        warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
         if args.token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         args.token = args.use_auth_token

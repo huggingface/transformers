@@ -47,9 +47,9 @@ class LlamaConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 11008):
             Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
+            Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
+            Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
@@ -87,8 +87,8 @@ class LlamaConfig(PretrainedConfig):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be an float greater than 1. The expected format
-            is `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
+            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
+            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
@@ -184,4 +184,4 @@ class LlamaConfig(PretrainedConfig):
                 f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")
+            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
