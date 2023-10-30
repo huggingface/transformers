@@ -41,8 +41,8 @@ class QuantizationMethod(str, Enum):
 
 
 class AWQLinearVersion(str, Enum):
-    GEMM = "GEMM"
-    GEMV = "GEMV"
+    GEMM = "gemm"
+    GEMV = "gemv"
 
 
 class AwqBackendPackingMethod(str, Enum):
