@@ -453,12 +453,17 @@ class FuyuImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
+        original_image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
+
         if do_resize:
             images = [self.resize(image, size=size, input_data_format=input_data_format) for image in images]
 
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
         image_unpadded_heights = [[image_size[0]] for image_size in image_sizes]
         image_unpadded_widths = [[image_size[1]] for image_size in image_sizes]
+
+        # scale_h is the same as scale_w
+        image_scale_factors = [[resized_size[0] / original_size[0]] for original_size, resized_size in zip(original_image_sizes, image_sizes)]
 
         if do_pad:
             images = [
@@ -490,6 +495,7 @@ class FuyuImageProcessor(BaseImageProcessor):
             "images": [[image] for image in images],
             "image_unpadded_heights": image_unpadded_heights,
             "image_unpadded_widths": image_unpadded_widths,
+            "image_scale_factors": image_scale_factors,
         }
         return FuyuBatchFeature(data=data, tensor_type=return_tensors)
 
