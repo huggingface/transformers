@@ -25,11 +25,11 @@ import requests
 
 from transformers import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
 from transformers.testing_utils import (
-    require_torch, 
-    require_torch_accelerator, 
+    require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
-    require_vision, 
-    slow, 
+    require_vision,
+    slow,
     torch_device,
 )
 from transformers.utils import is_torch_available, is_vision_available

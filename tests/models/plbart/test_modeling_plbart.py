@@ -25,7 +25,7 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
     require_torch_fp16,
-    slow, 
+    slow,
     torch_device,
 )
 from transformers.utils import cached_property

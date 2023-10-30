@@ -24,8 +24,8 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
-    require_torch_fp16,
     require_torch_accelerator,
+    require_torch_fp16,
     require_vision,
     slow,
     torch_device,

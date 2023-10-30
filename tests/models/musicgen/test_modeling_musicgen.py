@@ -29,10 +29,10 @@ from transformers import (
     T5Config,
 )
 from transformers.testing_utils import (
-    is_torch_available, 
-    require_torch, 
+    is_torch_available,
+    require_torch,
     require_torch_fp16,
-    slow, 
+    slow,
     torch_device,
 )
 from transformers.utils import cached_property

@@ -34,9 +34,9 @@ from transformers.models.bark.generation_configuration_bark import (
 )
 from transformers.testing_utils import (
     require_torch,
-    require_torch_fp16, 
-    require_torch_gpu, 
-    slow, 
+    require_torch_fp16,
+    require_torch_gpu,
+    slow,
     torch_device,
 )
 from transformers.utils import cached_property

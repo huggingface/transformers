@@ -21,11 +21,11 @@ import unittest
 
 from transformers import BigBirdPegasusConfig, is_torch_available
 from transformers.testing_utils import (
-    require_sentencepiece, 
-    require_tokenizers, 
-    require_torch, 
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
     require_torch_fp16,
-    slow, 
+    slow,
     torch_device,
 )
 

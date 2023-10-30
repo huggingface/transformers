@@ -21,10 +21,10 @@ from parameterized import parameterized
 
 from transformers import FSMTConfig, is_torch_available
 from transformers.testing_utils import (
-    require_sentencepiece, 
-    require_tokenizers, 
-    require_torch, 
-    require_torch_fp16, 
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    require_torch_fp16,
     slow,
     torch_device,
 )

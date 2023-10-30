@@ -19,9 +19,9 @@ import unittest
 from transformers import MegaConfig, is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
-    require_torch, 
+    require_torch,
     require_torch_fp16,
-    slow, 
+    slow,
     torch_device,
 )
 

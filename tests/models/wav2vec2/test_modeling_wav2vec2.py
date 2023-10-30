@@ -28,8 +28,8 @@ from datasets import load_dataset
 
 from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
-    backend_empty_cache,
     CaptureLogger,
+    backend_empty_cache,
     is_pt_flax_cross_test,
     is_pyctcdecode_available,
     is_torchaudio_available,

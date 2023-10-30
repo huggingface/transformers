@@ -21,11 +21,11 @@ from huggingface_hub.hf_api import list_models
 
 from transformers import MarianConfig, is_torch_available
 from transformers.testing_utils import (
-    require_sentencepiece, 
-    require_tokenizers, 
-    require_torch, 
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
     require_torch_fp16,
-    slow, 
+    slow,
     torch_device,
 )
 from transformers.utils import cached_property

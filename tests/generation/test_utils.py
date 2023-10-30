@@ -23,10 +23,10 @@ import numpy as np
 
 from transformers import is_torch_available, pipeline
 from transformers.testing_utils import (
-    require_accelerate, 
-    require_torch, 
-    require_torch_multi_accelerator, 
-    slow, 
+    require_accelerate,
+    require_torch,
+    require_torch_multi_accelerator,
+    slow,
     torch_device,
 )
 

@@ -21,7 +21,14 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers import Wav2Vec2ConformerConfig, is_torch_available
-from transformers.testing_utils import is_pt_flax_cross_test, require_torch, require_torch_accelerator, require_torch_fp16, slow, torch_device
+from transformers.testing_utils import (
+    is_pt_flax_cross_test,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (

@@ -24,10 +24,10 @@ from pytest import mark
 from transformers import AutoTokenizer, MistralConfig, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
-    require_flash_attn, 
-    require_torch, 
-    require_torch_gpu, 
-    slow, 
+    require_flash_attn,
+    require_torch,
+    require_torch_gpu,
+    slow,
     torch_device,
 )
 

@@ -17,10 +17,10 @@ from unittest import skip
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
-    require_torch, 
-    require_torch_accelerator, 
+    require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
-    slow, 
+    slow,
     torch_device,
 )
 from transformers.trainer_utils import set_seed

@@ -23,10 +23,10 @@ from parameterized import parameterized
 from transformers import PersimmonConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     backend_empty_cache,
-    require_torch, 
-    require_torch_accelerator, 
-    require_torch_fp16, 
-    slow, 
+    require_torch,
+    require_torch_accelerator,
+    require_torch_fp16,
+    slow,
     torch_device,
 )
 

@@ -25,9 +25,9 @@ import requests
 
 from transformers import BlipConfig, BlipTextConfig, BlipVisionConfig
 from transformers.testing_utils import (
-    require_torch, 
+    require_torch,
     require_torch_accelerator,
-    require_torch_fp16, 
+    require_torch_fp16,
     require_vision,
     slow,
     torch_device,

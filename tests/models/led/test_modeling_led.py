@@ -22,11 +22,11 @@ import unittest
 from transformers import LEDConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
-    require_sentencepiece, 
-    require_tokenizers, 
-    require_torch, 
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
     require_torch_fp16,
-    slow, 
+    slow,
     torch_device,
 )
 from transformers.utils import cached_property

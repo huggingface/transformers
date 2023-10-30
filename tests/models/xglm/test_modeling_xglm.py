@@ -20,10 +20,10 @@ import unittest
 
 from transformers import XGLMConfig, is_torch_available
 from transformers.testing_utils import (
-    require_torch, 
-    require_torch_accelerator, 
+    require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
-    slow, 
+    slow,
     torch_device,
 )
 

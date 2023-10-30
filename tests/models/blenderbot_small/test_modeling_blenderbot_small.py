@@ -20,8 +20,8 @@ import unittest
 from transformers import BlenderbotSmallConfig, is_torch_available
 from transformers.testing_utils import (
     require_torch,
-    require_torch_fp16, 
-    slow, 
+    require_torch_fp16,
+    slow,
     torch_device,
 )
 from transformers.utils import cached_property
