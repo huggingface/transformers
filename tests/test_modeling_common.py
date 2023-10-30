@@ -540,6 +540,9 @@ class ModelTesterMixin:
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
+        if not self.model_tester.is_training:
+            return
+
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.use_cache = False
@@ -596,21 +599,15 @@ class ModelTesterMixin:
             loss.backward()
 
     def test_training_gradient_checkpointing(self):
-        if not self.model_tester.is_training:
-            return
         # Scenario - 1 default behaviour
         self.check_training_gradient_checkpointing()
 
     def test_training_gradient_checkpointing_use_reentrant(self):
-        if not self.model_tester.is_training:
-            return
         # Scenario - 2 with `use_reentrant=True` - this is the default value that is used in pytorch's
         # torch.utils.checkpoint.checkpoint
         self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
 
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        if not self.model_tester.is_training:
-            return
         # Scenario - 3 with `use_reentrant=False` pytorch suggests users to use this value for
         # future releases: https://pytorch.org/docs/stable/checkpoint.html
         self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": False})
