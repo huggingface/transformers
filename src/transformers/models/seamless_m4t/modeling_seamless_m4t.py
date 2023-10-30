@@ -1813,7 +1813,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_outputs = self._gradient_checkpointing_func(
                         encoder_layer.forward,
                         hidden_states,
                         attention_mask,
