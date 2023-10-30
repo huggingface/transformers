@@ -53,15 +53,16 @@ def replace_with_awq_linear(
 
     backend = quantization_config.backend
 
-    if is_auto_awq_available():
-        if backend == AwqBackendPackingMethod.AUTOAWQ:
-            from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
-        elif backend == AwqBackendPackingMethod.LLMAWQ:
-            from awq.quantize.qmodule import WQLinear
-    else:
+    if not is_auto_awq_available():
         raise ValueError(
             "AWQ (either `autoawq` or `llmawq`) is not available. Please install it with `pip install autoawq` or check out the installation guide in https://github.com/mit-han-lab/llm-awq"
         )
+        
+    if backend == AwqBackendPackingMethod.AUTOAWQ:
+        from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
+    elif backend == AwqBackendPackingMethod.LLMAWQ:
+        from awq.quantize.qmodule import WQLinear
+
 
     for name, module in model.named_children():
         if current_key_name is None:
