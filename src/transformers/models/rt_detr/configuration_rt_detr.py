@@ -25,7 +25,7 @@ RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "rafaelpadilla/porting_rt_detr": "https://huggingface.co/rafaelpadilla/porting_rt_detr/raw/main/config.json",
 }
 
-
+# TODO: Docstrings (Rafael)
 class RTDetrConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RTDetrModel`]. It is used to instantiate a
@@ -37,76 +37,48 @@ class RTDetrConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        use_timm_backbone (`bool`, *optional*, defaults to `True`):
-            Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
-            API.
-        backbone_config (`PretrainedConfig` or `dict`, *optional*):
-            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
-            case it will default to `ResNetConfig()`.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        num_queries (`int`, *optional*, defaults to 100):
-            Number of object queries, i.e. detection slots. This is the maximal number of objects [`RTDetrModel`] can
-            detect in a single image. For COCO, we recommend 100 queries.
-        d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers.
-        encoder_layers (`int`, *optional*, defaults to 6):
-            Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (`float`, *optional*, defaults to 1):
-            The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
-        auxiliary_loss (`bool`, *optional*, defaults to `False`):
-            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-        position_embedding_type (`str`, *optional*, defaults to `"sine"`):
-            Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
-        backbone (`str`, *optional*, defaults to `"resnet50"`):
-            Name of convolutional backbone to use in case `use_timm_backbone` = `True`. Supports any convolutional
-            backbone from the timm package. For a list of all available models, see [this
-            page](https://rwightman.github.io/pytorch-image-models/#load-a-pretrained-model).
-        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use pretrained weights for the backbone. Only supported when `use_timm_backbone` = `True`.
-        dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
-            `use_timm_backbone` = `True`.
-        class_cost (`float`, *optional*, defaults to 1):
-            Relative weight of the classification error in the Hungarian matching cost.
-        bbox_cost (`float`, *optional*, defaults to 5):
-            Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
-        giou_cost (`float`, *optional*, defaults to 2):
-            Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
-        mask_loss_coefficient (`float`, *optional*, defaults to 1):
-            Relative weight of the Focal loss in the panoptic segmentation loss.
-        dice_loss_coefficient (`float`, *optional*, defaults to 1):
-            Relative weight of the DICE/F-1 loss in the panoptic segmentation loss.
-        bbox_loss_coefficient (`float`, *optional*, defaults to 5):
+        TODO: Missing docstrings
+        num_classes (`int`, *optional*, defaults to 80):
+        num_queries (`int`, *optional*, defaults to 300):
+        position_embed_type (`str`, *optional*, defaults to "sine"):
+        feat_channels (`List[int]`, *optional*, defaults to [512, 1024, 2048]):,
+        num_levels (`int`, *optional*, defaults to 3):
+        num_decoder_points (`int`, *optional*, defaults to 4):
+        num_decoder_layers (`int`, *optional*, defaults to 6):
+        act_decoder (`str`, *optional*, defaults to "relu"):
+        num_denoising (`int`, *optional*, defaults to 100):
+        label_noise_ratio (`float`, *optional*, defaults to 0.5):
+        box_noise_scale (`float`, *optional*, defaults to 1.0):
+        learnt_init_query (`bool`, *optional*, defaults to False):
+        eval_spatial_size  (`Tuple[int, int]`, *optional*, defaults to None):
+            Height and width used during evaluation to generate the bounding box anchors.
+        eval_idx (`int`, *optional*, defaults to -1):
+            Id of the decoder layer used to obtain the logits and bounding boxes.
+        eps (`float`, *optional*, defaults to 1e-2):
+
+        matcher_alpha (`float`, *optional*, defaults to 0.25):
+            Parameter alpha used by the Hungarian Matcher.
+        matcher_gamma (`float`, *optional*, defaults to 2.0):
+            Parameter gamma used by the Hungarian Matcher.
+        matcher_class_cost (`float`, *optional*, defaults to 2.0):
+            The relative weight of the class loss used by the Hungarian Matcher.
+        matcher_bbox_cost (`float`, *optional*, defaults to 5.0):
+            The relative weight of the bounding box loss used by the Hungarian Matcher.
+        matcher_giou_cost (`float`, *optional*, defaults to 2.0):
+            The relative weight of the giou loss of used by the Hungarian Matcher.
+        use_focal_loss (`bool`, *optional*, defaults to True):
+            Parameter informing if focal focal should be used.
+        aux_loss (`bool`, *optional*, defaults to True):
+            Parameter informing if auxiliar focal should be used.
+        focal_loss_alpha (`float`, *optional*, defaults to 0.75):
+            Parameter alpha used to compute the focal loss.
+        focal_loss_gamma (`float`, *optional*, defaults to 2.0):
+            Parameter gamma used to compute the focal loss.
+        weight_loss_vfl (`float`, *optional*, defaults to 1):
+            Relative weight of the varifocal loss in the object detection loss.
+        weight_loss_bbox (`float`, *optional*, defaults to 5):
             Relative weight of the L1 bounding box loss in the object detection loss.
-        giou_loss_coefficient (`float`, *optional*, defaults to 2):
+        weight_loss_giou (`float`, *optional*, defaults to 2):
             Relative weight of the generalized IoU loss in the object detection loss.
         eos_coefficient (`float`, *optional*, defaults to 0.1):
             Relative classification weight of the 'no-object' class in the object detection loss.
@@ -136,23 +108,11 @@ class RTDetrConfig(PretrainedConfig):
         self,
         # General
         initializer_range=0.02,
-        # PResNet config:
-        depth=50,
-        variant="d",
-        num_stages=4,
-        return_idx=[0, 1, 2, 3],
-        act_presnet="relu",
-        freeze_at=-1,
-        freeze_norm=True,
-        pretrained=True,
-        is_encoder_decoder=True,
-        block_nums=[3, 4, 6, 3],  # TODO Rafael: OC depends on the depth
-        # 18: [2, 2, 2, 2],
-        # 34: [3, 4, 6, 3],
-        # 50: [3, 4, 6, 3],
-        # 101: [3, 4, 23, 3],
-        # 152: [3, 8, 36, 3],
-        # HybridEncoder config:
+        # Backbone
+        backbone="resnet50d",
+        out_indices=[2,3,4], 
+        freeze_batch_norm_2d=True,
+        # encoder HybridEncoder
         in_channels=[512, 1024, 2048],
         feat_strides=[8, 16, 32],
         hidden_dim=256,
@@ -167,7 +127,7 @@ class RTDetrConfig(PretrainedConfig):
         depth_mult=1.0,
         act_encoder="silu",
         eval_size=None,
-        # RTDetrTransformer config:
+        # decoder RTDetrTransformer
         num_classes=80,
         num_queries=300,
         position_embed_type="sine",
@@ -186,16 +146,16 @@ class RTDetrConfig(PretrainedConfig):
         # Loss
         matcher_alpha=0.25,
         matcher_gamma=2.0,
-        matcher_class_cost=2,
-        matcher_bbox_cost=5,
-        matcher_giou_cost=2,
+        matcher_class_cost=2.0,
+        matcher_bbox_cost=5.0,
+        matcher_giou_cost=2.0,
         use_focal_loss=True,
         aux_loss=True,
         focal_loss_alpha=0.75,
         focal_loss_gamma=2.0,
-        weight_loss_vfl=1,
-        weight_loss_bbox=5,
-        weight_loss_giou=2,
+        weight_loss_vfl=1.0,
+        weight_loss_bbox=5.0,
+        weight_loss_giou=2.0,
         eos_coefficient=0.1,
         **kwargs,
     ):
@@ -204,16 +164,9 @@ class RTDetrConfig(PretrainedConfig):
 
         self.initializer_range = initializer_range
         # backbone
-        self.depth = depth
-        self.variant = variant
-        self.num_stages = num_stages
-        self.return_idx = return_idx
-        self.act_presnet = act_presnet
-        self.freeze_at = freeze_at
-        self.freeze_norm = freeze_norm
-        self.pretrained = pretrained
-        self.is_encoder_decoder = is_encoder_decoder
-        self.block_nums = block_nums
+        self.backbone = backbone
+        self.out_indices = out_indices
+        self.freeze_batch_norm_2d = freeze_batch_norm_2d
         # encoder
         self.in_channels = in_channels
         self.feat_strides = feat_strides
@@ -259,4 +212,4 @@ class RTDetrConfig(PretrainedConfig):
         self.weight_loss_bbox = weight_loss_bbox
         self.weight_loss_giou = weight_loss_giou
         self.eos_coefficient = eos_coefficient
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        super().__init__(**kwargs)

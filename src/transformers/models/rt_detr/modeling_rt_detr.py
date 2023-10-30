@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 from collections import OrderedDict
 import torch.nn.functional as F
-
+from transformers import TimmBackbone, TimmBackboneConfig
 import torch
 from torch import nn, Tensor
 
@@ -497,7 +497,8 @@ class RTDetrFrozenBatchNorm2d(nn.Module):
         self.register_buffer("bias", torch.zeros(n))
         self.register_buffer("running_mean", torch.zeros(n))
         self.register_buffer("running_var", torch.ones(n))
-
+        self.epsilon = 1e-5
+        
     def _load_from_state_dict(
         self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
     ):
@@ -516,8 +517,7 @@ class RTDetrFrozenBatchNorm2d(nn.Module):
         bias = self.bias.reshape(1, -1, 1, 1)
         running_var = self.running_var.reshape(1, -1, 1, 1)
         running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
+        scale = weight * (running_var + self.epsilon).rsqrt()
         bias = bias - running_mean * scale
         return x * scale + bias
 
@@ -556,96 +556,6 @@ def deformable_attention_core_func(value, value_spatial_shapes, sampling_locatio
     )
 
     return output.permute(0, 2, 1)
-
-
-class PResNet(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        block_nums = config.block_nums
-        variant = config.variant
-        act_presnet = config.act_presnet
-        depth = config.depth
-        num_stages = config.num_stages
-        return_idx = config.return_idx
-        freeze_at = config.freeze_at
-        freeze_norm = config.freeze_norm
-        channels_in = 64
-        if variant in ["c", "d"]:
-            conv_def = [
-                [3, channels_in // 2, 3, 2, "conv1_1"],
-                [channels_in // 2, channels_in // 2, 3, 1, "conv1_2"],
-                [channels_in // 2, channels_in, 3, 1, "conv1_3"],
-            ]
-        else:
-            conv_def = [[3, channels_in, 7, 2, "conv1_1"]]
-
-        self.conv1 = nn.Sequential(
-            OrderedDict(
-                [
-                    (_name, ConvNormLayer(c_in, c_out, k, s, activation=act_presnet))
-                    for c_in, c_out, k, s, _name in conv_def
-                ]
-            )
-        )
-
-        channels_out_list = [64, 128, 256, 512]
-        block = BottleNeck if depth >= 50 else BasicBlock
-
-        _out_channels = [block.expansion * v for v in channels_out_list]
-        _out_strides = [4, 8, 16, 32]
-
-        self.res_layers = nn.ModuleList()
-        for i in range(num_stages):
-            stage_num = i + 2
-            self.res_layers.append(
-                Blocks(
-                    block,
-                    channels_in,
-                    channels_out_list[i],
-                    block_nums[i],
-                    stage_num,
-                    activation=act_presnet,
-                    variant=variant,
-                )
-            )
-            channels_in = _out_channels[i]
-
-        self.return_idx = return_idx
-        self.out_channels = [_out_channels[_i] for _i in return_idx]
-        self.out_strides = [_out_strides[_i] for _i in return_idx]
-
-        if freeze_at >= 0:
-            self._freeze_parameters(self.conv1)
-            for i in range(min(freeze_at, num_stages)):
-                self._freeze_parameters(self.res_layers[i])
-
-        if freeze_norm:
-            self._freeze_norm(self)
-
-    def _freeze_parameters(self, m: nn.Module):
-        for p in m.parameters():
-            p.requires_grad = False
-
-    def _freeze_norm(self, m: nn.Module):
-        if isinstance(m, nn.BatchNorm2d):
-            m = RTDetrFrozenBatchNorm2d(m.num_features)
-        else:
-            for name, child in m.named_children():
-                _child = self._freeze_norm(child)
-                if _child is not child:
-                    setattr(m, name, _child)
-        return m
-
-    def forward(self, x):
-        conv1 = self.conv1(x)
-        x = F.max_pool2d(conv1, kernel_size=3, stride=2, padding=1)
-        outs = []
-        for idx, stage in enumerate(self.res_layers):
-            x = stage(x)
-            if idx in self.return_idx:
-                outs.append(x)
-        return outs
 
 
 class TransformerEncoderLayer(nn.Module):
@@ -1780,9 +1690,16 @@ class HybridEncoder(RTDetrPreTrainedModel):
 class RTDetrModel(RTDetrPreTrainedModel):
     def __init__(self, config: RTDetrConfig):
         super().__init__(config)
-
-        self.backbone = PResNet(config)
+        
+        # backbone
+        backbone_name = config.backbone
+        backbone_out_indices = config.out_indices
+        backbone_freeze_batch_norm_2d = config.freeze_batch_norm_2d
+        backbone_config = TimmBackboneConfig(backbone=backbone_name, out_indices=backbone_out_indices, freeze_batch_norm_2d=backbone_freeze_batch_norm_2d)
+        self.backbone = TimmBackbone(backbone_config)
+        # enconder
         self.encoder = HybridEncoder(config)
+        # decoder
         self.decoder = RTDetrTransformer(config)
 
         # Initialize weights and apply final processing
@@ -1836,7 +1753,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         features = self.backbone(pixel_values) 
-        encoder_outputs = self.encoder(features)
+        encoder_outputs = self.encoder(features["feature_maps"])
         outputs = self.decoder(encoder_outputs)
         
         pred_boxes = outputs["pred_boxes"]
