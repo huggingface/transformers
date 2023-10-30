@@ -168,7 +168,7 @@ class Dinov2ModelTester:
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
         self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, self.seq_length - 1, self.hidden_size]
+            list(result.feature_maps[0].shape), [self.batch_size, self.seq_length, self.hidden_size]
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
