@@ -33,20 +33,20 @@ class AwqConfigTest(unittest.TestCase):
         Simple test that checks if a user passes a wrong backend an error is raised
         """
         # This should work fine
-        _ = AwqConfig(w_bit=4)
+        _ = AwqConfig(bits=4)
 
         with self.assertRaises(ValueError):
-            AwqConfig(w_bit=4, backend="")
+            AwqConfig(bits=4, backend="")
 
         # LLMAWQ does not work on a T4
         with self.assertRaises(ValueError):
-            AwqConfig(w_bit=4, backend="llm-awq")
+            AwqConfig(bits=4, backend="llm-awq")
 
     def test_to_dict(self):
         """
         Simple test that checks if one uses a config and converts it to a dict, the dict is the same as the config object
         """
-        quantization_config = AwqConfig(w_bit=4)
+        quantization_config = AwqConfig(bits=4)
         config_to_dict = quantization_config.to_dict()
 
         for key in config_to_dict:
@@ -56,10 +56,10 @@ class AwqConfigTest(unittest.TestCase):
         """
         Simple test that checks if one uses a dict and converts it to a config object, the config object is the same as the dict
         """
-        dict = {"w_bit": 2, "zero_point": False, "backend": "autoawq"}
+        dict = {"bits": 2, "zero_point": False, "backend": "autoawq"}
         quantization_config = AwqConfig.from_dict(dict)
 
-        self.assertEqual(dict["w_bit"], quantization_config.w_bit)
+        self.assertEqual(dict["bits"], quantization_config.bits)
         self.assertEqual(dict["zero_point"], quantization_config.zero_point)
         self.assertEqual(dict["backend"], quantization_config.backend)
 
@@ -128,7 +128,7 @@ class AwqTest(unittest.TestCase):
         """
         Simple test that checks if one passes a quantization config to quantize a model, it raises an error
         """
-        quantization_config = AwqConfig(w_bit=4)
+        quantization_config = AwqConfig(bits=4)
 
         with self.assertRaises(ValueError) as context:
             _ = AutoModelForCausalLM.from_pretrained(

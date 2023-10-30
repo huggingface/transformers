@@ -438,9 +438,9 @@ class AwqConfig(QuantizationConfigMixin):
     loaded using `auto-awq` library awq quantization relying on auto_awq backend.
 
     Args:
-        w_bit (`int`):
+        bits (`int`):
             The number of bits to quantize to.
-        q_group_size (`int`, *optional*, defaults to 128):
+        group_size (`int`, *optional*, defaults to 128):
             The group size to use for quantization. Recommended value is 128 and -1 uses per-column quantization.
         zero_point (`bool`, *optional*, defaults to `True`):
             Whether to use zero point quantization.
@@ -453,8 +453,8 @@ class AwqConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        w_bit: int,
-        q_group_size: int = 128,
+        bits: int,
+        group_size: int = 128,
         zero_point: bool = True,
         version: str = "GEMM",
         backend: str = "autoawq",
@@ -462,8 +462,8 @@ class AwqConfig(QuantizationConfigMixin):
     ):
         self.quant_method = QuantizationMethod.AWQ
 
-        self.w_bit = w_bit
-        self.q_group_size = q_group_size
+        self.bits = bits
+        self.group_size = group_size
         self.zero_point = zero_point
         self.version = version
         self.backend = backend
