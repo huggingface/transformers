@@ -632,7 +632,7 @@ class FuyuProcessor(ProcessorMixin):
                 top, left, bottom, right = [2 * int(float(c)/scale) for c in coords]
 
                 # Replace the IDs so they get detokenized right
-                replacement = f" <box>{top}, {left}, {bottom}, {right}</box>"
+                replacement = f" {TEXT_REPR_BBOX_OPEN}{top}, {left}, {bottom}, {right}{TEXT_REPR_BBOX_CLOSE}"
                 replacement = self.tokenizer.tokenize(replacement)[1:]
                 replacement = self.tokenizer.convert_tokens_to_ids(replacement)
                 replacement = torch.tensor(replacement).to(tokens)
@@ -654,7 +654,7 @@ class FuyuProcessor(ProcessorMixin):
                 x, y = [2 * int(float(c)/scale) for c in coords]
 
                 # Replace the IDs so they get detokenized right
-                replacement = f" <point>{x}, {y}</point>"
+                replacement = f" {TEXT_REPR_POINT_OPEN}{x}, {y}{TEXT_REPR_POINT_CLOSE}"
                 replacement = self.tokenizer.tokenize(replacement)[1:]
                 replacement = self.tokenizer.convert_tokens_to_ids(replacement)
                 replacement = torch.tensor(replacement).to(tokens)
