@@ -103,7 +103,7 @@ class SummarizationPipelineTests(unittest.TestCase):
     @require_torch
     @slow
     def test_integration_torch_summarization(self):
-        summarizer = pipeline(task="summarization", device="{}:0".format(torch_device))
+        summarizer = pipeline(task="summarization", device=torch_device)
         cnn_article = (
             " (CNN)The Palestinian Authority officially became the 123rd member of the International Criminal Court on"
             " Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian territories. The"

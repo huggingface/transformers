@@ -132,7 +132,7 @@ class ConversationalPipelineTests(unittest.TestCase):
     @slow
     def test_integration_torch_conversation(self):
         # When
-        conversation_agent = pipeline(task="conversational", device="{}:0".format(torch_device))
+        conversation_agent = pipeline(task="conversational", device=torch_device)
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         conversation_2 = Conversation("What's the last book you have read?")
         # Then
@@ -164,9 +164,7 @@ class ConversationalPipelineTests(unittest.TestCase):
     @slow
     def test_integration_torch_conversation_truncated_history(self):
         # When
-        conversation_agent = pipeline(
-            task="conversational", min_length_for_response=24, device="{}:0".format(torch_device)
-        )
+        conversation_agent = pipeline(task="conversational", min_length_for_response=24, device=torch_device)
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         # Then
         self.assertEqual(len(conversation_1.past_user_inputs), 1)
@@ -372,9 +370,7 @@ These are just a few of the many attractions that Paris has to offer. With so mu
         # When
         tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
         model = AutoModelForSeq2SeqLM.from_pretrained("facebook/blenderbot_small-90M")
-        conversation_agent = ConversationalPipeline(
-            model=model, tokenizer=tokenizer, device="{}:0".format(torch_device)
-        )
+        conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer, device=torch_device)
 
         conversation_1 = Conversation("My name is Sarah and I live in London")
         conversation_2 = Conversation("Going to the movies tonight, What movie would you recommend? ")

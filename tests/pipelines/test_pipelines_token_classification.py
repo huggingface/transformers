@@ -398,7 +398,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         sentence = "This is dummy sentence"
         ner = pipeline(
             "token-classification",
-            device="{}:0".format(torch_device),
+            device=torch_device,
             aggregation_strategy=AggregationStrategy.SIMPLE,
         )
 

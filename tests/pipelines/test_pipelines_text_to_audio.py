@@ -118,9 +118,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_conversion_additional_tensor(self):
-        speech_generator = pipeline(
-            task="text-to-audio", model="suno/bark-small", framework="pt", device="{}:0".format(torch_device)
-        )
+        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt", device=torch_device)
         processor = AutoProcessor.from_pretrained("suno/bark-small")
 
         forward_params = {

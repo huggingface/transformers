@@ -113,7 +113,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
             "visual-question-answering",
             model="hf-internal-testing/tiny-random-Blip2ForConditionalGeneration",
             model_kwargs={"torch_dtype": torch.float16},
-            device="{}:0".format(torch_device),
+            device=torch_device,
         )
         self.assertEqual(vqa_pipeline.model.device, torch.device("{}:0".format(torch_device)))
         self.assertEqual(vqa_pipeline.model.language_model.dtype, torch.float16)
@@ -155,7 +155,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
             "visual-question-answering",
             model="Salesforce/blip2-opt-2.7b",
             model_kwargs={"torch_dtype": torch.float16},
-            device="{}:0".format(torch_device),
+            device=torch_device,
         )
         self.assertEqual(vqa_pipeline.model.device, torch.device("{}:0".format(torch_device)))
         self.assertEqual(vqa_pipeline.model.language_model.dtype, torch.float16)

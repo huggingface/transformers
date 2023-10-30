@@ -327,7 +327,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
         pipe = pipeline(
             model="hf-internal-testing/tiny-random-bloom",
-            device="{}:0".format(torch_device),
+            device=torch_device,
             torch_dtype=torch.float16,
         )
         pipe("This is a test")

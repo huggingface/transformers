@@ -171,7 +171,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_whisper_fp16(self):
         speech_recognizer = pipeline(
             model="openai/whisper-base",
-            device="{}:0".format(torch_device),
+            device=torch_device,
             torch_dtype=torch.float16,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
@@ -908,7 +908,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-conformer-rope-large-960h-ft",
-            device="{}:0".format(torch_device),
+            device=torch_device,
             torch_dtype=torch.float16,
             framework="pt",
         )
@@ -1310,7 +1310,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         pipe = pipeline(
             "automatic-speech-recognition",
             model="vasista22/whisper-hindi-large-v2",
-            device="{}:0".format(torch_device),
+            device=torch_device,
         )
         # Original model wasn't trained with timestamps and has incorrect generation config
         pipe.model.generation_config = GenerationConfig.from_pretrained("openai/whisper-large-v2")

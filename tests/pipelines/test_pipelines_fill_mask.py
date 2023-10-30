@@ -153,7 +153,7 @@ class FillMaskPipelineTests(unittest.TestCase):
         pipe = pipeline(
             "fill-mask",
             model="hf-internal-testing/tiny-random-distilbert",
-            device="{}:0".format(torch_device),
+            device=torch_device,
             framework="pt",
         )
 

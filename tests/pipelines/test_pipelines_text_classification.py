@@ -96,13 +96,11 @@ class TextClassificationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_accepts_torch_device(self):
-        import torch
-
         text_classifier = pipeline(
             task="text-classification",
             model="hf-internal-testing/tiny-random-distilbert",
             framework="pt",
-            device=torch.device(torch_device),
+            device=torch_device,
         )
 
         outputs = text_classifier("This is great !")

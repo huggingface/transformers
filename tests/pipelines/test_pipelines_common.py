@@ -549,14 +549,14 @@ class PipelineUtilsTest(unittest.TestCase):
     @require_torch
     @require_torch_accelerator
     def test_pipeline_accelerator(self):
-        pipe = pipeline("text-generation", device="{}:0".format(torch_device))
+        pipe = pipeline("text-generation", device=torch_device)
         _ = pipe("Hello")
 
     @slow
     @require_torch
     @require_torch_accelerator
     def test_pipeline_accelerator_indexed(self):
-        pipe = pipeline("text-generation", device="{}:0".format(torch_device))
+        pipe = pipeline("text-generation", device=torch_device)
         _ = pipe("Hello")
 
     @slow
