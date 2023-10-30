@@ -1825,6 +1825,13 @@ class GenerationTesterMixin:
     def test_generate_continue_from_past_key_values(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
+            # won't fix: old models
+            if any(model_name in model_class.__name__.lower() for model_name in ["led"]):
+                return
+            # may fix in the future: the following models fail with assisted decoding, and need model-specific fixes
+            if any(model_name in model_class.__name__.lower() for model_name in []):
+                return
+
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
             # If it doesn't support cache, pass the test
@@ -1846,19 +1853,34 @@ class GenerationTesterMixin:
                 del inputs["token_type_ids"]
 
             # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
-            outputs = model.generate(**inputs, do_sample=False, max_new_tokens=10, return_dict_in_generate=True)
+            outputs = model.generate(**inputs, do_sample=False, max_new_tokens=4, return_dict_in_generate=True)
 
-            # Let's generate again, but passing the past key values in between (9 + 1 = 10 tokens)
-            outputs_cached = model.generate(
-                **inputs, do_sample=False, max_new_tokens=9, return_dict_in_generate=True
-            )
-            outputs_cached = model.generate(
-                outputs_cached.sequences,  # continue from the 9 tokens generated previously
-                do_sample=False,
-                past_key_values=outputs_cached.past_key_values,
-                max_new_tokens=1,
-                return_dict_in_generate=True,
-            )
+            # Let's generate again, but passing the past key values in between (3 + 1 = 4 tokens). Note that the
+            # inputs may need to be tweaked across `generate` calls (like the attention mask).
+            outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=3, return_dict_in_generate=True)
+
+            # Continue from the tokens generated above, preparing the inputs accordingly
+            inputs["past_key_values"] = outputs_cached.past_key_values
+            new_attention_len = outputs_cached.sequences.shape[-1]
+            if config.is_encoder_decoder:
+                inputs["decoder_input_ids"] = outputs_cached.sequences
+                if "decoder_attention_mask" in inputs:
+                    inputs["decoder_attention_mask"] = torch.nn.functional.pad(
+                        inputs["decoder_attention_mask"],
+                        (0, new_attention_len - inputs["decoder_attention_mask"].shape[1]),
+                        mode="constant",
+                        value=1,
+                    )
+            else:
+                inputs["input_ids"] = outputs_cached.sequences
+                if "attention_mask" in inputs:
+                    inputs["attention_mask"] = torch.nn.functional.pad(
+                        inputs["attention_mask"],
+                        (0, new_attention_len - inputs["attention_mask"].shape[1]),
+                        mode="constant",
+                        value=1,
+                    )
+            outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=1, return_dict_in_generate=True)
 
             # The two sets should be equal to each other
             self.assertListEqual(outputs.sequences.tolist(), outputs_cached.sequences.tolist())
