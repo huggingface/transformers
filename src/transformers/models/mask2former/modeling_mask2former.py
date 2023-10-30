@@ -245,21 +245,6 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.detr.modeling_detr._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, target_seq_len, source_seq_len]`.
-    """
-    batch_size, source_len = mask.size()
-    target_len = target_len if target_len is not None else source_len
-
-    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, target_len, source_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
-
-
 # Adapted from https://github.com/facebookresearch/detectron2/blob/main/projects/PointRend/point_rend/point_features.py
 def sample_point(
     input_features: torch.Tensor, point_coordinates: torch.Tensor, add_dim=False, **kwargs
