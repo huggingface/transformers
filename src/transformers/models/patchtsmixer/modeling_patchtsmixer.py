@@ -575,7 +575,7 @@ class PatchTSMixerLayer(nn.Module):
 
 
 class PatchTSMixerBlock(nn.Module):
-    """The main coputing framework of the `PatchTSMixer` model.
+    """The main computing framework of the `PatchTSMixer` model.
 
     Args:
         config (`PatchTSMixerConfig`, *required*):
@@ -753,7 +753,7 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
     config_class = PatchTSMixerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
         """Initialize weights"""
@@ -764,11 +764,6 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 module.bias.data.zero_()
-
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (PatchTSMixerEncoder)):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 class PatchTSMixerPretrainHead(nn.Module):
