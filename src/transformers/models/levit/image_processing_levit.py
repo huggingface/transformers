@@ -56,7 +56,7 @@ class LevitImageProcessor(BaseImageProcessor):
             edge value `c` is rescaled to `int(c * (256/224))`. The smaller edge of the image will be matched to this
             value i.e, if height > width, then image will be rescaled to `(size["shortest_egde"] * height / width,
             size["shortest_egde"])`. Can be overridden by the `size` parameter in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `3`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `True`):
