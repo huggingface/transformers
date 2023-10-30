@@ -1265,7 +1265,7 @@ class Kosmos2TextTransformer(nn.Module):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self.gradient_checkpointing_func(
+                layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
@@ -1424,11 +1424,6 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
             module.embed_tokens.weight.data.normal_(mean=0.0, std=std)
             if module.embed_tokens.padding_idx is not None:
                 module.embed_tokens.weight.data[module.embed_tokens.padding_idx].zero_()
-
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (Kosmos2TextTransformer, Kosmos2VisionEncoder)):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 class Kosmos2VisionModel(Kosmos2PreTrainedModel):
