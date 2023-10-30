@@ -75,7 +75,7 @@ class AwqTest(unittest.TestCase):
 
     input_text = "Hello my name is"
 
-    EXPECTED_OUTPUT ="Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
+    EXPECTED_OUTPUT = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
 
     device_map = "cuda"
 
