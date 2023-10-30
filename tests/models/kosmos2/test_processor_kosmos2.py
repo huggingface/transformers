@@ -187,9 +187,9 @@ class Kosmos2ProcessorTest(unittest.TestCase):
 
     @require_torch
     def test_full_processor(self):
-        url = "https://huggingface.co/ydshieh/temp-testing-kosmos-2-rename-001/resolve/main/two_dogs.jpg"
+        url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/two_dogs.jpg"
 
-        processor = Kosmos2Processor.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001")
+        processor = Kosmos2Processor.from_pretrained("microsoft/kosmos-2-patch14-224")
 
         # test with different input formats.
         # fmt: off
@@ -434,7 +434,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             [[0, 0] + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[5]) - 1)] * len(batch_image),
         )
 
-        processor = Kosmos2Processor.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001", padding_side="left")
+        processor = Kosmos2Processor.from_pretrained("microsoft/kosmos-2-patch14-224", padding_side="left")
 
         # test with image in batch (left padding)
         outputs = processor(

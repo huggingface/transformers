@@ -38,10 +38,10 @@ The abstract from the paper is the following:
 >>> import requests
 >>> from transformers import AutoProcessor, Kosmos2ForConditionalGeneration
 
->>> model = Kosmos2ForConditionalGeneration.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001")
->>> processor = AutoProcessor.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001")
+>>> model = Kosmos2ForConditionalGeneration.from_pretrained("microsoft/kosmos-2-patch14-224")
+>>> processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
 
->>> url = "https://huggingface.co/ydshieh/temp-testing-kosmos-2-rename-001/resolve/main/snowman.jpg"
+>>> url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> prompt = "<grounding> An image of"
