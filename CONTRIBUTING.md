@@ -29,7 +29,7 @@ However you choose to contribute, please be mindful and respect our
 
 **This guide was heavily inspired by the awesome [scikit-learn guide to contributing](https://github.com/scikit-learn/scikit-learn/blob/main/CONTRIBUTING.md).**
 
-## Ways to contribute
+## Ways to Contribute
 
 There are several ways you can contribute to 🤗 Transformers:
 
@@ -47,17 +47,17 @@ For something slightly more challenging, you can also take a look at the [Good S
 
 > All contributions are equally valuable to the community. 🥰
 
-## Fixing outstanding issues
+## Fixing Outstanding Issues
 
 If you notice an issue with the existing code and have a fix in mind, feel free to [start contributing](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md/#create-a-pull-request) and open a Pull Request!
 
-## Submitting a bug-related issue or feature request
+## Submitting a Bug-related Issue or Feature Request
 
 Do your best to follow these guidelines when submitting a bug-related issue or a feature
 request. It will make it easier for us to come back to you quickly and with good
 feedback.
 
-### Did you find a bug?
+### Did You Find a Bug?
 
 The 🤗 Transformers library is robust and reliable thanks to users who report the problems they encounter.
 
@@ -85,7 +85,7 @@ You can also run the same command from the root of the repository:
 python src/transformers/commands/transformers_cli.py env
 ```
 
-### Do you want a new feature?
+### Do You Want a New Feature?
 
 If there is a new feature you'd like to see in 🤗 Transformers, please open an issue and describe:
 
@@ -101,7 +101,7 @@ If your issue is well written we're already 80% of the way there by the time you
 
 We have added [templates](https://github.com/huggingface/transformers/tree/main/templates) to help you get started with your issue.
 
-## Do you want to implement a new model?
+## Do You Want to Implement a New Model?
 
 New models are constantly released and if you want to implement a new model, please provide the following information
 
@@ -113,7 +113,7 @@ If you are willing to contribute the model yourself, let us know so we can help 
 
 We have added a [detailed guide and templates](https://github.com/huggingface/transformers/tree/main/templates) to help you get started with adding a new model, and we also have a more technical guide for [how to add a model to 🤗 Transformers](https://huggingface.co/docs/transformers/add_new_model).
 
-## Do you want to add documentation?
+## Do You Want to Add Documentation?
 
 We're always looking for improvements to the documentation that make it more clear and accurate. Please let us know how the documentation can be improved such as typos and any content that is missing, unclear or inaccurate. We'll be happy to make the changes or help you make a contribution if you're interested!
 
@@ -268,7 +268,7 @@ You'll need **[Python 3.8]((https://github.com/huggingface/transformers/blob/mai
    branch and push the changes to your fork. They will automatically appear in
    the pull request.
 
-### Pull request checklist
+### Pull Request Checklist
 
 ☐ The pull request title should summarize your contribution.<br>
 ☐ If your pull request addresses an issue, please mention the issue number in the pull
@@ -357,7 +357,7 @@ python -m unittest discover -s tests -t . -v
 python -m unittest discover -s examples -t examples -v
 ```
 
-### Style guide
+### Style Guide
 
 For documentation strings, 🤗 Transformers follows the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html).
 Check our [documentation writing guide](https://github.com/huggingface/transformers/tree/main/docs#writing-documentation---specification)
@@ -380,7 +380,7 @@ One way to run the `make` command on Windows is with MSYS2:
 
 You can now use `make` from any terminal (Powershell, cmd.exe, etc.)! 🎉
 
-### Sync a forked repository with upstream main (the Hugging Face repository)
+### Sync a Forked Repository with Upstream Main (the Hugging Face repository)
 
 When updating the main branch of a forked repository, please follow these steps to avoid pinging the upstream repository which adds reference notes to each upstream PR, and sends unnecessary notifications to the developers involved in these PRs.
 
