@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch GPTBigCode model."""
 import math
-import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -242,7 +241,7 @@ class GPTBigCodeAttention(nn.Module):
         Tuple[torch.Tensor, Optional[torch.Tensor], Tuple[torch.Tensor, ...]],
     ]:
         if "padding_mask" in kwargs:
-            warnings.warn(
+            logger.warning_once(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
             )
 
@@ -315,7 +314,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
         Tuple[torch.Tensor, Optional[torch.Tensor], Tuple[torch.Tensor, ...]],
     ]:
         if "padding_mask" in kwargs:
-            warnings.warn(
+            logger.warning_once(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
             )
 
