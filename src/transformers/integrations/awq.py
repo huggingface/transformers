@@ -39,13 +39,13 @@ def replace_with_awq_linear(
             The model to convert, can be any `torch.nn.Module` instance.
         quantization_config (`AwqConfig`):
             The quantization config object that contains the quantization parameters.
-        modules_to_not_convert (`list`, `optional`):
+        modules_to_not_convert (`list`, *optional*):
             A list of modules to not convert. If a module name is in the list (e.g. `lm_head`), it will not be
             converted.
-        current_key_name (`list`, `optional`):
+        current_key_name (`list`, *optional*):
             A list that contains the current key name. This is used for recursion and should not be passed by the user.
-        has_been_replaced (`bool`, `optional`):
-            A boolean that indicates if the conversion has been successfull or not. This is used for recursion and
+        has_been_replaced (`bool`, *optional*):
+            A boolean that indicates if the conversion has been successful or not. This is used for recursion and
             should not be passed by the user.
     """
     if modules_to_not_convert is None:
