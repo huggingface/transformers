@@ -426,8 +426,8 @@ class FuyuImageProcessor(BaseImageProcessor):
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         patch_size = patch_size if patch_size is not None else self.patch_size
 
-        if isinstance(images, list) and isinstance(images[0], list):
-            raise ValueError("Batch sizes of more than 1 are not yet supported.")
+        if isinstance(images, list) and any(len(elem) >= 2 and isinstance(elem, list) for elem in images):
+            raise ValueError("Multiple images for a single sample are not yet supported.")
 
         images = make_list_of_images(images)
 
