@@ -630,7 +630,7 @@ class TrainingArguments:
         neftune_noise_alpha (`Optional[float]`):
             If not `None`, this will activate NEFTune noise embeddings. This can drastically improve
             model performance for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914)
-            and the [original code](https://github.com/neelsjain/NEFTune)
+            and the [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also `PeftModel` from peft.
     """
 
     framework = "pt"
