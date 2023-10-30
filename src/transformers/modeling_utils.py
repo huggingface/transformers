@@ -2686,7 +2686,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise ValueError(
                     "You cannot pass an `AWQConfig` when loading a model as you can only use AWQ models"
                     " for inference. To quantize transformers models with AWQ algorithm, please refer to our"
-                    " quantization docs."
+                    " quantization docs: https://huggingface.co/docs/transformers/main_classes/quantization "
                 )
 
         if quantization_config is None and (load_in_8bit or load_in_4bit):
