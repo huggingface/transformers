@@ -6,7 +6,6 @@ deps = {
     "accelerate": "accelerate>=0.20.3",
     "av": "av==9.2.0",
     "beautifulsoup4": "beautifulsoup4",
-    "black": "black~=23.1",
     "codecarbon": "codecarbon==1.2.0",
     "cookiecutter": "cookiecutter==1.7.3",
     "dataclasses": "dataclasses",

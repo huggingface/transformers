@@ -40,10 +40,11 @@ import argparse
 import glob
 import os
 import re
+import tempfile
+from pathlib import Path
 from typing import List, Optional, Tuple
 
-import black
-from doc_builder.style_doc import style_docstrings_in_code
+from ruff.__main__ import find_ruff_bin
 
 from transformers.utils import direct_transformers_import
 
@@ -226,9 +227,10 @@ def get_indent(code: str) -> str:
     return ""
 
 
-def blackify(code: str) -> str:
+def stylify(code: str) -> str:
     """
-    Applies the black part of our `make style` command to some code.
+    Applies the ruff part of our `make style` command to some code.
+    As `ruff` does not provide a python api this cannot be done on the fly.
 
     Args:
         code (`str`): The code to format.
@@ -239,9 +241,14 @@ def blackify(code: str) -> str:
     has_indent = len(get_indent(code)) > 0
     if has_indent:
         code = f"class Bla:\n{code}"
-    mode = black.Mode(target_versions={black.TargetVersion.PY37}, line_length=119)
-    result = black.format_str(code, mode=mode)
-    result, _ = style_docstrings_in_code(result)
+
+    # Format with ruff
+    with tempfile.TemporaryDirectory() as tmpdir:
+        filepath = Path(tmpdir) / "__init__.py"
+        filepath.write_text(code)
+        ruff_bin = find_ruff_bin()
+        os.spawnv(os.P_WAIT, ruff_bin, ["ruff format", f"{str(filepath)}","--fix", "--quiet", "--ignore","F821"])
+        result = filepath.read_text()
     return result[len("class Bla:\n") :] if has_indent else result
 
 
@@ -352,7 +359,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False) -> Optional[List[
                     theoretical_code = re.sub(obj1.lower(), obj2.lower(), theoretical_code)
                     theoretical_code = re.sub(obj1.upper(), obj2.upper(), theoretical_code)
 
-            theoretical_code = blackify(theoretical_code)
+            theoretical_code = stylify(theoretical_code)
 
         # Test for a diff and act accordingly.
         diff_index = check_codes_match(observed_code, theoretical_code)
