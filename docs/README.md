@@ -303,8 +303,8 @@ to this dataset.
 ## Styling the docstring
 
 We have an automatic script running with the `make style` comment that will make sure that:
-- the docstrings fully take advantage of the line width
-- all code examples are formatted using black, like the code of the Transformers library
+- the docstrings fully take advantage of the line width.
+- all code examples are formatted using black, like the code of the Transformers library.
 
 This script may have some weird failures if you made a syntax mistake or if you uncover a bug. Therefore, it's
 recommended to commit your changes before running `make style`, so you can revert the changes done by that script
