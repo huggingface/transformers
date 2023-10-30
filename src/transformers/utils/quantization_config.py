@@ -444,9 +444,9 @@ class AwqConfig(QuantizationConfigMixin):
             The group size to use for quantization. Recommended value is 128 and -1 uses per-column quantization.
         zero_point (`bool`, *optional*, defaults to `True`):
             Whether to use zero point quantization.
-        version (`str`, *optional*, defaults to `"GEMM"`):
+        version (`AWQLinearVersion`, *optional*, defaults to `"AWQLinearVersion.GEMM"`):
             The version of the quantization algorithm to use.
-        backend (`str`, *optional*, defaults to `"autoawq"`):
+        backend (`AwqBackendPackingMethod`, *optional*, defaults to `"AwqBackendPackingMethod.AUTOAWQ"`):
             The quantization backend. Some models might be quantized using `llm-awq` backend. This is useful for users
             that quantize their own models using `llm-awq` library.
     """
@@ -456,8 +456,8 @@ class AwqConfig(QuantizationConfigMixin):
         bits: int,
         group_size: int = 128,
         zero_point: bool = True,
-        version: str = "GEMM",
-        backend: str = "autoawq",
+        version: AWQLinearVersion = "AWQLinearVersion.GEMM",
+        backend: AwqBackendPackingMethod = "AwqBackendPackingMethod.AUTOAWQ",
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AWQ
