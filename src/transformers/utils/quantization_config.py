@@ -438,14 +438,14 @@ class AwqConfig(QuantizationConfigMixin):
     loaded using `auto-awq` library awq quantization relying on auto_awq backend.
 
     Args:
-        bits (`int`):
+        bits (`int`, *optional*, defaults to 4):
             The number of bits to quantize to.
         group_size (`int`, *optional*, defaults to 128):
             The group size to use for quantization. Recommended value is 128 and -1 uses per-column quantization.
         zero_point (`bool`, *optional*, defaults to `True`):
             Whether to use zero point quantization.
         version (`AWQLinearVersion`, *optional*, defaults to `"AWQLinearVersion.GEMM"`):
-            The version of the quantization algorithm to use.
+            The version of the quantization algorithm to use. GEMM is better for big batch_size (e.g. >= 8) otherwise, GEMV is better (e.g. < 8 )
         backend (`AwqBackendPackingMethod`, *optional*, defaults to `"AwqBackendPackingMethod.AUTOAWQ"`):
             The quantization backend. Some models might be quantized using `llm-awq` backend. This is useful for users
             that quantize their own models using `llm-awq` library.
@@ -453,7 +453,7 @@ class AwqConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        bits: int,
+        bits: int = 4,
         group_size: int = 128,
         zero_point: bool = True,
         version: AWQLinearVersion = AWQLinearVersion.GEMM,
