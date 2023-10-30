@@ -602,16 +602,17 @@ class ModelTesterMixin:
         self.check_training_gradient_checkpointing()
 
     def test_training_gradient_checkpointing_use_reentrant(self):
+        if not self.model_tester.is_training:
+            return
         # Scenario - 2 with `use_reentrant=True` - this is the default value that is used in pytorch's
         # torch.utils.checkpoint.checkpoint
         self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
 
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        # Scenario - 3 with `use_reentrant=False` pytorch suggests users to use this value for
-        # future releases: https://pytorch.org/docs/stable/checkpoint.html
         if not self.model_tester.is_training:
             return
-
+        # Scenario - 3 with `use_reentrant=False` pytorch suggests users to use this value for
+        # future releases: https://pytorch.org/docs/stable/checkpoint.html
         self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": False})
 
     def test_attention_outputs(self):
