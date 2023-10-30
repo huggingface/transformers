@@ -213,8 +213,8 @@ ACT2CLS = {
     "relu2": ReLUSquaredActivation,
     "relu6": nn.ReLU6,
     "sigmoid": nn.Sigmoid,
-    "silu": nn.functional.silu,
-    "swish": nn.functional.silu,
+    "silu": nn.SiLU,
+    "swish": nn.SiLU,
     "tanh": nn.Tanh,
 }
 ACT2FN = ClassInstantier(ACT2CLS)
