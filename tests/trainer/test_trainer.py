@@ -74,6 +74,7 @@ from transformers.testing_utils import (
     require_torchdynamo,
     require_wandb,
     slow,
+    torch_device,
 )
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend
 from transformers.training_args import OptimizerNames
@@ -834,6 +835,41 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, 10)
+
+    def test_neftune(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            "./test", learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=False, neftune_noise_alpha=0.4
+        )
+        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+        trainer.model = trainer._activate_neftune(trainer.model)
+
+        dummy_input = torch.LongTensor([[1, 0, 1]]).to(torch_device)
+
+        emb1 = trainer.model.get_input_embeddings()(dummy_input)
+        emb2 = trainer.model.get_input_embeddings()(dummy_input)
+        self.assertFalse(torch.allclose(emb1, emb2), "Neftune noise is not applied!")
+
+        # redefine the model
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            "./test", learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=False, neftune_noise_alpha=0.4
+        )
+        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+        # Check that it trains without errors
+        trainer.train()
+
+        # Make sure forward pass works fine
+        _ = trainer.model(torch.LongTensor([[1, 0, 1]]).to(torch_device))
+        self.assertTrue(len(trainer.model.get_input_embeddings()._forward_hooks) == 0)
 
     def test_logging_inf_nan_filter(self):
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
