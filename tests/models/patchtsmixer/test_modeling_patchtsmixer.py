@@ -637,8 +637,6 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
         self.assertEqual(output.loss.item() < 100, True)
 
-        # print("loss shape", output.loss, output.loss.shape)
-
     def test_pretrain_full_with_return_dict(self):
         config = PatchTSMixerConfig(**self.__class__.params)
         mdl = PatchTSMixerForPretraining(config)
@@ -847,8 +845,6 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             ref_samples = target_val.unsqueeze(1).expand(-1, params["num_parallel_samples"], -1, -1)
             self.assertEqual(samples.sequences.shape, ref_samples.shape)
 
-        # print("loss shape", output.loss, output.loss.shape)
-
     def test_forecast_full(self):
         self.check_module(task="forecast", params=self.__class__.params, output_hidden_states=True)
         # self.forecast_full_module(self.__class__.params, output_hidden_states = True)
@@ -944,7 +940,6 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
     #         output.last_hidden_state.shape, self.__class__.enc_output.shape
     #     )
     #     self.assertEqual(output.loss.item()<100,True)
-    #     # print("loss shape", output.loss, output.loss.shape)
 
     def test_classification_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
@@ -969,7 +964,6 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         )
         self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
         self.assertEqual(output.loss.item() < 100, True)
-        # print("loss shape", output.loss, output.loss.shape)
 
     def test_classification_full_with_return_dict(self):
         config = PatchTSMixerConfig(**self.__class__.params)
@@ -985,7 +979,6 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         )
         self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
         self.assertEqual(output.loss.item() < 100, True)
-        # print("loss shape", output.loss, output.loss.shape)
 
     def test_regression_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
@@ -1072,5 +1065,3 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
                 -1, params["num_parallel_samples"], -1
             )
             self.assertEqual(samples.sequences.shape, ref_samples.shape)
-
-        # print("loss shape", output.loss, output.loss.shape)
