@@ -380,7 +380,10 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
         input_dtype = query.dtype
         if input_dtype == torch.float32:
             # Handle the case where the model is quantized
-            target_dtype = getattr(self.config, "_pre_quantization_dtype", self.c_attn.weight.dtype)
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.c_attn.weight.dtype
 
             logger.warning_once(
                 f"The input hidden states seems to be silently casted in float32, this might be related to"
