@@ -642,14 +642,10 @@ class Trainer:
         Activates the neftune as presented in this code: https://github.com/neelsjain/NEFTune and paper:
         https://arxiv.org/abs/2310.05914
         """
-        if isinstance(model, PreTrainedModel):
-            embeddings = model.get_input_embeddings()
-        elif is_peft_available() and isinstance(model, PeftModel):
-            embeddings = model.base_model.get_input_embeddings()
+        if is_peft_available() and isinstance(model, PeftModel):
+            embeddings = unwrap_model(model.base_model).get_input_embeddings()
         else:
-            raise ValueError(
-                f"In order to use NEFTune the model must be an instance of `PreTrainedModel` or `PeftModel` - got {model.__class__.__name__}"
-            )
+            embeddings = unwrap_model(model).get_input_embeddings()
 
         embeddings.neftune_noise_alpha = self.neftune_noise_alpha
         hook_handle = embeddings.register_forward_hook(neftune_post_forward_hook)
@@ -1985,12 +1981,10 @@ class Trainer:
         # After training we make sure to retrieve back the original forward pass method
         # for the embedding layer by removing the forward post hook.
         if self.neftune_noise_alpha is not None:
-            if isinstance(self.model, PreTrainedModel):
-                embeddings = self.model.get_input_embeddings()
-            elif is_peft_available() and isinstance(self.model, PeftModel):
-                embeddings = self.model.base_model.get_input_embeddings()
+            if is_peft_available() and isinstance(self.model, PeftModel):
+                embeddings = unwrap_model(self.model.base_model).get_input_embeddings()
             else:
-                raise ValueError("Neftune noise injection is only supported for PreTrainedModel or PeftModel.")
+                embeddings = unwrap_model(self.model).get_input_embeddings()
 
             self.neftune_hook_handle.remove()
             del embeddings.neftune_noise_alpha
