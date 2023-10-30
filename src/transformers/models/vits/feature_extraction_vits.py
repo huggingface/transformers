@@ -26,6 +26,7 @@ from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
 
+MAX_WAV_VALUE = 32768.0	
 
 if is_torch_available():
     import torch
@@ -64,7 +65,9 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         hop_length=256,
         n_fft=1024,
         padding_value=0.0,
-        return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
+        return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask,
+        max_wav_value=32768.0,  # TODO : add to docstrings
+        spec_gain=1, # for now do nothin TODO - it is used for plotting
         **kwargs,
     ):
         super().__init__(
@@ -86,6 +89,9 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
             norm="slaney",
             mel_scale="slaney",
         )
+        self.max_wav_value = max_wav_value
+        self.spec_gain = spec_gain # TODO: add - gain applied when converting amplitude to DB. Defaults to 20.
+        # improvement from coqui repo
 
     def _torch_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
         """
@@ -119,7 +125,7 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         mel_filters = torch.from_numpy(self.mel_filters).type(torch.float32).to(waveform.device)
         mel_spec = mel_filters.T @ magnitudes
 
-        log_spec = torch.clamp(mel_spec, min=1e-5).log()
+        log_spec = torch.clamp(mel_spec, min=1e-5).log() * self.spec_gain
         return magnitudes, log_spec
 
     @staticmethod
@@ -235,6 +241,11 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [np.asarray([raw_speech]).T]
 
+        # if self.max_wav_value is not None:	
+        #     raw_speech = [	
+        #         speech if self.max_wav_value is None else speech / self.max_wav_value for speech in raw_speech	
+        #     ]	
+
         batched_speech = BatchFeature({"input_features": raw_speech})
 
         # convert into correct format for padding
@@ -259,7 +270,7 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_features"] = np.stack(padded_inputs["input_features"], axis=0)
 
         # make sure list is in array format
-        input_features = padded_inputs.get("input_features").transpose(1, 2).transpose(0, 1)
+        input_features = torch.tensor(padded_inputs.get("input_features")).transpose(1, 2).transpose(0, 1)
 
         input_features = self._torch_extract_fbank_features(input_features[0])
 

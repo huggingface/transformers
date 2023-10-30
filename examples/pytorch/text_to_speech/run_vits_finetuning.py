@@ -197,7 +197,18 @@ class ModelArguments:
             )
         },
     )
-
+    
+@dataclass
+class VITSTrainingArguments(TrainingArguments):
+    do_step_schedule_per_epoch: bool = field(
+        default=True,
+        metadata={
+            "help": (
+                "Whether or not to perform scheduler steps per epoch or per steps."
+            )
+        },
+    ) 
+    
 @dataclass
 class DataTrainingArguments:
     """
@@ -296,6 +307,10 @@ class DataTrainingArguments:
     do_lower_case: bool = field(
         default=True,
         metadata={"help": "Whether the input text should be lower cased."},
+    )
+    do_normalize: bool = field(
+        default=False,
+        metadata={"help": "Whether the input waveform should be normalized."},
     )
     language: str = field(
         default=None,
@@ -419,7 +434,9 @@ def training_loop(
     per_device_train_batch_size = args.per_device_train_batch_size if args.per_device_train_batch_size else 1
     total_batch_size = per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
     
-    
+    if args.gradient_checkpointing:
+        model.gradient_checkpointing_enable()
+
     # define train_dataloader and eval_dataloader if relevant
     train_dataloader = None
     if args.do_train:
@@ -491,21 +508,64 @@ def training_loop(
         eps=args.adam_epsilon,
     )
     
-    gen_lr_scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(
-                #args.lr_scheduler_type,
-                optimizer=gen_optimizer,
-                num_warmup_steps=args.get_warmup_steps(args.max_steps * accelerator.num_processes),
-                num_training_steps=args.max_steps * accelerator.num_processes,
-                num_cycles=args.num_train_epochs,
-            )
-    disc_lr_scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(
-                #args.lr_scheduler_type,
-                optimizer=disc_optimizer,
-                num_warmup_steps=args.get_warmup_steps(args.max_steps * accelerator.num_processes),
-                num_training_steps=args.max_steps * accelerator.num_processes,
-                num_cycles=args.num_train_epochs,
-            )
+    #model.text_encoder = torch.compile(model.text_encoder)
+    #model.flow = torch.compile(model.flow)
+    #model.decoder = torch.compile(model.decoder)
+    #model.posterior_encoder = torch.compile(model.posterior_encoder)
+    #model.duration_predictor = torch.compile(model.duration_predictor)
+    #model = torch.compile(model)
+    #discriminator = torch.compile(discriminator)
     
+    #gen_lr_scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(
+    #            #args.lr_scheduler_type,
+    #            optimizer=gen_optimizer,
+    #            num_warmup_steps=args.get_warmup_steps(args.max_steps * accelerator.num_processes),
+    #            num_training_steps=args.max_steps * accelerator.num_processes,
+    #            num_cycles=args.num_train_epochs,
+    #        )
+    num_warmups_steps = args.get_warmup_steps(args.num_train_epochs * accelerator.num_processes) if args.do_step_schedule_per_epoch else args.get_warmup_steps(args.max_steps * accelerator.num_processes)
+    num_training_steps = args.num_train_epochs * accelerator.num_processes if args.do_step_schedule_per_epoch else args.max_steps * accelerator.num_processes
+    
+    if args.do_step_schedule_per_epoch:
+        # Potentially load in the weights and states from a previous save
+        if args.resume_from_checkpoint:
+            if args.resume_from_checkpoint != "latest":
+                path = os.path.basename(args.resume_from_checkpoint)
+            else:
+                # Get the most recent checkpoint
+                dirs = os.listdir(args.output_dir)
+                dirs = [d for d in dirs if d.startswith("checkpoint")]
+                dirs = sorted(dirs, key=lambda x: int(x.split("-")[1]))
+                path = dirs[-1] if len(dirs) > 0 else None
+
+            if path is None:
+                initial_global_step = 0
+            else:
+                global_step = int(path.split("-")[1])
+                initial_global_step = global_step
+        else:
+            initial_global_step = 0
+            
+        first_epoch_lr = initial_global_step // num_update_steps_per_epoch + 1
+            
+        # TODO :add lr_decay to parameters
+        # TODO: fix when last_epoch != -1
+        gen_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(gen_optimizer, gamma=0.999875, last_epoch=first_epoch_lr-2)
+        disc_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(disc_optimizer, gamma=0.999875, last_epoch=first_epoch_lr-2) 
+    else:    
+        gen_lr_scheduler = get_scheduler(
+            args.lr_scheduler_type,
+            optimizer=gen_optimizer,
+            num_warmup_steps=num_warmups_steps if num_warmups_steps > 0 else None,
+            num_training_steps=num_training_steps,
+        )
+        disc_lr_scheduler = get_scheduler(
+            args.lr_scheduler_type,
+            optimizer=disc_optimizer,
+            num_warmup_steps=num_warmups_steps if num_warmups_steps > 0 else None,
+            num_training_steps=num_training_steps,
+        )
+        
     # Prepare everything with our `accelerator`.
     model, discriminator, gen_optimizer, gen_lr_scheduler, disc_optimizer, disc_lr_scheduler, train_dataloader, eval_dataloader = accelerator.prepare(
         model, discriminator, gen_optimizer, gen_lr_scheduler, disc_optimizer, disc_lr_scheduler, train_dataloader, eval_dataloader
@@ -579,9 +639,12 @@ def training_loop(
         
         train_losses = [train_summed_losses, train_loss_duration, train_loss_mel, train_loss_kl, train_loss_fmaps, train_loss_gen, train_loss_disc, train_loss_real_disc, train_loss_fake_disc]
         
-        for step, batch in enumerate(train_dataloader):
-            print(f"batch {step}, process{accelerator.process_index}, waveform {(batch['waveform'].shape)}, tokens {(batch['input_ids'].shape)}... ") 
+        if args.do_step_schedule_per_epoch:
+            disc_lr_scheduler.step()
+            gen_lr_scheduler.step()
 
+        for step, batch in enumerate(train_dataloader):
+            print(f"batch {step}, process{accelerator.process_index}, waveform {(batch['waveform'].shape)}, tokens {(batch['input_ids'].shape)}... ")      
             with accelerator.accumulate(model, discriminator):                
                 model_outputs = model(
                     input_ids = batch["input_ids"],
@@ -619,7 +682,8 @@ def training_loop(
                 if accelerator.sync_gradients:
                     accelerator.clip_grad_norm_(discriminator.parameters(), args.max_grad_norm)
                 disc_optimizer.step()
-                disc_lr_scheduler.step()
+                if not args.do_step_schedule_per_epoch:
+                    disc_lr_scheduler.step()
                 disc_optimizer.zero_grad()
                 
           
@@ -645,7 +709,8 @@ def training_loop(
                 if accelerator.sync_gradients:
                     accelerator.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 gen_optimizer.step()
-                gen_lr_scheduler.step()
+                if not args.do_step_schedule_per_epoch:
+                    gen_lr_scheduler.step()
                 gen_optimizer.zero_grad()
                 
                 print(f"batch {step}, process{accelerator.process_index}, aggregation")
@@ -655,9 +720,7 @@ def training_loop(
                 losses = torch.stack([total_generator_loss, loss_duration, loss_mel, loss_kl, loss_fmaps, loss_gen, loss_disc, loss_real_disc, loss_fake_disc])
                 losses = accelerator.gather(losses.repeat(per_device_train_batch_size,1)).mean(0)
                 
-                for i, total_loss in enumerate(train_losses):
-                    total_loss += losses[i].item()/args.gradient_accumulation_steps
-
+                train_losses = [l + losses[i].item()/args.gradient_accumulation_steps for (i,l) in enumerate(train_losses)]
                 
                 
                 # TODO: gather in right dim and do things
@@ -685,16 +748,8 @@ def training_loop(
                                 "train_loss_fmaps": train_loss_fmaps,
                                 "train_loss_gen": train_loss_gen,}
                                 , step=global_step)
-                train_summed_losses = 0.0
-                train_loss_disc = 0.0
-                train_loss_real_disc = 0.0
-                train_loss_fake_disc = 0.0
-                train_loss_duration = 0.0
-                train_loss_mel = 0.0
-                train_loss_kl = 0.0
-                train_loss_fmaps = 0.0
-                train_loss_gen = 0.0
-
+                train_losses = [0. for _ in train_losses]
+                
                 if global_step % args.save_steps == 0:
                     if accelerator.is_main_process:
                         # _before_ saving state, check if this save would set us over the `save_total_limit`
@@ -747,6 +802,7 @@ def training_loop(
                 generated_audio = []
                 generated_attn = []
                 generated_spec = []
+                target_spec = []
                 for step, batch in enumerate(eval_dataloader):
                     print(f"VALIDATION - batch {step}, process{accelerator.process_index}, waveform {(batch['waveform'].shape)}, tokens {(batch['input_ids'].shape)}... ") 
                     with torch.no_grad():
@@ -778,11 +834,12 @@ def training_loop(
                     # model_outputs = accelerator.gather_for_metrics(model_outputs)  
                     
                     # TODO: make one
-                    print(f"VALIDATION - batch {step}, process{accelerator.process_index}, PADDING AND GATHER... ") 
-                    padded_attn, specs = accelerator.pad_across_processes([attn.squeeze(), latents], dim=1) 
-                    padded_attn, specs = accelerator.pad_across_processes([padded_attn, specs], dim=2)
+                    print(f"VALIDATION - batch {step}, process{accelerator.process_index}, PADDING AND GATHER... ")
+                    specs = feature_extractor._torch_extract_fbank_features(waveform.squeeze(1))[0]
+                    padded_attn, specs, target_specs = accelerator.pad_across_processes([attn.squeeze(), specs, batch["labels"]], dim=1) 
+                    padded_attn, specs, target_specs = accelerator.pad_across_processes([padded_attn, specs, target_specs], dim=2)
                     
-                    generated_train_waveform, padded_attn, specs = accelerator.gather_for_metrics([waveform, padded_attn, specs])
+                    generated_train_waveform, padded_attn, specs, target_specs = accelerator.gather_for_metrics([waveform, padded_attn, specs, target_specs])
 
 
                     if accelerator.is_main_process:
@@ -791,6 +848,7 @@ def training_loop(
                         generated_audio.append(generated_train_waveform.cpu())
                         generated_attn.append(padded_attn.cpu())
                         generated_spec.append(specs.cpu())
+                        target_spec.append(target_specs.cpu())
                         
                                         
                 logger.info("Validation inference done, now evaluating... ")      
@@ -799,14 +857,16 @@ def training_loop(
                     generated_audio = [audio.numpy() for audio_batch in generated_audio  for audio in audio_batch]
                     generated_attn = [attn.numpy() for attn_batch in generated_attn for attn in attn_batch]
                     generated_spec = [attn.numpy() for attn_batch in generated_spec for attn in attn_batch]
+                    target_spec = [attn.numpy() for attn_batch in target_spec for attn in attn_batch]
+                    # diff_spec = [np.abs(spec1-spec2) for (spec1, spec2) in zip(target_spec, generated_spec)]
                     
                     for tracker in accelerator.trackers:
                         if tracker.name == "tensorboard":
-                            # limit to 100, otherwise too heavy
-                            # for (cpt,audio) in enumerate(audios[:min(len(audios), 100)]):
+                            # limit to 50, otherwise too heavy
+                            # for (cpt,audio) in enumerate(audios[:min(len(audios), 50)]):
                             #     tracker.writer.add_audio(f"validation_{cpt}", audio[None,:], epoch, sample_rate=sampling_rate)
 
-                            for (cpt,audio) in enumerate(generated_audio[:min(len(generated_audio), 100)]):
+                            for (cpt,audio) in enumerate(generated_audio[:min(len(generated_audio), 50)]):
                                 tracker.writer.add_audio(f"train_step_audio_{cpt}", audio[None,:], epoch, sample_rate=sampling_rate)                            
                             
                             # TODO: add images
@@ -818,11 +878,13 @@ def training_loop(
                                             #     wandb.Audio(audio, caption=f"Audio epoch {epoch}", sample_rate=sampling_rate)
                                             #     for audio in audios[:min(len(audios), 100)]
                                             # ],
-                                            "alignments" : [wandb.Image(plot_alignment_to_numpy(attn),caption=f"Audio epoch {epoch}") for attn in generated_attn[:min(len(generated_audio), 100)]],
-                                            "spectrogram": [wandb.Image(plot_spectrogram_to_numpy(spec),caption=f"Audio epoch {epoch}") for spec in generated_spec[:min(len(generated_audio), 100)]],
+                                            "alignments" : [wandb.Image(plot_alignment_to_numpy(attn),caption=f"Audio epoch {epoch}") for attn in generated_attn[:min(len(generated_audio), 50)]],
+                                            "spectrogram": [wandb.Image(plot_spectrogram_to_numpy(spec),caption=f"Audio epoch {epoch}") for spec in generated_spec[:min(len(generated_audio), 50)]],
+                                            "target spectrogram": [wandb.Image(plot_spectrogram_to_numpy(spec),caption=f"Audio epoch {epoch}") for spec in target_spec[:min(len(generated_audio), 50)]],
+                                            #"absolute spectrogram diff": [wandb.Image(plot_spectrogram_to_numpy(spec),caption=f"Audio epoch {epoch}") for spec in diff_spec[:min(len(generated_audio), 50)]],
                                             "train generated audio": [
                                                 wandb.Audio(audio[0], caption=f"Audio during train step epoch {epoch}", sample_rate=sampling_rate)
-                                                for audio in generated_audio[:min(len(generated_audio), 100)]
+                                                for audio in generated_audio[:min(len(generated_audio), 50)]
                                             ],
                                         }
                                     )
@@ -884,7 +946,7 @@ def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, VITSTrainingArguments))
 
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
@@ -1061,6 +1123,7 @@ def main():
     model_input_name = tokenizer.model_input_names[0]
     do_lower_case = data_args.do_lower_case
     speaker_id_column_name = data_args.speaker_id_column_name
+    do_normalize = data_args.do_normalize
     
     num_speakers = config.num_speakers
     
@@ -1083,7 +1146,7 @@ def main():
         # process target audio
         sample = batch[audio_column_name]
         audio_inputs = feature_extractor(
-            sample["array"], sampling_rate=sample["sampling_rate"], return_attention_mask=False
+            sample["array"], sampling_rate=sample["sampling_rate"], return_attention_mask=False, do_normalize=do_normalize
         )
         
         batch["labels"] = audio_inputs.get("input_features")[0]
@@ -1110,27 +1173,29 @@ def main():
     if speaker_id_column_name is not None:
         remove_columns = [col for col in remove_columns if col != speaker_id_column_name]
 
+
+    # filter data that is shorter than min_input_length or longer than
+    # max_input_length
+    def is_audio_in_length_range(length):
+        length_ = len(length["array"])
+        return length_ > min_input_length and length_ < max_input_length
+
+    with training_args.main_process_first(desc="filter audio lengths"):
+        vectorized_datasets = raw_datasets.filter(
+            is_audio_in_length_range,
+            num_proc=num_workers,
+            input_columns=[audio_column_name],
+        )
+
     with training_args.main_process_first(desc="dataset map pre-processing"):
-        vectorized_datasets = raw_datasets.map(
+        vectorized_datasets = vectorized_datasets.map(
             prepare_dataset,
             remove_columns=remove_columns,
             num_proc=data_args.preprocessing_num_workers,
             desc="preprocess train dataset",
         )
 
-    # filter data that is shorter than min_input_length or longer than
-    # max_input_length
-    def is_audio_in_length_range(length):
-        return length > min_input_length and length < max_input_length
-
-    with training_args.main_process_first(desc="filter lengths"):
-        # TODO: for now, I'm quite conservative about length-> only small samples
-        vectorized_datasets = vectorized_datasets.filter(
-            is_audio_in_length_range,
-            num_proc=num_workers,
-            input_columns=["waveform_input_length"],
-        )
-        
+    with training_args.main_process_first(desc="filter tokens lengths"):
         vectorized_datasets = vectorized_datasets.filter(
             lambda x: x<data_args.max_tokens_length,
             num_proc=num_workers,
