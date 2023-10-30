@@ -30,9 +30,9 @@ class TrOCRProcessor(ProcessorMixin):
     more information.
 
     Args:
-        image_processor ([`ViTImageProcessor`/`DeiTImageProcessor`]):
+        image_processor ([`ViTImageProcessor`/`DeiTImageProcessor`], *optional*):
             An instance of [`ViTImageProcessor`/`DeiTImageProcessor`]. The image processor is a required input.
-        tokenizer ([`RobertaTokenizer`/`XLMRobertaTokenizer`]):
+        tokenizer ([`RobertaTokenizer`/`XLMRobertaTokenizer`], *optional*):
             An instance of [`RobertaTokenizer`/`XLMRobertaTokenizer`]. The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]

@@ -358,18 +358,12 @@ class Transformer(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_state,
                     attn_mask,
                     head_mask[i],
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -429,10 +423,6 @@ class DistilBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, Transformer):
-            module.gradient_checkpointing = value
 
 
 DISTILBERT_START_DOCSTRING = r"""

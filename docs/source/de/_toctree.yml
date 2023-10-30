@@ -35,4 +35,8 @@
     title: Wie konvertiert man ein 🤗 Transformers-Modell in TensorFlow?
   - local: add_new_pipeline
     title: Wie fügt man eine Pipeline zu 🤗 Transformers hinzu?
+  - local: testing
+    title: Testen
+  - local: pr_checks
+    title: Überprüfung einer Pull Request
   title: Contribute

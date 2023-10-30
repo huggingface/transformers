@@ -127,6 +127,8 @@ class CircleCIJob:
             },
         ]
         steps.extend([{"run": l} for l in self.install_steps])
+        steps.extend([{"run": 'pip install "fsspec>=2023.5.0,<2023.10.0"'}])
+        steps.extend([{"run": "pip install pytest-subtests"}])
         steps.append(
             {
                 "save_cache": {
@@ -311,7 +313,7 @@ torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     parallelism=1,
-    pytest_num_workers=8,
+    pytest_num_workers=6,
 )
 
 
@@ -347,6 +349,7 @@ pipelines_torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
     ],
     marker="is_pipeline_test",
+    pytest_num_workers=6,
 )
 
 

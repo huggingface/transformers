@@ -517,7 +517,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
         tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
-        tokenizer.add_tokens(["<REPR_END>"], special_tokens=False)
+        tokenizer.add_tokens([AddedToken("<REPR_END>", rstrip=True, lstrip=True)], special_tokens=False)
         out1 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
         )
@@ -582,6 +582,19 @@ class LlamaIntegrationTest(unittest.TestCase):
         # a dummy prefix space is not added by the sp_model as it was de-activated
         self.assertEqual(tokens, tokenizer.sp_model.encode("▁▁▁", out_type=str))
 
+    def test_fast_post_processor(self):
+        tokenizer = LlamaTokenizerFast(
+            SAMPLE_VOCAB, eos_token=None, bos_token=None, add_bos_token=False, add_eos_token=False
+        )
+        tokenizer.encode(" Hey ")
+
+        with self.assertRaises(ValueError):
+            tokenizer = LlamaTokenizerFast(
+                SAMPLE_VOCAB, bos_token=None, eos_token="<s>", add_bos_token=True, add_eos_token=False
+            )
+        with self.assertRaises(ValueError):
+            tokenizer = LlamaTokenizerFast(SAMPLE_VOCAB, eos_token=None, add_bos_token=True, add_eos_token=True)
+
     @require_jinja
     def test_tokenization_for_chat(self):
         tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
@@ -602,7 +615,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         expected_tokens = [
             [1, 29961, 25580, 29962, 3532, 14816, 29903, 6778, 13, 3492, 526, 263, 8444, 13563, 7451, 29889, 13, 29966, 829, 14816, 29903, 6778, 13, 13, 10994, 29991, 518, 29914, 25580, 29962],
             [1, 29961, 25580, 29962, 3532, 14816, 29903, 6778, 13, 3492, 526, 263, 8444, 13563, 7451, 29889, 13, 29966, 829, 14816, 29903, 6778, 13, 13, 10994, 29991, 518, 29914, 25580, 29962, 20103, 304, 5870, 366, 29889, 29871, 2],
-            [1, 29961, 25580, 29962, 3532, 14816, 29903, 6778, 13, 3492, 526, 263, 8444, 29892, 3390, 1319, 322, 15993, 20255, 29889, 29849, 1234, 408, 1371, 3730, 408, 1950, 29892, 1550, 1641, 9109, 29889, 3575, 6089, 881, 451, 3160, 738, 10311, 1319, 29892, 443, 621, 936, 29892, 11021, 391, 29892, 7916, 391, 29892, 304, 27375, 29892, 18215, 29892, 470, 27302, 2793, 29889, 3529, 9801, 393, 596, 20890, 526, 5374, 635, 443, 5365, 1463, 322, 6374, 297, 5469, 29889, 13, 13, 3644, 263, 1139, 947, 451, 1207, 738, 4060, 29892, 470, 338, 451, 2114, 1474, 16165, 261, 296, 29892, 5649, 2020, 2012, 310, 22862, 1554, 451, 1959, 29889, 960, 366, 1016, 29915, 29873, 1073, 278, 1234, 304, 263, 1139, 29892, 3113, 1016, 29915, 29873, 6232, 2089, 2472, 29889, 13, 29966, 829, 14816, 29903, 6778, 13, 13, 10994, 29991, 518, 29914, 25580, 29962]
+            [1, 29961, 25580, 29962, 15043, 29991, 518, 29914, 25580, 29962]
         ]
         # fmt: on
         for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):

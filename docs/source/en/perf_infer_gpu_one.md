@@ -32,6 +32,7 @@ Make sure to follow the installation guide on the repository mentioned above to 
 We natively support Flash Attention 2 for the following models:
 
 - Llama
+- Mistral
 - Falcon
 - OPT
 
