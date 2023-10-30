@@ -18,6 +18,7 @@ import math
 import os
 import re
 from fnmatch import fnmatch
+from time import sleep
 from typing import Dict, List
 
 import requests
