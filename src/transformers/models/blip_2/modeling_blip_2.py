@@ -1306,9 +1306,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         device = embedding_output.device
 
         if attention_mask is None:
-            attention_mask = torch.ones(
-                ((batch_size, seq_length + past_key_values_length)), device=device, dtype=torch.long
-            )
+            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -1326,7 +1324,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
             if type(encoder_attention_mask) == list:
                 encoder_extended_attention_mask = [self.invert_attention_mask(mask) for mask in encoder_attention_mask]
             elif encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device, dtype=torch.long)
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
                 encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
             else:
                 encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)

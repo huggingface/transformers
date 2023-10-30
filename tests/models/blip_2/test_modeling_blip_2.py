@@ -25,6 +25,7 @@ import requests
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 from transformers.testing_utils import (
     require_torch,
+    require_torch_gpu,
     require_torch_multi_gpu,
     require_vision,
     slow,
@@ -974,11 +975,23 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @slow
+    @require_torch_gpu
     def test_model_from_pretrained(self):
-        for model_name in ["jpizarrom/blip2-itm-vit-g"]:
-            model = Blip2TextModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "text_proj"))
+        model_name = "jpizarrom/blip2-itm-vit-g"
+        model = Blip2TextModelWithProjection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertTrue(hasattr(model, "text_proj"))
+
+        _, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+
+        self.assertEqual(
+            outputs.text_embeds.shape, (self.model_tester.qformer_model_tester.batch_size, input_ids.shape[1], 256)
+        )
 
 
 class Blip2VisionModelWithProjectionTester:
@@ -1122,11 +1135,21 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @slow
+    @require_torch_gpu
     def test_model_from_pretrained(self):
-        for model_name in ["jpizarrom/blip2-itm-vit-g"]:
-            model = Blip2VisionModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "vision_proj"))
+        model_name = "jpizarrom/blip2-itm-vit-g"
+        model = Blip2VisionModelWithProjection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertTrue(hasattr(model, "vision_proj"))
+
+        _, pixel_values = self.model_tester.prepare_config_and_inputs()
+
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values)
+
+        self.assertEqual(outputs.image_embeds.shape, (self.model_tester.vision_model_tester.batch_size, 32, 256))
 
 
 class Blip2TextRetrievalModelTester:
@@ -1263,11 +1286,26 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
 
     @slow
+    @require_torch_gpu
     def test_model_from_pretrained(self):
-        for model_name in ["jpizarrom/blip2-itm-vit-g"]:
-            for model_class in self.all_model_classes:
-                model = model_class.from_pretrained(model_name)
-                self.assertIsNotNone(model)
+        model_name = "jpizarrom/blip2-itm-vit-g"
+        model = Blip2ForImageTextRetrieval.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+        _, input_ids, attention_mask, pixel_values = self.model_tester.prepare_config_and_inputs()
+
+        model.to(torch_device)
+        model.eval()
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, input_ids=input_ids, attention_mask=attention_mask)
+        self.assertEqual(outputs.itm_score.shape, (self.model_tester.qformer_model_tester.batch_size, 2))
+
+        with torch.no_grad():
+            outputs = model(
+                pixel_values=pixel_values, input_ids=input_ids, attention_mask=attention_mask, use_itm_head=False
+            )
+        self.assertEqual(outputs.itm_score.shape, (self.model_tester.qformer_model_tester.batch_size, 1))
 
     def test_training(self):
         pass
@@ -1482,3 +1520,90 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
             [0, 3, 7, 152, 67, 839, 1],
         )
         self.assertEqual(generated_text, "san diego")
+
+    @require_torch_gpu
+    def test_inference_itm(self):
+        model_name = "jpizarrom/blip2-itm-vit-g"
+        processor = Blip2Processor.from_pretrained(model_name)
+        model = Blip2ForImageTextRetrieval.from_pretrained(model_name).to(torch_device)
+
+        image = prepare_img()
+        text = "A woman and her dog sitting in a beach"
+        inputs = processor(images=image, text=text, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        out_itm = model(**inputs)
+        out = model(**inputs, use_itm_head=False)
+
+        # verify
+        expected_scores = torch.Tensor([[0.0238, 0.9762]])
+        self.assertTrue(torch.allclose(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, atol=1e-3))
+        self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([[0.4406]]), rtol=1e-3, atol=1e-3))
+
+    @require_torch_gpu
+    def test_inference_itm_fp16(self):
+        model_name = "jpizarrom/blip2-itm-vit-g"
+        processor = Blip2Processor.from_pretrained(model_name)
+        model = Blip2ForImageTextRetrieval.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
+
+        image = prepare_img()
+        text = "A woman and her dog sitting in a beach"
+        inputs = processor(images=image, text=text, return_tensors="pt").to(torch_device, dtype=torch.float16)
+
+        # forward pass
+        out_itm = model(**inputs)
+        out = model(**inputs, use_itm_head=False)
+
+        # verify
+        expected_scores = torch.Tensor([[0.0239, 0.9761]])
+        self.assertTrue(
+            torch.allclose(torch.nn.Softmax()(out_itm[0].cpu().float()), expected_scores, rtol=1e-3, atol=1e-3)
+        )
+        self.assertTrue(torch.allclose(out[0].cpu().float(), torch.Tensor([[0.4406]]), rtol=1e-3, atol=1e-3))
+
+    @require_torch_gpu
+    def test_inference_vision_with_projection_fp16(self):
+        model_name = "jpizarrom/blip2-itm-vit-g"
+        processor = Blip2Processor.from_pretrained(model_name)
+        model = Blip2VisionModelWithProjection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
+
+        image = prepare_img()
+        inputs = processor(images=image, return_tensors="pt").to(torch_device, dtype=torch.float16)
+
+        # forward pass
+        out = model(**inputs)
+
+        # verify
+        expected_image_embeds = [
+            -0.093994140625,
+            -0.075927734375,
+            0.031890869140625,
+            0.053009033203125,
+            0.0352783203125,
+            -0.01190185546875,
+        ]
+        self.assertTrue(np.allclose(out.image_embeds[0][0][:6].tolist(), expected_image_embeds, atol=1e-3))
+
+    @require_torch_gpu
+    def test_inference_text_with_projection_fp16(self):
+        model_name = "jpizarrom/blip2-itm-vit-g"
+        processor = Blip2Processor.from_pretrained(model_name)
+        model = Blip2TextModelWithProjection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
+
+        inputs = processor(text="a woman sitting on the beach with a dog", padding=True, return_tensors="pt").to(
+            torch_device
+        )
+
+        # forward pass
+        out = model(**inputs)
+
+        # verify
+        expected_text_embeds = [
+            -0.1082763671875,
+            0.053192138671875,
+            -0.02825927734375,
+            0.0169830322265625,
+            0.08648681640625,
+            -0.04656982421875,
+        ]
+        self.assertTrue(np.allclose(out.text_embeds[0][0][:6].tolist(), expected_text_embeds, atol=1e-3))
