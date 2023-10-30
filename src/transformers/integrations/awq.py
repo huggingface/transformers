@@ -91,8 +91,8 @@ def replace_with_awq_linear(
                         target_cls = WQLinear
 
                     model._modules[name] = target_cls(
-                        bits=quantization_config.bits,
-                        group_size=quantization_config.group_size,
+                        w_bit=quantization_config.bits,
+                        q_group_size=quantization_config.group_size,
                         in_features=in_features,
                         out_features=out_features,
                         bias=module.bias is not None,
