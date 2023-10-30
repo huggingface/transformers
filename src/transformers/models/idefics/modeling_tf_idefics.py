@@ -474,6 +474,8 @@ class TFIdeficsRMSNorm(tf.keras.layers.Layer):
     def build(self, input_shape):
         self.weight = self.add_weight(name="weight", shape=[self.hidden_size], initializer="ones")
 
+        super().build(input_shape)
+
     def call(self, hidden_states):
         variance = tf.math.reduce_mean(tf.math.square(tf.cast(hidden_states, tf.float32)), axis=-1, keepdims=True)
         hidden_states = hidden_states * tf.math.rsqrt(variance + self.variance_epsilon)
