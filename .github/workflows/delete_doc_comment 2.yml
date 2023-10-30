@@ -1,0 +1,14 @@
+name: Delete doc comment
+
+on:
+  workflow_run:
+    workflows: ["Delete doc comment trigger"]
+    types:
+      - completed
+
+
+jobs:
+  delete:
+    uses: huggingface/doc-builder/.github/workflows/delete_doc_comment.yml@main
+    secrets:
+      comment_bot_token: ${{ secrets.COMMENT_BOT_TOKEN }}

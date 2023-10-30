@@ -1,0 +1,23 @@
+[tool.black]
+line-length = 119
+target-version = ['py37']
+
+[tool.ruff]
+# Never enforce `E501` (line length violations).
+ignore = ["C901", "E501", "E741"]
+select = ["C", "E", "F", "I", "W"]
+line-length = 119
+
+# Ignore import violations in all `__init__.py` files.
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["E402", "F401", "F403", "F811"]
+"src/transformers/file_utils.py" = ["F401"]
+"src/transformers/utils/dummy_*.py" = ["F401"]
+
+[tool.ruff.isort]
+lines-after-imports = 2
+known-first-party = ["transformers"]
+
+# This is ignored, maybe because of the header? If someone finds a fix, we can uncomment and remove setup.cfg
+# [tool.pytest]
+# doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"

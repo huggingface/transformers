@@ -1,0 +1,7 @@
+transformers
+
+gitpython==3.1.32
+tensorboard>=1.14.0
+tensorboardX==1.8
+psutil==5.6.6
+scipy>=1.4.1

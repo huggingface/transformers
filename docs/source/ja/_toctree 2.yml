@@ -1,0 +1,157 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: クイックツアー
+  - local: installation
+    title: インストール
+  title: Get started
+- sections:
+  - local: pipeline_tutorial
+    title: パイプラインを使用して推論を実行する
+  - local: autoclass_tutorial
+    title: AutoClass を使用して移植可能なコードを作成する
+  - local: preprocessing
+    title: データの前処理
+  - local: training
+    title: 事前トレーニングされたモデルを微調整する
+  - local: run_scripts
+    title: スクリプトを使用してトレーニングする
+  - local: accelerate
+    title: 🤗 Accelerate を使用して分散トレーニングをセットアップする
+  - local: peft
+    title: 🤗 PEFT を使用してアダプターをロードしてトレーニングする
+  - local: model_sharing
+    title: モデルを共有する
+  - local: transformers_agents
+    title: エージェント
+  - local: llm_tutorial
+    title: LLM を使用した生成
+  title: Tutorials
+- sections:
+  - local: generation_strategies
+    title: 生成戦略をカスタマイズする
+  title: Generation
+- sections:
+  - local: fast_tokenizers
+    title: 🤗 トークナイザーの高速トークナイザーを使用する
+  - local: multilingual
+    title: 多言語モデルで推論を実行する
+  - local: create_a_model
+    title: モデル固有の API を使用する
+  - local: custom_models
+    title: カスタムモデルを共有する
+  - local: chat_templating
+    title: チャットモデルのテンプレート
+  - local: serialization
+    title: ONNX へのエクスポート
+  - local: tflite
+    title: TFLite へのエクスポート
+  - local: torchscript
+    title: トーチスクリプトへのエクスポート
+  - local: benchmarks
+    title: ベンチマーク
+  - local: community
+    title: コミュニティリソース
+  - local: custom_tools
+    title: カスタムツールとプロンプト
+  - local: troubleshooting
+    title: トラブルシューティング
+  title: 開発者ガイド
+- sections:
+  - local: performance
+    title: 概要
+  - sections:
+    - local: perf_train_gpu_one
+      title: 単一の GPU で効率的にトレーニングするための方法とツール
+    - local: perf_train_gpu_many
+      title: 複数の GPU と並列処理
+    - local: perf_train_cpu
+      title: CPU での効率的なトレーニング
+    - local: perf_train_cpu_many
+      title: 分散CPUトレーニング
+    - local: perf_train_tpu
+      title: TPU に関するトレーニング
+    - local: perf_train_tpu_tf
+      title: TensorFlow を使用した TPU のトレーニング
+    - local: perf_train_special
+      title: 特殊なハードウェアに関するトレーニング
+    - local: perf_hardware
+      title: トレーニング用のカスタム ハードウェア
+    - local: hpo_train
+      title: Trainer API を使用したハイパーパラメータ検索
+    title: 効率的なトレーニングテクニック
+  - sections:
+    - local: perf_infer_cpu
+      title: CPUでの推論
+    - local: perf_infer_gpu_one
+      title: 1 つの GPU での推論
+    - local: perf_infer_gpu_many
+      title: 多くの GPU での推論
+    - local: perf_infer_special
+      title: 特殊なハードウェアでの推論
+    title: 推論の最適化
+  - local: big_models
+    title: 大きなモデルのインスタンス化
+  - local: tf_xla
+    title: TensorFlowモデルのXLA統合
+  - local: perf_torch_compile
+    title: torch.compile()を使用した推論の最適化
+  title: パフォーマンスとスケーラビリティ
+- sections:
+  - local: add_new_model
+    title: 🤗 Transformersにモデルを追加する方法
+  - local: add_tensorflow_model
+    title: 🤗 TransformersモデルをTensorFlowに変換する方法
+  - local: testing
+    title: テスト
+  - local: pr_checks
+    title: プルリクエストのチェック
+  title: 貢献する
+- sections:
+  - local: philosophy
+    title: フィロソフィー
+  - local: glossary
+    title: 用語集
+  - local: task_summary
+    title: 🤗 Transformersの機能
+  - local: tasks_explained
+    title: 🤗 Transformersがタスクを解決する方法
+  - local: model_summary
+    title: Transformerモデルファミリー
+  - local: tokenizer_summary
+    title: トークナイザーの概要
+  - local: attention
+    title: 注意機構
+  - local: pad_truncation
+    title: パディングと切り詰め
+  - local: bertology
+    title: BERTology
+  - local: perplexity
+    title: 固定長モデルのパープレキシティ
+  - local: pipeline_webserver
+    title: Webサーバー推論用パイプライン
+  - local: model_memory_anatomy
+    title: モデルトレーニングの解剖学
+  title: コンセプチュアルガイド
+- sections:
+  - local: internal/modeling_utils
+    title: カスタムレイヤーとユーティリティ
+  - local: internal/pipelines_utils
+    title: パイプライン用のユーティリティ
+  - local: internal/tokenization_utils
+    title: ト=ークナイザー用のユーティリティ
+  - local: internal/trainer_utils
+    title: トレーナー用ユーティリティ
+  - local: internal/generation_utils
+    title: 発電用ユーティリティ
+  - local: internal/image_processing_utils
+    title: 画像プロセッサ用ユーティリティ
+  - local: internal/audio_utils
+    title: オーディオ処理用のユーティリティ
+  - local: internal/file_utils
+    title: 一般公共事業
+  - local: internal/time_series_utils
+    title: 時系列用のユーティリティ
+  title: 内部ヘルパー
+  title: API

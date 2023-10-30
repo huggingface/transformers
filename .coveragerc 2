@@ -1,0 +1,12 @@
+[run]
+source=transformers
+omit =
+    # skip convertion scripts from testing for now
+    */convert_*
+    */__main__.py
+[report]
+exclude_lines =
+    pragma: no cover
+    raise
+    except
+    register_parameter

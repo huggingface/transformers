@@ -179,8 +179,8 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
 class CombinedEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.char_embeddings = nn.Embedding(config.char_vocab_size, config.hidden_size)
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.char_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.word_embeddings = nn.Embedding(config.word_piece_vocab_size, config.hidden_size)
         self.combination_layer = nn.Linear(config.hidden_size * 2, config.hidden_size)
 
     def forward(self, input_ids, char_ids):
