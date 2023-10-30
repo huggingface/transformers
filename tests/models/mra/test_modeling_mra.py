@@ -360,6 +360,12 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_attention_outputs(self):
         return
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
 
 @require_torch
 class MraModelIntegrationTest(unittest.TestCase):
