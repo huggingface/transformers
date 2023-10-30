@@ -539,6 +539,29 @@ class ModelTesterMixin:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    def check_training_gradient_checkpointing(self, model_class, gradient_checkpointing_kwargs=None):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = model_class(config)
+
+        model.to(torch_device)
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+        model.train()
+
+        # unfreeze additional layers
+        for p in model.parameters():
+            p.requires_grad_(True)
+
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+        loss = model(**inputs).loss
+        loss.backward()
+        optimizer.step()
+
+        for k, v in model.named_parameters():
+            if v.requires_grad:
+                self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+
     def test_training(self):
         if not self.model_tester.is_training:
             return
@@ -576,25 +599,7 @@ class ModelTesterMixin:
             ):
                 continue
             # Scenario - 1 default behaviour
-            model = model_class(config)
-            model.to(torch_device)
-            model.gradient_checkpointing_enable()
-            model.train()
-
-            # unfreeze additional layers
-            for p in model.parameters():
-                p.requires_grad_(True)
-
-            optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
-
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
-            optimizer.step()
-
-            for k, v in model.named_parameters():
-                if v.requires_grad:
-                    self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+            self.check_training_gradient_checkpointing(model_class)
 
     def test_training_gradient_checkpointing_use_reentrant(self):
         # Scenario - 2 with `use_reentrant=True` - this is the default value that is used in pytorch's
@@ -613,27 +618,9 @@ class ModelTesterMixin:
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
-            # Scenario - 1 default behaviour
-            model = model_class(config)
-
-            model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": True})
-            model.train()
-
-            # unfreeze additional layers
-            for p in model.parameters():
-                p.requires_grad_(True)
-
-            optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
-
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
-            optimizer.step()
-
-            for k, v in model.named_parameters():
-                if v.requires_grad:
-                    self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+            self.check_training_gradient_checkpointing(
+                model_class, gradient_checkpointing_kwargs={"use_reentrant": True}
+            )
 
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         # Scenario - 3 with `use_reentrant=False` pytorch suggests users to use this value for
@@ -652,27 +639,9 @@ class ModelTesterMixin:
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
-            model.train()
-
-            # unfreeze additional layers
-            for p in model.parameters():
-                p.requires_grad_(True)
-
-            optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
-
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
-
-            optimizer.step()
-
-            for k, v in model.named_parameters():
-                if v.requires_grad:
-                    self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+            self.check_training_gradient_checkpointing(
+                model_class, gradient_checkpointing_kwargs={"use_reentrant": False}
+            )
 
     def test_attention_outputs(self):
         if not self.has_attentions:
