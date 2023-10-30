@@ -618,7 +618,12 @@ class FuyuImageProcessor(BaseImageProcessor):
                     if variable_sized:
                         # Now terminate each line with |NEWLINE|.
                         tensor_of_image_ids = tensor_of_image_ids.reshape(-1, image_width // patch_width)
-                        newline_ids = torch.full([tensor_of_image_ids.shape[0], 1], image_newline_id, dtype=torch.int32, device=image_input.device)
+                        newline_ids = torch.full(
+                            [tensor_of_image_ids.shape[0], 1],
+                            image_newline_id,
+                            dtype=torch.int32,
+                            device=image_input.device,
+                        )
                         tensor_of_image_ids = torch.cat([tensor_of_image_ids, newline_ids], dim=1)
                         tensor_of_image_ids = tensor_of_image_ids.reshape(-1)
 

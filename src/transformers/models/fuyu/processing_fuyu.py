@@ -21,8 +21,8 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TruncationStrategy
-from ...utils import TensorType, is_torch_available, is_torch_device, is_vision_available, logging, requires_backends
+from ...tokenization_utils_base import PaddingStrategy, TruncationStrategy
+from ...utils import TensorType, is_torch_available, is_vision_available, logging, requires_backends
 
 
 if is_torch_available() and is_vision_available():
