@@ -191,9 +191,9 @@ class IdeficsModelTester:
             pixel_values.clone().fill_(0.6),
             pixel_values.clone().fill_(0.3),
         ]
-        input_mask = None
+        attention_mask = None
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+            attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, 1])
         image_attention_mask_list = [
@@ -206,11 +206,19 @@ class IdeficsModelTester:
         config = self.get_config()
         inputs_list = []
         for pixel_values, image_attention_mask in zip(pixel_values_list, image_attention_mask_list):
-            inputs_list.append((input_ids, input_mask, pixel_values, image_attention_mask, interpolate_pos_encoding))
+            inputs_list.append(
+                {
+                    "input_ids": input_ids,
+                    "attention_mask": attention_mask,
+                    "pixel_values": pixel_values,
+                    "image_attention_mask": image_attention_mask,
+                    "interpolate_pos_encoding": interpolate_pos_encoding,
+                }
+            )
 
-        inputs_list_test_1 = inputs_list[:2]
-        inputs_list_test_2 = inputs_list[2:]
-        return config, inputs_list_test_1, inputs_list_test_2
+        inputs_w_same_img = inputs_list[:2]
+        inputs_w_0_img_attn = inputs_list[2:]
+        return config, inputs_w_same_img, inputs_w_0_img_attn
 
     def get_config(self):
         return IdeficsConfig(
@@ -234,24 +242,6 @@ class IdeficsModelTester:
             modality_type_vocab_size=self.modality_type_vocab_size,
             vision_config=self.vision_config,
         )
-
-    def model_last_hidden_states(
-        self,
-        model,
-        input_ids,
-        input_mask,
-        pixel_values,
-        image_attention_mask,
-        interpolate_pos_encoding,
-    ):
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            pixel_values=pixel_values,
-            image_attention_mask=image_attention_mask,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-        )
-        return result.last_hidden_state
 
     def create_and_check_model(
         self,
@@ -402,17 +392,19 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.model_tester.create_and_check_model_gen(*config_and_inputs)
 
     def test_cross_attention_gates(self):
-        config, inputs_test_1, inputs_test_2 = self.model_tester.prepare_config_and_inputs_gate_tests()
+        config, inputs_w_same_img, inputs_w_0_img_attn = self.model_tester.prepare_config_and_inputs_gate_tests()
 
         model = IdeficsModel(config=config)
         test_1_results = []
-        for inputs in inputs_test_1:
-            test_1_results.append(self.model_tester.model_last_hidden_states(model, *inputs))
+        for inputs in inputs_w_same_img:
+            last_hidden_states = model(**inputs).last_hidden_state
+            test_1_results.append(last_hidden_states)
         self.assertNotEqual(test_1_results[0].sum().item(), test_1_results[1].sum().item())
 
         test_2_results = []
-        for inputs in inputs_test_2:
-            test_2_results.append(self.model_tester.model_last_hidden_states(model, *inputs))
+        for inputs in inputs_w_0_img_attn:
+            last_hidden_states = model(**inputs).last_hidden_state
+            test_2_results.append(last_hidden_states)
         self.assertEqual(test_2_results[0].sum().item(), test_2_results[1].sum().item())
 
     def test_training(self):
