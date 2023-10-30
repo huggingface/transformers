@@ -98,6 +98,22 @@ class AwqTest(unittest.TestCase):
             device_map=cls.device_map,
         )
 
+    def test_quantized_model_conversion(self):
+        """
+        Simple test that checks if the quantized model has been converted properly
+        """
+        from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
+
+        self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+
+        correctly_converted = False
+        for name, module in self.quantized_model.named_modules():
+            if isinstance(module, (WQLinear_GEMM, WQLinear_GEMV)):
+                correctly_converted = True
+                break
+
+        self.assertTrue(correctly_converted)
+
     def test_quantized_model(self):
         """
         Simple test that checks if the quantized model is working properly
