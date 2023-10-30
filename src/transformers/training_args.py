@@ -625,6 +625,10 @@ class TrainingArguments:
             This will iterate over the entire training dataloader once beforehand,
 
             and will slow down the entire process.
+        neftune_noise_alpha (`Optional[float]`):
+            If not `None`, this will activate NEFTune noise embeddings. This has been proven to drastically improve
+            model performances for instrcution fine-tuning. Check out the original paper here:
+            https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune
     """
 
     framework = "pt"
@@ -1216,6 +1220,13 @@ class TrainingArguments:
     include_tokens_per_second: Optional[bool] = field(
         default=False,
         metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
+    )
+
+    neftune_noise_alpha: float = field(
+        default=None,
+        metadata={
+            "help": "NEFTune has been proven to drastically improve model performances for instrcution fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. This argument activates the neftune noise embeddings into the model. Only supported for `PreTrainedModel` and `PeftModel` classes."
+        },
     )
 
     def __post_init__(self):
