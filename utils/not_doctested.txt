@@ -272,9 +272,7 @@ docs/source/en/pad_truncation.md
 docs/source/en/peft.md
 docs/source/en/perf_hardware.md
 docs/source/en/perf_infer_cpu.md
-docs/source/en/perf_infer_gpu_many.md
 docs/source/en/perf_infer_gpu_one.md
-docs/source/en/perf_infer_special.md
 docs/source/en/perf_torch_compile.md
 docs/source/en/perf_train_cpu.md
 docs/source/en/perf_train_cpu_many.md
@@ -618,6 +616,7 @@ src/transformers/models/instructblip/processing_instructblip.py
 src/transformers/models/jukebox/configuration_jukebox.py
 src/transformers/models/jukebox/convert_jukebox.py
 src/transformers/models/jukebox/modeling_jukebox.py
+src/transformers/models/kosmos2/convert_kosmos2_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/led/configuration_led.py
 src/transformers/models/led/modeling_led.py
 src/transformers/models/led/modeling_tf_led.py

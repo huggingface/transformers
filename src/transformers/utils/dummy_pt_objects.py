@@ -4261,6 +4261,30 @@ class JukeboxVQVAE(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class Kosmos2ForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Kosmos2Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Kosmos2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
