@@ -670,13 +670,11 @@ class FuyuProcessor(ProcessorMixin):
         if target_sizes.shape[1] != 2:
             raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
-        results = None
+        results = []
         for seq, size in zip(outputs, target_sizes):
             seq = tokens_to_boxes(seq, size)
             seq = tokens_to_points(seq, size)
-            seq = seq[None, :]
-            # TODO: what if sequence lengths vary?
-            results = seq if results is None else torch.cat((results, seq), dim=0)
+            results.append(seq)
 
         return results
 
