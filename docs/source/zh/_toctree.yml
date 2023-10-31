@@ -29,4 +29,6 @@
     title: 共享自定义模型
   - local: serialization
     title: 导出为 ONNX
+  - local: tflite
+    title: 导出为 TFLite
   title: 开发者指南
