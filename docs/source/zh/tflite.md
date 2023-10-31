@@ -32,7 +32,7 @@ pip install optimum[exporters-tf]
 optimum-cli export tflite --help
 ```
 
-运行以下命令，以从 🤗 Hub 导出模型的检查点（checkpoint），以 `distilbert-base-uncased-distilled-squad` 为例：
+运行以下命令，以从 🤗 Hub 导出模型的检查点（checkpoint），以 `bert-base-uncased` 为例：
 
 ```bash
 optimum-cli export tflite --model bert-base-uncased --sequence_length 128 bert_tflite/
