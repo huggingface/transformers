@@ -37,7 +37,6 @@ from .dynamic_module_utils import custom_object_save
 from .generation import FlaxGenerationMixin, GenerationConfig
 from .modeling_flax_pytorch_utils import (
     load_pytorch_checkpoint_in_flax_state_dict,
-    load_pytorch_state_dict_in_flax_state_dict,
 )
 from .utils import (
     FLAX_WEIGHTS_INDEX_NAME,
@@ -901,14 +900,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         # init random models
         model = cls(config, *model_args, _do_init=_do_init, **model_kwargs)
 
-        if safetensors_from_pt:
-            state_dict = {}
-            with safe_open(resolved_archive_file, framework="pt") as f:
-                for k in f.keys():
-                    state_dict[k] = f.get_tensor(k)
-
-            state = load_pytorch_state_dict_in_flax_state_dict(model, state_dict, is_sharded)
-        elif from_pt:
+        if from_pt or safetensors_from_pt:
             state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file, is_sharded)
         else:
             if is_sharded:
@@ -1193,7 +1185,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             if safe_serialization:
                 params = params if params is not None else self.params
                 flat_dict = flatten_dict(params, sep=".")
-                safe_save_file(state_dict, output_model_file, metadata={"format": "flax"})
+                safe_save_file(flat_dict, output_model_file, metadata={"format": "flax"})
             else:
                 with open(output_model_file, "wb") as f:
                     params = params if params is not None else self.params

@@ -32,6 +32,7 @@ from .utils import logging
 
 
 if is_safetensors_available():
+    from safetensors import safe_open
     from safetensors.flax import load_file as safe_load_file
 
 
@@ -61,7 +62,13 @@ def load_pytorch_checkpoint_in_flax_state_dict(
         pt_path = os.path.abspath(pytorch_checkpoint_path)
         logger.info(f"Loading PyTorch weights from {pt_path}")
 
-        pt_state_dict = torch.load(pt_path, map_location="cpu")
+        if pt_path.endswith(".safetensors"):
+            pt_state_dict = {}
+            with safe_open(pt_path, framework="pt") as f:
+                for k in f.keys():
+                    pt_state_dict[k] = f.get_tensor(k)
+        else:
+            pt_state_dict = torch.load(pt_path, map_location="cpu")
         logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters.")
 
         flax_state_dict = convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)
