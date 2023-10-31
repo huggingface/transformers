@@ -349,7 +349,7 @@ class GPTQConfig(QuantizationConfigMixin):
         max_input_length (`int`, *optional*):
             The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
             length. It is specific to the exllama backend with act-order.
-        cache_block_outputs (`bool`, defaults to `False`):
+        cache_block_outputs (`bool`, defaults to `True`):
                 Whether to cache block outputs to reuse as inputs for the succeeding block.
     """
 
