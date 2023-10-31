@@ -82,6 +82,7 @@ from . import (
     ernie_m,
     esm,
     falcon,
+    fast,
     flaubert,
     flava,
     fnet,
