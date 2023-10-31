@@ -456,7 +456,7 @@ Epoch 5/5
 
 <Tip>
 
-画像分類用のモデルを微調整する方法の詳細な例については、対応する [PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/) を参照してください。例/image_classification.ipynb)。
+画像分類用のモデルを微調整する方法の詳細な例については、対応する [PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)
 
 </Tip>
 
