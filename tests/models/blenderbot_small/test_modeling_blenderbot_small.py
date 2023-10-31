@@ -85,7 +85,7 @@ class BlenderbotSmallModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=50,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -242,12 +242,7 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
-        if pipeline_test_casse_name == "TextGenerationPipelineTests":
-            return True
-        # TODO @Rocketnight1 to fix
-        if pipeline_test_casse_name == "ConversationalPipelineTests":
-            return True
-        return False
+        return pipeline_test_casse_name in ("TextGenerationPipelineTests", "ConversationalPipelineTests")
 
     def setUp(self):
         self.model_tester = BlenderbotSmallModelTester(self)
