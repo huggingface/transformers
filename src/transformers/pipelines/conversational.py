@@ -169,6 +169,10 @@ class Conversation:
         # or not.
         if not self._user_messages:
             return []
+        # In the past, the most recent user message had to be mark_processed() before being included
+        # in past_user_messages. The class essentially had a single-message buffer, representing messages that
+        # had not yet been replied to. This is no longer the case, but we mimic the behaviour in this property
+        # for backward compatibility.
         if self.messages[-1]["role"] != "user" or self._num_processed_user_inputs == len(self._user_messages):
             return self._user_messages
 
