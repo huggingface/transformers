@@ -508,7 +508,8 @@ _import_structure = {
     "models.roberta_prelayernorm": ["ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaPreLayerNormConfig"],
     "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
-    "models.rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig", "RWKVWorldTokenizer"],
+    "models.rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig"],
+    "models.rwkv5": ["RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP", "Rwkv5Config", "RWKVWorldTokenizer"],
     "models.sam": [
         "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SamConfig",
@@ -2683,6 +2684,14 @@ else:
             "RwkvForCausalLM",
             "RwkvModel",
             "RwkvPreTrainedModel",
+        ]
+    )
+    _import_structure["models.rwkv5"].extend(
+        [
+            "RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Rwkv5ForCausalLM",
+            "Rwkv5Model",
+            "Rwkv5PreTrainedModel",
             "RWKVWorldTokenizer",
         ]
     )
@@ -4674,7 +4683,8 @@ if TYPE_CHECKING:
     )
     from .models.roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RoCBertConfig, RoCBertTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
-    from .models.rwkv import RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP, RwkvConfig, RWKVWorldTokenizer
+    from .models.rwkv import RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP, RwkvConfig
+    from .models.rwkv5 import RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP, Rwkv5Config, RWKVWorldTokenizer
     from .models.sam import (
         SAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SamConfig,
@@ -6510,6 +6520,12 @@ if TYPE_CHECKING:
             RwkvForCausalLM,
             RwkvModel,
             RwkvPreTrainedModel,
+        )
+        from .models.rwkv5 import (
+            RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Rwkv5ForCausalLM,
+            Rwkv5Model,
+            Rwkv5PreTrainedModel,
             RWKVWorldTokenizer,
         )
         from .models.sam import (

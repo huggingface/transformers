@@ -22,7 +22,8 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig", "RwkvOnnxConfig"],
+    "configuration_rwkv5": ["RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP", "Rwkv5Config"],
+    "tokenization_rwkv5": ["RWKVWorldTokenizer"],
 }
 
 try:
@@ -31,16 +32,17 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_rwkv"] = [
-        "RWKV_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "RwkvForCausalLM",
-        "RwkvModel",
-        "RwkvPreTrainedModel",
+    _import_structure["modeling_rwkv5"] = [
+        "RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "Rwkv5ForCausalLM", 
+        "Rwkv5Model",
+        "Rwkv5PreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_rwkv import RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP, RwkvConfig, RwkvOnnxConfig
+    from .configuration_rwkv5 import RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP, Rwkv5Config
+    from .tokenization_rwkv5 import RWKVWorldTokenizer
 
     try:
         if not is_torch_available():
@@ -48,11 +50,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_rwkv import (
-            RWKV_PRETRAINED_MODEL_ARCHIVE_LIST,
-            RwkvForCausalLM,
-            RwkvModel,
-            RwkvPreTrainedModel,
+        from .modeling_rwkv5 import (
+            RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Rwkv5ForCausalLM,
+            Rwkv5Model,
+            Rwkv5PreTrainedModel,
         )
 else:
     import sys
