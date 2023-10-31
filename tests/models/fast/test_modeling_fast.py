@@ -27,7 +27,7 @@ from transformers.models.fast.image_processing_fast import FastImageProcessor
 from transformers.testing_utils import (
     require_torch,
     require_vision,
-    torch_device,
+    torch_device, slow,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -387,7 +387,7 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 @require_torch
 @require_vision
 class FastModelIntegrationTest(unittest.TestCase):
-    # @slow
+    @slow
     def test_inference_fast_tiny_ic17mlt_model(self):
         model = FASTForImageCaptioning.from_pretrained("Raghavan/ic17mlt_Fast_T")
 
@@ -403,11 +403,12 @@ class FastModelIntegrationTest(unittest.TestCase):
 
         output = model(pixel_values=torch.tensor(input["pixel_values"]))
         target_sizes = [(image.shape[1], image.shape[2]) for image in input["pixel_values"]]
-        final_out = image_processor.get_results(output, target_sizes)
+        final_out = image_processor.post_process_text_detection(output, target_sizes)
 
         assert final_out[0]["bboxes"][0] == [224, 120, 246, 120, 246, 134, 224, 134]
         assert round(float(final_out[0]["scores"][0]), 5) == 0.95541
 
+    @slow
     def test_inference_fast_base_800_total_text_ic17mlt_model(self):
         model = FASTForImageCaptioning.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
 
@@ -423,7 +424,7 @@ class FastModelIntegrationTest(unittest.TestCase):
 
         output = model(pixel_values=torch.tensor(input["pixel_values"]))
         target_sizes = [(image.shape[1], image.shape[2]) for image in input["pixel_values"]]
-        final_out = image_processor.get_results(output, target_sizes)
+        final_out = image_processor.post_process_text_detection(output, target_sizes)
 
         assert final_out[0]["bboxes"][0][:10] == [484, 175, 484, 178, 483, 179, 452, 179, 452, 182]
         assert round(float(final_out[0]["scores"][0]), 5) == 0.92356
