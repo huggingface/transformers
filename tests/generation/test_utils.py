@@ -1825,11 +1825,11 @@ class GenerationTesterMixin:
     def test_generate_continue_from_past_key_values(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
-            # won't fix: old models
-            if any(model_name in model_class.__name__.lower() for model_name in ["led"]):
+            # won't fix: old models with unique inputs/caches/others
+            if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt"]):
                 return
-            # may fix in the future: the following models fail with assisted decoding, and need model-specific fixes
-            if any(model_name in model_class.__name__.lower() for model_name in []):
+            # may fix in the future: needs modeling or test input preparation fixes for compatibility
+            if any(model_name in model_class.__name__.lower() for model_name in ["umt5"]):
                 return
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1837,20 +1837,28 @@ class GenerationTesterMixin:
             # If it doesn't support cache, pass the test
             if not hasattr(config, "use_cache"):
                 return
+
+            # Let's make it always:
+            # 1. use cache (for obvious reasons)
+            # 2. generate to max length (which can be achieved by setting the eos token to an invalid value), which
+            #    would make the test flaky (e.g. EOS is generated on iteration 1 on both generations, but the
+            #    continuation would force it to generate beyond an EOS token)
+            # 3. ignore `token_type_ids` for simplicity
+            # 4. ignore `forced_eos_token_id`, which requires further manipulation of the continuation inputs and is
+            #    active by default on some models
             config.use_cache = True
+            if "token_type_ids" in inputs:
+                del inputs["token_type_ids"]
 
             model = model_class(config).to(torch_device)
             model.eval()
+            model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
+            model.generation_config.forced_eos_token_id = None
 
             # If "past_key_values" is not returned, pass the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs)
             if "past_key_values" not in outputs:
                 return
-
-            # Let's force it to always generate to max length, and let's ignore token type ids
-            config.pad_token_id = config.eos_token_id = -1
-            if "token_type_ids" in inputs:
-                del inputs["token_type_ids"]
 
             # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
             outputs = model.generate(**inputs, do_sample=False, max_new_tokens=4, return_dict_in_generate=True)
@@ -1882,7 +1890,7 @@ class GenerationTesterMixin:
                     )
             outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=1, return_dict_in_generate=True)
 
-            # The two sets should be equal to each other
+            # The two sets of generated text and past kv should be equal to each other
             self.assertListEqual(outputs.sequences.tolist(), outputs_cached.sequences.tolist())
             for layer_idx in range(len(outputs_cached.past_key_values)):
                 for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
