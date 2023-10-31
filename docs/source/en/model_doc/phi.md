@@ -73,26 +73,26 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 
 ### Examples :
 
-- Example of Python Code generation using `Phi-1`
+- Example of Python Code generation using `Phi-1.5`
 
 ```python
->>> import sys
 >>> from transformers import PhiForCausalLM, AutoTokenizer
 
->>> # define the model and the tokenzier.
->>> model = PhiForCausalLM.from_pretrained("susnato/phi-1_dev")
->>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_dev")
+>>> # define the model and tokenzier
+>>> model = PhiForCausalLM.from_pretrained("susnato/phi-1_5_dev")
+>>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_5_dev")
 
->>> # feel free to change the prompt to your liking but make sure to add a small docstring explaining the problem statement.
->>> prompt = """def print_prime(n):\n    '''\n    Print all primes between 1 and n\n    '''"""
+>>> # feel free to change the prompt to your liking.
+>>> prompt = "If I were an AI that had just achieved"
 
->>> # apply the tokenizer.
+>>> # apply the tokenizer
 >>> tokens = tokenizer(prompt, return_tensors="pt")
 
->>> # use the model to generate new tokens.
->>> generated_output = model.generate(**tokens, use_cache=True, eos_token_id=tokenizer.eos_token_id, max_new_tokens=512)
+>>> # use the model to generate new tokens
+>>> generated_output = model.generate(**tokens, use_cache=True, max_new_tokens=20)
 
->>> generated_code = tokenizer.batch_decode(generated_output)[0]
+>>> tokenizer.batch_decode(generated_output)[0]
+'If I were an AI that had just achieved a breakthrough in machine learning, I would be thrilled. But I would also be acutely aware of the'
 ```
 
 
