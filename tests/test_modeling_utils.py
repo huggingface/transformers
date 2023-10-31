@@ -44,8 +44,8 @@ from transformers.testing_utils import (
     require_accelerate,
     require_safetensors,
     require_torch,
-    require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_accelerator,
+    require_torch_multi_accelerator,
     require_usr_bin_time,
     slow,
     torch_device,
@@ -681,7 +681,7 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @slow
     def test_model_parallelism_gpt2(self):
         device_map = {"transformer.wte": 0, "transformer.wpe": 0, "lm_head": 0, "transformer.ln_f": 1}
@@ -699,7 +699,7 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_from_pretrained_disk_offload_task_model(self):
         model = AutoModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         device_map = {
@@ -1036,7 +1036,7 @@ class ModelUtilsTest(TestCasePlus):
             opt_fn(input_ids)
             self.assertEqual(compile_counter.frame_count, 0)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_pretrained_low_mem_new_config(self):
         # Checking for 1 model(the same one which was described in the issue) .
