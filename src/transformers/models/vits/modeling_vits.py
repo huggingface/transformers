@@ -1724,6 +1724,45 @@ class VitsModel(VitsPreTrainedModel):
             hidden_states=text_encoder_output.hidden_states,
             attentions=text_encoder_output.attentions,
         )
+        
+        
+class VitsDiscriminator(VitsPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.discriminators = nn.ModuleList([HifiGanDiscriminatorScaleResidualBlock(config.leaky_relu_slope)])
+
+        self.discriminators.extend(
+            [
+                HifiGanDiscriminatorPeriodResidualBlock(
+                    period, config.discriminator_kernel_size, config.discriminator_stride, config.leaky_relu_slope
+                )
+                for period in config.discriminator_periods
+            ]
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(self, hidden_states):
+        fmaps = []
+        discriminated_hidden_states_list = []
+
+        for discriminator in self.discriminators:
+            discriminated_hidden_states, fmap = discriminator(hidden_states)
+            fmaps.append(fmap)
+            discriminated_hidden_states_list.append(discriminated_hidden_states)
+
+        return discriminated_hidden_states_list, fmaps
+    
+    def apply_weight_norm(self):
+        for disc in self.discriminators:
+            disc.apply_weight_norm()
+
+    def remove_weight_norm(self):
+        for disc in self.discriminators:
+            disc.remove_weight_norm()
+
 
 
 @add_start_docstrings(
@@ -1748,6 +1787,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
 
         # This is used only for training.
         self.posterior_encoder = VitsPosteriorEncoder(config)
+        self.discriminator = VitsDiscriminator(config)
 
         # These parameters control the synthesised speech properties
         self.speaking_rate = config.speaking_rate
@@ -2055,41 +2095,3 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
                 posterior_log_variances,
             ),
         )
-
-
-class VitsDiscriminator(VitsPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.discriminators = nn.ModuleList([HifiGanDiscriminatorScaleResidualBlock(config.leaky_relu_slope)])
-
-        self.discriminators.extend(
-            [
-                HifiGanDiscriminatorPeriodResidualBlock(
-                    period, config.discriminator_kernel_size, config.discriminator_stride, config.leaky_relu_slope
-                )
-                for period in config.discriminator_periods
-            ]
-        )
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def forward(self, hidden_states):
-        fmaps = []
-        discriminated_hidden_states_list = []
-
-        for discriminator in self.discriminators:
-            discriminated_hidden_states, fmap = discriminator(hidden_states)
-            fmaps.append(fmap)
-            discriminated_hidden_states_list.append(discriminated_hidden_states)
-
-        return discriminated_hidden_states_list, fmaps
-    
-    def apply_weight_norm(self):
-        for disc in self.discriminators:
-            disc.apply_weight_norm()
-
-    def remove_weight_norm(self):
-        for disc in self.discriminators:
-            disc.remove_weight_norm()
