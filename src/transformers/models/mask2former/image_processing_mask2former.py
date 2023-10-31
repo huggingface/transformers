@@ -474,7 +474,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
                 If size_divisor is given, the output image size will be divisible by the number.
             resample (`PILImageResampling` resampling filter, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
+            data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
                 image is used.
             input_data_format (`ChannelDimension` or `str`, *optional*):

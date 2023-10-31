@@ -321,7 +321,7 @@ def get_maskformer_resize_output_image_size(
             If `size_divisor` is given, the output image size will be divisible by the number.
         default_to_square (`bool`, *optional*, defaults to `True`):
             Whether to default to square if no size is provided.
-        input_data_format (`str` or `ChannelDimension`, *optional*):
+        input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format of the input image. If unset, will use the inferred format from the input.
 
     Returns:
