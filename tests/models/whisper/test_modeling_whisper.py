@@ -24,7 +24,14 @@ import numpy as np
 
 import transformers
 from transformers import WhisperConfig
-from transformers.testing_utils import is_pt_flax_cross_test, require_torch, require_torchaudio, slow, torch_device
+from transformers.testing_utils import (
+    is_pt_flax_cross_test,
+    require_torch,
+    require_torch_fp16,
+    require_torchaudio,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property, is_flax_available, is_torch_available
 from transformers.utils.import_utils import is_datasets_available
 
@@ -49,7 +56,7 @@ if is_torch_available():
         WhisperProcessor,
         set_seed,
     )
-    from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder
+    from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder, sinusoids
 
 if is_flax_available():
     import jax.numpy as jnp
@@ -351,6 +358,20 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             self.assertFalse(all(encoder_grads))
             self.assertTrue(all(decoder_grads))
 
+    def test_requires_grad_encoder_embed_positions(self):
+        config = self.model_tester.get_config()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            encoder = model.get_encoder()
+            self.assertFalse(encoder.embed_positions.weight.requires_grad)
+
+    def test_encoder_sinusoidal_embed_positions(self):
+        config = self.model_tester.get_config()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            embeds = model.get_encoder().embed_positions.weight
+            self.assertTrue(torch.allclose(embeds, sinusoids(*embeds.shape)))
+
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
@@ -400,17 +421,29 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     def test_generate_with_head_masking(self):
         pass
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         config.max_target_positions = 400
         input_features = input_dict["input_features"]
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            input_features = input_features.half()
-            model.half()
+        input_features = input_features.half()
+        model.half()
         model.generate(input_features)
         model.generate(input_features, num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 

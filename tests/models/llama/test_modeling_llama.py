@@ -21,7 +21,14 @@ from parameterized import parameterized
 from pytest import mark
 
 from transformers import LlamaConfig, is_torch_available, set_seed
-from transformers.testing_utils import require_flash_attn, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_flash_attn,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -341,7 +348,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @unittest.skip("LLaMA buffers include complex numbers, which breaks this test")
+    @unittest.skip("Llama buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
@@ -534,7 +541,7 @@ end
 """,
     ]
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_model_7b_logits(self):
         model = LlamaForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf").to(torch_device)
