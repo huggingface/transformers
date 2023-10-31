@@ -74,8 +74,8 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         )
 
         # Converts all `BatchNorm2d` and `SyncBatchNorm` or `BatchNormAct2d` and `SyncBatchNormAct2d` layers of provided module into `FrozenBatchNorm2d` or `FrozenBatchNormAct2d` respectively
-        if hasattr(config, "freeze_batch_norm_2d") and config.freeze_batch_norm_2d is True:
-            self._backbone = timm.layers.freeze_batch_norm_2d(self._backbone)
+        if getattr(config, "freeze_batch_norm_2d", False):
+            self.freeze_batch_norm_2d()
 
         # These are used to control the output of the model when called. If output_hidden_states is True, then
         # return_layers is modified to include all layers.
@@ -107,6 +107,12 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         )
         return super()._from_config(config, **kwargs)
 
+    def freeze_batch_norm_2d(self):
+        timm.layers.freeze_batch_norm_2d(self._backbone)
+
+    def unfreeze_bach_norm_2d(self):
+        timm.layers.unfreeze_batch_norm_2d(self._backbone)
+        
     def _init_weights(self, module):
         """
         Empty init weights function to ensure compatibility of the class in the library.
