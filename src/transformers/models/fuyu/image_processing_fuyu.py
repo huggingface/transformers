@@ -27,10 +27,12 @@ from ...image_transforms import (
 )
 from ...image_utils import (
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
+    is_valid_image,
     make_list_of_images,
     to_numpy_array,
 )
@@ -52,6 +54,21 @@ if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
+
+
+def make_list_of_list_of_images(
+    images: Union[List[List[ImageInput]], List[ImageInput], ImageInput]
+) -> List[List[ImageInput]]:
+    if is_valid_image(images):
+        return [[images]]
+
+    if isinstance(images, list):
+        return [make_list_of_images(image) for image in images]
+
+    if isinstance(images, list) and all(isinstance(image, list) for image in images):
+        return images
+
+    raise ValueError("images must be a list of list of images or a list of images or an image.")
 
 
 class FuyuBatchFeature(BatchFeature):
@@ -426,10 +443,10 @@ class FuyuImageProcessor(BaseImageProcessor):
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         patch_size = patch_size if patch_size is not None else self.patch_size
 
-        if isinstance(images, list) and any(len(elem) >= 2 and isinstance(elem, list) for elem in images):
+        if isinstance(images, list) and any(isinstance(elem, list) and len(elem) >= 2 for elem in images):
             raise ValueError("Multiple images for a single sample are not yet supported.")
 
-        images = make_list_of_images(images)
+        batch_images = make_list_of_list_of_images(images)
 
         if do_resize and size is None:
             raise ValueError("Size must be specified if do_resize is True.")
@@ -441,9 +458,9 @@ class FuyuImageProcessor(BaseImageProcessor):
             raise ValueError("image_mean and image_std must be specified if do_normalize is True.")
 
         # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
+        batch_images = [[to_numpy_array(image) for image in images] for images in batch_images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if is_scaled_image(batch_images[0][0]) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -451,14 +468,17 @@ class FuyuImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
+            input_data_format = infer_channel_dimension_format(batch_images[0][0])
 
         original_image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
 
         if do_resize:
-            images = [self.resize(image, size=size, input_data_format=input_data_format) for image in images]
+            batch_images = [
+                [self.resize(image, size=size, input_data_format=input_data_format) for image in images]
+                for images in batch_images
+            ]
 
-        image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
+        image_sizes = [get_image_size(images[0], channel_dim=input_data_format) for images in batch_images]
         image_unpadded_heights = [[image_size[0]] for image_size in image_sizes]
         image_unpadded_widths = [[image_size[1]] for image_size in image_sizes]
 
@@ -466,33 +486,43 @@ class FuyuImageProcessor(BaseImageProcessor):
         image_scale_factors = [[resized_size[0] / original_size[0]] for original_size, resized_size in zip(original_image_sizes, image_sizes)]
 
         if do_pad:
-            images = [
-                self.pad_image(
-                    image,
-                    size=size,
-                    mode=padding_mode,
-                    constant_values=padding_value,
-                    input_data_format=input_data_format,
-                )
-                for image in images
+            batch_images = [
+                [
+                    self.pad_image(
+                        image,
+                        size=size,
+                        mode=padding_mode,
+                        constant_values=padding_value,
+                        input_data_format=input_data_format,
+                    )
+                    for image in images
+                ]
+                for images in batch_images
             ]
 
         if do_rescale:
-            images = [
-                self.rescale(image, scale=rescale_factor, input_data_format=input_data_format) for image in images
+            batch_images = [
+                [self.rescale(image, scale=rescale_factor, input_data_format=input_data_format) for image in images]
+                for images in batch_images
             ]
 
         if do_normalize:
-            images = [
-                self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
+            batch_images = [
+                [
+                    self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                    for image in images
+                ]
+                for images in batch_images
             ]
 
         if data_format is not None:
-            images = [to_channel_dimension_format(image, data_format, input_data_format) for image in images]
+            batch_images = [
+                [to_channel_dimension_format(image, data_format, input_data_format) for image in images]
+                for images in batch_images
+            ]
 
         data = {
-            "images": [[image] for image in images],
+            "images": batch_images,
             "image_unpadded_heights": image_unpadded_heights,
             "image_unpadded_widths": image_unpadded_widths,
             "image_scale_factors": image_scale_factors,
