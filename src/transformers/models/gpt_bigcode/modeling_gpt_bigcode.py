@@ -21,6 +21,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -34,6 +35,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_torch_sdpa_available,
     logging,
 )
 from .configuration_gpt_bigcode import GPTBigCodeConfig
@@ -127,6 +129,7 @@ class GPTBigCodeAttention(nn.Module):
         self.scale_attention_softmax_in_fp32 = (
             config.scale_attention_softmax_in_fp32 and config.attention_softmax_in_fp32
         )
+        self.attn_pdrop = config.attn_pdrop
 
         if self.is_cross_attention:
             if self.multi_query:
@@ -507,6 +510,138 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
+class GPTBigCodeSDPAAttention(GPTBigCodeAttention):
+    def _attn(self, query, key, value, attention_mask=None, head_mask=None):
+        if head_mask is not None:
+            raise ValueError("PyTorch SDPA does not support head_mask. Please open an issue in Transformers repository.")
+
+        scale = None
+        if not self.scale_attn_weights:
+            scale = 1
+
+        # MQA models: (batch_size, query_length, num_heads * head_dim)
+        # MHA models: (batch_size, num_heads, query_length, head_dim)
+        query_shape = query.shape
+        batch_size = query_shape[0]
+        kv_seq_len = key.shape[-2]
+
+        if self.multi_query:
+            query_length = query_shape[1]
+
+            # NOTE: Maybe there is better than this?
+            query = query.view(batch_size, query_length, self.num_heads, self.head_dim).transpose(1, 2)
+
+            # Without these unsqueeze, SDPA complains as the query and key/value have a different number of dimensions.
+            key = key.unsqueeze(1)
+            value = value.unsqueeze(1)
+
+            # Although these expand are not numerically useful, PyTorch 2.1 can not dispatch to mem-efficient attention
+            # and flash attention (No available kernel.  Aborting execution.) from the shapes
+            # query = [batch_size, num_heads, query_length, head_dim]
+            # key = [batch_size, 1, past_length, head_dim]
+            # value = [batch_size, 1, past_length, head_dim]
+            # which is unfortunate. Hopefully can be improved in the future. These expand should not be too expansive as they do not do memory copy.
+            key = key.expand(-1, self.num_heads, -1, -1)
+            value = value.expand(-1, self.num_heads, -1, -1)
+        else:
+            query_length = query_shape[-1]
+
+        dropout_p = self.attn_pdrop if self.training else 0.0
+
+        if attention_mask is not None:
+            is_causal = False
+        elif query_length == 1:
+            # causal attention and bi-directional attention are the same.
+            is_causal = False
+        else:
+            is_causal = True
+        
+        sdpa_result = torch.nn.functional.scaled_dot_product_attention(
+            query,
+            key,
+            value,
+            attn_mask=attention_mask,
+            dropout_p=dropout_p,
+            is_causal=is_causal,
+            scale=scale,
+        )
+
+        if self.multi_query:
+            # (batch_size, num_heads, seq_len, head_dim) --> (batch_size, seq_len, num_heads, head_dim)
+            sdpa_result = sdpa_result.transpose(1, 2)
+
+            # Reshape is kind of expensive here, as it does a memory copy,
+            # but I did not manage to make away without it (logits do not match when using view)
+            # (batch_size, seq_len, num_heads, head_dim) --> (batch_size, seq_len, num_heads * head_dim)
+            sdpa_result = sdpa_result.reshape(query_shape)
+
+        return sdpa_result, None
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        layer_past: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
+    ) -> Union[
+        Tuple[torch.Tensor, Optional[torch.Tensor]],
+        Tuple[torch.Tensor, Optional[torch.Tensor], Tuple[torch.Tensor, ...]],
+    ]:
+        if encoder_hidden_states is not None:
+            if not hasattr(self, "q_attn") or not self.is_cross_attention:
+                raise ValueError(
+                    "If class is used as cross attention, the weights `q_attn` have to be defined. "
+                    "Please make sure to instantiate class with `GPTBigCodeAttention(..., is_cross_attention=True)`."
+                )
+
+            query = self.q_attn(hidden_states)
+            key_value = self.c_attn(encoder_hidden_states)
+            attention_mask = encoder_attention_mask
+        elif self.multi_query:
+            query, key_value = self.c_attn(hidden_states).split((self.embed_dim, 2 * self.kv_dim), dim=2)
+        else:
+            # Note: We split as (self.num_heads, 3, self.head_dim) instead of (3, self.num_heads, self.head_dim),
+            # i.e., the memory layout is not the same as GPT2.
+            # This makes the concatenation with past_key_value more efficient.
+            query, key_value = (
+                self.c_attn(hidden_states)
+                .view(*hidden_states.shape[:2], self.num_heads, 3 * self.head_dim)
+                .transpose(1, 2)
+                .split((self.head_dim, 2 * self.head_dim), dim=3)
+            )
+
+        if layer_past is not None:
+            key_value = torch.cat((layer_past, key_value), dim=-2)
+        present = key_value if use_cache else None
+
+        key, value = key_value.split((self.head_dim, self.head_dim), dim=-1)
+
+        if not output_attentions and head_mask is None:
+            # Difference with the original implementation: there is no need to transpose the key here,
+            # as SDPA expects seq_length to be at index -2 for the key as well
+            attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+        else:
+            # output_attentions=True, head_mask not None can not be supported when using SDPA.
+            attn_output, attn_weights = super()._attn(query, key.transpose(-1, -2), value, attention_mask, head_mask)
+
+        if not self.multi_query:
+            attn_output = attn_output.transpose(1, 2).reshape(hidden_states.shape)
+        attn_output = self.c_proj(attn_output)
+        attn_output = self.resid_dropout(attn_output)
+
+        outputs = (attn_output, present)
+        if output_attentions:
+            if self.multi_query:
+                # Transpose to return weights in the usual format (batch_size, num_heads, query_length, key_length)
+                attn_weights = attn_weights.transpose(1, 2)
+            outputs += (attn_weights,)
+
+        return outputs
+
 
 class GPTBigCodeMLP(nn.Module):
     def __init__(self, intermediate_size, config):
@@ -533,21 +668,26 @@ class GPTBigCodeBlock(nn.Module):
         self.inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = (
-            GPTBigCodeAttention(config, layer_idx=layer_idx)
-            if not getattr(config, "_flash_attn_2_enabled", False)
-            else GPTBigCodeFlashAttention2(config, layer_idx=layer_idx)
-        )
+        
+        if getattr(config, "_flash_attn_2_enabled", False):
+            self.attn = GPTBigCodeFlashAttention2(config, layer_idx=layer_idx)
+        elif is_torch_sdpa_available():
+            self.attn = GPTBigCodeSDPAAttention(config, layer_idx=layer_idx)
+        else:
+            self.attn = GPTBigCodeAttention(config, layer_idx=layer_idx)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
             if config.multi_query:
                 raise NotImplementedError("Cross-attention not implemented for MQA")
-            self.crossattention = (
-                GPTBigCodeAttention(config, is_cross_attention=True, layer_idx=layer_idx)
-                if not getattr(config, "_flash_attn_2_enabled", False)
-                else GPTBigCodeFlashAttention2(config, is_cross_attention=True, layer_idx=layer_idx)
-            )
+            
+            if getattr(config, "_flash_attn_2_enabled", False):
+                self.attn = GPTBigCodeFlashAttention2(config, is_cross_attention=True, layer_idx=layer_idx)
+            elif is_torch_sdpa_available():
+                self.attn = GPTBigCodeSDPAAttention(config, is_cross_attention=True, layer_idx=layer_idx)
+            else:
+                self.attn = GPTBigCodeAttention(config, is_cross_attention=True, layer_idx=layer_idx)
+
             self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.mlp = GPTBigCodeMLP(self.inner_dim, config)
@@ -769,6 +909,8 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 
         self.gradient_checkpointing = False
 
+        self._use_sdpa = isinstance(self.h[0].attn, GPTBigCodeSDPAAttention)
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -866,7 +1008,19 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 
             # MQA models: (batch_size, query_length, n_heads, key_length)
             # MHA models: (batch_size, n_heads, query_length, key_length)
-            attention_mask = self_attention_mask.unsqueeze(2 if self.multi_query else 1)
+            self_attention_mask = self_attention_mask.unsqueeze(2 if self.multi_query else 1)
+
+            # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
+            # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
+            if self._use_sdpa and query_length > 1:
+                if self.multi_query:
+                    # gpt_bigcode using MQA has the bad taste to use a causal mask with shape
+                    # [batch_size, target_length, 1, source_length], not compatible with SDPA, hence this transpose.
+                    self_attention_mask = self_attention_mask.transpose(1, 2)
+
+                self_attention_mask = AttentionMaskConverter._unmask_unattended(self_attention_mask, attention_mask, unmasked_value=True)
+            
+            attention_mask = self_attention_mask
 
             # If a 2D or 3D attention mask is provided for the cross-attention
             # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]

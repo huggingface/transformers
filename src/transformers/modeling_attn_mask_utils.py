@@ -203,8 +203,6 @@ class AttentionMaskConverter:
         [0, 1, 1]]]]
         ```
         """
-        # TODO: unmasked_value may be unnecessary following Patrick's refactor
-
         # Get the index of the first non-zero value for every sample in the batch.
         # In the above example, indices = [[2], [0], [1]]]
         tmp = torch.arange(attention_mask.shape[1], 0, -1)
@@ -301,8 +299,9 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
     attn_mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=sliding_window)
 
     key_value_length = input_shape[-1] + past_key_values_length
-    query_length = input_shape[-1]
+    batch_size, query_length = input_shape
 
+    print("query_length", query_length)
     if attention_mask is not None:
         if batch_size == 1 and torch.all(attention_mask == 1):
             if query_length == 1:
@@ -323,7 +322,8 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
 
         # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
         # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
-        expanded_4d_mask = AttentionMaskConverter._unmask_unattended(expanded_4d_mask, attention_mask, unmasked_value=0.0)
+        if query_length > 1:
+            expanded_4d_mask = AttentionMaskConverter._unmask_unattended(expanded_4d_mask, attention_mask, unmasked_value=0.0)
 
     return expanded_4d_mask
 
