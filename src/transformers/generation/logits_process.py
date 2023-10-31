@@ -492,8 +492,8 @@ class TypicalLogitsWarper(LogitsWarper):
         cumulative_probs = sorted_logits.softmax(dim=-1).cumsum(dim=-1)
 
         # Remove tokens with cumulative mass above the threshold
-        last_ind = (cumulative_probs < self.mass).sum(dim=1) - 1
-        last_ind.clamp_(min=0)
+        last_ind = (cumulative_probs < self.mass).sum(dim=1)
+        last_ind.clamp_(max=sorted_scores.shape[-1] - 1)
         sorted_indices_to_remove = sorted_scores > sorted_scores.gather(1, last_ind.view(-1, 1))
         sorted_indices_to_remove[..., : self.min_tokens_to_keep] = 0
         indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
