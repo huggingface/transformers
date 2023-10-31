@@ -78,26 +78,6 @@ def load_pytorch_checkpoint_in_flax_state_dict(
     return flax_state_dict
 
 
-def load_pytorch_state_dict_in_flax_state_dict(flax_model, pt_state_dict, is_sharded, allow_missing_keys=False):
-    """Load pytorch checkpoints in a flax model"""
-    try:
-        import torch  # noqa: F401
-    except ImportError:
-        logger.error(
-            "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see"
-            " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
-            " instructions."
-        )
-        raise
-
-    if not is_sharded:
-        flax_state_dict = convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)
-    else:
-        # model is sharded and pytorch_checkpoint_path already contains the list of .pt shard files
-        flax_state_dict = convert_pytorch_sharded_state_dict_to_flax(pt_state_dict, flax_model)
-    return flax_state_dict
-
-
 def rename_key_and_reshape_tensor(
     pt_tuple_key: Tuple[str],
     pt_tensor: np.ndarray,
