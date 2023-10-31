@@ -43,7 +43,7 @@ from ...utils import (
     is_torch_available,
     is_torch_tensor,
     is_vision_available,
-    logging, is_cv2_available,
+    logging,
 )
 
 if is_vision_available():
@@ -57,7 +57,7 @@ logger = logging.get_logger(__name__)
 
 class FastImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a BEiT image processor.
+    Constructs a Fast image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -151,7 +151,7 @@ class FastImageProcessor(BaseImageProcessor):
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure `reduce_labels` is updated if image processor
-        is created using from_dict and kwargs e.g. `BeitImageProcessor.from_pretrained(checkpoint, reduce_labels=True)`
+        is created using from_dict and kwargs e.g. `FastImageProcessor.from_pretrained(checkpoint, reduce_labels=True)`
         """
         image_processor_dict = image_processor_dict.copy()
         if "reduce_labels" in kwargs:
@@ -478,48 +478,6 @@ class FastImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
-        """
-        Converts the output of [`BeitForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
-
-        Args:
-            outputs ([`BeitForSemanticSegmentation`]):
-                Raw outputs of the model.
-            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
-                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
-                predictions will not be resized.
-
-        Returns:
-            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
-            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
-            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
-        """
-        # TODO: add support for other frameworks
-        logits = outputs.logits
-
-        # Resize logits and compute semantic segmentation maps
-        if target_sizes is not None:
-            if len(logits) != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                )
-
-            if is_torch_tensor(target_sizes):
-                target_sizes = target_sizes.numpy()
-
-            semantic_segmentation = []
-
-            for idx in range(len(logits)):
-                resized_logits = torch.nn.functional.interpolate(
-                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
-                )
-                semantic_map = resized_logits[0].argmax(dim=0)
-                semantic_segmentation.append(semantic_map)
-        else:
-            semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
-
-        return semantic_segmentation
 
     def _max_pooling(self, x, scale=1):
         if scale == 1:
@@ -530,7 +488,7 @@ class FastImageProcessor(BaseImageProcessor):
             )
         return x
 
-    def get_results(self, output, target_sizes):
+    def post_process_text_detection(self, output, target_sizes):
         scale = 2
         img_size = (self.size["height"], self.size["width"])
         out = output["hidden_states"]
