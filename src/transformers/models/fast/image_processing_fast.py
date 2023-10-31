@@ -16,8 +16,10 @@
 import math
 import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union
+from ...utils.import_utils import is_cv2_available
 
-import cv2
+if is_cv2_available():
+    import cv2
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
@@ -41,9 +43,8 @@ from ...utils import (
     is_torch_available,
     is_torch_tensor,
     is_vision_available,
-    logging,
+    logging, is_cv2_available,
 )
-
 
 if is_vision_available():
     import PIL
@@ -100,23 +101,23 @@ class FastImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values"]
 
     def __init__(
-        self,
-        do_resize: bool = True,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_center_crop: bool = False,
-        crop_size: Dict[str, int] = None,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_rescale: bool = True,
-        do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_reduce_labels: bool = False,
-        min_area: int = 10,
-        min_score: float = 0.88,
-        bbox_type: str = "rect",
-        pooling_size: int = 9,
-        **kwargs,
+            self,
+            do_resize: bool = True,
+            size: Dict[str, int] = None,
+            resample: PILImageResampling = PILImageResampling.BICUBIC,
+            do_center_crop: bool = False,
+            crop_size: Dict[str, int] = None,
+            rescale_factor: Union[int, float] = 1 / 255,
+            do_rescale: bool = True,
+            do_normalize: bool = True,
+            image_mean: Optional[Union[float, List[float]]] = None,
+            image_std: Optional[Union[float, List[float]]] = None,
+            do_reduce_labels: bool = False,
+            min_area: int = 10,
+            min_score: float = 0.88,
+            bbox_type: str = "rect",
+            pooling_size: int = 9,
+            **kwargs,
     ) -> None:
         if "reduce_labels" in kwargs:
             warnings.warn(
@@ -158,13 +159,13 @@ class FastImageProcessor(BaseImageProcessor):
         return super().from_dict(image_processor_dict, **kwargs)
 
     def resize(
-        self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
+            self,
+            image: np.ndarray,
+            size: Dict[str, int],
+            resample: PILImageResampling = PILImageResampling.BICUBIC,
+            data_format: Optional[Union[str, ChannelDimension]] = None,
+            input_data_format: Optional[Union[str, ChannelDimension]] = None,
+            **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to (size["height"], size["width"]).
@@ -202,20 +203,20 @@ class FastImageProcessor(BaseImageProcessor):
         return label
 
     def _preprocess(
-        self,
-        image: ImageInput,
-        do_reduce_labels: bool = None,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+            self,
+            image: ImageInput,
+            do_reduce_labels: bool = None,
+            do_resize: bool = None,
+            size: Dict[str, int] = None,
+            resample: PILImageResampling = None,
+            do_center_crop: bool = None,
+            crop_size: Dict[str, int] = None,
+            do_rescale: bool = None,
+            rescale_factor: float = None,
+            do_normalize: bool = None,
+            image_mean: Optional[Union[float, List[float]]] = None,
+            image_std: Optional[Union[float, List[float]]] = None,
+            input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         if do_reduce_labels:
             image = self.reduce_label(image)
@@ -235,20 +236,20 @@ class FastImageProcessor(BaseImageProcessor):
         return image
 
     def _preprocess_image(
-        self,
-        image: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+            self,
+            image: ImageInput,
+            do_resize: bool = None,
+            size: Dict[str, int] = None,
+            resample: PILImageResampling = None,
+            do_center_crop: bool = None,
+            crop_size: Dict[str, int] = None,
+            do_rescale: bool = None,
+            rescale_factor: float = None,
+            do_normalize: bool = None,
+            image_mean: Optional[Union[float, List[float]]] = None,
+            image_std: Optional[Union[float, List[float]]] = None,
+            data_format: Optional[Union[str, ChannelDimension]] = None,
+            input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """Preprocesses a single image."""
         # All transformations expect numpy arrays.
@@ -280,15 +281,15 @@ class FastImageProcessor(BaseImageProcessor):
         return image
 
     def _preprocess_segmentation_map(
-        self,
-        segmentation_map: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_reduce_labels: bool = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+            self,
+            segmentation_map: ImageInput,
+            do_resize: bool = None,
+            size: Dict[str, int] = None,
+            resample: PILImageResampling = None,
+            do_center_crop: bool = None,
+            crop_size: Dict[str, int] = None,
+            do_reduce_labels: bool = None,
+            input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """Preprocesses a single segmentation map."""
         # All transformations expect numpy arrays.
@@ -326,24 +327,24 @@ class FastImageProcessor(BaseImageProcessor):
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
 
     def preprocess(
-        self,
-        images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_reduce_labels: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
+            self,
+            images: ImageInput,
+            segmentation_maps: Optional[ImageInput] = None,
+            do_resize: bool = None,
+            size: Dict[str, int] = None,
+            resample: PILImageResampling = None,
+            do_center_crop: bool = None,
+            crop_size: Dict[str, int] = None,
+            do_rescale: bool = None,
+            rescale_factor: float = None,
+            do_normalize: bool = None,
+            image_mean: Optional[Union[float, List[float]]] = None,
+            image_std: Optional[Union[float, List[float]]] = None,
+            do_reduce_labels: Optional[bool] = None,
+            return_tensors: Optional[Union[str, TensorType]] = None,
+            data_format: ChannelDimension = ChannelDimension.FIRST,
+            input_data_format: Optional[Union[str, ChannelDimension]] = None,
+            **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
