@@ -33,6 +33,7 @@ import torch
 from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, Identity
+from torch.utils.checkpoint import checkpoint
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -1869,9 +1870,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if gradient_checkpointing_kwargs is None:
             gradient_checkpointing_kwargs = {}
 
-        gradient_checkpointing_func = functools.partial(
-            torch.utils.checkpoint.checkpoint, **gradient_checkpointing_kwargs
-        )
+        gradient_checkpointing_func = functools.partial(checkpoint, **gradient_checkpointing_kwargs)
 
         self._set_gradient_checkpointing(enable=True, gradient_checkpointing_func=gradient_checkpointing_func)
 
@@ -1882,9 +1881,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # the gradients to make sure the gradient flows.
             self.enable_input_require_grads()
 
-    def _set_gradient_checkpointing(
-        self, enable: bool = True, gradient_checkpointing_func: Callable = torch.utils.checkpoint.checkpoint
-    ):
+    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
         is_gradient_checkpointing_set = False
 
         # Apply it on the top-level module in case the top-level modules supports it
@@ -2791,7 +2788,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             quantization_method_from_args == QuantizationMethod.GPTQ
             or quantization_method_from_config == QuantizationMethod.GPTQ
         ):
-            if not torch.cuda.is_available():
+            gptq_supports_cpu = version.parse(importlib.metadata.version("auto-gptq")) > version.parse("0.4.2")
+            if not gptq_supports_cpu and not torch.cuda.is_available():
                 raise RuntimeError("GPU is required to quantize or run quantize model.")
             elif not (is_optimum_available() and is_auto_gptq_available()):
                 raise ImportError(
