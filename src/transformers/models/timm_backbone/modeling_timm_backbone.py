@@ -75,9 +75,9 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
 
         # Converts all `BatchNorm2d` and `SyncBatchNorm` or `BatchNormAct2d` and `SyncBatchNormAct2d` layers of provided module into `FrozenBatchNorm2d` or `FrozenBatchNormAct2d` respectively
         if getattr(config, "freeze_batch_norm_2d", False):
-            self.unfreeze_batch_norm_2d()
-        else:
             self.freeze_batch_norm_2d()
+        else:
+            self.unfreeze_batch_norm_2d()
 
         # These are used to control the output of the model when called. If output_hidden_states is True, then
         # return_layers is modified to include all layers.
