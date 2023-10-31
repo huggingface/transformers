@@ -530,9 +530,9 @@ class TFModelUtilsTest(unittest.TestCase):
             TFBertModel.from_pretrained(path)
 
     @require_safetensors
-    def test_safetensors_flax_from_sharded_msgpack_with_sharded_safetensors_hub(self):
+    def test_safetensors_tf_from_sharded_h5_with_sharded_safetensors_hub(self):
         # This should not raise even if there are two types of sharded weights
-        # This should discard the safetensors weights in favor of the msgpack sharded weights
+        # This should discard the safetensors weights in favor of the .h5 sharded weights
         TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-safetensors-h5-sharded")
 
 

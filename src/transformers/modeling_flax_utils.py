@@ -35,9 +35,7 @@ from jax.random import PRNGKey
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import FlaxGenerationMixin, GenerationConfig
-from .modeling_flax_pytorch_utils import (
-    load_pytorch_checkpoint_in_flax_state_dict,
-)
+from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 from .utils import (
     FLAX_WEIGHTS_INDEX_NAME,
     FLAX_WEIGHTS_NAME,
