@@ -438,7 +438,7 @@ class GPTQConfig(QuantizationConfigMixin):
 
             if self.use_exllama:
                 if self.exllama_version == ExllamaVersion.ONE:
-                    logger.warning(
+                    logger.info(
                         "You have activated exllama backend. Note that you can get better inference "
                         "speed using exllamav2 kernel by setting `exllama_version=2`."
                     )
