@@ -304,7 +304,7 @@ def get_mask2former_resize_output_image_size(
     size_divisor: int = 0,
     default_to_square: bool = True,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-) -> tuple:
+) -> Tuple[int, int]:
     """
     Computes the output size given the desired size.
 
