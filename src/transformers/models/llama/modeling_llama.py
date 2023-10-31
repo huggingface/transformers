@@ -603,6 +603,40 @@ class LlamaSDPAAttention(LlamaAttention):
     `LlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
+    def set_sdpa_attention_mask(
+        self,
+        batch_size: int,
+        attention_mask: Optional[torch.Tensor],
+        padding_mask: Optional[torch.Tensor],
+        kv_seq_len: int,
+        query_length: int,
+    ):
+        """
+        Prepares the correct argument to be used by torch.nn.functional.scaled_dot_product_attention.
+        We ignore the attention mask in some cases for batch_size = 1 to allow to dispatch to the flash attention
+        kernel.
+        NOTE: As of PyTorch 2.1, SDPA can not dispatch to flash attention in case an attention mask passed. Possible
+        solution: use nested tensors.
+        """
+        # TODO: remove padding mask
+        if batch_size == 1 and padding_mask is None:
+            if query_length == 1:  # For query_length == 1, causal attention and bi-directional attention are the same.
+                is_causal = False
+                attention_mask = None
+            elif kv_seq_len == query_length:
+                is_causal = True
+                attention_mask = None
+            else:
+                # Unfortunately, for query_length > 1, we can not generally ignore the attention mask, as SDPA causal mask generation
+                # may be wrong. We set is_causal=False in SDPA and rely on Transformers attention_mask instead.
+                # Reference: https://github.com/pytorch/pytorch/issues/108108
+                is_causal = False
+        elif attention_mask is not None:
+            is_causal = False
+        else:
+            is_causal = True
+
+        return attention_mask, is_causal
 
     # Adapted from LlamaAttention.forward
     def forward(
@@ -613,7 +647,6 @@ class LlamaSDPAAttention(LlamaAttention):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
-        padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             raise ValueError("output_attentions=True can not be supported with PyTorch SDPA.")
