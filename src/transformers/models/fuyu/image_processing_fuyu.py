@@ -470,7 +470,7 @@ class FuyuImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(batch_images[0][0])
 
-        original_image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
+        original_image_sizes = [get_image_size(images[0], channel_dim=input_data_format) for images in batch_images]
 
         if do_resize:
             batch_images = [
