@@ -71,9 +71,7 @@ This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
 The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.co/microsoft/phi-1/blob/main/modeling_mixformer_sequential.py) and [here](https://huggingface.co/microsoft/phi-1_5/blob/main/modeling_mixformer_sequential.py) respectively.
 
 
-### Examples :
-
-- Example of Python Code generation using `Phi-1.5`
+### Example :
 
 ```python
 >>> from transformers import PhiForCausalLM, AutoTokenizer
@@ -89,10 +87,10 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 >>> tokens = tokenizer(prompt, return_tensors="pt")
 
 >>> # use the model to generate new tokens
->>> generated_output = model.generate(**tokens, use_cache=True, max_new_tokens=20)
+>>> generated_output = model.generate(**tokens, use_cache=True, max_new_tokens=10)
 
 >>> tokenizer.batch_decode(generated_output)[0]
-'If I were an AI that had just achieved a breakthrough in machine learning, I would be thrilled. But I would also be acutely aware of the'
+'If I were an AI that had just achieved a breakthrough in machine learning, I would be thrilled'
 ```
 
 
