@@ -346,7 +346,7 @@ def load_flax_checkpoint_in_pytorch_model(model, flax_checkpoint_path):
     # load flax weight dict
     if flax_checkpoint_path.endswith(".safetensors"):
         flax_state_dict = safe_load_file(flax_checkpoint_path)
-        flax_state_dict = unflatten_dict({tuple(k.split(".")): v for k, v in flax_state_dict.items()})
+        flax_state_dict = unflatten_dict(flax_state_dict, sep=".")
     else:
         with open(flax_checkpoint_path, "rb") as state_f:
             try:

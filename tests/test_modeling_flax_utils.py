@@ -202,7 +202,7 @@ class FlaxModelUtilsTest(unittest.TestCase):
 
     @require_flax
     @require_torch
-    def test_safetensors_save_and_load_pt_to_tf(self):
+    def test_safetensors_save_and_load_pt_to_flax(self):
         model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-random-bert", from_pt=True)
         pt_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         with tempfile.TemporaryDirectory() as tmp_dir:

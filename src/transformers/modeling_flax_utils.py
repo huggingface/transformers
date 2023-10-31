@@ -438,7 +438,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         try:
             if resolved_archive_file.endswith(".safetensors"):
                 state = safe_load_file(resolved_archive_file)
-                state = unflatten_dict({tuple(k.split(".")): v for k, v in state.items()})
+                state = unflatten_dict(state, sep=".")
             else:
                 with open(resolved_archive_file, "rb") as state_f:
                     state = from_bytes(cls, state_f.read())
@@ -1197,8 +1197,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if index is None:
             if safe_serialization:
                 params = params if params is not None else self.params
-                flat_dict = flatten_dict(params)
-                state_dict = {".".join(k): v for k, v in flat_dict.items()}
+                flat_dict = flatten_dict(params, sep=".")
                 safe_save_file(state_dict, output_model_file, metadata={"format": "flax"})
             else:
                 with open(output_model_file, "wb") as f:
