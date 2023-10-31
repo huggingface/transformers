@@ -24,7 +24,14 @@ import numpy as np
 import requests
 
 from transformers import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
-from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_torch_fp16,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -860,7 +867,8 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.target_pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_torch_fp16
     def test_inference_one_shot_object_detection_fp16(self):
         model_name = "google/owlvit-base-patch32"
         model = OwlViTForObjectDetection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
