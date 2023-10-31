@@ -54,21 +54,25 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clip", "CLIPProcessor"),
         ("clipseg", "CLIPSegProcessor"),
         ("flava", "FlavaProcessor"),
+        ("fuyu", "FuyuProcessor"),
         ("git", "GitProcessor"),
         ("groupvit", "CLIPProcessor"),
         ("hubert", "Wav2Vec2Processor"),
         ("idefics", "IdeficsProcessor"),
         ("instructblip", "InstructBlipProcessor"),
+        ("kosmos-2", "Kosmos2Processor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("markuplm", "MarkupLMProcessor"),
         ("mctct", "MCTCTProcessor"),
         ("mgp-str", "MgpstrProcessor"),
         ("oneformer", "OneFormerProcessor"),
+        ("owlv2", "Owlv2Processor"),
         ("owlvit", "OwlViTProcessor"),
         ("pix2struct", "Pix2StructProcessor"),
         ("pop2piano", "Pop2PianoProcessor"),
         ("sam", "SamProcessor"),
+        ("seamless_m4t", "SeamlessM4TProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
         ("speech_to_text", "Speech2TextProcessor"),
@@ -202,7 +206,8 @@ class AutoProcessor:
         use_auth_token = kwargs.pop("use_auth_token", None)
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if kwargs.get("token", None) is not None:
                 raise ValueError(

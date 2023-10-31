@@ -702,6 +702,18 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
@@ -987,6 +999,18 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
@@ -1015,15 +1039,21 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
 
         set_seed(555)  # make deterministic
 
+        speaker_embeddings = torch.zeros((1, 512)).to(torch_device)
+
         input_text = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
         input_ids = processor(text=input_text, return_tensors="pt").input_ids.to(torch_device)
 
-        generated_speech = model.generate_speech(input_ids)
-        self.assertEqual(generated_speech.shape, (1820, model.config.num_mel_bins))
+        generated_speech = model.generate_speech(input_ids, speaker_embeddings=speaker_embeddings)
+        self.assertEqual(generated_speech.shape, (228, model.config.num_mel_bins))
+
+        set_seed(555)  # make deterministic
 
         # test model.generate, same method than generate_speech but with additional kwargs to absorb kwargs such as attention_mask
-        generated_speech_with_generate = model.generate(input_ids, attention_mask=None)
-        self.assertEqual(generated_speech_with_generate.shape, (1820, model.config.num_mel_bins))
+        generated_speech_with_generate = model.generate(
+            input_ids, attention_mask=None, speaker_embeddings=speaker_embeddings
+        )
+        self.assertEqual(generated_speech_with_generate.shape, (228, model.config.num_mel_bins))
 
 
 @require_torch
@@ -1413,6 +1443,18 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     # overwrite from test_modeling_common

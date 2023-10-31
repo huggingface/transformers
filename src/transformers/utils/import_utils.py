@@ -71,7 +71,9 @@ TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
-_flash_attn_available = _is_package_available("flash_attn")
+_flash_attn_2_available = _is_package_available("flash_attn") and version.parse(
+    importlib.metadata.version("flash_attn")
+) >= version.parse("2.1.0")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -166,6 +168,7 @@ else:
                 "tf-nightly",
                 "tf-nightly-cpu",
                 "tf-nightly-gpu",
+                "tf-nightly-rocm",
                 "intel-tensorflow",
                 "intel-tensorflow-avx512",
                 "tensorflow-rocm",
@@ -346,6 +349,45 @@ def is_torch_bf16_available():
         FutureWarning,
     )
     return is_torch_bf16_gpu_available()
+
+
+@lru_cache()
+def is_torch_fp16_available_on_device(device):
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    try:
+        x = torch.zeros(2, 2, dtype=torch.float16).to(device)
+        _ = x @ x
+    except:  # noqa: E722
+        # TODO: more precise exception matching, if possible.
+        # most backends should return `RuntimeError` however this is not guaranteed.
+        return False
+
+    return True
+
+
+@lru_cache()
+def is_torch_bf16_available_on_device(device):
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    if device == "cuda":
+        return is_torch_bf16_gpu_available()
+
+    try:
+        x = torch.zeros(2, 2, dtype=torch.bfloat16).to(device)
+        _ = x @ x
+    except:  # noqa: E722
+        # TODO: more precise exception matching, if possible.
+        # most backends should return `RuntimeError` however this is not guaranteed.
+        return False
+
+    return True
 
 
 def is_torch_tf32_available():
@@ -579,14 +621,14 @@ def is_bitsandbytes_available():
     return _bitsandbytes_available and torch.cuda.is_available()
 
 
-def is_flash_attn_available():
+def is_flash_attn_2_available():
     if not is_torch_available():
         return False
 
     # Let's add an extra check to see if cuda is available
     import torch
 
-    return _flash_attn_available and torch.cuda.is_available()
+    return _flash_attn_2_available and torch.cuda.is_available()
 
 
 def is_torchdistx_available():
