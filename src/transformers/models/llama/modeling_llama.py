@@ -29,7 +29,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -603,41 +603,6 @@ class LlamaSDPAAttention(LlamaAttention):
     `LlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
-    def set_sdpa_attention_mask(
-        self,
-        batch_size: int,
-        attention_mask: Optional[torch.Tensor],
-        padding_mask: Optional[torch.Tensor],
-        kv_seq_len: int,
-        query_length: int,
-    ):
-        """
-        Prepares the correct argument to be used by torch.nn.functional.scaled_dot_product_attention.
-        We ignore the attention mask in some cases for batch_size = 1 to allow to dispatch to the flash attention
-        kernel.
-        NOTE: As of PyTorch 2.1, SDPA can not dispatch to flash attention in case an attention mask passed. Possible
-        solution: use nested tensors.
-        """
-        # TODO: remove padding mask
-        if batch_size == 1 and padding_mask is None:
-            if query_length == 1:  # For query_length == 1, causal attention and bi-directional attention are the same.
-                is_causal = False
-                attention_mask = None
-            elif kv_seq_len == query_length:
-                is_causal = True
-                attention_mask = None
-            else:
-                # Unfortunately, for query_length > 1, we can not generally ignore the attention mask, as SDPA causal mask generation
-                # may be wrong. We set is_causal=False in SDPA and rely on Transformers attention_mask instead.
-                # Reference: https://github.com/pytorch/pytorch/issues/108108
-                is_causal = False
-        elif attention_mask is not None:
-            is_causal = False
-        else:
-            is_causal = True
-
-        return attention_mask, is_causal
-
     # Adapted from LlamaAttention.forward
     def forward(
         self,
@@ -701,32 +666,25 @@ class LlamaSDPAAttention(LlamaAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
+        if attention_mask is not None:
+            is_causal = False
+        elif query_length == 1:
+            # causal attention and bi-directional attention are the same.
+            is_causal = False
+        else:
+            is_causal = True
+
+        if attention_mask is not None:
+            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
+                )
+
         # Note that Llama does not use dropout in the attention, hence the hard-coded
         # dropout_p=0.0 independent of self.training.
-        # The batch_size = 1 case is handled separately to allow to dispatch on flash attention
-        # kernel.
-        if bsz == 1:
-            if query_states.shape[2] > 1:
-                is_causal = True
-            else:
-                is_causal = False
-            attn_output = torch.nn.functional.scaled_dot_product_attention(
-                query_states, key_states, value_states, attn_mask=None, dropout_p=0.0, is_causal=is_causal
-            )
-        else:
-            if attention_mask is not None:
-                if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                    raise ValueError(
-                        f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                    )
-
-            attention_mask = torch.max(attention_mask, torch.tensor(torch.finfo(key_states.dtype).min))
-
-            # NOTE: As of PyTorch 2.1, this case can not dispatch to flash attention v2 due to the
-            # attention mask passed. Possible solution: use nested tensors.
-            attn_output = torch.nn.functional.scaled_dot_product_attention(
-                query_states, key_states, value_states, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
-            )
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states, key_states, value_states, attn_mask=attention_mask, dropout_p=0.0, is_causal=is_causal
+        )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
@@ -943,6 +901,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.use_sdpa = isinstance(self.layers[0], LlamaSDPAAttention)
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
@@ -1003,6 +962,11 @@ class LlamaModel(LlamaPreTrainedModel):
         if getattr(self.config, "_flash_attn_2_enabled", False):
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        elif self.use_sdpa:
+            # Alternatively, 4d mask or None is passed to the layers
+            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+            )
         else:
             # 4d mask is passed through the layers
             attention_mask = _prepare_4d_causal_attention_mask(

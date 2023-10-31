@@ -116,11 +116,6 @@ class AttentionMaskConverter:
         )
         expanded_4d_mask = expanded_attn_mask if causal_4d_mask is None else expanded_attn_mask + causal_4d_mask
 
-        # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
-        # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
-        if query_length > 1 and is_torch_sdpa_available() and attention_mask_2d.device.type == "cuda":
-            expanded_4d_mask = _unmask_unattended(expanded_4d_mask, attention_mask_2d, unmasked_value=0.0)
-
         return expanded_4d_mask
 
     @staticmethod
@@ -281,6 +276,51 @@ def _prepare_4d_causal_attention_mask(
         )
 
     return attention_mask
+
+# Adapted from _prepare_4d_causal_attention_mask
+def _prepare_4d_causal_attention_mask_for_sdpa(
+    attention_mask: Optional[torch.Tensor],
+    input_shape: Union[torch.Size, Tuple, List],
+    inputs_embeds: torch.Tensor,
+    past_key_values_length: int,
+    sliding_window: Optional[int] = None,
+):
+    """
+    Prepares the correct attn_mask argument to be used by torch.nn.functional.scaled_dot_product_attention.
+
+    We ignore the attention mask in some cases for batch_size = 1 to allow to dispatch to the flash attention
+    kernel.
+
+    Note that as of PyTorch 2.1, SDPA can not dispatch to flash attention in case an attention mask is passed. A possible solution is to use nested tensors.
+    """
+    attn_mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=sliding_window)
+
+    key_value_length = input_shape[-1] + past_key_values_length
+    query_length = input_shape[-1]
+
+    if attention_mask is not None:
+        if batch_size == 1 and torch.all(attention_mask == 1):
+            if query_length == 1:
+                # For query_length == 1, causal attention and bi-directional attention are the same.
+                attention_mask = None
+            elif key_value_length == query_length:
+                attention_mask = None
+            else:
+                # Unfortunately, for query_length > 1 and key_value_length != query_length, we can not generally ignore the attention mask, as SDPA causal mask generation
+                # may be wrong. We will set is_causal=False in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
+                # Reference: https://github.com/pytorch/pytorch/issues/108108
+                is_causal = False
+
+    if attention_mask is not None:
+        expanded_4d_mask = attn_mask_converter.to_4d(
+            attention_mask, input_shape[-1], key_value_length, dtype=inputs_embeds.dtype
+        )
+
+        # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
+        # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
+        expanded_4d_mask = AttentionMaskConverter._unmask_unattended(expanded_4d_mask, attention_mask, unmasked_value=0.0)
+
+    return expanded_4d_mask
 
 
 def _prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
