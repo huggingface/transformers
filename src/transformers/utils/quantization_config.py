@@ -349,13 +349,13 @@ class GPTQConfig(QuantizationConfigMixin):
             The batch size used when processing the dataset
         pad_token_id (`int`, *optional*):
             The pad token id. Needed to prepare the dataset when `batch_size` > 1.
-        use_exllama (`bool`, *optional*, defaults to `True`):
+        use_exllama (`bool`, *optional*):
             Whether to use exllama backend. Only works with `bits` = 4.
         max_input_length (`int`, *optional*):
             The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
             length. It is specific to the exllama backend with act-order.
-        exllama_version (`ExllamaVersion`, *optional*, defaults to `ExllamaVersion.ONE`):
-            The version of exllama kernel to use.
+        exllama_config (`Dict[str, Any]`, *optional*):
+            The exllama config. You can specify the version of the exllama kernel through the `version` key.
     """
 
     def __init__(
@@ -374,9 +374,9 @@ class GPTQConfig(QuantizationConfigMixin):
         module_name_preceding_first_block: Optional[List[str]] = None,
         batch_size: int = 1,
         pad_token_id: Optional[int] = None,
-        use_exllama: bool = True,
+        use_exllama: Optional[bool] = None,
         max_input_length: Optional[int] = None,
-        exllama_version: ExllamaVersion = ExllamaVersion.ONE,
+        exllama_config: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
@@ -396,8 +396,8 @@ class GPTQConfig(QuantizationConfigMixin):
         self.pad_token_id = pad_token_id
         self.use_exllama = use_exllama
         self.max_input_length = max_input_length
-        self.exllama_version = exllama_version
-        self.disable_exllama = kwargs.get("disable_exllama", None)
+        self.exllama_config = exllama_config
+        self.disable_exllama = kwargs.pop("disable_exllama", None)
         self.post_init()
 
     def get_loading_attributes(self):
@@ -428,27 +428,50 @@ class GPTQConfig(QuantizationConfigMixin):
                     f"""dataset needs to be either a list of string or a value in
                     ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
                 )
-        if self.bits == 4:
-            if self.disable_exllama is not None:
-                logger.warning(
-                    "Using `disable_exllama` is deprecated and will be removed in version 4.37. Use `use_exllama` instead and specify the version with `exllama_version`."
-                    "The value of `use_exllama` will be overwritten by `disable_exllama` passed in `GPTQConfig` or stored in your config file."
-                )
-                self.use_exllama = not self.disable_exllama
 
-            if self.use_exllama:
-                if self.exllama_version == ExllamaVersion.ONE:
-                    logger.info(
-                        "You have activated exllama backend. Note that you can get better inference "
-                        "speed using exllamav2 kernel by setting `exllama_version=2`."
+        if self.disable_exllama is None and self.use_exllama is None:
+            # New default behaviour
+            self.use_exllama = True
+        elif self.disable_exllama is not None and self.use_exllama is None:
+            # Follow pattern of old config
+            logger.warning(
+                "Using `disable_exllama` is deprecated and will be removed in version 4.37. Use `use_exllama` instead and specify the version with `exllama_config`."
+                "The value of `use_exllama` will be overwritten by `disable_exllama` passed in `GPTQConfig` or stored in your config file."
+            )
+            self.use_exllama = not self.disable_exllama
+        elif self.disable_exllama is not None and self.use_exllama is not None:
+            # Only happens if user explicitly passes in both arguments
+            raise ValueError("Cannot specify both `disable_exllama` and `use_exllama`. Please use just `use_exllama`")
+
+        if self.exllama_config is None:
+            self.exllama_config = {"version": ExllamaVersion.ONE}
+        else:
+            if "version" not in self.exllama_config:
+                raise ValueError("`exllama_config` needs to have a `version` key.")
+            elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
+                version = self.exllama_config["version"]
+                raise ValueError(
+                    f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {version}"
+                )
+
+        if self.bits == 4 and self.use_exllama:
+            if self.exllama_config["version"] == ExllamaVersion.ONE:
+                logger.log(
+                    "You have activated exllama backend. Note that you can get better inference "
+                    "speed using exllamav2 kernel by setting `exllama_config`."
+                )
+            elif self.exllama_config["version"] == ExllamaVersion.TWO:
+                optimum_version = version.parse(importlib.metadata.version("optimum"))
+                autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
+                if optimum_version <= version.parse("1.13.2") or autogptq_version <= version.parse("0.4.2"):
+                    raise ValueError(
+                        f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
                     )
-                if self.exllama_version == ExllamaVersion.TWO:
-                    optimum_version = version.parse(importlib.metadata.version("optimum"))
-                    autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
-                    if optimum_version <= version.parse("1.13.2") or autogptq_version <= version.parse("0.4.2"):
-                        raise ValueError(
-                            f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
-                        )
+
+    def to_dict(self):
+        config_dict = super().to_dict()
+        config_dict.pop("disable_exllama", None)
+        return config_dict
 
     def to_dict_optimum(self):
         """
@@ -456,8 +479,7 @@ class GPTQConfig(QuantizationConfigMixin):
         """
         quant_dict = self.to_dict()
         # make it compatible with optimum config
-        quant_dict["disable_exllama"] = not (self.use_exllama and self.exllama_version == ExllamaVersion.ONE)
-        quant_dict["disable_exllamav2"] = not (self.use_exllama and self.exllama_version == ExllamaVersion.TWO)
+        quant_dict["disable_exllama"] = not self.use_exllama
         return quant_dict
 
     @classmethod
@@ -468,13 +490,8 @@ class GPTQConfig(QuantizationConfigMixin):
 
         if "disable_exllama" in config_dict:
             config_dict["use_exllama"] = not config_dict["disable_exllama"]
-            config_dict["exllama_version"] = ExllamaVersion.ONE
             # switch to None to not trigger the warning
             config_dict["disable_exllama"] = None
-
-        if "disable_exllamav2" in config_dict:
-            config_dict["use_exllama"] = config_dict.get("use_exllama", False) or not config_dict["disable_exllamav2"]
-            config_dict["exllama_version"] = ExllamaVersion.TWO
 
         config = cls(**config_dict)
         return config

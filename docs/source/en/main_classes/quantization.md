@@ -145,7 +145,7 @@ pass `exllama_version=2` in [`GPTQConfig`] and disable exllama kernels:
 
 ```py
 import torch
-gptq_config = GPTQConfig(bits=4, exllama_version=2)
+gptq_config = GPTQConfig(bits=4, exllama_version={"version":2})
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config = gptq_config)
 ```
 
