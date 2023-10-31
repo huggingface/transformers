@@ -364,7 +364,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
             key = key.transpose(1, 2).reshape(batch_size, tgt, self.num_heads, self.head_dim)
             value = value.transpose(1, 2).reshape(batch_size, tgt, self.num_heads, self.head_dim)
 
-        attn_dropout = self.dropout if self.training else 0.0
+        attn_dropout = self.config.attn_pdrop if self.training else 0.0
 
         softmax_dtype = torch.float32 if self.attention_softmax_in_fp32 else query.dtype
         upcast = query.dtype != softmax_dtype
