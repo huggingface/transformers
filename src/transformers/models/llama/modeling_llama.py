@@ -614,8 +614,16 @@ class LlamaSDPAAttention(LlamaAttention):
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
-            raise ValueError("output_attentions=True can not be supported with PyTorch SDPA.")
-        attn_weights = None
+            # output_attentions=True can not be supported when using SDPA, falling back on the manual implementation.
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                padding_mask=padding_mask,
+            )
 
         bsz, q_len, _ = hidden_states.size()
 
@@ -696,7 +704,7 @@ class LlamaSDPAAttention(LlamaAttention):
         else:
             attn_output = self.o_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, None, past_key_value
 
 
 class LlamaDecoderLayer(nn.Module):
@@ -965,7 +973,7 @@ class LlamaModel(LlamaPreTrainedModel):
         elif self.use_sdpa:
             # Alternatively, 4d mask or None is passed to the layers
             attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+                attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length, output_attentions=output_attentions
             )
         else:
             # 4d mask is passed through the layers

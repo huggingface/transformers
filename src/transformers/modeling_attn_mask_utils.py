@@ -284,6 +284,7 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
     inputs_embeds: torch.Tensor,
     past_key_values_length: int,
     sliding_window: Optional[int] = None,
+    output_attentions: bool = False,
 ):
     """
     Prepares the correct attn_mask argument to be used by torch.nn.functional.scaled_dot_product_attention.
@@ -293,6 +294,10 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
 
     Note that as of PyTorch 2.1, SDPA can not dispatch to flash attention in case an attention mask is passed. A possible solution is to use nested tensors.
     """
+    if output_attentions:
+        # output_attentions=True can not be supported when using SDPA, and we fall back on
+        # the manual implementation that requires a 4D causal mask in all cases.
+        return _prepare_4d_causal_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length, sliding_window)
     attn_mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=sliding_window)
 
     key_value_length = input_shape[-1] + past_key_values_length
