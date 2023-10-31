@@ -113,6 +113,7 @@ from .trainer_utils import (
     find_executable_batch_size,
     get_last_checkpoint,
     has_length,
+    neftune_post_forward_hook,
     number_of_arguments,
     seed_worker,
     set_seed,
@@ -486,6 +487,8 @@ class Trainer:
         self.model_wrapped = model
         self.model = model
 
+        self.neftune_noise_alpha = args.neftune_noise_alpha
+
         self.compute_metrics = compute_metrics
         self.preprocess_logits_for_metrics = preprocess_logits_for_metrics
         self.optimizer, self.lr_scheduler = optimizers
@@ -633,6 +636,42 @@ class Trainer:
         # torch.compile
         if args.torch_compile and not is_torch_compile_available():
             raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
+
+    def _activate_neftune(self, model):
+        r"""
+        Activates the neftune as presented in this code: https://github.com/neelsjain/NEFTune and paper:
+        https://arxiv.org/abs/2310.05914
+        """
+        unwrapped_model = unwrap_model(model)
+
+        if is_peft_available() and isinstance(unwrapped_model, PeftModel):
+            embeddings = unwrapped_model.base_model.get_input_embeddings()
+        else:
+            embeddings = unwrapped_model.get_input_embeddings()
+
+        del unwrapped_model
+
+        embeddings.neftune_noise_alpha = self.neftune_noise_alpha
+        hook_handle = embeddings.register_forward_hook(neftune_post_forward_hook)
+        self.neftune_hook_handle = hook_handle
+        return model
+
+    def _deactivate_neftune(self, model):
+        """
+        Deactivates the neftune method. Make sure to call `_activate_neftune` first.
+        """
+        if not hasattr(self, "neftune_hook_handle"):
+            raise ValueError("Neftune is not activated make sure to call `trainer._activate_neftune()` first")
+
+        unwrapped_model = unwrap_model(model)
+
+        if is_peft_available() and isinstance(unwrapped_model, PeftModel):
+            embeddings = unwrapped_model.base_model.get_input_embeddings()
+        else:
+            embeddings = unwrapped_model.get_input_embeddings()
+
+        self.neftune_hook_handle.remove()
+        del embeddings.neftune_noise_alpha, unwrapped_model
 
     def add_callback(self, callback):
         """
@@ -1444,6 +1483,10 @@ class Trainer:
 
         self.is_in_train = True
 
+        # Attach NEFTune hooks if necessary
+        if self.neftune_noise_alpha is not None:
+            self.model = self._activate_neftune(self.model)
+
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
         if (args.fp16_full_eval or args.bf16_full_eval) and not args.do_train:
@@ -1955,6 +1998,11 @@ class Trainer:
 
         # Wait for the checkpoint to be uploaded.
         self._finish_current_push()
+
+        # After training we make sure to retrieve back the original forward pass method
+        # for the embedding layer by removing the forward post hook.
+        if self.neftune_noise_alpha is not None:
+            self._deactivate_neftune(self.model)
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
