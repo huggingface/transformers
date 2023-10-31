@@ -370,7 +370,6 @@ class Jukebox5bModelTester(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    @require_torch_fp16
     @skip("Not enough GPU memory on CI runners")
     def test_slow_sampling(self):
         model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
