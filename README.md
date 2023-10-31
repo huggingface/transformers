@@ -221,9 +221,9 @@ The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/sta
 
 1. Easy-to-use state-of-the-art models:
     - High performance on natural language understanding & generation, computer vision, and audio tasks.
-    - Low barrier to entry for educators and practitioners.
+    - Low barrier for entry of educators and practitioners.
     - Few user-facing abstractions with just three classes to learn.
-    - A unified API for using all our pretrained models.
+    - An unified API for using all our pretrained models.
 
 1. Lower compute costs, smaller carbon footprint:
     - Researchers can share trained models instead of always retraining.
