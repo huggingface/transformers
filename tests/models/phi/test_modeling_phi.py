@@ -287,7 +287,6 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     test_headmasking = False
     test_pruning = False
-    test_mismatched_shapes = False  # This test fails because in config we have "mixformer-sequential" instead of "phi". Will be resolved once we transfer the weights and update the config.
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Phi
     def setUp(self):
