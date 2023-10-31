@@ -580,7 +580,7 @@ def spectrogram_batch(
         else:
             raise ValueError(f"Unknown log_mel option: {log_mel}")
 
-    spectrogram = np.asarray(spectrogram, dtype).transpose(0, 2, 1)
+    spectrogram = np.asarray(spectrogram, spectrogram.dtype).transpose(0, 2, 1)
 
     return spectrogram
 
