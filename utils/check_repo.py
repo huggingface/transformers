@@ -73,6 +73,9 @@ PRIVATE_MODELS = [
     "MaskFormerSwinPreTrainedModel",
     "BridgeTowerTextModel",
     "BridgeTowerVisionModel",
+    "Kosmos2TextModel",
+    "Kosmos2TextForCausalLM",
+    "Kosmos2VisionModel",
     "TvpTransformer",
 ]
 

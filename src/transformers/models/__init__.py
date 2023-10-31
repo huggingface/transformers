@@ -109,6 +109,7 @@ from . import (
     informer,
     instructblip,
     jukebox,
+    kosmos2,
     layoutlm,
     layoutlmv2,
     layoutlmv3,
