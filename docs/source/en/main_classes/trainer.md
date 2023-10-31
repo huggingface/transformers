@@ -210,6 +210,7 @@ python -m torch.distributed.launch --nproc_per_node=2  trainer-program.py ...
 ```
 
 if you have either [`accelerate`](https://github.com/huggingface/accelerate) or [`deepspeed`](https://github.com/microsoft/DeepSpeed) installed you can also accomplish the same by using one of:
+
 ```bash
 accelerate launch --num_processes 2 trainer-program.py ...
 ```
@@ -246,6 +247,7 @@ CUDA_VISIBLE_DEVICES=2,0 python -m torch.distributed.launch trainer-program.py .
 Here your physical GPUs 0 and 2 are mapped to `cuda:1` and `cuda:0` correspondingly.
 
 The above examples were all for `DistributedDataParallel` use pattern, but the same method works for [`DataParallel`](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html) as well:
+
 ```bash
 CUDA_VISIBLE_DEVICES=2,0 python trainer-program.py ...
 ```
