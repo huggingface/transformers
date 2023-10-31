@@ -301,7 +301,6 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
     key_value_length = input_shape[-1] + past_key_values_length
     batch_size, query_length = input_shape
 
-    print("query_length", query_length)
     if attention_mask is not None:
         if batch_size == 1 and torch.all(attention_mask == 1):
             if query_length == 1:
