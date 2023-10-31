@@ -137,7 +137,7 @@ test_ds.set_transform(transforms)
 
 ## Load a base model
 
-["microsoft/git-base"](https://huggingface.co/microsoft/git-base) を [`AutoModelForCausalLM`](https://huggingface.co/docs/transformers/model_doc/auto#) にロードします。 transformers.AutoModelForCausalLM) オブジェクト。
+["microsoft/git-base"](https://huggingface.co/microsoft/git-base) を [`AutoModelForCausalLM`](https://huggingface.co/docs/transformers/model_doc/auto#transformers.AutoModelForCausalLM) オブジェクト。
 
 ```python
 from transformers import AutoModelForCausalLM
