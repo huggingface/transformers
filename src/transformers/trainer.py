@@ -642,10 +642,14 @@ class Trainer:
         Activates the neftune as presented in this code: https://github.com/neelsjain/NEFTune and paper:
         https://arxiv.org/abs/2310.05914
         """
-        if is_peft_available() and isinstance(model, PeftModel):
-            embeddings = unwrap_model(model.base_model).get_input_embeddings()
+        unwrapped_model = unwrap_model(model)
+
+        if is_peft_available() and isinstance(unwrapped_model, PeftModel):
+            embeddings = unwrapped_model.base_model.get_input_embeddings()
         else:
-            embeddings = unwrap_model(model).get_input_embeddings()
+            embeddings = unwrapped_model.get_input_embeddings()
+
+        del unwrapped_model
 
         embeddings.neftune_noise_alpha = self.neftune_noise_alpha
         hook_handle = embeddings.register_forward_hook(neftune_post_forward_hook)
@@ -659,13 +663,15 @@ class Trainer:
         if not hasattr(self, "neftune_hook_handle"):
             raise ValueError("Neftune is not activated make sure to call `trainer._activate_neftune()` first")
 
-        if is_peft_available() and isinstance(model, PeftModel):
-            embeddings = unwrap_model(model.base_model).get_input_embeddings()
+        unwrapped_model = unwrap_model(model)
+
+        if is_peft_available() and isinstance(unwrapped_model, PeftModel):
+            embeddings = unwrapped_model.base_model.get_input_embeddings()
         else:
-            embeddings = unwrap_model(model).get_input_embeddings()
+            embeddings = unwrapped_model.get_input_embeddings()
 
         self.neftune_hook_handle.remove()
-        del embeddings.neftune_noise_alpha
+        del embeddings.neftune_noise_alpha, unwrapped_model
 
     def add_callback(self, callback):
         """
