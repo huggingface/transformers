@@ -316,7 +316,7 @@ def get_mask2former_resize_output_image_size(
         max_size (`int`, *optional*):
             The maximum size of the output image.
         size_divisor (`int`, *optional*, defaults to 0):
-            If size_divisible is given, the output image size will be divisible by the number.
+            If `size_divisor` is given, the output image size will be divisible by the number.
         default_to_square (`bool`, *optional*, defaults to `True`):
             Whether to default to square if no size is provided.
         input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -473,7 +473,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             size (`Dict[str, int]`):
                 The size of the output image.
             size_divisor (`int`, *optional*, defaults to 0):
-                If size_divisor is given, the output image size will be divisible by the number.
+                If `size_divisor` is given, the output image size will be divisible by the number.
             resample (`PILImageResampling` resampling filter, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resizing the image.
             data_format (`ChannelDimension` or `str`, *optional*):
