@@ -769,10 +769,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 filename = pretrained_model_name_or_path
                 resolved_archive_file = download_url(pretrained_model_name_or_path)
             else:
-                if is_safetensors_available():
-                    filename = SAFE_WEIGHTS_NAME
-                elif from_pt:
+                if from_pt:
                     filename = WEIGHTS_NAME
+                elif is_safetensors_available():
+                    filename = SAFE_WEIGHTS_NAME
                 else:
                     filename = FLAX_WEIGHTS_NAME
 
@@ -810,7 +810,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         if resolved_archive_file is not None:
                             is_sharded = True
                     # Maybe the checkpoint is pytorch sharded, we try to grab the pytorch index name in this case.
-                    elif resolved_archive_file is None and from_pt:
+                    if resolved_archive_file is None and from_pt:
                         resolved_archive_file = cached_file(
                             pretrained_model_name_or_path, WEIGHTS_INDEX_NAME, **cached_file_kwargs
                         )

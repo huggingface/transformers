@@ -2757,10 +2757,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 resolved_archive_file = download_url(pretrained_model_name_or_path)
             else:
                 # set correct filename
-                if is_safetensors_available():
-                    filename = SAFE_WEIGHTS_NAME
-                elif from_pt:
+                if from_pt:
                     filename = WEIGHTS_NAME
+                elif is_safetensors_available():
+                    filename = SAFE_WEIGHTS_NAME
                 else:
                     filename = TF2_WEIGHTS_NAME
 
