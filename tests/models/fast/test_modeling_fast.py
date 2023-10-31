@@ -18,22 +18,23 @@ import unittest
 
 import requests
 from PIL import Image
-from parameterized import parameterized
 
 from transformers import (
     FastConfig,
     is_torch_available,
-    set_seed,
 )
 from transformers.models.fast.image_processing_fast import FastImageProcessor
-from transformers.testing_utils import CaptureLogger, require_bitsandbytes, require_torch, slow, tooslow, torch_device, \
-    require_vision
-from transformers.utils import logging as transformers_logging
+from transformers.testing_utils import (
+    require_torch,
+    require_vision,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+
 
 if is_torch_available():
     import torch
@@ -45,74 +46,74 @@ if is_torch_available():
 
 class FastModelTester:
     def __init__(
-            self,
-            parent,
-            backbone_kernel_size=3,
-            backbone_stride=2,
-            backbone_dilation=1,
-            backbone_groups=1,
-            backbone_bias=False,
-            backbone_has_shuffle=False,
-            backbone_in_channels=3,
-            backbone_out_channels=64,
-            backbone_use_bn=True,
-            backbone_act_func="relu",
-            backbone_dropout_rate=0,
-            backbone_ops_order="weight_bn_act",
-            backbone_stage1_in_channels=[64],
-            backbone_stage1_out_channels=[64],
-            backbone_stage1_kernel_size=[[3, 3]],
-            backbone_stage1_stride=[1],
-            backbone_stage1_dilation=[1],
-            backbone_stage1_groups=[1],
-            backbone_stage2_in_channels=[64],
-            backbone_stage2_out_channels=[128],
-            backbone_stage2_kernel_size=[[3, 1]],
-            backbone_stage2_stride=[2],
-            backbone_stage2_dilation=[1],
-            backbone_stage2_groups=[1],
-            backbone_stage3_in_channels=[128],
-            backbone_stage3_out_channels=[256],
-            backbone_stage3_kernel_size=[[1, 3]],
-            backbone_stage3_stride=[2],
-            backbone_stage3_dilation=[1],
-            backbone_stage3_groups=[1],
-            backbone_stage4_in_channels=[256],
-            backbone_stage4_out_channels=[512],
-            backbone_stage4_kernel_size=[[3, 3]],
-            backbone_stage4_stride=[2],
-            backbone_stage4_dilation=[1],
-            backbone_stage4_groups=[1],
-            neck_in_channels=[64],
-            neck_out_channels=[128],
-            neck_kernel_size=[[3, 3]],
-            neck_stride=[1],
-            neck_dilation=[1],
-            neck_groups=[1],
-            head_pooling_size=9,
-            head_dropout_ratio=0.1,
-            head_conv_in_channels=128,
-            head_conv_out_channels=4,
-            head_conv_kernel_size=[3, 3],
-            head_conv_stride=1,
-            head_conv_dilation=1,
-            head_conv_groups=1,
-            head_final_kernel_size=1,
-            head_final_stride=1,
-            head_final_dilation=1,
-            head_final_groups=1,
-            head_final_bias=False,
-            head_final_has_shuffle=False,
-            head_final_in_channels=4,
-            head_final_out_channels=5,
-            head_final_use_bn=False,
-            head_final_act_func=None,
-            head_final_dropout_rate=0,
-            head_final_ops_order="weight",
-            batch_size=3,
-            num_channels=3,
-            image_size=500,
-            is_training=True,
+        self,
+        parent,
+        backbone_kernel_size=3,
+        backbone_stride=2,
+        backbone_dilation=1,
+        backbone_groups=1,
+        backbone_bias=False,
+        backbone_has_shuffle=False,
+        backbone_in_channels=3,
+        backbone_out_channels=64,
+        backbone_use_bn=True,
+        backbone_act_func="relu",
+        backbone_dropout_rate=0,
+        backbone_ops_order="weight_bn_act",
+        backbone_stage1_in_channels=[64],
+        backbone_stage1_out_channels=[64],
+        backbone_stage1_kernel_size=[[3, 3]],
+        backbone_stage1_stride=[1],
+        backbone_stage1_dilation=[1],
+        backbone_stage1_groups=[1],
+        backbone_stage2_in_channels=[64],
+        backbone_stage2_out_channels=[128],
+        backbone_stage2_kernel_size=[[3, 1]],
+        backbone_stage2_stride=[2],
+        backbone_stage2_dilation=[1],
+        backbone_stage2_groups=[1],
+        backbone_stage3_in_channels=[128],
+        backbone_stage3_out_channels=[256],
+        backbone_stage3_kernel_size=[[1, 3]],
+        backbone_stage3_stride=[2],
+        backbone_stage3_dilation=[1],
+        backbone_stage3_groups=[1],
+        backbone_stage4_in_channels=[256],
+        backbone_stage4_out_channels=[512],
+        backbone_stage4_kernel_size=[[3, 3]],
+        backbone_stage4_stride=[2],
+        backbone_stage4_dilation=[1],
+        backbone_stage4_groups=[1],
+        neck_in_channels=[64],
+        neck_out_channels=[128],
+        neck_kernel_size=[[3, 3]],
+        neck_stride=[1],
+        neck_dilation=[1],
+        neck_groups=[1],
+        head_pooling_size=9,
+        head_dropout_ratio=0.1,
+        head_conv_in_channels=128,
+        head_conv_out_channels=4,
+        head_conv_kernel_size=[3, 3],
+        head_conv_stride=1,
+        head_conv_dilation=1,
+        head_conv_groups=1,
+        head_final_kernel_size=1,
+        head_final_stride=1,
+        head_final_dilation=1,
+        head_final_groups=1,
+        head_final_bias=False,
+        head_final_has_shuffle=False,
+        head_final_in_channels=4,
+        head_final_out_channels=5,
+        head_final_use_bn=False,
+        head_final_act_func=None,
+        head_final_dropout_rate=0,
+        head_final_ops_order="weight",
+        batch_size=3,
+        num_channels=3,
+        image_size=500,
+        is_training=True,
     ):
         self.parent = parent
         self.backbone_kernel_size = backbone_kernel_size
@@ -193,10 +194,6 @@ class FastModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        pixel_values_meta = {
-            "org_img_size": (500, 500),
-            "img_size": (500, 500)
-        }
         # labels = None
         # if self.use_labels:
         #     labels = ids_tensor([self.batch_size], self.num_labels)
@@ -275,7 +272,7 @@ class FastModelTester:
         model = FASTForImageCaptioning(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values=input['pixel_values'])
+        result = model(pixel_values=input["pixel_values"])
         self.parent.assertEqual(result.hidden_states.shape, (self.batch_size, 5, 125, 125))
 
     def prepare_config_and_inputs_for_common(self):
@@ -286,13 +283,7 @@ class FastModelTester:
 
 @require_torch
 class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            FASTForImageCaptioning,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (FASTForImageCaptioning,) if is_torch_available() else ()
 
     pipeline_model_mapping = {}
     test_headmasking = False
@@ -356,13 +347,16 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         to_return = inputs_dict.copy()
-        gt_instances = torch.zeros(self.model_tester.batch_size, self.model_tester.image_size,
-                                   self.model_tester.image_size)
-        gt_kernels = torch.zeros(self.model_tester.batch_size, self.model_tester.image_size,
-                                 self.model_tester.image_size)
+        gt_instances = torch.zeros(
+            self.model_tester.batch_size, self.model_tester.image_size, self.model_tester.image_size
+        )
+        gt_kernels = torch.zeros(
+            self.model_tester.batch_size, self.model_tester.image_size, self.model_tester.image_size
+        )
         gt_text = torch.zeros(self.model_tester.batch_size, self.model_tester.image_size, self.model_tester.image_size)
-        training_masks = torch.ones(self.model_tester.batch_size, self.model_tester.image_size,
-                                    self.model_tester.image_size)
+        training_masks = torch.ones(
+            self.model_tester.batch_size, self.model_tester.image_size, self.model_tester.image_size
+        )
         labels = {}
         labels["gt_instances"] = gt_instances
         labels["gt_kernels"] = gt_kernels
@@ -381,7 +375,7 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             model = model_class(config)
             num_params = model.num_parameters()
             assert (
-                    num_params < 3000000
+                num_params < 3000000
             ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
 
         # def prepare_image():
@@ -407,14 +401,12 @@ class FastModelIntegrationTest(unittest.TestCase):
         image = prepare_image()
         input = image_processor(image, return_tensor="np")
 
-        output = model(pixel_values=torch.tensor(input['pixel_values']))
-        target_sizes = [(image.shape[1], image.shape[2]) for image in input['pixel_values']]
+        output = model(pixel_values=torch.tensor(input["pixel_values"]))
+        target_sizes = [(image.shape[1], image.shape[2]) for image in input["pixel_values"]]
         final_out = image_processor.get_results(output, target_sizes)
 
-        assert (
-                final_out[0]['bboxes'][0] == [224, 120, 246, 120, 246, 134, 224, 134]
-        )
-        assert round(float(final_out[0]['scores'][0]), 5) == 0.95541
+        assert final_out[0]["bboxes"][0] == [224, 120, 246, 120, 246, 134, 224, 134]
+        assert round(float(final_out[0]["scores"][0]), 5) == 0.95541
 
     def test_inference_fast_base_800_total_text_ic17mlt_model(self):
         model = FASTForImageCaptioning.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
@@ -429,11 +421,9 @@ class FastModelIntegrationTest(unittest.TestCase):
         image = prepare_image()
         input = image_processor(image, return_tensor="np")
 
-        output = model(pixel_values=torch.tensor(input['pixel_values']))
-        target_sizes = [(image.shape[1], image.shape[2]) for image in input['pixel_values']]
+        output = model(pixel_values=torch.tensor(input["pixel_values"]))
+        target_sizes = [(image.shape[1], image.shape[2]) for image in input["pixel_values"]]
         final_out = image_processor.get_results(output, target_sizes)
 
-        assert (
-                final_out[0]['bboxes'][0][:10] == [484, 175, 484, 178, 483, 179, 452, 179, 452, 182]
-        )
-        assert round(float(final_out[0]['scores'][0]), 5) == 0.92356
+        assert final_out[0]["bboxes"][0][:10] == [484, 175, 484, 178, 483, 179, 452, 179, 452, 182]
+        assert round(float(final_out[0]["scores"][0]), 5) == 0.92356

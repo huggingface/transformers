@@ -20,6 +20,7 @@ from ...utils import (
     is_torch_available,
 )
 
+
 _import_structure = {
     "configuration_fast": ["FastConfig"],
 }
@@ -30,9 +31,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_fast"] = [
-        "FASTForImageCaptioning"
-    ]
+    _import_structure["modeling_fast"] = ["FASTForImageCaptioning"]
 
 if TYPE_CHECKING:
     from .configuration_fast import FastConfig
@@ -43,9 +42,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_fast import (
-            FASTForImageCaptioning
-        )
+        from .modeling_fast import FASTForImageCaptioning
 
 
 else:
