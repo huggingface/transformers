@@ -16,7 +16,7 @@ import tempfile
 import unittest
 
 import numpy as np
-from huggingface_hub import HfFolder, delete_repo
+from huggingface_hub import HfFolder, delete_repo, snapshot_download
 from requests.exceptions import HTTPError
 
 from transformers import BertConfig, BertModel, is_flax_available
@@ -254,3 +254,19 @@ class FlaxModelUtilsTest(unittest.TestCase):
             new_model = FlaxBertModel.from_pretrained(tmp_dir)
 
         self.assertTrue(check_models_equal(hub_model, new_model))
+
+    @require_safetensors
+    def test_safetensors_flax_from_sharded_msgpack_with_sharded_safetensors_local(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = snapshot_download(
+                "hf-internal-testing/tiny-bert-flax-safetensors-msgpack-sharded", cache_dir=tmp_dir
+            )
+
+            # This should not raise even if there are two types of sharded weights
+            FlaxBertModel.from_pretrained(path)
+
+    @require_safetensors
+    def test_safetensors_flax_from_sharded_msgpack_with_sharded_safetensors_hub(self):
+        # This should not raise even if there are two types of sharded weights
+        # This should discard the safetensors weights in favor of the msgpack sharded weights
+        FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-flax-safetensors-msgpack-sharded")

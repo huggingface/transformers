@@ -24,7 +24,7 @@ import tempfile
 import unittest
 import unittest.mock as mock
 
-from huggingface_hub import HfFolder, Repository, delete_repo
+from huggingface_hub import HfFolder, Repository, delete_repo, snapshot_download
 from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
 
@@ -520,6 +520,20 @@ class TFModelUtilsTest(unittest.TestCase):
 
         for p1, p2 in zip(hub_model.weights, new_model.weights):
             self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
+    @require_safetensors
+    def test_safetensors_tf_from_sharded_h5_with_sharded_safetensors_local(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = snapshot_download("hf-internal-testing/tiny-bert-tf-safetensors-h5-sharded", cache_dir=tmp_dir)
+
+            # This should not raise even if there are two types of sharded weights
+            TFBertModel.from_pretrained(path)
+
+    @require_safetensors
+    def test_safetensors_flax_from_sharded_msgpack_with_sharded_safetensors_hub(self):
+        # This should not raise even if there are two types of sharded weights
+        # This should discard the safetensors weights in favor of the msgpack sharded weights
+        TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-safetensors-h5-sharded")
 
 
 @require_tf
