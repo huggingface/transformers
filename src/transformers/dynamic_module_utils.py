@@ -265,7 +265,8 @@ def get_cached_module_file(
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
@@ -466,7 +467,8 @@ def get_class_from_dynamic_module(
     use_auth_token = kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
@@ -575,7 +577,7 @@ def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Option
 
 def _raise_timeout_error(signum, frame):
     raise ValueError(
-        "Loading this model requires you to execute custom code contained in the model repository on your local"
+        "Loading this model requires you to execute custom code contained in the model repository on your local "
         "machine. Please set the option `trust_remote_code=True` to permit loading of this model."
     )
 
@@ -593,7 +595,7 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
                 signal.alarm(TIME_OUT_REMOTE_CODE)
                 while trust_remote_code is None:
                     answer = input(
-                        f"The repository for {model_name} contains custom code which must be executed to correctly"
+                        f"The repository for {model_name} contains custom code which must be executed to correctly "
                         f"load the model. You can inspect the repository content at https://hf.co/{model_name}.\n"
                         f"You can avoid this prompt in future by passing the argument `trust_remote_code=True`.\n\n"
                         f"Do you wish to run the custom code? [y/N] "
@@ -606,7 +608,7 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
             except Exception:
                 # OS which does not support signal.SIGALRM
                 raise ValueError(
-                    f"The repository for {model_name} contains custom code which must be executed to correctly"
+                    f"The repository for {model_name} contains custom code which must be executed to correctly "
                     f"load the model. You can inspect the repository content at https://hf.co/{model_name}.\n"
                     f"Please pass the argument `trust_remote_code=True` to allow custom code to be run."
                 )

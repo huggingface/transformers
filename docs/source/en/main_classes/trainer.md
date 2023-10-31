@@ -18,6 +18,12 @@ rendered properly in your Markdown viewer.
 
 The [`Trainer`] class provides an API for feature-complete training in PyTorch for most standard use cases. It's used in most of the [example scripts](https://github.com/huggingface/transformers/tree/main/examples).
 
+<Tip>
+
+If you're looking to fine-tune a language model like Llama-2 or Mistral on a text dataset using autoregressive techniques, consider using [`trl`](https://github.com/huggingface/trl)'s [`~trl.SFTTrainer`]. The [`~trl.SFTTrainer`] wraps the [`Trainer`] and is specially optimized for this particular task and supports sequence packing, LoRA, quantization, and DeepSpeed for efficient scaling to any model size. On the other hand, the [`Trainer`] is a more versatile option, suitable for a broader spectrum of tasks.
+
+</Tip>
+
 Before instantiating your [`Trainer`], create a [`TrainingArguments`] to access all the points of customization during training.
 
 The API supports distributed training on multiple GPUs/TPUs, mixed precision through [NVIDIA Apex](https://github.com/NVIDIA/apex) and Native AMP for PyTorch.
@@ -204,6 +210,7 @@ python -m torch.distributed.launch --nproc_per_node=2  trainer-program.py ...
 ```
 
 if you have either [`accelerate`](https://github.com/huggingface/accelerate) or [`deepspeed`](https://github.com/microsoft/DeepSpeed) installed you can also accomplish the same by using one of:
+
 ```bash
 accelerate launch --num_processes 2 trainer-program.py ...
 ```
@@ -240,6 +247,7 @@ CUDA_VISIBLE_DEVICES=2,0 python -m torch.distributed.launch trainer-program.py .
 Here your physical GPUs 0 and 2 are mapped to `cuda:1` and `cuda:0` correspondingly.
 
 The above examples were all for `DistributedDataParallel` use pattern, but the same method works for [`DataParallel`](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html) as well:
+
 ```bash
 CUDA_VISIBLE_DEVICES=2,0 python trainer-program.py ...
 ```

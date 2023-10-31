@@ -306,7 +306,7 @@ Create a function to preprocess the dataset so the audio samples are the same le
 ...     return inputs
 ```
 
-Apply the `preprocess_function` to the the first few examples in the dataset:
+Apply the `preprocess_function` to the first few examples in the dataset:
 
 ```py
 >>> processed_dataset = preprocess_function(dataset[:5])
@@ -412,8 +412,7 @@ If you wish to normalize images as a part of the augmentation transformation, us
 and `image_processor.image_std` values.
 </Tip>
 
-3. Then use 🤗 Datasets [`set_transform`](https://huggingface.co/docs/datasets/process.html#format-transform) to apply the transforms on the fly:
-
+3. Then use 🤗 Datasets[`~datasets.Dataset.set_transform`] to apply the transforms on the fly:
 ```py
 >>> dataset.set_transform(transforms)
 ```

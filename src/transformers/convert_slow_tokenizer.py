@@ -775,6 +775,31 @@ class NllbConverter(SpmConverter):
         )
 
 
+class SeamlessM4TConverter(SpmConverter):
+    def vocab(self, proto):
+        vocab = [
+            ("<pad>", 0.0),
+            ("<unk>", 0.0),
+            ("<s>", 0.0),
+            ("</s>", 0.0),
+        ]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        return vocab
+
+    def unk_id(self, proto):
+        return self.original_tokenizer.unk_token_id
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single="__eng__ $A </s>",
+            pair="__eng__ $A $B </s>",
+            special_tokens=[
+                ("__eng__", self.original_tokenizer.convert_tokens_to_ids("__eng__")),
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+            ],
+        )
+
+
 class XLMRobertaConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [
@@ -1168,9 +1193,9 @@ class LlamaConverter(SpmConverter):
             )
             tokenizer.add_special_tokens(
                 [
-                    AddedToken("<unk>"),
-                    AddedToken("<s>"),
-                    AddedToken("</s>"),
+                    AddedToken("<unk>", normalized=False, special=True),
+                    AddedToken("<s>", normalized=False, special=True),
+                    AddedToken("</s>", normalized=False, special=True),
                 ]
             )
         else:
@@ -1192,32 +1217,8 @@ class LlamaConverter(SpmConverter):
         return None
 
     def post_processor(self):
-        # 3 possible case :
-        # - add_bos and add_eos : '<s>:0 $A:0 </s>:0' and '<s>:0 $A:0 </s>:0 <s>:1 $B:1 </s>:1'
-        # - add_bos: '<s>:0 $A:0' and '<s>:0 $A:0 <s>:1 $B:1'
-        # - add_eos: '$A:0 </s>:0' and '$A:0 </s>:0 $B:1 </s>:1'
-
-        add_bos = self.original_tokenizer.add_bos_token
-        add_eos = self.original_tokenizer.add_eos_token
-        if add_bos or add_eos:
-            bos = self.original_tokenizer.bos_token
-            bos_token_id = self.original_tokenizer.bos_token_id
-
-            eos = self.original_tokenizer.eos_token
-            eos_token_id = self.original_tokenizer.eos_token_id
-
-            single = f"{(bos+':0 ') * add_bos}$A:0{(' '+eos+':0') if add_eos else ''}"
-            pair = f"{single}{(' '+bos+':1') * add_bos} $B:1{(' '+eos+':1') if add_eos else ''}"
-
-            special_tokens = []
-            if add_bos:
-                special_tokens.append((bos, bos_token_id))
-            if add_eos:
-                special_tokens.append((eos, eos_token_id))
-            return processors.TemplateProcessing(single=single, pair=pair, special_tokens=special_tokens)
-
-        else:
-            return None
+        # the processor is defined in the LlamaTokenizerFast class.
+        return None
 
 
 class MarkupLMConverter(Converter):
@@ -1302,6 +1303,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "RetriBertTokenizer": BertConverter,
     "RobertaTokenizer": RobertaConverter,
     "RoFormerTokenizer": RoFormerConverter,
+    "SeamlessM4TTokenizer": SeamlessM4TConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
     "WhisperTokenizer": WhisperConverter,

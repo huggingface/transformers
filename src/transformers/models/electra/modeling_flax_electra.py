@@ -263,7 +263,7 @@ class FlaxElectraSelfAttention(nn.Module):
         hidden_states,
         attention_mask,
         layer_head_mask,
-        key_value_states: Optional[jnp.array] = None,
+        key_value_states: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         deterministic=True,
         output_attentions: bool = False,
@@ -1228,13 +1228,13 @@ class FlaxElectraSequenceSummary(nn.Module):
         Compute a single vector summary of a sequence hidden states.
 
         Args:
-            hidden_states (`jnp.array` of shape `[batch_size, seq_len, hidden_size]`):
+            hidden_states (`jnp.ndarray` of shape `[batch_size, seq_len, hidden_size]`):
                 The hidden states of the last layer.
-            cls_index (`jnp.array` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
+            cls_index (`jnp.ndarray` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
                 Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
 
         Returns:
-            `jnp.array`: The summary of the sequence hidden states.
+            `jnp.ndarray`: The summary of the sequence hidden states.
         """
         # NOTE: this doest "first" type summary always
         output = hidden_states[:, 0]

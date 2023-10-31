@@ -266,7 +266,6 @@ class Seq2SeqTrainer(Trainer):
         has_labels = "labels" in inputs
         inputs = self._prepare_inputs(inputs)
 
-        # XXX: adapt synced_gpus for fairscale as well
         # Priority (handled in generate):
         # non-`None` gen_kwargs > model.generation_config > default GenerationConfig()
         if len(gen_kwargs) == 0 and hasattr(self, "_gen_kwargs"):
@@ -289,7 +288,9 @@ class Seq2SeqTrainer(Trainer):
             and "decoder_input_ids" in generation_inputs
             and generation_inputs["labels"].shape == generation_inputs["decoder_input_ids"].shape
         ):
-            generation_inputs = {k: v for k, v in inputs.items() if k != "decoder_input_ids"}
+            generation_inputs = {
+                k: v for k, v in inputs.items() if k not in ("decoder_input_ids", "decoder_attention_mask")
+            }
         generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)
 
         # Temporary hack to ensure the generation config is not initialized for each iteration of the evaluation loop
