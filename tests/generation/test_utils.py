@@ -22,7 +22,13 @@ import warnings
 import numpy as np
 
 from transformers import is_torch_available, pipeline
-from transformers.testing_utils import require_accelerate, require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_accelerate,
+    require_torch,
+    require_torch_multi_accelerator,
+    slow,
+    torch_device,
+)
 
 from ..test_modeling_common import floats_tensor, ids_tensor
 from .test_framework_agnostic import GenerationIntegrationTestsMixin
@@ -1019,7 +1025,7 @@ class GenerationTesterMixin:
                 )
 
     @require_accelerate
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_model_parallel_beam_search(self):
         for model_class in self.all_generative_model_classes:
             if model_class._no_split_modules is None:

@@ -24,7 +24,14 @@ import numpy as np
 
 import transformers
 from transformers import WhisperConfig
-from transformers.testing_utils import is_pt_flax_cross_test, require_torch, require_torchaudio, slow, torch_device
+from transformers.testing_utils import (
+    is_pt_flax_cross_test,
+    require_torch,
+    require_torch_fp16,
+    require_torchaudio,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property, is_flax_available, is_torch_available
 from transformers.utils.import_utils import is_datasets_available
 
@@ -429,14 +436,14 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_generate_with_head_masking(self):
         pass
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         config.max_target_positions = 400
         input_features = input_dict["input_features"]
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            input_features = input_features.half()
-            model.half()
+        input_features = input_features.half()
+        model.half()
         model.generate(input_features)
         model.generate(input_features, num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
