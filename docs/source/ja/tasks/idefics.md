@@ -267,7 +267,7 @@ IDEFICS は、次のデータを含むデータについて明示的にトレー
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-classification.jpg" alt="Image of a vegetable stand"/>
 </div>
 
-写真提供：[ピーター・ウェント](https://unsplash.com/@peterwendt)。
+写真提供：[Peter Wendt](https://unsplash.com/@peterwendt)。
 
 画像を次のいずれかのカテゴリに分類するようにモデルに指示できます。
 
