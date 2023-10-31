@@ -16,7 +16,7 @@
 import tempfile
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, AwqConfig
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
 from transformers.testing_utils import (
     require_accelerate,
     require_auto_awq,
@@ -25,11 +25,14 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available
+from transformers.utils import is_accelerate_available, is_torch_available
 
 
 if is_torch_available():
     import torch
+
+if is_accelerate_available():
+    from accelerate import init_empty_weights
 
 
 @require_torch_gpu
@@ -104,15 +107,41 @@ class AwqTest(unittest.TestCase):
         """
         from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
 
-        self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        from transformers.integrations.awq import replace_with_awq_linear
 
-        correctly_converted = False
-        for name, module in self.quantized_model.named_modules():
+        model_id = "facebook/opt-350m"
+        config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
+        quantization_config = AwqConfig(bits=4)
+
+        with init_empty_weights():
+            model = OPTForCausalLM(config)
+
+        nb_linears = 0
+        for module in model.modules():
+            if isinstance(module, torch.nn.Linear):
+                nb_linears += 1
+
+        model, _ = replace_with_awq_linear(model, quantization_config=quantization_config)
+        nb_awq_linear = 0
+        for module in model.modules():
             if isinstance(module, (WQLinear_GEMM, WQLinear_GEMV)):
-                correctly_converted = True
-                break
+                nb_awq_linear += 1
 
-        self.assertTrue(correctly_converted)
+        self.assertEqual(nb_linears, nb_awq_linear)
+
+        # Try with `modules_not_to_convert`
+        with init_empty_weights():
+            model = OPTForCausalLM(config)
+
+        model, _ = replace_with_awq_linear(
+            model, quantization_config=quantization_config, modules_to_not_convert=["lm_head"]
+        )
+        nb_awq_linear = 0
+        for module in model.modules():
+            if isinstance(module, (WQLinear_GEMM, WQLinear_GEMV)):
+                nb_awq_linear += 1
+
+        self.assertEqual(nb_linears - 1, nb_awq_linear)
 
     def test_quantized_model(self):
         """
