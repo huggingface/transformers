@@ -242,9 +242,7 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
-        if pipeline_test_casse_name in ("TextGenerationPipelineTests", "ConversationalPipelineTests"):
-            return True
-        return False
+        return pipeline_test_casse_name in ("TextGenerationPipelineTests", "ConversationalPipelineTests")
 
     def setUp(self):
         self.model_tester = BlenderbotSmallModelTester(self)
