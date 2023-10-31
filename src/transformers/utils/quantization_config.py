@@ -371,7 +371,7 @@ class GPTQConfig(QuantizationConfigMixin):
         pad_token_id: Optional[int] = None,
         disable_exllama: bool = False,
         max_input_length: Optional[int] = None,
-        cache_block_outputs: Optional[bool] = True,
+        cache_block_outputs: bool = True,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
