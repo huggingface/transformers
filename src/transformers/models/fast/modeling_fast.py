@@ -1,15 +1,12 @@
-import math
-from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Optional, Dict
+from typing import Dict, Optional
 
-import cv2
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers import PreTrainedModel, FastConfig
+from transformers import FastConfig, PreTrainedModel
 from transformers.utils import ModelOutput
 
 
@@ -41,7 +38,7 @@ def build_activation(act_func, inplace=True):
 
 class My2DLayer(nn.Module):
     def __init__(
-            self, in_channels, out_channels, use_bn=True, act_func="relu", dropout_rate=0, ops_order="weight_bn_act"
+        self, in_channels, out_channels, use_bn=True, act_func="relu", dropout_rate=0, ops_order="weight_bn_act"
     ):
         super(My2DLayer, self).__init__()
         self.in_channels = in_channels
@@ -104,7 +101,7 @@ class My2DLayer(nn.Module):
 
     def forward(self, x):
         for key, module in self._modules.items():
-            if key == 'bn' and not self.training:
+            if key == "bn" and not self.training:
                 continue
             x = module(x)
         return x
@@ -138,21 +135,20 @@ class My2DLayer(nn.Module):
 
 class ConvLayer(nn.Module):
     def __init__(
-            self,
-            in_channels,
-            out_channels,
-            kernel_size=3,
-            stride=1,
-            dilation=1,
-            groups=1,
-            bias=False,
-            has_shuffle=False,
-            use_bn=True,
-            act_func="relu",
-            dropout_rate=0,
-            use_act=True
+        self,
+        in_channels,
+        out_channels,
+        kernel_size=3,
+        stride=1,
+        dilation=1,
+        groups=1,
+        bias=False,
+        has_shuffle=False,
+        use_bn=True,
+        act_func="relu",
+        dropout_rate=0,
+        use_act=True,
     ):
-
         super().__init__()
 
         self.kernel_size = kernel_size
@@ -192,14 +188,14 @@ class ConvLayer(nn.Module):
 
     def forward(self, x):
         if self.training:
-            if hasattr(self, 'fused_conv'):
-                delattr(self, 'fused_conv')
+            if hasattr(self, "fused_conv"):
+                delattr(self, "fused_conv")
             x = self.conv(x)
             x = self.bn(x)
             return self.act(x)
         else:
-            if not hasattr(self, 'fused_conv'):
-                setattr(self, 'fused_conv', self.fuse_conv_bn(self.conv, self.bn))
+            if not hasattr(self, "fused_conv"):
+                setattr(self, "fused_conv", self.fuse_conv_bn(self.conv, self.bn))
             x = self.fused_conv(x)
             if self.act is not None:
                 x = self.act(x)
@@ -207,18 +203,15 @@ class ConvLayer(nn.Module):
 
     def fuse_conv_bn(self, conv, bn):
         """During inference, the functionary of batch norm layers is turned off but
-        only the mean and var alone channels are used, which exposes the chance to
-        fuse it with the preceding conv layers to save computations and simplify
-        network structures."""
+        only the mean and var alone channels are used, which exposes the chance to fuse it with the preceding conv
+        layers to save computations and simplify network structures."""
         if isinstance(bn, nn.Identity):
             return conv
         conv_w = conv.weight
-        conv_b = conv.bias if conv.bias is not None else torch.zeros_like(
-            bn.running_mean)
+        conv_b = conv.bias if conv.bias is not None else torch.zeros_like(bn.running_mean)
 
         factor = bn.weight / torch.sqrt(bn.running_var + bn.eps)
-        conv.weight = nn.Parameter(conv_w *
-                                   factor.reshape([conv.out_channels, 1, 1, 1]))
+        conv.weight = nn.Parameter(conv_w * factor.reshape([conv.out_channels, 1, 1, 1]))
         conv.bias = nn.Parameter((conv_b - bn.running_mean) * factor + bn.bias)
         return conv
 
@@ -290,8 +283,8 @@ class RepConvLayer(nn.Module):
 
     def forward(self, input):
         if self.training:
-            if hasattr(self, 'fused_conv'):
-                self.__delattr__('fused_conv')
+            if hasattr(self, "fused_conv"):
+                self.__delattr__("fused_conv")
 
             main_outputs = self.main_conv(input)
             main_outputs = self.main_bn(main_outputs)
@@ -314,7 +307,7 @@ class RepConvLayer(nn.Module):
 
             return self.nonlinearity(main_outputs + vertical_outputs + horizontal_outputs + id_out)
         else:
-            if not hasattr(self, 'fused_conv'):
+            if not hasattr(self, "fused_conv"):
                 self.prepare_for_eval()
             return self.nonlinearity(self.fused_conv(input))
 
@@ -375,11 +368,16 @@ class RepConvLayer(nn.Module):
 
     def prepare_for_eval(self):
         kernel, bias = self.get_equivalent_kernel_bias()
-        self.fused_conv = nn.Conv2d(in_channels=self.main_conv.in_channels,
-                                    out_channels=self.main_conv.out_channels,
-                                    kernel_size=self.main_conv.kernel_size, stride=self.main_conv.stride,
-                                    padding=self.main_conv.padding, dilation=self.main_conv.dilation,
-                                    groups=self.main_conv.groups, bias=True)
+        self.fused_conv = nn.Conv2d(
+            in_channels=self.main_conv.in_channels,
+            out_channels=self.main_conv.out_channels,
+            kernel_size=self.main_conv.kernel_size,
+            stride=self.main_conv.stride,
+            padding=self.main_conv.padding,
+            dilation=self.main_conv.dilation,
+            groups=self.main_conv.groups,
+            bias=True,
+        )
         self.fused_conv.weight.data = kernel
         self.fused_conv.bias.data = bias
         for para in self.fused_conv.parameters():
@@ -423,48 +421,48 @@ class TextNet(FastPreTrainedModel):
         self.first_conv.apply(self._init_weights)
         stage1 = []
         for stage_config in zip(
-                config.backbone_stage1_in_channels,
-                config.backbone_stage1_out_channels,
-                config.backbone_stage1_kernel_size,
-                config.backbone_stage1_stride,
-                config.backbone_stage1_dilation,
-                config.backbone_stage1_groups,
+            config.backbone_stage1_in_channels,
+            config.backbone_stage1_out_channels,
+            config.backbone_stage1_kernel_size,
+            config.backbone_stage1_stride,
+            config.backbone_stage1_dilation,
+            config.backbone_stage1_groups,
         ):
             stage1.append(RepConvLayer(*stage_config))
         self.stage1 = nn.ModuleList(stage1)
 
         stage2 = []
         for stage_config in zip(
-                config.backbone_stage2_in_channels,
-                config.backbone_stage2_out_channels,
-                config.backbone_stage2_kernel_size,
-                config.backbone_stage2_stride,
-                config.backbone_stage2_dilation,
-                config.backbone_stage2_groups,
+            config.backbone_stage2_in_channels,
+            config.backbone_stage2_out_channels,
+            config.backbone_stage2_kernel_size,
+            config.backbone_stage2_stride,
+            config.backbone_stage2_dilation,
+            config.backbone_stage2_groups,
         ):
             stage2.append(RepConvLayer(*stage_config))
         self.stage2 = nn.ModuleList(stage2)
 
         stage3 = []
         for stage_config in zip(
-                config.backbone_stage3_in_channels,
-                config.backbone_stage3_out_channels,
-                config.backbone_stage3_kernel_size,
-                config.backbone_stage3_stride,
-                config.backbone_stage3_dilation,
-                config.backbone_stage3_groups,
+            config.backbone_stage3_in_channels,
+            config.backbone_stage3_out_channels,
+            config.backbone_stage3_kernel_size,
+            config.backbone_stage3_stride,
+            config.backbone_stage3_dilation,
+            config.backbone_stage3_groups,
         ):
             stage3.append(RepConvLayer(*stage_config))
         self.stage3 = nn.ModuleList(stage3)
 
         stage4 = []
         for stage_config in zip(
-                config.backbone_stage4_in_channels,
-                config.backbone_stage4_out_channels,
-                config.backbone_stage4_kernel_size,
-                config.backbone_stage4_stride,
-                config.backbone_stage4_dilation,
-                config.backbone_stage4_groups,
+            config.backbone_stage4_in_channels,
+            config.backbone_stage4_out_channels,
+            config.backbone_stage4_kernel_size,
+            config.backbone_stage4_stride,
+            config.backbone_stage4_dilation,
+            config.backbone_stage4_groups,
         ):
             stage4.append(RepConvLayer(*stage_config))
         self.stage4 = nn.ModuleList(stage4)
@@ -695,8 +693,9 @@ class FASTHead(FastPreTrainedModel):
     #     return bboxes, scores
 
 
-def emb_loss(emb, instance, kernel, training_mask, feature_dim=4, delta_v=0.5, delta_d=1.5, weights=(1.0, 1.0),
-             bg_sample=False):
+def emb_loss(
+    emb, instance, kernel, training_mask, feature_dim=4, delta_v=0.5, delta_d=1.5, weights=(1.0, 1.0), bg_sample=False
+):
     training_mask = (training_mask > 0.5).long()
     kernel = (kernel > 0.5).long()
     instance = instance * training_mask
@@ -722,7 +721,7 @@ def emb_loss(emb, instance, kernel, training_mask, feature_dim=4, delta_v=0.5, d
             continue
         ind = instance == lb
         emb_ = emb[:, ind]
-        dist = (emb_ - emb_mean[:, i:i + 1]).norm(p=2, dim=0)
+        dist = (emb_ - emb_mean[:, i : i + 1]).norm(p=2, dim=0)
         dist = F.relu(dist - delta_v) ** 2
         l_agg[i] = torch.mean(torch.log(dist + 1.0))
     l_agg = torch.mean(l_agg[1:])
@@ -754,7 +753,7 @@ def emb_loss(emb, instance, kernel, training_mask, feature_dim=4, delta_v=0.5, d
                 for i, lb in enumerate(unique_labels):
                     if lb == 0:
                         continue
-                    dist = (emb_bg - emb_mean[:, i:i + 1]).norm(p=2, dim=0)
+                    dist = (emb_bg - emb_mean[:, i : i + 1]).norm(p=2, dim=0)
                     dist = F.relu(2 * delta_d - dist) ** 2
                     l_dis_bg = torch.mean(torch.log(dist + 1.0), 0, keepdim=True)
                     l_dis.append(l_dis_bg)
@@ -894,7 +893,6 @@ class FASTForImageCaptioningOutput(ModelOutput):
 
 
 class FASTForImageCaptioning(FastPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.backbone = TextNet(config=config)
@@ -902,10 +900,12 @@ class FASTForImageCaptioning(FastPreTrainedModel):
         self.det_head = FASTHead(config=config)
         self.loss_bg = config.loss_bg
 
-        self.pooling_1s = nn.MaxPool2d(kernel_size=config.head_pooling_size, stride=1,
-                                       padding=(config.head_pooling_size - 1) // 2)
-        self.pooling_2s = nn.MaxPool2d(kernel_size=config.head_pooling_size // 2 + 1, stride=1,
-                                       padding=(config.head_pooling_size // 2) // 2)
+        self.pooling_1s = nn.MaxPool2d(
+            kernel_size=config.head_pooling_size, stride=1, padding=(config.head_pooling_size - 1) // 2
+        )
+        self.pooling_2s = nn.MaxPool2d(
+            kernel_size=config.head_pooling_size // 2 + 1, stride=1, padding=(config.head_pooling_size // 2) // 2
+        )
         self.post_init()
 
     def _upsample(self, x, size, scale=1):
@@ -920,10 +920,10 @@ class FASTForImageCaptioning(FastPreTrainedModel):
         return x
 
     def loss(self, hidden, labels):
-        gt_texts = labels['gt_texts']
-        gt_kernels = labels['gt_kernels']
-        training_masks = labels['training_masks']
-        gt_instances = labels['gt_instances']
+        gt_texts = labels["gt_texts"]
+        gt_kernels = labels["gt_kernels"]
+        training_masks = labels["training_masks"]
+        gt_instances = labels["gt_instances"]
 
         kernels = hidden[:, 0, :, :]  # 4*640*640
         texts = self._max_pooling(kernels, scale=1)  # 4*640*640
@@ -940,12 +940,13 @@ class FASTForImageCaptioning(FastPreTrainedModel):
 
         return torch.mean(loss_text) + torch.mean(loss_kernel) + torch.mean(loss_emb)
 
-    def forward(self,
-                pixel_values: torch.FloatTensor,
-                output_hidden_states: Optional[bool] = True,
-                return_dict: Optional[bool] = None,
-                labels: Dict = None
-                ):
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        output_hidden_states: Optional[bool] = True,
+        return_dict: Optional[bool] = None,
+        labels: Dict = None,
+    ):
         # outputs = {}
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         f = self.backbone(pixel_values)

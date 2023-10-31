@@ -16,17 +16,15 @@
 import math
 import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union
-import torch.nn.functional as F
-import torch.nn as nn
 
 import cv2
 import numpy as np
+import torch.nn as nn
+import torch.nn.functional as F
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -36,8 +34,16 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_torch_available, is_torch_tensor, is_vision_available, logging, \
-    IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+from ...utils import (
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    TensorType,
+    is_torch_available,
+    is_torch_tensor,
+    is_vision_available,
+    logging,
+)
+
 
 if is_vision_available():
     import PIL
@@ -94,23 +100,23 @@ class FastImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values"]
 
     def __init__(
-            self,
-            do_resize: bool = True,
-            size: Dict[str, int] = None,
-            resample: PILImageResampling = PILImageResampling.BICUBIC,
-            do_center_crop: bool = False,
-            crop_size: Dict[str, int] = None,
-            rescale_factor: Union[int, float] = 1 / 255,
-            do_rescale: bool = True,
-            do_normalize: bool = True,
-            image_mean: Optional[Union[float, List[float]]] = None,
-            image_std: Optional[Union[float, List[float]]] = None,
-            do_reduce_labels: bool = False,
-            min_area: int = 10,
-            min_score: float = 0.88,
-            bbox_type: str = "rect",
-            pooling_size: int = 9,
-            **kwargs,
+        self,
+        do_resize: bool = True,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        do_center_crop: bool = False,
+        crop_size: Dict[str, int] = None,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_rescale: bool = True,
+        do_normalize: bool = True,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_reduce_labels: bool = False,
+        min_area: int = 10,
+        min_score: float = 0.88,
+        bbox_type: str = "rect",
+        pooling_size: int = 9,
+        **kwargs,
     ) -> None:
         if "reduce_labels" in kwargs:
             warnings.warn(
@@ -152,13 +158,13 @@ class FastImageProcessor(BaseImageProcessor):
         return super().from_dict(image_processor_dict, **kwargs)
 
     def resize(
-            self,
-            image: np.ndarray,
-            size: Dict[str, int],
-            resample: PILImageResampling = PILImageResampling.BICUBIC,
-            data_format: Optional[Union[str, ChannelDimension]] = None,
-            input_data_format: Optional[Union[str, ChannelDimension]] = None,
-            **kwargs,
+        self,
+        image: np.ndarray,
+        size: Dict[str, int],
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to (size["height"], size["width"]).
@@ -196,20 +202,20 @@ class FastImageProcessor(BaseImageProcessor):
         return label
 
     def _preprocess(
-            self,
-            image: ImageInput,
-            do_reduce_labels: bool = None,
-            do_resize: bool = None,
-            size: Dict[str, int] = None,
-            resample: PILImageResampling = None,
-            do_center_crop: bool = None,
-            crop_size: Dict[str, int] = None,
-            do_rescale: bool = None,
-            rescale_factor: float = None,
-            do_normalize: bool = None,
-            image_mean: Optional[Union[float, List[float]]] = None,
-            image_std: Optional[Union[float, List[float]]] = None,
-            input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        self,
+        image: ImageInput,
+        do_reduce_labels: bool = None,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        do_center_crop: bool = None,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         if do_reduce_labels:
             image = self.reduce_label(image)
@@ -229,20 +235,20 @@ class FastImageProcessor(BaseImageProcessor):
         return image
 
     def _preprocess_image(
-            self,
-            image: ImageInput,
-            do_resize: bool = None,
-            size: Dict[str, int] = None,
-            resample: PILImageResampling = None,
-            do_center_crop: bool = None,
-            crop_size: Dict[str, int] = None,
-            do_rescale: bool = None,
-            rescale_factor: float = None,
-            do_normalize: bool = None,
-            image_mean: Optional[Union[float, List[float]]] = None,
-            image_std: Optional[Union[float, List[float]]] = None,
-            data_format: Optional[Union[str, ChannelDimension]] = None,
-            input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        self,
+        image: ImageInput,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        do_center_crop: bool = None,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """Preprocesses a single image."""
         # All transformations expect numpy arrays.
@@ -274,15 +280,15 @@ class FastImageProcessor(BaseImageProcessor):
         return image
 
     def _preprocess_segmentation_map(
-            self,
-            segmentation_map: ImageInput,
-            do_resize: bool = None,
-            size: Dict[str, int] = None,
-            resample: PILImageResampling = None,
-            do_center_crop: bool = None,
-            crop_size: Dict[str, int] = None,
-            do_reduce_labels: bool = None,
-            input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        self,
+        segmentation_map: ImageInput,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        do_center_crop: bool = None,
+        crop_size: Dict[str, int] = None,
+        do_reduce_labels: bool = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """Preprocesses a single segmentation map."""
         # All transformations expect numpy arrays.
@@ -320,24 +326,24 @@ class FastImageProcessor(BaseImageProcessor):
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
 
     def preprocess(
-            self,
-            images: ImageInput,
-            segmentation_maps: Optional[ImageInput] = None,
-            do_resize: bool = None,
-            size: Dict[str, int] = None,
-            resample: PILImageResampling = None,
-            do_center_crop: bool = None,
-            crop_size: Dict[str, int] = None,
-            do_rescale: bool = None,
-            rescale_factor: float = None,
-            do_normalize: bool = None,
-            image_mean: Optional[Union[float, List[float]]] = None,
-            image_std: Optional[Union[float, List[float]]] = None,
-            do_reduce_labels: Optional[bool] = None,
-            return_tensors: Optional[Union[str, TensorType]] = None,
-            data_format: ChannelDimension = ChannelDimension.FIRST,
-            input_data_format: Optional[Union[str, ChannelDimension]] = None,
-            **kwargs,
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput] = None,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        do_center_crop: bool = None,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_reduce_labels: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -516,25 +522,26 @@ class FastImageProcessor(BaseImageProcessor):
 
     def _max_pooling(self, x, scale=1):
         if scale == 1:
-            x = nn.MaxPool2d(kernel_size=self.pooling_size, stride=1,
-                             padding=(self.pooling_size - 1) // 2)(x)
+            x = nn.MaxPool2d(kernel_size=self.pooling_size, stride=1, padding=(self.pooling_size - 1) // 2)(x)
         elif scale == 2:
-            x = nn.MaxPool2d(kernel_size=self.pooling_size // 2 + 1, stride=1,
-                             padding=(self.pooling_size // 2) // 2)(x)
+            x = nn.MaxPool2d(kernel_size=self.pooling_size // 2 + 1, stride=1, padding=(self.pooling_size // 2) // 2)(
+                x
+            )
         return x
 
     def get_results(self, output, target_sizes):
         scale = 2
-        img_size = (self.size['height'], self.size['width'])
-        out = output['hidden_states']
+        img_size = (self.size["height"], self.size["width"])
+        out = output["hidden_states"]
         batch_size = out.size(0)
-        final_results = dict()
+        final_results = {}
 
-        texts = F.interpolate(out[:, 0:1, :, :], size=(img_size[0] // scale, img_size[1] // scale),
-                              mode='nearest')  # B*1*320*320
+        texts = F.interpolate(
+            out[:, 0:1, :, :], size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
+        )  # B*1*320*320
         texts = self._max_pooling(texts, scale=scale)  # B*1*320*320
         score_maps = torch.sigmoid_(texts)  # B*1*320*320
-        score_maps = F.interpolate(score_maps, size=(img_size[0], img_size[1]), mode='nearest')  # B*1*640*640
+        score_maps = F.interpolate(score_maps, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
         score_maps = score_maps.squeeze(1)  # B*640*640
 
         kernels = (out[:, 0, :, :] > 0).to(torch.uint8)  # B*160*160
@@ -545,27 +552,25 @@ class FastImageProcessor(BaseImageProcessor):
         labels_ = np.array(labels_)
         labels_ = torch.from_numpy(labels_)
         labels = labels_.unsqueeze(1).to(torch.float32)  # B*1*160*160
-        labels = F.interpolate(labels, size=(img_size[0] // scale, img_size[1] // scale), mode='nearest')  # B*1*320*320
+        labels = F.interpolate(
+            labels, size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
+        )  # B*1*320*320
         labels = self._max_pooling(labels, scale=scale)
-        labels = F.interpolate(labels, size=(img_size[0], img_size[1]), mode='nearest')  # B*1*640*640
+        labels = F.interpolate(labels, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
         labels = labels.squeeze(1).to(torch.int32)  # B*640*640
 
         keys = [torch.unique(labels_[i], sorted=True) for i in range(batch_size)]
 
-        final_results.update(dict(kernels=kernels.data.cpu()))
+        final_results.update({"kernels": kernels.data.cpu()})
 
         results = []
         for i in range(batch_size):
             org_img_size = target_sizes[i]
-            scales = (float(org_img_size[1]) / float(img_size[1]),
-                      float(org_img_size[0]) / float(img_size[0]))
+            scales = (float(org_img_size[1]) / float(img_size[1]), float(org_img_size[0]) / float(img_size[0]))
 
             bboxes, scores = self.generate_bbox(keys[i], labels[i], score_maps[i], scales)
-            results.append(dict(
-                bboxes=bboxes,
-                scores=scores
-            ))
-        final_results.update(dict(results=results))
+            results.append({"bboxes": bboxes, "scores": scores})
+        final_results.update({"results": results})
 
         return results
 
@@ -575,7 +580,7 @@ class FastImageProcessor(BaseImageProcessor):
         scores = []
         for index in range(1, label_num):
             i = keys[index]
-            ind = (label == i)
+            ind = label == i
             ind_np = ind.data.cpu().numpy()
             points = np.array(np.where(ind_np)).transpose((1, 0))
             if points.shape[0] < self.min_area:
@@ -586,18 +591,18 @@ class FastImageProcessor(BaseImageProcessor):
                 label[ind] = 0
                 continue
 
-            if self.bbox_type == 'rect':
+            if self.bbox_type == "rect":
                 rect = cv2.minAreaRect(points[:, ::-1])
                 alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
                 rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
                 bbox = cv2.boxPoints(rect) * scales
 
-            elif self.bbox_type == 'poly':
-                binary = np.zeros(label.shape, dtype='uint8')
+            elif self.bbox_type == "poly":
+                binary = np.zeros(label.shape, dtype="uint8")
                 binary[ind_np] = 1
                 contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                 bbox = contours[0] * scales
-            bbox = bbox.astype('int32')
+            bbox = bbox.astype("int32")
             bboxes.append(bbox.reshape(-1).tolist())
             scores.append(score_i)
         return bboxes, scores
