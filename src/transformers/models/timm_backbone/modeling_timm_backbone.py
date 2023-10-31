@@ -114,7 +114,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
 
     def unfreeze_batch_norm_2d(self):
         timm.layers.unfreeze_batch_norm_2d(self._backbone)
-        
+
     def _init_weights(self, module):
         """
         Empty init weights function to ensure compatibility of the class in the library.
