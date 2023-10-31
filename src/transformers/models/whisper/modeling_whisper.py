@@ -1841,6 +1841,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
 )
 class WhisperForCausalLM(WhisperPreTrainedModel):
     _tied_weights_keys = ["proj_out.weight"]
+    main_input_name = "input_ids"
 
     def __init__(self, config):
         super().__init__(config)
@@ -1897,9 +1898,6 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
             encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 if the model is configured as a decoder.
-            encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
-                in the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
             head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
                 - 1 indicates the head is **not masked**,
@@ -1935,19 +1933,31 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
                 for more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        Returns: Example:
-        ```python
-        >>> from transformers import AutoTokenizer, BartForCausalLM
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/bart-base")
-        >>> model = BartForCausalLM.from_pretrained("facebook/bart-base", add_cross_attention=False)
-        >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
-        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
-        >>> list(logits.shape) == expected_shape
-        True
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import WhisperForCausalLM, WhisperForConditionalGeneration, WhisperProcessor
+        >>> import torch
+        >>> from datasets import load_dataset
+
+        >>> processor = WhisperProcessor.from_pretrained("openai/whisper-large-v2")
+        >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v2")
+
+        >>> assistant_model = WhisperForCausalLM.from_pretrained("distil-whisper/distil-large-v2")
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> sample = ds[0]["audio"]
+        >>> input_features = processor(sample["array"], sampling_rate=sample["sampling_rate"], return_tensors="pt").input_features 
+
+        >>> predicted_ids = model.generate(input_features, assistant_model=assistant_model)
+
+        >>> # decode token ids to text
+        >>> transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
+        >>> transcription
+        ' Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.'
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2001,7 +2011,6 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
         past_key_values=None,
         use_cache=None,
         encoder_outputs=None,
-        position_ids=None,
         attention_mask=None,
         **kwargs,
     ):
@@ -2017,18 +2026,12 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
 
             input_ids = input_ids[:, remove_prefix_length:]
 
-        if position_ids is not None and position_ids.shape[1] > position_ids.shape[1]:
-            print("pos len", position_ids.shape)
-            position_ids = position_ids[:, remove_prefix_length:]
-            print("pos len", position_ids.shape)
-
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
             "input_ids": input_ids,
             "use_cache": use_cache,
             "attention_mask": attention_mask,
-            "position_ids": position_ids,
         }
 
     @staticmethod
