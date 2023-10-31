@@ -309,16 +309,18 @@ def get_mask2former_resize_output_image_size(
     Computes the output size given the desired size.
 
     Args:
-        input_image (`np.ndarray`):
+        image (`np.ndarray`):
             The input image.
-        size (`int`, `Tuple[int, int]`, `List[int]`, `Tuple[int]`):
+        size (`int` or `Tuple[int, int]` or `List[int]` or `Tuple[int]`):
             The size of the output image.
-        default_to_square (`bool`, *optional*, defaults to `True`):
-            Whether to default to square if no size is provided.
         max_size (`int`, *optional*):
             The maximum size of the output image.
-        size_divisible (`int`, *optional*, defaults to 0):
+        size_divisor (`int`, *optional*, defaults to 0):
             If size_divisible is given, the output image size will be divisible by the number.
+        default_to_square (`bool`, *optional*, defaults to `True`):
+            Whether to default to square if no size is provided.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format of the input image. If unset, will use the inferred format from the input.
 
     Returns:
         `Tuple[int, int]`: The output size.
