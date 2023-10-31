@@ -475,6 +475,7 @@ def spectrogram(
 
     return spectrogram
 
+
 # This version of the spectrogram function is specifically optimized for batch processing.
 # It leverages broadcasting to efficiently handle multiple inputs simultaneously.
 def spectrogram_batch(
@@ -503,23 +504,17 @@ def spectrogram_batch(
         fft_length = frame_length
 
     if frame_length > fft_length:
-        raise ValueError(
-            f"frame_length ({frame_length}) may not be larger than fft_length ({fft_length})"
-        )
+        raise ValueError(f"frame_length ({frame_length}) may not be larger than fft_length ({fft_length})")
 
     if window_length != frame_length:
-        raise ValueError(
-            f"Length of the window ({window_length}) must equal frame_length ({frame_length})"
-        )
+        raise ValueError(f"Length of the window ({window_length}) must equal frame_length ({frame_length})")
 
     if hop_length <= 0:
         raise ValueError("hop_length must be greater than zero")
 
     # Check the dimensions of the waveform
     if waveform.ndim != 2:
-        raise ValueError(
-            f"Input waveform must have two dimensions (batch, time), shape is {waveform.shape}"
-        )
+        raise ValueError(f"Input waveform must have two dimensions (batch, time), shape is {waveform.shape}")
 
     # Check if waveform is complex
     if np.iscomplexobj(waveform):
@@ -539,9 +534,7 @@ def spectrogram_batch(
     num_batches = waveform.shape[0]
 
     num_frequency_bins = (fft_length // 2) + 1 if onesided else fft_length
-    spectrogram = np.empty(
-        (num_batches, num_frames, num_frequency_bins), dtype=np.complex64
-    )
+    spectrogram = np.empty((num_batches, num_frames, num_frequency_bins), dtype=np.complex64)
 
     # rfft is faster than fft
     fft_func = np.fft.rfft if onesided else np.fft.fft
@@ -552,9 +545,7 @@ def spectrogram_batch(
         buffer[:, :frame_length] = waveform[:, timestep : timestep + frame_length]
 
         if remove_dc_offset:
-            buffer[:, :frame_length] -= buffer[:, :frame_length].mean(
-                axis=1, keepdims=True
-            )
+            buffer[:, :frame_length] -= buffer[:, :frame_length].mean(axis=1, keepdims=True)
 
         if preemphasis is not None:
             buffer[:, 1:frame_length] -= preemphasis * buffer[:, : frame_length - 1]
@@ -581,21 +572,18 @@ def spectrogram_batch(
             spectrogram = np.log10(spectrogram)
         elif log_mel == "dB":
             if power == 1.0:
-                spectrogram = amplitude_to_db(
-                    spectrogram, reference, min_value, db_range
-                )
+                spectrogram = amplitude_to_db(spectrogram, reference, min_value, db_range)
             elif power == 2.0:
                 spectrogram = power_to_db(spectrogram, reference, min_value, db_range)
             else:
-                raise ValueError(
-                    f"Cannot use log_mel option '{log_mel}' with power {power}"
-                )
+                raise ValueError(f"Cannot use log_mel option '{log_mel}' with power {power}")
         else:
             raise ValueError(f"Unknown log_mel option: {log_mel}")
 
     spectrogram = np.asarray(spectrogram, dtype).transpose(0, 2, 1)
 
     return spectrogram
+
 
 def power_to_db(
     spectrogram: np.ndarray,
