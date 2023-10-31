@@ -304,7 +304,9 @@ def is_torch_bf16_gpu_available():
         return False
 
     import torch
+
     return torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+
 
 def is_torch_bf16_cpu_available():
     if not is_torch_available():
