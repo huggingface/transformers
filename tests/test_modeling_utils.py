@@ -1128,36 +1128,6 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-    @require_safetensors
-    @require_flax
-    def test_safetensors_torch_from_flax_sharded(self):
-        # Not implemented yet
-        pass
-
-        model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="100kB")
-            new_model = BertModel.from_pretrained(tmp_dir)
-
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.equal(p1, p2))
-
-    @require_tf
-    @require_safetensors
-    def test_safetensors_torch_from_tf_sharded(self):
-        # Not implemented yet
-        pass
-
-        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="100kB")
-            new_model = BertModel.from_pretrained(tmp_dir)
-
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.equal(p1, p2))
-
 
 @require_torch
 @is_staging_test
