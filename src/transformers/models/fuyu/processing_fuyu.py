@@ -664,11 +664,11 @@ class FuyuProcessor(ProcessorMixin):
 
         if target_sizes is None:
             target_sizes = ((self.image_processor.size["height"], self.image_processor.size["width"]),) * len(outputs)
+        elif target_sizes.shape[1] != 2:
+            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
         if len(outputs) != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as output sequences")
-        if target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
         results = []
         for seq, size in zip(outputs, target_sizes):
