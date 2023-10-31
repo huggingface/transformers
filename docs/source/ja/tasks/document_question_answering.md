@@ -500,6 +500,3 @@ LayoutLMv2 モデルを微調整し、🤗 ハブにアップロードしたの�
 >>> processor.tokenizer.decode(encoding.input_ids.squeeze()[predicted_start_idx : predicted_end_idx + 1])
 'lee a. waller'
 ```
-
-
-

@@ -178,9 +178,6 @@ MInDS-14 データセットのサンプリング レートは 8000khz です (�
 >>> accuracy = evaluate.load("accuracy")
 ```
 
-Then create a function that passes your predictions and labels to [`~evaluate.EvaluationModule.compute`] to calculate the accuracy:
-
-
 次に、予測とラベルを [`~evaluate.EvaluationModule.compute`] に渡して精度を計算する関数を作成します。
 
 ```py
@@ -331,11 +328,3 @@ Then create a function that passes your predictions and labels to [`~evaluate.Ev
 ```
 </pt>
 </frameworkcontent>
-
-
-
-
-
-
-
-

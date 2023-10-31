@@ -152,4 +152,3 @@ pip install -q transformers
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/depth-visualization.png" alt="Depth estimation visualization"/>
 </div>
-

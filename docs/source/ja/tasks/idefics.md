@@ -232,11 +232,9 @@ Visual Question Answering (VQA) は、画像に基づいて自由形式の質問
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-vqa.jpg" alt="Image of a couple having a picnic"/>
 </div>
 
-Visual Question Answering (VQA) は、画像に基づいて自由形式の質問に答えるタスクです。画像に似ている
-キャプションは、アクセシビリティ アプリケーションだけでなく、教育 (視覚資料についての推論) にも使用できます。
-サービス（画像を基にした商品に関する質問）、画像検索など。
+写真提供  [Jarritos Mexican Soda](https://unsplash.com/@jarritos).
 
-このタスク用に新しい画像を取得しましょう。
+適切な指示をプロンプトすることで、モデルを画像キャプションから視覚的な質問への応答に導くことができます。
 
 ```py
 >>> prompt = [
@@ -430,12 +428,3 @@ This is an image of a vegetable stand.
 >>> for i, t in enumerate(generated_text):
 ...     print(f"{i}:\n{t}\n")
 ```
-
-
-
-
-
-
-
-
-

@@ -108,7 +108,7 @@ on the fly while loading.
 
 Now that you have the model loaded in one of the suggested ways, let's move on to exploring tasks that you can use IDEFICS for.
 
-提案された方法のいずれかでモデルをロードしたので、IDEFICS を使用できるタスクの探索に進みましょう。
+## Image captioning
 Image captioning is the task of predicting a caption for a given image. A common application is to aid visually impaired 
 people navigate through different situations, for instance, explore image content online. 
 
@@ -228,7 +228,7 @@ Let's get a new image for this task:
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-vqa.jpg" alt="Image of a couple having a picnic"/>
 </div>
 
-Photo by [Jarritos Mexican Soda](https://unsplash.com/@jarritos).
+[Jarritos Mexican Soda](https://unsplash.com/@jarritos).Photo by 
 
 You can steer the model from image captioning to visual question answering by prompting it with appropriate instructions: 
 

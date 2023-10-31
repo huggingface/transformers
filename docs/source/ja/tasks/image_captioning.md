@@ -48,9 +48,11 @@ notebook_login()
 🤗 データセット ライブラリを使用して、{image-caption} ペアで構成されるデータセットを読み込みます。独自の画像キャプション データセットを作成するには
 PyTorch では、[このノートブック](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/GIT/Fine_tune_GIT_on_an_image_captioning_dataset.ipynb) を参照できます。
 
+```py
 ds = load_dataset("lambdalabs/pokemon-blip-captions")
 ds
 ```
+
 ```bash
 DatasetDict({
     train: Dataset({
@@ -204,7 +206,7 @@ training_args = TrainingArguments(
 )
 ```
 
-次に、それらをデータセットとモデルと一緒に 🤗 トレーナーに渡します。
+Trainer 次に、次に、データセットとモデルと一緒に 🤗 に渡します。
 
 ```python
 trainer = Trainer(

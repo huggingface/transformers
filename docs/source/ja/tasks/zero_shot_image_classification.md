@@ -146,5 +146,3 @@ pip install -q transformers
  {'score': 0.0003393686, 'label': 'tree'},
  {'score': 3.1572064e-05, 'label': 'cat'}]
 ```
-
-

@@ -563,6 +563,3 @@ TensorFlow でモデルを微調整するには、オプティマイザー関数
 ```
 </tf>
 </frameworkcontent>
-
-
-
