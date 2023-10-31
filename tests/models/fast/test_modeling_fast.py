@@ -27,7 +27,8 @@ from transformers.models.fast.image_processing_fast import FastImageProcessor
 from transformers.testing_utils import (
     require_torch,
     require_vision,
-    torch_device, slow,
+    slow,
+    torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
