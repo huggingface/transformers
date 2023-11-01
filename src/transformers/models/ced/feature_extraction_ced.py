@@ -18,6 +18,7 @@ Feature extractor class for CED.
 
 from typing import Optional
 
+import numpy as np
 import torch
 import torchaudio.transforms as audio_transforms
 
@@ -71,19 +72,27 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
         self.f_max = f_max
         self.hop_size = hop_size
 
-    def __call__(self, x: torch.Tensor) -> BatchFeature:
+    def __call__(
+        self, x: torch.Tensor | np.ndarray, sampling_rate: Optional[int] = None, return_tensors="pt"
+    ) -> BatchFeature:
         r"""
         Extracts Mel spectrogram features from an audio signal tensor.
 
         Args:
-            x (torch.Tensor): Input audio signal tensor.
+            x (torch.Tensor | np.ndarray): Input audio signal tensor.
 
         Returns:
             BatchFeature: A dictionary containing the extracted features.
         """
+        if sampling_rate is None:
+            sampling_rate = self.sampling_rate
+
+        if return_tensors != "pt":
+            raise NotImplementedError("Only return_tensors='pt' is currently supported.")
+
         mel_spectrogram = audio_transforms.MelSpectrogram(
             f_min=self.f_min,
-            sample_rate=self.sampling_rate,
+            sample_rate=sampling_rate,
             win_length=self.win_size,
             center=self.center,
             n_fft=self.n_fft,
@@ -93,6 +102,6 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
         )
         amplitude_to_db = audio_transforms.AmplitudeToDB(top_db=120)
 
-        x = mel_spectrogram(x)
+        x = mel_spectrogram(torch.from_numpy(x).float() if isinstance(x, np.ndarray) else x.float())
         x = amplitude_to_db(x)
         return BatchFeature({"input_values": x})
