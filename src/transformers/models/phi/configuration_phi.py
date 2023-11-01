@@ -152,7 +152,7 @@ class PhiConfig(PretrainedConfig):
             **kwargs,
         )
 
-    # Copied from transformers.models.persimmon.configuration_persimmon.PersimmonConfig._rope_scaling_validation
+    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
@@ -172,4 +172,4 @@ class PhiConfig(PretrainedConfig):
                 f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")
+            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
