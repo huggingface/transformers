@@ -37,7 +37,6 @@ from .configuration_ced import CedConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "CedConfig"
-_CHECKPOINT_FOR_DOC = "mispeech/ced-tiny"
 _SEQ_CLASS_EXPECTED_OUTPUT = 0
 _SEQ_CLASS_EXPECTED_LOSS = 0.01
 
@@ -336,6 +335,7 @@ class CedModel(CedPreTrainedModel):
     def __init__(self, config: CedConfig) -> None:
         super().__init__(config)
         self.config = config
+        self.name = config.name
 
         # Allowed length in number of frames, otherwise the positional embedding will throw an error
         self.maximal_allowed_length = self.config.target_length
@@ -380,7 +380,7 @@ class CedModel(CedPreTrainedModel):
 
     def forward_features(self, x: torch.Tensor) -> torch.Tensor:
         x = self.patch_embed(x)
-        b, c, f, t = x.shape
+        _, _, _, t = x.shape
         x = x + self.time_pos_embed[:, :, :, :t]
         x = x + self.freq_pos_embed[:, :, :, :]  # Just to support __getitem__ in posembed
 
