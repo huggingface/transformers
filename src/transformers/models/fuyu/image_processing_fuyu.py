@@ -41,7 +41,6 @@ from ...utils import (
     is_torch_available,
     is_torch_device,
     is_torch_dtype,
-    is_vision_available,
     logging,
     requires_backends,
 )
