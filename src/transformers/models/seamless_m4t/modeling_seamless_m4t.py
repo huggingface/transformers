@@ -4125,6 +4125,11 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         self.text_decoder.embed_tokens = value
         self.shared = value
 
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.text_encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
+
     @add_start_docstrings_to_model_forward(M4T_MODEL_INPUTS_DOCSTRING)
     def forward(
         self,
