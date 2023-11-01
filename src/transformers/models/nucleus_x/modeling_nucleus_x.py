@@ -88,10 +88,10 @@ def theta_shift(x, sin, cos):
 def build_rms_norm(dim, eps=1e-6, elementwise_affine=True):
     if SUPPORT_APEX:
         return FusedRMSNorm(dim, eps=eps, elementwise_affine=elementwise_affine)
-    return NculeusXRMSNorm(dim, eps=eps, elementwise_affine=elementwise_affine)
+    return NucleusXRMSNorm(dim, eps=eps, elementwise_affine=elementwise_affine)
 
 
-class NculeusXRMSNorm(nn.Module):
+class NucleusXRMSNorm(nn.Module):
     """RMSNorm from torchscale implementation.
     Copied from https://github.com/microsoft/torchscale/blob/main/torchscale/component/rms_norm.py
     """
@@ -644,6 +644,8 @@ class NucleusXPreTrainedModel(PreTrainedModel):
         lm_head_std = self.config.lm_head_initializer_range
         gain = self.config.initializer_factor
 
+        rms_norm_module = FusedRMSNorm if SUPPORT_APEX else NucleusXRMSNorm
+
         if isinstance(module, NucleusXForCausalLM):
             module.reset_parameters(std=lm_head_std)
         elif isinstance(module, NucleusXForSequenceClassification):
@@ -652,6 +654,8 @@ class NucleusXPreTrainedModel(PreTrainedModel):
             module.reset_parameters(gain=gain)
         elif isinstance(module, NucleusXGLU):
             module.reset_parameters(std=std)
+        elif isinstance(module, rms_norm_module):
+            module.reset_parameters()  # this reset the weight to ones.
         # copied from LlamaPretrainedModel
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
