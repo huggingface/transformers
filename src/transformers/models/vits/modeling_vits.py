@@ -1855,7 +1855,11 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def resize_speaker_embeddings(self, new_num_speakers: int, speaker_embedding_size: Optional[int] = None):
+    def resize_speaker_embeddings(self, new_num_speakers: int, speaker_embedding_size: Optional[int] = None,
+                                  pad_to_multiple_of: Optional[int] = 2):
+        if pad_to_multiple_of is not None:
+            new_num_speakers = ((new_num_speakers + pad_to_multiple_of - 1) // pad_to_multiple_of) * pad_to_multiple_of
+
         # first, take care of embed_speaker
         if self.config.num_speakers <= 1:
             if speaker_embedding_size is None:
@@ -1872,7 +1876,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             # initialize all new embeddings
             self._init_weights(new_embeddings)
         else:
-            new_embeddings = self.resize_token_embeddings(self.embed_speaker, speaker_embedding_size)
+            new_embeddings = self._get_resized_embeddings(self.embed_speaker, new_num_speakers)
 
         self.embed_speaker = new_embeddings
 
