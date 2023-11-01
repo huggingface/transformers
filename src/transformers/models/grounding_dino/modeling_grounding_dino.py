@@ -2103,9 +2103,9 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         """Generate the encoder output proposals from encoded enc_output.
 
         Args:
-            enc_output (Tensor[batch_size, sequence_length, hidden_size]): Output of the encoder.
-            padding_mask (Tensor[batch_size, sequence_length]): Padding mask for `enc_output`.
-            spatial_shapes (Tensor[num_feature_levels, 2]): Spatial shapes of the feature maps.
+            enc_output (`torch.Tensor[batch_size, sequence_length, hidden_size]`): Output of the encoder.
+            padding_mask (`torch.Tensor[batch_size, sequence_length]`): Padding mask for `enc_output`.
+            spatial_shapes (`torch.Tensor[num_feature_levels, 2]`): Spatial shapes of the feature maps.
 
         Returns:
             `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
