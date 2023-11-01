@@ -8413,6 +8413,13 @@ class WhisperForAudioClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class WhisperForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class WhisperForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 

@@ -43,6 +43,8 @@ class TimmBackboneConfig(PretrainedConfig):
         out_indices (`List[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). Will default to the last stage if unset.
+        freeze_batch_norm_2d (`bool`, *optional*, defaults to `False`):
+            Converts all `BatchNorm2d` and `SyncBatchNorm` layers of provided module into `FrozenBatchNorm2d`.
 
     Example:
     ```python
@@ -67,6 +69,7 @@ class TimmBackboneConfig(PretrainedConfig):
         features_only=True,
         use_pretrained_backbone=True,
         out_indices=None,
+        freeze_batch_norm_2d=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -76,3 +79,4 @@ class TimmBackboneConfig(PretrainedConfig):
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = True
         self.out_indices = out_indices if out_indices is not None else (-1,)
+        self.freeze_batch_norm_2d = freeze_batch_norm_2d
