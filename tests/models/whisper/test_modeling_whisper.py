@@ -2113,17 +2113,9 @@ class WhisperStandaloneDecoderModelTester:
         input_ids = input_features["input_ids"]
         encoder_hidden_states = floats_tensor([self.batch_size, self.decoder_seq_length, self.hidden_size])
 
-        return (
-            config,
-            input_ids,
-            encoder_hidden_states,
-        )
+        return (config, input_ids, encoder_hidden_states)
 
-    def create_and_check_decoder_model_past(
-        self,
-        config,
-        input_ids,
-    ):
+    def create_and_check_decoder_model_past(self, config, input_ids):
         config.use_cache = True
         model = WhisperDecoder(config=config).to(torch_device).eval()
         # first forward pass
@@ -2153,11 +2145,7 @@ class WhisperStandaloneDecoderModelTester:
         # test that outputs are equal for slice
         assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
 
-    def create_and_check_decoder_model_attention_mask_past(
-        self,
-        config,
-        input_ids,
-    ):
+    def create_and_check_decoder_model_attention_mask_past(self, config, input_ids):
         model = WhisperDecoder(config=config).to(torch_device).eval()
 
         # create attention mask
@@ -2208,9 +2196,7 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
     is_encoder_decoder = False
     test_missing_keys = False
 
-    def setUp(
-        self,
-    ):
+    def setUp(self):
         self.model_tester = WhisperStandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
 
