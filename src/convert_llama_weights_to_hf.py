@@ -23,7 +23,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import LlavaConfig, LlavaForCausalLM, LlavaProcessor
+from transformers import LlaVaConfig
 from transformers.utils import logging
 
 
@@ -59,7 +59,7 @@ def convert_llava_checkpoint(
     """
 
     # define default ViT configuration
-    config = LlavaConfig()
+    config = LlaVaConfig()
 
     # load original models
     llava_state_dict = OrderedDict()
@@ -91,7 +91,7 @@ def convert_llava_checkpoint(
     print(f"Saving model model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
-    image_processor = LlavaProcessor(size=config.image_size)
+    image_processor = LlaVaProcessor(size=config.image_size)
     # encoding = image_processor(images=prepare_img(), return_tensors="pt")
     # pixel_values = encoding["pixel_values"]
     # outputs = model(pixel_values)

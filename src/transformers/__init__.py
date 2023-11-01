@@ -417,10 +417,10 @@ _import_structure = {
     "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
     "models.llava": [
         "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "LlavaConfig",
-        "LlavaProcessor",
+        "LlaVaConfig",
+        "LlaVaProcessor",
         "LlaVaTokenizer",
-        "LlavaVisionConfig",
+        "LlaVaVisionConfig",
     ],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config"],
@@ -4637,10 +4637,9 @@ if TYPE_CHECKING:
     from .models.llava import (
         LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LlaVaConfig,
-        LlavaConfig,
-        LlavaProcessor,
+        LlaVaProcessor,
         LlaVaTokenizer,
-        LlavaVisionConfig,
+        LlaVaVisionConfig,
     )
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.longt5 import LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP, LongT5Config

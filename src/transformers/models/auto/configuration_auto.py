@@ -126,7 +126,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("lilt", "LiltConfig"),
         ("llama", "LlamaConfig"),
         ("llava", "LlaVaConfig"),
-        ("llava", "LlavaConfig"),
         ("longformer", "LongformerConfig"),
         ("longt5", "LongT5Config"),
         ("luke", "LukeConfig"),

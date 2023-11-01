@@ -33,13 +33,13 @@ if is_vision_available():
         AutoTokenizer,
         CLIPImageProcessor,
         CLIPVisionModel,
-        LlavaProcessor,
+        LlaVaProcessor,
         PreTrainedTokenizerFast,
     )
 
 
 @require_torch
-class LlavaProcessorTest(unittest.TestCase):
+class LlaVaProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -48,7 +48,7 @@ class LlavaProcessorTest(unittest.TestCase):
         vision_model = CLIPVisionModel.from_pretrained("openai/clip-vit-large-patch14")
         image_processor.pad = False
 
-        processor = LlavaProcessor(image_processor, tokenizer, vision_model)
+        processor = LlaVaProcessor(image_processor, tokenizer, vision_model)
 
         processor.save_pretrained(self.tmpdirname)
 
@@ -76,7 +76,7 @@ class LlavaProcessorTest(unittest.TestCase):
         return image_inputs[0]
 
     def test_save_load_pretrained_additional_features(self):
-        processor = LlavaProcessor(
+        processor = LlaVaProcessor(
             tokenizer=self.get_tokenizer(),
             image_processor=self.get_image_processor(),
             vision_model=self.get_vision_model(),
@@ -86,7 +86,7 @@ class LlavaProcessorTest(unittest.TestCase):
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
-        processor = LlavaProcessor.from_pretrained(
+        processor = LlaVaProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
@@ -102,7 +102,7 @@ class LlavaProcessorTest(unittest.TestCase):
         tokenizer = self.get_tokenizer()
         vision_model = self.get_vision_model()
 
-        processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor, vision_model=vision_model)
+        processor = LlaVaProcessor(tokenizer=tokenizer, image_processor=image_processor, vision_model=vision_model)
 
         image_input = self.prepare_image_inputs()
 
@@ -120,7 +120,7 @@ class LlavaProcessorTest(unittest.TestCase):
         tokenizer = self.get_tokenizer()
         vision_model = self.get_vision_model()
 
-        processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor, vision_model=vision_model)
+        processor = LlaVaProcessor(tokenizer=tokenizer, image_processor=image_processor, vision_model=vision_model)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -141,7 +141,7 @@ class LlavaProcessorTest(unittest.TestCase):
         tokenizer = self.get_tokenizer()
         vision_model = self.get_vision_model()
 
-        processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor, vision_model=vision_model)
+        processor = LlaVaProcessor(tokenizer=tokenizer, image_processor=image_processor, vision_model=vision_model)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -155,7 +155,7 @@ class LlavaProcessorTest(unittest.TestCase):
         tokenizer = self.get_tokenizer()
         vision_model = self.get_vision_model()
 
-        processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor, vision_model=vision_model)
+        processor = LlaVaProcessor(tokenizer=tokenizer, image_processor=image_processor, vision_model=vision_model)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()

@@ -36,12 +36,12 @@ if is_torch_available():
     import torch
 
 
-class LlavaProcessor(ProcessorMixin):
+class LlaVaProcessor(ProcessorMixin):
     r"""
-    Constructs an LLava processor which wraps a CLIP image processor, CLIP vision model and a LLaMa/T5 tokenizer into a
+    Constructs an LLaVa processor which wraps a CLIP image processor, CLIP vision model and a LLaMa/T5 tokenizer into a
     single processor.
 
-    [`LlavaProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`AutoTokenizer`]. See the
+    [`LlaVaProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`AutoTokenizer`]. See the
     docstring of [`~BlipProcessor.__call__`] and [`~BlipProcessor.decode`] for more information.
 
     Args:

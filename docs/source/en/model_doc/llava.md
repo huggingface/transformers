@@ -11,42 +11,40 @@ specific language governing permissions and limitations under the License.
 -->
 
 
-# Llava
+# LlaVA
 
 ## Overview
 
-The Llava model was proposed in [Visual Instruction Tuning](https://arxiv.org/abs/2304.08485) by Haotian Liu, Chunyuan Li, Qingyang Wu and Yong Jae Lee. It is an end-to-end trained large multimodal model that connects a vision encoder and LLM for general-purpose visual and language understanding.
+The LlaVA model was proposed in [Visual Instruction Tuning](https://arxiv.org/abs/2304.08485) by Haotian Liu, Chunyuan Li, Qingyang Wu and Yong Jae Lee. It is an end-to-end trained large multimodal model that connects a vision encoder and LLM for general-purpose visual and language understanding.
 
 The abstract from the paper is the following:
 
 *Instruction tuning large language models (LLMs) using machine-generated instruction-following data has improved zero-shot capabilities on new tasks, but the idea is less explored in the multimodal field. In this paper, we present the first attempt to use language-only GPT-4 to generate multimodal language-image instruction-following data. By instruction tuning on such generated data, we introduce LLaVA: Large Language and Vision Assistant, an end-to-end trained large multimodal model that connects a vision encoder and LLM for general-purpose visual and language understanding. Our early experiments show that LLaVA demonstrates impressive multimodel chat abilities, sometimes exhibiting the behaviors of multimodal GPT-4 on unseen images/instructions, and yields a 85.1% relative score compared with GPT-4 on a synthetic multimodal instruction-following dataset. When fine-tuned on Science QA, the synergy of LLaVA and GPT-4 achieves a new state-of-the-art accuracy of 92.53%. We make GPT-4 generated visual instruction tuning data, our model and code base publicly available.*
 
-Checkout all Llava models by the authors[here](https://huggingface.co/models?search=llava)
-Checkout all HF friendly Llava models [here](https://huggingface.co/models?search=llava-hf)
+Checkout all LlaVA models by the authors [here](https://huggingface.co/models?search=llava)
 
 Tips:
 
-- Weights for the Llava 7B can be obtained from [here](https://huggingface.co/shauray/Llava-Llama-2-7B-hf/)
-- Weights for the Llava 13B can be obtained from [here](https://huggingface.co/shauray/Llava-Llama-2-13B-hf/)
+- Weights for the LlaVA v1.5 7B can be obtained from [liuhaotian/llava-v1.5-7b](https://huggingface.co/liuhaotian/llava-v1.5-7b)
+- Weights for the LlaVA v1.5 13B can be obtained from [liuhaotian/llava-v1.5-13b](https://huggingface.co/liuhaotian/llava-v1.5-13b)
+- Weights for the LlaVA v1.5 7B (LoRa) can be obtained from [liuhaotian/llava-v1.5-7b-lora](https://huggingface.co/liuhaotian/llava-v1.5-7b-lora)
+- Weights for the LlaVA v1.5 13B (LoRa) can be obtained from [liuhaotian/llava-v1.5-13b-lora](https://huggingface.co/liuhaotian/llava-v1.5-13b-lora)
 
-- Weights for the Llava v1.5 7B can be obtained from [here](https://huggingface.co/shauray/Llava-v1.5-7B-hf/)
-- Weights for the Llava v1.5 13B can be obtained from [here](https://huggingface.co/shauray/Llava-v1.5-13B-hf/)
-- The architecture is very similar to the first Llama, with the addition of Grouped Query Attention (GQA) following this [paper](https://arxiv.org/pdf/2305.13245.pdf)
+The architecture is very similar to the first Llama, with the addition of Grouped Query Attention (GQA) following this [paper](https://arxiv.org/pdf/2305.13245.pdf)
 
-Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions
-come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM). For the 13B model, it's thus 26GB of RAM needed.
+Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM). For the 13B model, it's thus 26GB of RAM needed.
 
 ```python
->>> from transformers import LlavaProcessor, LlavaForCausalLM
+>>> from transformers import LlaVaProcessor, LlavaForCausalLM
 >>> from PIL import Image
 
 >>> import requests
 >>> import torch
 
->>> checkpoint = "liuhaotian/llava-v1.5-13b"
+>>> checkpoint = "liuhaotian/llava-v1.5-7b"
 
 >>> model = LlavaForCausalLM.from_pretrained(checkpoint)
->>> processor = LlavaProcessor.from_pretrained(checkpoint)
+>>> processor = LlaVaProcessor.from_pretrained(checkpoint)
 
 >>> url = "https://llava-vl.github.io/static/images/view.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
@@ -61,7 +59,7 @@ come in several checkpoints they each contain a part of each weight of the model
 ...     top_p=0.9,
 ... )
 
->>> out = processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True).strip()
+>>> output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True).strip()
 ```
 
 This model was contributed by [Matt Mazzola](https://huggingface.co/mattmazzola) The original code of the authors can be found [here](https://github.com/haotian-liu/LLaVA).
@@ -107,6 +105,7 @@ This model was contributed by [Matt Mazzola](https://huggingface.co/mattmazzola)
 
 [[autodoc]] transformers.LlaVaForSequenceClassification
     - forward
+
 
 ## LlaVaForMultipleChoice
 

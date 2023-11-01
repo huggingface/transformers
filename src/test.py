@@ -1,4 +1,4 @@
-from transformers import LlavaConfig, LlavaForCausalLM
+from transformers import LlaVaConfig, LlavaForCausalLM
 
 
-model = LlavaForCausalLM(LlavaConfig())
+model = LlavaForCausalLM(LlaVaConfig())

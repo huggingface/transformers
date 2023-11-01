@@ -6,7 +6,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import LlavaConfig, LlavaForCausalLM
+from transformers import LlaVaConfig
 from transformers.utils import logging
 
 
@@ -47,7 +47,7 @@ def convert_llava_checkpoint(
     """
 
     # define default ViT configuration
-    config = LlavaConfig()
+    config = LlaVaConfig()
 
     # load original models
     llava_state_dict = OrderedDict()
@@ -102,7 +102,7 @@ def convert_llava_checkpoint(
     llava_state_dict = None
     rename_keys = None
 
-    config = LlavaConfig()
+    config = LlaVaConfig()
     config.save_pretrained("./temp")
 
     # print("Loading the checkpoint in a Llama model.")
