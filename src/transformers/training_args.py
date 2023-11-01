@@ -1214,7 +1214,7 @@ class TrainingArguments:
     )
 
     split_batches: Optional[bool] = field(
-        default=None,
+        default=False,
         metadata={
             "help": "Whether or not the accelerator should split the batches yielded by the dataloaders across the devices during distributed training. If"
             "set to `True`, the actual batch size used will be the same on any kind of distributed processes, but it must be a"
