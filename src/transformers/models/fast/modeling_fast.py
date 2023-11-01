@@ -982,7 +982,18 @@ class FASTForImageCaptioning(FastPreTrainedModel):
 
         Returns:
 
-        """
+                Examples:
+
+        ```python
+        >>> from transformers import FastImageProcessor, FASTForImageCaptioning >>> from PIL import Image >>> import
+        requests >>> url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg" >>>
+        image = Image.open(requests.get(url, stream=True).raw).convert("RGB") >>> processor =
+        FastImageProcessor.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt") >>> model =
+        FASTForImageCaptioning.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt") >>> inputs =
+        processor(image, return_tensor="np") >>> # forward pass >>> outputs =
+        model(pixel_values=torch.tensor(inputs["pixel_values"])) >>> target_sizes = [(image.shape[1], image.shape[2])
+        for image in inputs["pixel_values"]] >>> text_locations = processor.post_process_text_detection(outputs,
+        target_sizes) >>> print(text_locations[0]["bboxes"][0][:10]) [484, 175, 484, 178, 483, 179, 452, 179, 452, 182]"""
         # outputs = {}
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         f = self.backbone(pixel_values)
