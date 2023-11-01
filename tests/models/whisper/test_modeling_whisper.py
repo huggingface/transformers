@@ -51,6 +51,7 @@ if is_torch_available():
     from transformers import (
         WhisperFeatureExtractor,
         WhisperForAudioClassification,
+        WhisperForCausalLM,
         WhisperForConditionalGeneration,
         WhisperModel,
         WhisperProcessor,
@@ -1990,3 +1991,246 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 
                 self.assertEqual(fx_keys, pt_keys)
                 self.check_pt_flax_outputs(fx_outputs, pt_outputs_loaded, model_class)
+
+
+class WhisperStandaloneDecoderModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=2,
+        is_training=True,
+        use_labels=False,
+        vocab_size=200,
+        hidden_size=16,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        input_channels=1,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=20,
+        max_source_positions=30,
+        max_target_positions=40,
+        bos_token_id=98,
+        eos_token_id=98,
+        pad_token_id=0,
+        num_mel_bins=80,
+        decoder_start_token_id=85,
+        num_conv_layers=1,
+        suppress_tokens=None,
+        begin_suppress_tokens=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.input_channels = input_channels
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.num_mel_bins = num_mel_bins
+        self.max_position_embeddings = max_position_embeddings
+        self.max_source_positions = max_source_positions
+        self.max_target_positions = max_target_positions
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.num_conv_layers = num_conv_layers
+        self.suppress_tokens = suppress_tokens
+        self.begin_suppress_tokens = begin_suppress_tokens
+
+    def prepare_config_and_inputs(self):
+        input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
+
+        decoder_input_ids = torch.tensor(
+            self.batch_size * [[self.decoder_start_token_id, 3, 3, 7, 2]], device=torch_device
+        )
+
+        config = self.get_config()
+        config.is_encoder_decoder = False
+        inputs_dict = prepare_whisper_inputs_dict(
+            config,
+            attention_mask=None,
+            input_features=input_features,
+            decoder_input_ids=decoder_input_ids,
+        )
+
+        inputs_dict.pop("input_features")
+        inputs_dict.pop("head_mask")
+        inputs_dict.pop("decoder_head_mask")
+        inputs_dict.pop("cross_attn_head_mask")
+
+        inputs_dict["attention_mask"] = inputs_dict.pop("decoder_attention_mask")
+        inputs_dict["input_ids"] = inputs_dict.pop("decoder_input_ids")
+        return config, inputs_dict
+
+    @property
+    def encoder_seq_length(self):
+        return 5
+
+    @property
+    def seq_length(self):
+        return 5
+
+    def get_config(self):
+        return WhisperConfig(
+            vocab_size=self.vocab_size,
+            d_model=self.hidden_size,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_attention_heads=self.num_attention_heads,
+            input_channels=self.input_channels,
+            dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+            max_source_positions=self.max_source_positions,
+            max_target_positions=self.max_target_positions,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.bos_token_id,
+            pad_token_id=self.pad_token_id,
+            decoder_ffn_dim=self.hidden_size,
+            encoder_ffn_dim=self.hidden_size,
+            decoder_start_token_id=self.decoder_start_token_id,
+            suppress_tokens=self.suppress_tokens,
+            begin_suppress_tokens=self.begin_suppress_tokens,
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config, inputs_dict = self.prepare_config_and_inputs()
+
+        inputs_dict["input_ids"][:, -1] = self.pad_token_id
+
+        return config, inputs_dict
+
+    def prepare_config_and_inputs_for_decoder(self):
+        config, input_features = self.prepare_config_and_inputs()
+        input_ids = input_features["input_ids"]
+        encoder_hidden_states = floats_tensor([self.batch_size, self.decoder_seq_length, self.hidden_size])
+
+        return (config, input_ids, encoder_hidden_states)
+
+    def create_and_check_decoder_model_past(self, config, input_ids):
+        config.use_cache = True
+        model = WhisperDecoder(config=config).to(torch_device).eval()
+        # first forward pass
+        outputs = model(input_ids, use_cache=True)
+        outputs_use_cache_conf = model(input_ids)
+        outputs_no_past = model(input_ids, use_cache=False)
+
+        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
+        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
+
+        past_key_values = outputs["past_key_values"]
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+
+        output_from_no_past = model(next_input_ids)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+        # test that outputs are equal for slice
+        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+
+    def create_and_check_decoder_model_attention_mask_past(self, config, input_ids):
+        model = WhisperDecoder(config=config).to(torch_device).eval()
+
+        # create attention mask
+        attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+
+        half_seq_length = input_ids.shape[-1] // 2
+        attn_mask[:, half_seq_length:] = 0
+
+        # first forward pass
+        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)["past_key_values"]
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+        # change a random masked slice from input_ids
+        random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
+        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
+        input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
+
+        # append to next input_ids and attn_mask
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        attn_mask = torch.cat(
+            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            dim=1,
+        )
+
+        # get two different outputs
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=attn_mask, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+        # test that outputs are equal for slice
+        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+
+
+@require_torch
+class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (WhisperDecoder, WhisperForCausalLM) if is_torch_available() else ()
+    all_generative_model_classes = (WhisperForCausalLM,) if is_torch_available() else ()
+    fx_comptatible = False
+    test_pruning = False
+    is_encoder_decoder = False
+    test_missing_keys = False
+
+    def setUp(self):
+        self.model_tester = WhisperStandaloneDecoderModelTester(self, is_training=False)
+        self.config_tester = ConfigTester(self, config_class=WhisperConfig)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_decoder_model_past(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config, inputs_dict = config_and_inputs
+
+        self.model_tester.create_and_check_decoder_model_past(config=config, input_ids=inputs_dict["input_ids"])
+
+    def test_decoder_model_attn_mask_past(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config, inputs_dict = config_and_inputs
+
+        self.model_tester.create_and_check_decoder_model_attention_mask_past(
+            config=config, input_ids=inputs_dict["input_ids"]
+        )
+
+    @unittest.skip("Generate needs input ids")
+    def test_generate_without_input_ids(self):
+        # generate only works with input ids for whisper
+        pass
+
+    @unittest.skip("Decoder can't keep attention grads")
+    def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
+        return
+
+    @unittest.skip("The model doesn't support fast init from base")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    def test_left_padding_compatibility(self):
+        pass
