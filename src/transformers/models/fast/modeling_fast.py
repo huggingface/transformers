@@ -7,7 +7,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from transformers import FastConfig, PreTrainedModel, add_start_docstrings
-from transformers.utils import ModelOutput
+from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, replace_return_docstrings
+
+_CONFIG_FOR_DOC = "FastConfig"
+
+FAST_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`Beit3Config`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 
 FAST_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
@@ -54,7 +67,7 @@ def build_activation(act_func, inplace=True):
 
 class My2DLayer(nn.Module):
     def __init__(
-        self, in_channels, out_channels, use_bn=True, act_func="relu", dropout_rate=0, ops_order="weight_bn_act"
+            self, in_channels, out_channels, use_bn=True, act_func="relu", dropout_rate=0, ops_order="weight_bn_act"
     ):
         super(My2DLayer, self).__init__()
         self.in_channels = in_channels
@@ -151,19 +164,19 @@ class My2DLayer(nn.Module):
 
 class ConvLayer(nn.Module):
     def __init__(
-        self,
-        in_channels,
-        out_channels,
-        kernel_size=3,
-        stride=1,
-        dilation=1,
-        groups=1,
-        bias=False,
-        has_shuffle=False,
-        use_bn=True,
-        act_func="relu",
-        dropout_rate=0,
-        use_act=True,
+            self,
+            in_channels,
+            out_channels,
+            kernel_size=3,
+            stride=1,
+            dilation=1,
+            groups=1,
+            bias=False,
+            has_shuffle=False,
+            use_bn=True,
+            act_func="relu",
+            dropout_rate=0,
+            use_act=True,
     ):
         super().__init__()
 
@@ -437,61 +450,51 @@ class TextNet(nn.Module):
         # self.first_conv.apply(self._init_weights)
         stage1 = []
         for stage_config in zip(
-            config.backbone_stage1_in_channels,
-            config.backbone_stage1_out_channels,
-            config.backbone_stage1_kernel_size,
-            config.backbone_stage1_stride,
-            config.backbone_stage1_dilation,
-            config.backbone_stage1_groups,
+                config.backbone_stage1_in_channels,
+                config.backbone_stage1_out_channels,
+                config.backbone_stage1_kernel_size,
+                config.backbone_stage1_stride,
+                config.backbone_stage1_dilation,
+                config.backbone_stage1_groups,
         ):
             stage1.append(RepConvLayer(*stage_config))
         self.stage1 = nn.ModuleList(stage1)
 
         stage2 = []
         for stage_config in zip(
-            config.backbone_stage2_in_channels,
-            config.backbone_stage2_out_channels,
-            config.backbone_stage2_kernel_size,
-            config.backbone_stage2_stride,
-            config.backbone_stage2_dilation,
-            config.backbone_stage2_groups,
+                config.backbone_stage2_in_channels,
+                config.backbone_stage2_out_channels,
+                config.backbone_stage2_kernel_size,
+                config.backbone_stage2_stride,
+                config.backbone_stage2_dilation,
+                config.backbone_stage2_groups,
         ):
             stage2.append(RepConvLayer(*stage_config))
         self.stage2 = nn.ModuleList(stage2)
 
         stage3 = []
         for stage_config in zip(
-            config.backbone_stage3_in_channels,
-            config.backbone_stage3_out_channels,
-            config.backbone_stage3_kernel_size,
-            config.backbone_stage3_stride,
-            config.backbone_stage3_dilation,
-            config.backbone_stage3_groups,
+                config.backbone_stage3_in_channels,
+                config.backbone_stage3_out_channels,
+                config.backbone_stage3_kernel_size,
+                config.backbone_stage3_stride,
+                config.backbone_stage3_dilation,
+                config.backbone_stage3_groups,
         ):
             stage3.append(RepConvLayer(*stage_config))
         self.stage3 = nn.ModuleList(stage3)
 
         stage4 = []
         for stage_config in zip(
-            config.backbone_stage4_in_channels,
-            config.backbone_stage4_out_channels,
-            config.backbone_stage4_kernel_size,
-            config.backbone_stage4_stride,
-            config.backbone_stage4_dilation,
-            config.backbone_stage4_groups,
+                config.backbone_stage4_in_channels,
+                config.backbone_stage4_out_channels,
+                config.backbone_stage4_kernel_size,
+                config.backbone_stage4_stride,
+                config.backbone_stage4_dilation,
+                config.backbone_stage4_groups,
         ):
             stage4.append(RepConvLayer(*stage_config))
         self.stage4 = nn.ModuleList(stage4)
-
-    #     self._initialize_weights()
-    #
-    # def _initialize_weights(self):
-    #     for m in self.modules():
-    #         if isinstance(m, nn.Conv2d):
-    #             nn.init.kaiming_normal_(m.weight)
-    #         elif isinstance(m, nn.BatchNorm2d):
-    #             m.weight.data.fill_(1)
-    #             m.bias.data.zero_()
 
     def forward(self, x):
         x = self.first_conv(x)
@@ -710,7 +713,8 @@ class FASTHead(nn.Module):
 
 
 def emb_loss(
-    emb, instance, kernel, training_mask, feature_dim=4, delta_v=0.5, delta_d=1.5, weights=(1.0, 1.0), bg_sample=False
+        emb, instance, kernel, training_mask, feature_dim=4, delta_v=0.5, delta_d=1.5, weights=(1.0, 1.0),
+        bg_sample=False
 ):
     training_mask = (training_mask > 0.5).long()
     kernel = (kernel > 0.5).long()
@@ -737,7 +741,7 @@ def emb_loss(
             continue
         ind = instance == lb
         emb_ = emb[:, ind]
-        dist = (emb_ - emb_mean[:, i : i + 1]).norm(p=2, dim=0)
+        dist = (emb_ - emb_mean[:, i: i + 1]).norm(p=2, dim=0)
         dist = F.relu(dist - delta_v) ** 2
         l_agg[i] = torch.mean(torch.log(dist + 1.0))
     l_agg = torch.mean(l_agg[1:])
@@ -769,7 +773,7 @@ def emb_loss(
                 for i, lb in enumerate(unique_labels):
                     if lb == 0:
                         continue
-                    dist = (emb_bg - emb_mean[:, i : i + 1]).norm(p=2, dim=0)
+                    dist = (emb_bg - emb_mean[:, i: i + 1]).norm(p=2, dim=0)
                     dist = F.relu(2 * delta_d - dist) ** 2
                     l_dis_bg = torch.mean(torch.log(dist + 1.0), 0, keepdim=True)
                     l_dis.append(l_dis_bg)
@@ -913,7 +917,7 @@ class FASTForImageCaptioningOutput(ModelOutput):
         utilizes [Multiway transformers] (https://arxiv.org/abs/2208.10442) for deep fusion and modality-specific
         encoding, and unifies masked modeling on images, texts, and image-text pairs, achieving top performance on
         multiple benchmarks.""",
-    FAST_FOR_CAPTIONING_INPUTS_DOCSTRING,
+    FAST_START_DOCSTRING,
 )
 class FASTForImageCaptioning(FastPreTrainedModel):
     def __init__(self, config):
@@ -963,12 +967,14 @@ class FASTForImageCaptioning(FastPreTrainedModel):
 
         return torch.mean(loss_text) + torch.mean(loss_kernel) + torch.mean(loss_emb)
 
+    @add_start_docstrings_to_model_forward(FAST_FOR_CAPTIONING_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=FASTForImageCaptioningOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = True,
-        return_dict: Optional[bool] = None,
-        labels: Dict = None,
+            self,
+            pixel_values: torch.FloatTensor,
+            output_hidden_states: Optional[bool] = True,
+            return_dict: Optional[bool] = None,
+            labels: Dict = None,
     ):
         # outputs = {}
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
