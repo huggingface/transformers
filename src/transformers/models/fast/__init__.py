@@ -20,10 +20,8 @@ from ...utils import (
     is_torch_available,
 )
 
-_import_structure = {
-    "configuration_fast": ["FastConfig"],
-    "image_processing_fast": ["FastImageProcessor"]
-}
+
+_import_structure = {"configuration_fast": ["FastConfig"], "image_processing_fast": ["FastImageProcessor"]}
 
 try:
     if not is_torch_available():
@@ -31,18 +29,19 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_fast"] = ["FASTForImageCaptioning","FastPreTrainedModel"]
+    _import_structure["modeling_fast"] = ["FASTForImageCaptioning", "FastPreTrainedModel"]
 
 if TYPE_CHECKING:
     from .configuration_fast import FastConfig
     from .image_processing_fast import FastImageProcessor
+
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_fast import FASTForImageCaptioning,FastPreTrainedModel
+        from .modeling_fast import FASTForImageCaptioning, FastPreTrainedModel
 
 
 else:

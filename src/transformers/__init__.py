@@ -47,6 +47,7 @@ from .utils import (
     logging,
 )
 
+
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
@@ -4400,11 +4401,11 @@ else:
 
 try:
     if not (
-            is_librosa_available()
-            and is_essentia_available()
-            and is_scipy_available()
-            and is_torch_available()
-            and is_pretty_midi_available()
+        is_librosa_available()
+        and is_essentia_available()
+        and is_scipy_available()
+        and is_torch_available()
+        and is_pretty_midi_available()
     ):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -8554,11 +8555,11 @@ if TYPE_CHECKING:
 
     try:
         if not (
-                is_librosa_available()
-                and is_essentia_available()
-                and is_scipy_available()
-                and is_torch_available()
-                and is_pretty_midi_available()
+            is_librosa_available()
+            and is_essentia_available()
+            and is_scipy_available()
+            and is_torch_available()
+            and is_pretty_midi_available()
         ):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:

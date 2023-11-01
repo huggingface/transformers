@@ -50,6 +50,7 @@ from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
+
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_repo.py
 PATH_TO_TRANSFORMERS = "src/transformers"
@@ -811,9 +812,9 @@ def check_objects_being_equally_in_main_init():
         module_name = module_path.split(".")[-1]
         module_dir = ".".join(module_path.split(".")[:-1])
         if (
-                module_name.startswith("modeling_")
-                and not module_name.startswith("modeling_tf_")
-                and not module_name.startswith("modeling_flax_")
+            module_name.startswith("modeling_")
+            and not module_name.startswith("modeling_tf_")
+            and not module_name.startswith("modeling_flax_")
         ):
             parent_module = sys.modules[module_dir]
 
@@ -1006,17 +1007,17 @@ def ignore_undocumented(name: str) -> bool:
         return True
     # PreTrainedModels / Encoders / Decoders / Layers / Embeddings / Attention are not documented.
     if (
-            name.endswith("PreTrainedModel")
-            or name.endswith("Decoder")
-            or name.endswith("Encoder")
-            or name.endswith("Layer")
-            or name.endswith("Embeddings")
-            or name.endswith("Attention")
+        name.endswith("PreTrainedModel")
+        or name.endswith("Decoder")
+        or name.endswith("Encoder")
+        or name.endswith("Layer")
+        or name.endswith("Embeddings")
+        or name.endswith("Attention")
     ):
         return True
     # Submodules are not documented.
     if os.path.isdir(os.path.join(PATH_TO_TRANSFORMERS, name)) or os.path.isfile(
-            os.path.join(PATH_TO_TRANSFORMERS, f"{name}.py")
+        os.path.join(PATH_TO_TRANSFORMERS, f"{name}.py")
     ):
         return True
     # All load functions are not documented.
@@ -1074,7 +1075,7 @@ def check_model_type_doc_match():
             "Some model doc pages do not match any existing model type:\n"
             + "\n".join(errors)
             + "\nYou can add any missing model type to the `MODEL_NAMES_MAPPING` constant in "
-              "models/auto/configuration_auto.py."
+            "models/auto/configuration_auto.py."
         )
 
 
@@ -1118,7 +1119,7 @@ def check_docstrings_are_in_md():
             "The following files have docstrings written in rst:\n"
             + "\n".join([f"- {f}" for f in files_with_rst])
             + "\nTo fix this run `doc-builder convert path_to_py_file` after installing `doc-builder`\n"
-              "(`pip install git+https://github.com/huggingface/doc-builder`)"
+            "(`pip install git+https://github.com/huggingface/doc-builder`)"
         )
 
 
