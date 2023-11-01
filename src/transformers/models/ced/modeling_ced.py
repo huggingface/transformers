@@ -23,18 +23,23 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...modeling_outputs import SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+)
 from .configuration_ced import CedConfig
 
 
 logger = logging.get_logger(__name__)
 
-# General docstring
 _CONFIG_FOR_DOC = "CedConfig"
-
-# Base docstring
 _CHECKPOINT_FOR_DOC = "xiaomi/ced-tiny"
+_SEQ_CLASS_EXPECTED_OUTPUT = 0
+_SEQ_CLASS_EXPECTED_LOSS = 0.01
 
 # Audio classification docstring
 _SEQ_CLASS_CHECKPOINT = "xiaomi/ced-tiny"
@@ -70,21 +75,6 @@ class CedPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
             nn.init.constant_(module.weight, 1.0)
 
-
-CED_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`CedConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-CED_INPUTS_DOCSTRING = r"""
-"""
 
 Conv_Kernel = Union[int, Tuple[int, int]]
 
@@ -207,6 +197,7 @@ class CedMlp(nn.Module):
 
 
 # Drop path is taken from Timm
+# https://github.com/huggingface/pytorch-image-models/blob/7c67d6aca992f039eece0af5f7c29a43d48c00e4/timm/models/layers/drop.py#L155
 class DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -225,10 +216,11 @@ class DropPath(nn.Module):
 def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however, the original name is
-    misleading as 'Drop Connect' is a different form of dropout in a separate paper... See discussion:
-    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
-    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
+    This is the same as the DropConnect impl I (https://github.com/rwightman) created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
 
     """
     if drop_prob == 0.0 or not training:
@@ -312,6 +304,30 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
         return tensor
 
 
+CED_START_DOCSTRING = r"""
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`CedConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+CED_INPUTS_DOCSTRING = r"""
+    Args:
+        input_values (`torch.FloatTensor` of shape `(batch_size, n_mels, sequence_length)`):
+            The sequence of audio features extracted from the audio signal. Can be obtained from a raw audio waveform
+            using `~transformers.CedFeatureExtractor.__call__`.
+"""
+
+
 @add_start_docstrings(
     "The bare Ced Model transformer outputting raw hidden-states without any specific head on top.",
     CED_START_DOCSTRING,
@@ -347,7 +363,6 @@ class CedModel(CedPreTrainedModel):
                     num_heads=config.num_heads,
                     mlp_ratio=config.mlp_ratio,
                     qkv_bias=config.qkv_bias,
-                    init_values=config.init_values,
                     drop=config.drop_rate,
                     attn_drop=config.attn_drop_rate,
                     drop_path=dpr[i],
@@ -385,8 +400,20 @@ class CedModel(CedPreTrainedModel):
         x = self.norm(x)
         return x
 
-    def forward_spectrogram(self, x: torch.Tensor) -> torch.Tensor:
-        x = torch.unsqueeze(x, 1)
+    @add_start_docstrings_to_model_forward(CED_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
+    )
+    def forward(self, input_values: torch.Tensor):
+        r"""
+        Runs a forward pass of the CED model as an audio encoder.
+        """
+        x = torch.unsqueeze(input_values, 1)
 
         x = torch.permute(x, (0, 2, 1, 3))
         x = self.init_bn(x)
@@ -419,12 +446,6 @@ class CedModel(CedPreTrainedModel):
             x = self.forward_features(x)
 
         return x
-
-    def forward(self, x: torch.Tensor):
-        r"""
-        TODO: Add docstring
-        """
-        return self.forward_spectrogram(x)
 
 
 @add_start_docstrings(
@@ -467,10 +488,19 @@ class CedForAudioClassification(CedPreTrainedModel):
         else:
             return x.mean(1)
 
-    def forward(self, x: torch.Tensor):
+    @add_start_docstrings_to_model_forward(CED_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
+    )
+    def forward(self, input_values: torch.Tensor):
         r"""
-        TODO: Add docstring
+        Runs a forward pass of the CED model for audio classification task.
         """
-        x = self.encoder(x)
+        x = self.encoder(input_values)
         x = self.forward_head(x)
         return x

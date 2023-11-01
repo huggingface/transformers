@@ -31,7 +31,20 @@ logger = logging.get_logger(__name__)
 
 class CedFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    TODO: Add docstring
+    CedFeatureExtractor extracts Mel spectrogram features from audio signals.
+
+    Args:
+        f_min (int, optional): Minimum frequency for the Mel filterbank. Default: 0.
+        sample_rate (int, optional): Sampling rate of the input audio signal. Default: 16000.
+        win_size (int, optional): Window size for the STFT. Default: 512.
+        center (bool, optional): Whether to pad the signal on both sides to center it. Default: True.
+        n_fft (int, optional): Number of FFT points for the STFT. Default: 512.
+        f_max (int, optional): Maximum frequency for the Mel filterbank. Default: None.
+        hop_size (int, optional): Hop size for the STFT. Default: 160.
+        n_mels (int, optional): Number of Mel bands to generate. Default: 64.
+
+    Returns:
+        BatchFeature: A BatchFeature object containing the extracted features.
     """
 
     def __init__(
@@ -46,9 +59,6 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
         n_mels: int = 64,
         **kwargs,
     ):
-        r"""
-        TODO: Add docstring
-        """
         super().__init__(feature_size=n_mels, sampling_rate=sample_rate, padding_value=0.0, **kwargs)
         self.f_min = f_min
         self.sample_rate = sample_rate
@@ -61,7 +71,13 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(self, x: torch.Tensor) -> BatchFeature:
         r"""
-        TODO: Add docstring
+        Extracts Mel spectrogram features from an audio signal tensor.
+
+        Args:
+            x (torch.Tensor): Input audio signal tensor.
+
+        Returns:
+            BatchFeature: A dictionary containing the extracted features.
         """
         mel_spectrogram = audio_transforms.MelSpectrogram(
             f_min=self.f_min,

@@ -39,11 +39,22 @@ The original code can be found [here](https://github.com/RicherMans/CED).
 ```python
 >>> from transformers import CedConfig, CedForAudioClassification, CedFeatureExtractor
 
->>> config = CedConfig("ced-mini")
->>> front_end = CedFeatureExtractor()
+>>> model_name = "ced-tiny"
 
-TODO: complete this example
+>>> config = CedConfig(model_name)
+
+>>> feature_extractor = CedFeatureExtractor()
+
+>>> model_saved_path = f"./{model_name}"
+
+>>> model = CedForAudioClassification(config).from_pretrained(model_saved_path).eval()
+
+>>> wave, _ = torchaudio.load(wavpath)
+
+>>> output = model(feature_extractor(wave)['input_values']).squeeze(0)
 ```
+
+The `output` is a 527-dimensional vector, where each element is the logit for one of the 527 classes in Audioset (http://storage.googleapis.com/us_audioset/youtube_corpus/v1/csv/class_labels_indices.csv).
 
 
 ## CedConfig

@@ -28,7 +28,29 @@ CED_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CedConfig(PretrainedConfig):
     r"""
-    TODO: Add docstring
+    Configuration class for the CED model.
+
+    Args:
+        name (str, optional):
+            Name of the pre-defined configuration. Can be "ced-tiny", "ced-mini", "ced-small" or "ced-base".
+        attn_drop_rate (float, optional): Dropout probability for attention weights. Default to 0.0.
+        depth (int, optional): Number of transformer layers. Default to 12.
+        drop_path_rate (float, optional): Drop path is taken from timm. Default to 0.0.
+        drop_rate (float, optional): Dropout probability for input embeddings. Default to 0.0.
+        embed_dim (int, optional): Dimensionality of the audio patch embeddings. Default to 768.
+        eval_avg (str, optional):
+            Type of pooling to use for evaluation. Can be "mean", "token", "dm" or "logit". Default to "mean".
+        mlp_ratio (float, optional):
+            Ratio of hidden size in the feedforward layer to the embedding size. Default to 4.0.
+        num_heads (int, optional): Number of attention heads. Default to 12.
+        outputdim (int, optional): Dimensionality of the output. Default to 527.
+        patch_size (int, optional): Size of the patches. Default to 16.
+        patch_stride (int, optional): Stride of the patches. Default to 16.
+        pooling (str, optional):
+            Type of pooling to use for the output. Can be "mean", "token", "dm" or "logit". Default to "mean".
+        qkv_bias (bool, optional):
+            Whether to include bias terms in the query, key and value projections. Default to True.
+        target_length (int, optional): Frames of an audio chunk. Default to 1012.
     """
 
     def __init__(
@@ -40,7 +62,6 @@ class CedConfig(PretrainedConfig):
         drop_rate=0.0,
         embed_dim=768,
         eval_avg="mean",
-        init_values=None,
         mlp_ratio=4.0,
         num_heads=12,
         outputdim=527,
@@ -58,29 +79,17 @@ class CedConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         if name == "ced-tiny":
-            patch_size = 16
             embed_dim = 192
-            depth = 12
             num_heads = 3
-            mlp_ratio = 4
         elif name == "ced-mini":
-            patch_size = 16
             embed_dim = 256
-            depth = 12
             num_heads = 4
-            mlp_ratio = 4
         elif name == "ced-small":
-            patch_size = 16
             embed_dim = 384
-            depth = 12
             num_heads = 6
-            mlp_ratio = 4
         elif name == "ced-base":
-            patch_size = 16
             embed_dim = 768
-            depth = 12
             num_heads = 12
-            mlp_ratio = 4
         else:
             logger.info("No model name specified for CedConfig, use default settings.")
 
@@ -96,7 +105,6 @@ class CedConfig(PretrainedConfig):
         self.f_max = kwargs.get("f_max", 8000)
         self.f_min = kwargs.get("f_min", 0)
         self.hop_size = kwargs.get("hop_size", 160)
-        self.init_values = init_values
         self.mlp_ratio = mlp_ratio
         self.n_fft = kwargs.get("n_fft", 512)
         self.n_mels = kwargs.get("n_mels", 64)
