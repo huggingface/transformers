@@ -147,7 +147,6 @@ docs/source/en/model_doc/lilt.md
 docs/source/en/model_doc/llama.md
 docs/source/en/model_doc/llama2.md
 docs/source/en/model_doc/llava.md
-docs/source/en/model_doc/llava.md
 docs/source/en/model_doc/longformer.md
 docs/source/en/model_doc/longt5.md
 docs/source/en/model_doc/luke.md
