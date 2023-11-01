@@ -1646,6 +1646,10 @@ class GenerationMixin:
                 and assistant_accepts_encoder_outputs
                 and "encoder_outputs" in model_kwargs
             ):
+                # some assistants might be assymetric (many more enc layers than dec layers)
+                # encoder-decoder models that share the exact same encoder as the teacher
+                # in this case the assistant only needs to load the light-weight decoder,
+                # but still requires `encoder_outputs` to be passed
                 model_kwargs["assistant_encoder_outputs"] = model_kwargs["encoder_outputs"]
 
             # 12. run assisted generate
