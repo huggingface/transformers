@@ -1435,7 +1435,6 @@ class ModelTesterMixin:
 
             # Check that adding and removing tokens has not modified the first part of the embedding matrix.
             models_equal = True
-
             for p1, p2 in zip(cloned_embeddings, model_embed.weight):
                 if p1.data.ne(p2.data).sum() > 0:
                     models_equal = False
@@ -1684,7 +1683,6 @@ class ModelTesterMixin:
             tied_params = [names for _, names in ptrs.items() if len(names) > 1]
 
             tied_weight_keys = model_tied._tied_weights_keys if model_tied._tied_weights_keys is not None else []
-
             # Detect we get a hit for each key
             for key in tied_weight_keys:
                 if not any(re.search(key, p) for group in tied_params for p in group):
