@@ -3090,6 +3090,7 @@ else:
         [
             "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "WhisperForAudioClassification",
+            "WhisperForCausalLM",
             "WhisperForConditionalGeneration",
             "WhisperModel",
             "WhisperPreTrainedModel",
@@ -3412,6 +3413,13 @@ else:
             "TFConvNextForImageClassification",
             "TFConvNextModel",
             "TFConvNextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.convnextv2"].extend(
+        [
+            "TFConvNextV2ForImageClassification",
+            "TFConvNextV2Model",
+            "TFConvNextV2PreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -6845,6 +6853,7 @@ if TYPE_CHECKING:
         from .models.whisper import (
             WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
             WhisperForAudioClassification,
+            WhisperForCausalLM,
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,
@@ -7125,6 +7134,11 @@ if TYPE_CHECKING:
             TFConvBertPreTrainedModel,
         )
         from .models.convnext import TFConvNextForImageClassification, TFConvNextModel, TFConvNextPreTrainedModel
+        from .models.convnextv2 import (
+            TFConvNextV2ForImageClassification,
+            TFConvNextV2Model,
+            TFConvNextV2PreTrainedModel,
+        )
         from .models.ctrl import (
             TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFCTRLForSequenceClassification,

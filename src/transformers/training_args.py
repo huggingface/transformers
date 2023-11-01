@@ -621,6 +621,14 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
+        split_batches (`bool`, *optional*):
+            Whether or not the accelerator should split the batches yielded by the dataloaders across the devices
+            during distributed training. If
+
+            set to `True`, the actual batch size used will be the same on any kind of distributed processes, but it
+            must be a
+
+            round multiple of the number of processes you are using (such as GPUs).
         include_tokens_per_second (`bool`, *optional*):
             Whether or not to compute the number of tokens per second per device for training speed metrics.
 
@@ -1223,6 +1231,15 @@ class TrainingArguments:
             "help": "Whether to dispatch batches across devices in distributed training. If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process "
             "and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
             "underlying dataset is an `IterableDataset`, `False` otherwise."
+        },
+    )
+
+    split_batches: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether or not the accelerator should split the batches yielded by the dataloaders across the devices during distributed training. If"
+            "set to `True`, the actual batch size used will be the same on any kind of distributed processes, but it must be a"
+            "round multiple of the number of processes you are using (such as GPUs)."
         },
     )
 

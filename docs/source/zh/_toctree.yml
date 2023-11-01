@@ -32,3 +32,7 @@
   - local: tflite
     title: 导出为 TFLite
   title: 开发者指南
+- sections:
+  - local: task_summary
+    title: 🤗Transformers能做什么
+  title: 概念指南

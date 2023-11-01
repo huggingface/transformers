@@ -69,9 +69,9 @@ class GPTQConfigTest(unittest.TestCase):
         from optimum.gptq import GPTQQuantizer
 
         config = GPTQConfig(bits=2)
-        optimum_config = GPTQQuantizer.from_dict(config.to_dict())
+        optimum_config = GPTQQuantizer.from_dict(config.to_dict_optimum())
         self.assertEqual(optimum_config.bits, config.bits)
-        new_config = GPTQConfig.from_dict(optimum_config.to_dict())
+        new_config = GPTQConfig.from_dict_optimum(optimum_config.to_dict())
         self.assertEqual(optimum_config.bits, new_config.bits)
 
 
@@ -98,7 +98,7 @@ class GPTQTest(unittest.TestCase):
     bits = 4
     group_size = 128
     desc_act = False
-    disable_exllama = True
+    use_exllama = False
 
     dataset = [
         "auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."
@@ -125,7 +125,7 @@ class GPTQTest(unittest.TestCase):
             tokenizer=cls.tokenizer,
             group_size=cls.group_size,
             desc_act=cls.desc_act,
-            disable_exllama=cls.disable_exllama,
+            use_exllama=cls.use_exllama,
         )
 
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -147,11 +147,12 @@ class GPTQTest(unittest.TestCase):
 
     def test_device_and_dtype_assignment(self):
         r"""
-        Test whether trying to cast (or assigning a device to) a model after converting it in 8-bit will throw an error.
+        Test whether trying to cast (or assigning a device to) a model after quantization will throw an error.
         Checks also if other models are casted correctly.
         """
         # This should work
-        _ = self.quantized_model.to(0)
+        if self.device_map is None:
+            _ = self.quantized_model.to(0)
 
         with self.assertRaises(ValueError):
             # Tries with a `dtype``
@@ -177,7 +178,8 @@ class GPTQTest(unittest.TestCase):
             desc_act=self.desc_act,
             group_size=self.group_size,
             bits=self.bits,
-            disable_exllama=self.disable_exllama,
+            disable_exllama=not self.use_exllama,
+            disable_exllamav2=True,
         )
         self.assertTrue(self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__ == QuantLinear)
 
@@ -196,6 +198,9 @@ class GPTQTest(unittest.TestCase):
         # Get the generation
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
+    def check_quantized_layers_type(self, model, value):
+        self.assertTrue(model.transformer.h[0].mlp.dense_4h_to_h.QUANT_TYPE == value)
+
     def test_generate_quality(self):
         """
         Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
@@ -211,11 +216,13 @@ class GPTQTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            if self.disable_exllama:
+            if not self.use_exllama:
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname).to(0)
+                self.check_quantized_layers_type(quantized_model_from_saved, "cuda-old")
             else:
                 # we need to put it directly to the gpu. Otherwise, we won't be able to initialize the exllama kernel
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map={"": 0})
+                self.check_quantized_layers_type(quantized_model_from_saved, "exllama")
             self.check_inference_correctness(quantized_model_from_saved)
 
     @require_accelerate
@@ -234,14 +241,15 @@ class GPTQTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            if self.disable_exllama:
-                self.assertEqual(self.quantized_model.config.quantization_config.disable_exllama, True)
+            if not self.use_exllama:
+                self.assertEqual(self.quantized_model.config.quantization_config.use_exllama, False)
                 # we need to put it directly to the gpu. Otherwise, we won't be able to initialize the exllama kernel
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
-                    tmpdirname, quantization_config=GPTQConfig(disable_exllama=False, bits=4), device_map={"": 0}
+                    tmpdirname, quantization_config=GPTQConfig(use_exllama=True, bits=4), device_map={"": 0}
                 )
-                self.assertEqual(quantized_model_from_saved.config.quantization_config.disable_exllama, False)
+                self.assertEqual(quantized_model_from_saved.config.quantization_config.use_exllama, True)
                 self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
+                self.check_quantized_layers_type(quantized_model_from_saved, "exllama")
                 self.check_inference_correctness(quantized_model_from_saved)
 
 
@@ -255,7 +263,7 @@ class GPTQTestDeviceMap(GPTQTest):
 @require_torch_multi_gpu
 class GPTQTestDeviceMapExllama(GPTQTest):
     device_map = "auto"
-    disable_exllama = False
+    use_exllama = True
 
 
 @slow
@@ -281,8 +289,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         """
         Setup quantized model
         """
-
-        cls.quantization_config = GPTQConfig(bits=4, disable_exllama=False, max_input_length=4028)
+        cls.quantization_config = GPTQConfig(bits=4, max_input_length=4028)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             revision=cls.revision,
@@ -308,14 +315,15 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         # Get the generation
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
+    def test_quantized_layers_type(self):
+        self.assertTrue(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE == "exllama")
+
     def test_generate_quality(self):
         """
         Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
         """
         self.check_inference_correctness(self.quantized_model)
 
-    # this test will fail until the next release of optimum
-    @pytest.mark.skip
     def test_max_input_length(self):
         """
         Test if the max_input_length works. It modifies the maximum input length that of the model that runs with exllama backend.
@@ -332,6 +340,65 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         inp = self.tokenizer(prompt, return_tensors="pt").to(0)
         self.assertTrue(inp["input_ids"].shape[1] < 4028)
         self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
+
+
+@slow
+@require_optimum
+@require_auto_gptq
+@require_torch_gpu
+@require_accelerate
+class GPTQTestExllamaV2(unittest.TestCase):
+    """
+    Test GPTQ model with exllamav2 kernel and desc_act=True (also known as act-order).
+    More information on those arguments here:
+    https://huggingface.co/docs/transformers/main_classes/quantization#transformers.GPTQConfig
+    """
+
+    EXPECTED_OUTPUTS = set()
+    EXPECTED_OUTPUTS.add("Hello my name is Katie and I am a 20 year")
+    model_name = "hf-internal-testing/Llama-2-7B-GPTQ"
+    revision = "gptq-4bit-128g-actorder_True"
+    input_text = "Hello my name is"
+
+    @classmethod
+    def setUpClass(cls):
+        """
+        Setup quantized model
+        """
+        cls.quantization_config = GPTQConfig(bits=4, exllama_config={"version": 2})
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
+            cls.model_name,
+            revision=cls.revision,
+            torch_dtype=torch.float16,
+            device_map={"": 0},
+            quantization_config=cls.quantization_config,
+        )
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, use_fast=True)
+
+    def test_quantized_layers_type(self):
+        self.assertTrue(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE == "exllamav2")
+
+    def check_inference_correctness(self, model):
+        """
+        Test the generation quality of the quantized model and see that we are matching the expected output.
+        Given that we are operating on small numbers + the testing model is relatively small, we might not get
+        the same output across GPUs. So we'll generate few tokens (5-10) and check their output.
+        """
+
+        # Check that inference pass works on the model
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+
+        # Check the exactness of the results
+        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+        # Get the generation
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
+    def test_generate_quality(self):
+        """
+        Simple test to check the quality of the model by comapring the the generated tokens with the expected tokens
+        """
+        self.check_inference_correctness(self.quantized_model)
 
 
 # fail when run all together
