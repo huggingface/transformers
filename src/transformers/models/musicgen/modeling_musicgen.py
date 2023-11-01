@@ -145,8 +145,8 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
         return self.weights.index_select(0, position_ids.view(-1)).detach()
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention
-class BartAttention(nn.Module):
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Musicgen
+class MusicgenAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -157,7 +157,7 @@ class BartAttention(nn.Module):
         is_decoder: bool = False,
         bias: bool = True,
         is_causal: bool = False,
-        config: Optional[BartConfig] = None,
+        config: Optional[MusicgenConfig] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim

@@ -392,9 +392,8 @@ class M2M100EncoderLayer(nn.Module):
         return outputs
 
 
-M2M100_ATTENTION_CLASSES = {
-    "default": M2M100Attention
-}
+M2M100_ATTENTION_CLASSES = {"default": M2M100Attention}
+
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->M2M100, MBART->M2M100
 class M2M100DecoderLayer(nn.Module):

@@ -326,9 +326,7 @@ class Speech2TextAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-SPEECH_TO_TEXT_ATTENTION_CLASSES = {
-    "default": Speech2TextAttention
-}
+SPEECH_TO_TEXT_ATTENTION_CLASSES = {"default": Speech2TextAttention}
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Speech2Text, MBART->SPEECH_TO_TEXT

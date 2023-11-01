@@ -18,8 +18,8 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
 import torch.nn.functional as F
+import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -492,6 +492,7 @@ MBART_ATTENTION_CLASSES = {
     "default": MBartAttention,
     "flash_attention_2": MBartFlashAttention2,
 }
+
 
 class MBartEncoderLayer(nn.Module):
     def __init__(self, config: MBartConfig):
@@ -1235,7 +1236,7 @@ class MBartDecoder(MBartPreTrainedModel):
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 encoder_attention_mask = _prepare_4d_attention_mask(
                     encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-            )
+                )
 
         # embed positions
         positions = self.embed_positions(input, past_key_values_length)

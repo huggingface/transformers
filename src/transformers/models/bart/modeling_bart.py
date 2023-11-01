@@ -19,8 +19,8 @@ import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
 import torch.nn.functional as F
+import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -293,6 +293,7 @@ class BartFlashAttention2(BartAttention):
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
+
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
 
@@ -491,10 +492,12 @@ class BartFlashAttention2(BartAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
+
 BART_ATTENTION_CLASSES = {
     "default": BartAttention,
     "flash_attention_2": BartFlashAttention2,
 }
+
 
 class BartEncoderLayer(nn.Module):
     def __init__(self, config: BartConfig):
@@ -1256,7 +1259,7 @@ class BartDecoder(BartPreTrainedModel):
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 encoder_attention_mask = _prepare_4d_attention_mask(
                     encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-            )
+                )
 
         # embed positions
         positions = self.embed_positions(input, past_key_values_length)

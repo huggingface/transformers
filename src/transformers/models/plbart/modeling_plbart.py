@@ -332,9 +332,8 @@ class PLBartEncoderLayer(nn.Module):
         return outputs
 
 
-PLBART_ATTENTION_CLASSES = {
-    "default": PLBartAttention
-}
+PLBART_ATTENTION_CLASSES = {"default": PLBartAttention}
+
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->PLBart, BART->PLBART
 class PLBartDecoderLayer(nn.Module):

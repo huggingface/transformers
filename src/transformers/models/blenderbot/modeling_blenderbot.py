@@ -252,9 +252,8 @@ class BlenderbotAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-BLENDERBOT_ATTENTION_CLASSES = {
-    "default": BlenderbotAttention
-}
+BLENDERBOT_ATTENTION_CLASSES = {"default": BlenderbotAttention}
+
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Blenderbot, MBART->BLENDERBOT
 class BlenderbotEncoderLayer(nn.Module):

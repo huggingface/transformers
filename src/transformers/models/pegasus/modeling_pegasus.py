@@ -267,9 +267,7 @@ class PegasusAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-PEGASUS_ATTENTION_CLASSES = {
-    "default": PegasusAttention
-}
+PEGASUS_ATTENTION_CLASSES = {"default": PegasusAttention}
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Pegasus, MBART->PEGASUS

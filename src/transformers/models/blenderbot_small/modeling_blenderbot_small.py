@@ -321,9 +321,7 @@ class BlenderbotSmallEncoderLayer(nn.Module):
         return outputs
 
 
-BLENDERBOT_SMALL_ATTENTION_CLASSES = {
-    "default": BlenderbotSmallAttention
-}
+BLENDERBOT_SMALL_ATTENTION_CLASSES = {"default": BlenderbotSmallAttention}
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->BlenderbotSmall, BART->BLENDERBOT_SMALL

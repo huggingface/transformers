@@ -339,9 +339,7 @@ class MarianEncoderLayer(nn.Module):
         return outputs
 
 
-MARIAN_ATTENTION_CLASSES = {
-    "default": MarianAttention
-}
+MARIAN_ATTENTION_CLASSES = {"default": MarianAttention}
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->Marian, BART->MARIAN

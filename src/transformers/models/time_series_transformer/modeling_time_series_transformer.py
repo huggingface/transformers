@@ -500,9 +500,9 @@ class TimeSeriesTransformerEncoderLayer(nn.Module):
 
         return outputs
 
-TIME_SERIES_TRANSFORMER_ATTENTION_CLASSES = {
-    "default": TimeSeriesTransformerAttention
-}
+
+TIME_SERIES_TRANSFORMER_ATTENTION_CLASSES = {"default": TimeSeriesTransformerAttention}
+
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->TimeSeriesTransformer, with BART->TIME_SERIES_TRANSFORMER
 class TimeSeriesTransformerDecoderLayer(nn.Module):
