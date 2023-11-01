@@ -252,6 +252,15 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(self, vocab_file, errors="replace", **kwargs):
+        self.add_bos_token = False
+        self._bos_token = None
+        self._eos_token = None
+        self._unk_token = None
+        self._sep_token = None
+        self._pad_token = None
+        self._cls_token = None
+        self._mask_token = None
+        self._additional_special_tokens = []
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}

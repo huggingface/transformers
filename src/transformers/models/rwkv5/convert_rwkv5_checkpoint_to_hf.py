@@ -26,7 +26,6 @@ from huggingface_hub import hf_hub_download
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerFast, Rwkv5Config
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME, shard_checkpoint
-import configuration_rwkv5
 
 
 NUM_HIDDEN_LAYERS_MAPPING = {

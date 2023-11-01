@@ -18,7 +18,7 @@ import copy
 import unittest
 from unittest.util import safe_repr
 
-from transformers import AutoTokenizer, Rwkv5Config, is_torch_available
+from transformers import Rwkv5Config, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -230,7 +230,6 @@ class Rwkv5ModelTester:
         output_whole = outputs.last_hidden_state
 
         outputs = model(input_ids[:, :2])
-        output_one = outputs.last_hidden_state
 
         # Using the state computed on the first inputs, we will get the same output
         outputs = model(input_ids[:, 2:], state=outputs.state)

@@ -42,7 +42,6 @@ outputs = model(inputs["input_ids"])
 output_whole = outputs.last_hidden_state
 
 outputs = model(inputs["input_ids"][:, :2])
-output_one = outputs.last_hidden_state
 
 # Using the state computed on the first inputs, we will get the same output
 outputs = model(inputs["input_ids"][:, 2:], state=outputs.state)

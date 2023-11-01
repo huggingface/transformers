@@ -15,16 +15,13 @@
 # limitations under the License.
 """PyTorch RWKV5 World model."""
 
-import math
 from dataclasses import dataclass
-from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss
 
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import (
@@ -32,10 +29,9 @@ from transformers.utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_ninja_available,
-    is_torch_cuda_available,
     logging,
 )
+
 from .configuration_rwkv5 import Rwkv5Config
 
 

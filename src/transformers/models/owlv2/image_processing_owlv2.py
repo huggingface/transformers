@@ -192,7 +192,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             by `do_resize` in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 960, "width": 960}`):
             Size to resize the image to. Can be overriden by `size` in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `2`):
             Resampling method to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
