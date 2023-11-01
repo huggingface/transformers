@@ -853,24 +853,8 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
         self.out_vision_proj = nn.Linear(self.embed_dim, self.vision_dim)
         self.out_text_proj = nn.Linear(self.embed_dim, self.text_dim)
 
-        self._reset_parameters()
-
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    def _reset_parameters(self):
-        nn.init.xavier_uniform_(self.vision_proj.weight)
-        self.vision_proj.bias.data.fill_(0)
-        nn.init.xavier_uniform_(self.text_proj.weight)
-        self.text_proj.bias.data.fill_(0)
-        nn.init.xavier_uniform_(self.values_vision_proj.weight)
-        self.values_vision_proj.bias.data.fill_(0)
-        nn.init.xavier_uniform_(self.values_text_proj.weight)
-        self.values_text_proj.bias.data.fill_(0)
-        nn.init.xavier_uniform_(self.out_vision_proj.weight)
-        self.out_vision_proj.bias.data.fill_(0)
-        nn.init.xavier_uniform_(self.out_text_proj.weight)
-        self.out_text_proj.bias.data.fill_(0)
 
     def forward(
         self,
@@ -1412,7 +1396,18 @@ class GroundingDINOPreTrainedModel(PreTrainedModel):
         elif isinstance(module, GroundingDINOMultiscaleDeformableAttention):
             module._reset_parameters()
         elif isinstance(module, GroundingDINOBiMultiHeadAttention):
-            module._reset_parameters()
+            nn.init.xavier_uniform_(module.vision_proj.weight)
+            module.vision_proj.bias.data.fill_(0)
+            nn.init.xavier_uniform_(module.text_proj.weight)
+            module.text_proj.bias.data.fill_(0)
+            nn.init.xavier_uniform_(module.values_vision_proj.weight)
+            module.values_vision_proj.bias.data.fill_(0)
+            nn.init.xavier_uniform_(module.values_text_proj.weight)
+            module.values_text_proj.bias.data.fill_(0)
+            nn.init.xavier_uniform_(module.out_vision_proj.weight)
+            module.out_vision_proj.bias.data.fill_(0)
+            nn.init.xavier_uniform_(module.out_text_proj.weight)
+            module.out_text_proj.bias.data.fill_(0)
         elif isinstance(module, (GroundingDINOEncoderLayer, GroundingDINODecoderLayer)):
             for p in module.parameters():
                 if p.dim() > 1:
