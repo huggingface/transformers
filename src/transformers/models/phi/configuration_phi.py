@@ -52,6 +52,8 @@ class PhiConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer decoder.
         resid_pdrop (`float`, *optional*, defaults to 0.0):
             Dropout probability for mlp outputs.
+        embd_pdrop (`int`, *optional*, defaults to 0.0):
+            The dropout ratio for the embeddings.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio after computing the attention scores.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_new"`):
@@ -112,6 +114,7 @@ class PhiConfig(PretrainedConfig):
         num_hidden_layers=24,
         num_attention_heads=32,
         resid_pdrop=0.0,
+        embd_pdrop=0.0,
         attention_dropout=0.0,
         hidden_act="gelu_new",
         max_position_embeddings=2048,
@@ -133,6 +136,7 @@ class PhiConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.resid_pdrop = resid_pdrop
+        self.embd_pdrop = embd_pdrop
         self.attention_dropout = attention_dropout
         self.hidden_act = hidden_act
         self.max_position_embeddings = max_position_embeddings

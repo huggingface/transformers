@@ -511,7 +511,6 @@ PHI_INPUTS_DOCSTRING = r"""
     "The bare Phi Model outputting raw hidden-states without any specific head on top.",
     PHI_START_DOCSTRING,
 )
-# Copied from transformers.models.persimmon.modeling_persimmon.PersimmonModel with Persimmon->Phi, PERSIMMON->PHI
 class PhiModel(PhiPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PhiDecoderLayer`]
@@ -526,6 +525,7 @@ class PhiModel(PhiPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_dropout = nn.Dropout(config.embd_pdrop)
         self.layers = nn.ModuleList([PhiDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -586,6 +586,9 @@ class PhiModel(PhiPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+
+        inputs_embeds = self.embed_dropout(inputs_embeds)
+
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(
