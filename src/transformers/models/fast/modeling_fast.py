@@ -22,7 +22,6 @@ FAST_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-
 FAST_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -976,6 +975,14 @@ class FASTForImageCaptioning(FastPreTrainedModel):
             return_dict: Optional[bool] = None,
             labels: Dict = None,
     ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        """
         # outputs = {}
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         f = self.backbone(pixel_values)
