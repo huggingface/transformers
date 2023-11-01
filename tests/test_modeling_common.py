@@ -607,6 +607,7 @@ class ModelTesterMixin:
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
             if chunk_length is not None:
                 self.assertListEqual(
                     list(attentions[0].shape[-4:]),
