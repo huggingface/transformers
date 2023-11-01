@@ -198,6 +198,9 @@ class GPTQTest(unittest.TestCase):
         # Get the generation
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
+    def check_quantized_layers_type(self, model, value):
+        self.assertTrue(model.transformer.h[0].mlp.dense_4h_to_h.QUANT_TYPE == value)
+
     def test_generate_quality(self):
         """
         Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
@@ -215,9 +218,11 @@ class GPTQTest(unittest.TestCase):
             self.quantized_model.save_pretrained(tmpdirname)
             if not self.use_exllama:
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname).to(0)
+                self.check_quantized_layers_type(quantized_model_from_saved,"cuda-old")
             else:
                 # we need to put it directly to the gpu. Otherwise, we won't be able to initialize the exllama kernel
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map={"": 0})
+                self.check_quantized_layers_type(quantized_model_from_saved,"exllama")
             self.check_inference_correctness(quantized_model_from_saved)
 
     @require_accelerate
@@ -244,6 +249,7 @@ class GPTQTest(unittest.TestCase):
                 )
                 self.assertEqual(quantized_model_from_saved.config.quantization_config.use_exllama, True)
                 self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
+                self.check_quantized_layers_type(quantized_model_from_saved,"exllama")
                 self.check_inference_correctness(quantized_model_from_saved)
 
 
@@ -309,6 +315,9 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         # Get the generation
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
+    def test_quantized_layers_type(self):
+        self.assertTrue(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE == "exllama")
+
     def test_generate_quality(self):
         """
         Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
@@ -365,6 +374,9 @@ class GPTQTestExllamaV2(unittest.TestCase):
             quantization_config=cls.quantization_config,
         )
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, use_fast=True)
+
+    def test_quantized_layers_type(self):
+        self.assertTrue(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE == "exllamav2")
 
     def check_inference_correctness(self, model):
         """
