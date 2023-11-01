@@ -804,9 +804,9 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
             # bs, num_q, num_k
             attention_masks = attention_masks.repeat(self.num_heads, 1, 1)
 
-        q = k = self.with_pos_embed(hidden_states, position_embeddings)
+        queries = keys = self.with_pos_embed(hidden_states, position_embeddings)
         attention_output, attention_weights = self.self_attn(
-            query=q, key=k, value=hidden_states, attn_mask=attention_masks, average_attn_weights=False
+            query=queries, key=keys, value=hidden_states, attn_mask=attention_masks, average_attn_weights=False
         )
         attention_output = nn.functional.dropout(attention_output, p=self.dropout, training=self.training)
         hidden_states = hidden_states + attention_output
