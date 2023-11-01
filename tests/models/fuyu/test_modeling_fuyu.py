@@ -278,9 +278,8 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
     @slow
     @require_torch_gpu
     def test_model_8b_chat_greedy_generation_bus_captioning(self):
-        EXPECTED_TEXT_COMPLETION = """A bus parked on the side of a road.|ENDOFTEXT|"""
+        EXPECTED_TEXT_COMPLETION = """A blue bus parked on the side of a road.|ENDOFTEXT|"""
         text_prompt_coco_captioning = "Generate a coco-style caption.\n"
-
         model_inputs_bus_captioning = self.processor(text=text_prompt_coco_captioning, images=self.bus_image_pil)
         generated_tokens = self.model.generate(**model_inputs_bus_captioning, max_new_tokens=10)
         text = self.processor.tokenizer.batch_decode(generated_tokens)
