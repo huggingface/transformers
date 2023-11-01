@@ -31,26 +31,29 @@ class CedConfig(PretrainedConfig):
     Configuration class for the CED model.
 
     Args:
-        name (str, optional):
+        name (str, optional, *optional*):
             Name of the pre-defined configuration. Can be "ced-tiny", "ced-mini", "ced-small" or "ced-base".
-        attn_drop_rate (float, optional): Dropout probability for attention weights. Default to 0.0.
-        depth (int, optional): Number of transformer layers. Default to 12.
-        drop_path_rate (float, optional): Drop path is taken from timm. Default to 0.0.
-        drop_rate (float, optional): Dropout probability for input embeddings. Default to 0.0.
-        embed_dim (int, optional): Dimensionality of the audio patch embeddings. Default to 768.
-        eval_avg (str, optional):
+        attn_drop_rate (float, *optional*, defaults to 0.0):
+            Dropout probability for attention weights. Default to 0.0.
+        depth (int, *optional*, defaults to 12): Number of transformer layers. Default to 12.
+        drop_path_rate (float, *optional*, defaults to 0.0): Drop path is taken from timm. Default to 0.0.
+        drop_rate (float, *optional*, defaults to 0.0):
+            Dropout probability for input embeddings. Default to 0.0.
+        embed_dim (int, *optional*, defaults to 768):
+            Dimensionality of the audio patch embeddings. Default to 768.
+        eval_avg (str, *optional*, defaults to `"mean"`):
             Type of pooling to use for evaluation. Can be "mean", "token", "dm" or "logit". Default to "mean".
-        mlp_ratio (float, optional):
+        mlp_ratio (float, *optional*, defaults to 4.0):
             Ratio of hidden size in the feedforward layer to the embedding size. Default to 4.0.
-        num_heads (int, optional): Number of attention heads. Default to 12.
-        outputdim (int, optional): Dimensionality of the output. Default to 527.
-        patch_size (int, optional): Size of the patches. Default to 16.
-        patch_stride (int, optional): Stride of the patches. Default to 16.
-        pooling (str, optional):
+        num_heads (int, *optional*, defaults to 12): Number of attention heads. Default to 12.
+        outputdim (int, *optional*, defaults to 527): Dimensionality of the output. Default to 527.
+        patch_size (int, *optional*, defaults to 16): Size of the patches. Default to 16.
+        patch_stride (int, *optional*, defaults to 16): Stride of the patches. Default to 16.
+        pooling (str, *optional*, defaults to `"mean"`):
             Type of pooling to use for the output. Can be "mean", "token", "dm" or "logit". Default to "mean".
-        qkv_bias (bool, optional):
+        qkv_bias (bool, *optional*, defaults to `True`):
             Whether to include bias terms in the query, key and value projections. Default to True.
-        target_length (int, optional): Frames of an audio chunk. Default to 1012.
+        target_length (int, *optional*, defaults to 1012): Frames of an audio chunk. Default to 1012.
     """
 
     def __init__(
