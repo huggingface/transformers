@@ -2049,9 +2049,12 @@ class WhisperStandaloneDecoderModelTester:
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
 
-        decoder_input_ids = torch.tensor(self.batch_size * [[self.decoder_start_token_id, 3, 3, 7, 2]], device=torch_device)
+        decoder_input_ids = torch.tensor(
+            self.batch_size * [[self.decoder_start_token_id, 3, 3, 7, 2]], device=torch_device
+        )
 
         config = self.get_config()
+        config.is_encoder_decoder = False
         inputs_dict = prepare_whisper_inputs_dict(
             config,
             attention_mask=None,
@@ -2067,6 +2070,10 @@ class WhisperStandaloneDecoderModelTester:
         inputs_dict["attention_mask"] = inputs_dict.pop("decoder_attention_mask")
         inputs_dict["input_ids"] = inputs_dict.pop("decoder_input_ids")
         return config, inputs_dict
+
+    @property
+    def encoder_seq_length(self):
+        return 5
 
     def get_config(self):
         return WhisperConfig(
@@ -2114,8 +2121,6 @@ class WhisperStandaloneDecoderModelTester:
         self,
         config,
         input_ids,
-        attention_mask,
-        lm_labels,
     ):
         config.use_cache = True
         model = WhisperDecoder(config=config).to(torch_device).eval()
@@ -2150,8 +2155,6 @@ class WhisperStandaloneDecoderModelTester:
         self,
         config,
         input_ids,
-        attention_mask,
-        lm_labels,
     ):
         model = WhisperDecoder(config=config).to(torch_device).eval()
 
@@ -2193,6 +2196,7 @@ class WhisperStandaloneDecoderModelTester:
         # test that outputs are equal for slice
         assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
 
+
 @require_torch
 class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperDecoder, WhisperForCausalLM) if is_torch_available() else ()
@@ -2213,11 +2217,17 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
 
     def test_decoder_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
+        config, inputs_dict = config_and_inputs
+
+        self.model_tester.create_and_check_decoder_model_past(config=config, input_ids=inputs_dict["input_ids"])
 
     def test_decoder_model_attn_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
+        config, inputs_dict = config_and_inputs
+
+        self.model_tester.create_and_check_decoder_model_attention_mask_past(
+            config=config, input_ids=inputs_dict["input_ids"]
+        )
 
     def test_generate_without_input_ids(self):
         # generate only works with input ids for whisper
