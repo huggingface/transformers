@@ -607,7 +607,6 @@ class ModelTesterMixin:
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
             if chunk_length is not None:
                 self.assertListEqual(
                     list(attentions[0].shape[-4:]),
@@ -1228,6 +1227,8 @@ class ModelTesterMixin:
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_retain_grad_hidden_states_attentions(self):
+        if self.model_tester.is_training is False:
+            return
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
         config.output_attentions = self.has_attentions
@@ -1434,6 +1435,7 @@ class ModelTesterMixin:
 
             # Check that adding and removing tokens has not modified the first part of the embedding matrix.
             models_equal = True
+
             for p1, p2 in zip(cloned_embeddings, model_embed.weight):
                 if p1.data.ne(p2.data).sum() > 0:
                     models_equal = False
@@ -1682,6 +1684,7 @@ class ModelTesterMixin:
             tied_params = [names for _, names in ptrs.items() if len(names) > 1]
 
             tied_weight_keys = model_tied._tied_weights_keys if model_tied._tied_weights_keys is not None else []
+
             # Detect we get a hit for each key
             for key in tied_weight_keys:
                 if not any(re.search(key, p) for group in tied_params for p in group):

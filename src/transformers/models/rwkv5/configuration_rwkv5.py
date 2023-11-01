@@ -28,7 +28,7 @@ RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class Rwkv5Config(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`RwkvModel`]. It is used to instantiate a RWKV
+    This is the configuration class to store the configuration of a [`Rwkv5Model`]. It is used to instantiate a RWKV
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the RWVK-4
     [RWKV/rwkv-4-169m-pile](https://huggingface.co/RWKV/rwkv-4-169m-pile) architecture.
@@ -40,7 +40,7 @@ class Rwkv5Config(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50277):
             Vocabulary size of the RWKV model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`RwkvModel`].
+            `inputs_ids` passed when calling [`Rwkv5Model`].
         context_length (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model can be be used with in a single forward (using it in RNN mode
             lets use any sequence length).
@@ -72,13 +72,13 @@ class Rwkv5Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import RwkvConfig, RwkvModel
+    >>> from transformers import Rwkv5Config, Rwkv5Model
 
-    >>> # Initializing a Rwkv configuration
-    >>> configuration = RwkvConfig()
+    >>> # Initializing a Rwkv5 configuration
+    >>> configuration = Rwkv5Config()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = RwkvModel(configuration)
+    >>> model = Rwkv5Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -94,7 +94,7 @@ class Rwkv5Config(PretrainedConfig):
         hidden_size=768,
         num_hidden_layers=24,
         attention_hidden_size=None,
-        head_size=64,
+        num_attention_heads=64,
         intermediate_size=None,
         layer_norm_epsilon=1e-5,
         bos_token_id=0,
@@ -109,7 +109,7 @@ class Rwkv5Config(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.attention_hidden_size = attention_hidden_size if attention_hidden_size is not None else hidden_size
-        self.head_size = head_size
+        self.num_attention_heads = num_attention_heads
         self.intermediate_size = None
         self.layer_norm_epsilon = layer_norm_epsilon
         self.rescale_every = rescale_every
