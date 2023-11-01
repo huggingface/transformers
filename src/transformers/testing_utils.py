@@ -52,6 +52,7 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     is_accelerate_available,
     is_apex_available,
+    is_auto_awq_available,
     is_auto_gptq_available,
     is_bitsandbytes_available,
     is_bs4_available,
@@ -961,6 +962,13 @@ def require_auto_gptq(test_case):
     Decorator for auto_gptq dependency
     """
     return unittest.skipUnless(is_auto_gptq_available(), "test requires auto-gptq")(test_case)
+
+
+def require_auto_awq(test_case):
+    """
+    Decorator for auto_awq dependency
+    """
+    return unittest.skipUnless(is_auto_awq_available(), "test requires autoawq")(test_case)
 
 
 def require_phonemizer(test_case):
