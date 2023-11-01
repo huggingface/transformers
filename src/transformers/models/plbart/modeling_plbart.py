@@ -112,12 +112,15 @@ class PLBartAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
+        is_causal: bool = False,
+        config: Optional[PLBartConfig] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.config = config
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -126,6 +129,7 @@ class PLBartAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
+        self.is_causal = is_causal
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -256,15 +260,18 @@ class PLBartAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->PLBart
+# Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->PLBart, BART->PLBART
 class PLBartEncoderLayer(nn.Module):
     def __init__(self, config: PLBartConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = PLBartAttention(
+        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
+
+        self.self_attn = PLBART_ATTENTION_CLASSES[attn_type](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
+            config=config,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -325,28 +332,35 @@ class PLBartEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->PLBart
+PLBART_ATTENTION_CLASSES = {"default": PLBartAttention}
+
+
+# Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->PLBart, BART->PLBART
 class PLBartDecoderLayer(nn.Module):
     def __init__(self, config: PLBartConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = PLBartAttention(
+        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
+        self.self_attn = PLBART_ATTENTION_CLASSES[attn_type](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            is_causal=True,
+            config=config,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = PLBartAttention(
+        self.encoder_attn = PLBART_ATTENTION_CLASSES[attn_type](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            config=config,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
@@ -743,8 +757,11 @@ class PLBartEncoder(PLBartPreTrainedModel):
 
         # expand attention_mask
         if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            if getattr(self.config, "_flash_attn_2_enabled", False):
+                attention_mask = attention_mask if 0 in attention_mask else None
+            else:
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -947,16 +964,24 @@ class PLBartDecoder(PLBartPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input) * self.embed_scale
 
-        attention_mask = _prepare_4d_causal_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
-        )
+        if getattr(self.config, "_flash_attn_2_enabled", False):
+            # 2d mask is passed through the layers
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        else:
+            # 4d mask is passed through the layers
+            attention_mask = _prepare_4d_causal_attention_mask(
+                attention_mask, input_shape, inputs_embeds, past_key_values_length
+            )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-            )
+            if getattr(self.config, "_flash_attn_2_enabled", False):
+                encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
+            else:
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                encoder_attention_mask = _prepare_4d_attention_mask(
+                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+                )
 
         # embed positions
         positions = self.embed_positions(input, past_key_values_length)
