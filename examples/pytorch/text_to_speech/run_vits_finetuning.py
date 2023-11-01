@@ -1461,6 +1461,11 @@ def main():
         project_name=data_args.project_name,
         full_generation_sample=full_generation_sample,
     )
+    
+    # 13. Push FE and tokenizer
+    if training_args.push_to_hub:
+        feature_extractor.push_to_hub(training_args.hub_model_id)
+        tokenizer.push_to_hub(training_args.hub_model_id)    
 
     logger.info("***** Training / Inference Done *****")
 
