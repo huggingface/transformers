@@ -988,7 +988,6 @@ def training_loop(
                                         wandb.Image(plot_spectrogram_to_numpy(spec), caption=f"Audio epoch {epoch}")
                                         for spec in target_spec[: min(len(generated_audio), 50)]
                                     ],
-                                    # "absolute spectrogram diff": [wandb.Image(plot_spectrogram_to_numpy(spec),caption=f"Audio epoch {epoch}") for spec in diff_spec[:min(len(generated_audio), 50)]],
                                     "train generated audio": [
                                         wandb.Audio(
                                             audio[0],
