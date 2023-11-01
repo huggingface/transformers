@@ -40,10 +40,25 @@ def get_dpt_config(model_name):
         backbone_config = Dinov2Config.from_pretrained(
             "facebook/dinov2-small", out_indices=[3, 6, 9, 12], apply_layernorm=False, reshape_hidden_states=False
         )
+        neck_hidden_sizes = [48, 96, 192, 384]
+    elif "base" in model_name:
+        backbone_config = Dinov2Config.from_pretrained(
+            "facebook/dinov2-base", out_indices=[3, 6, 9, 12], apply_layernorm=False, reshape_hidden_states=False
+        )
+        neck_hidden_sizes = [96, 192, 384, 768]
+    elif "large" in model_name:
+        backbone_config = Dinov2Config.from_pretrained(
+            "facebook/dinov2-large", out_indices=[5, 12, 18, 24], apply_layernorm=False, reshape_hidden_states=False
+        )
+        neck_hidden_sizes = [128, 256, 512, 1024]
+    elif "giant" in model_name:
+        backbone_config = Dinov2Config.from_pretrained(
+            "facebook/dinov2-giant", out_indices=[10, 20, 30, 40], apply_layernorm=False, reshape_hidden_states=False
+        )
+        neck_hidden_sizes = [128, 256, 512, 1024]
     else:
         raise NotImplementedError("To do")
 
-    neck_hidden_sizes = [48, 96, 192, 384]
     config = DPTConfig(
         backbone_config=backbone_config,
         neck_hidden_sizes=neck_hidden_sizes,
@@ -236,16 +251,24 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     config = get_dpt_config(model_name)
 
     # load original DPT state_dict from URL
+    print("URL:", checkpoint_url)
     dpt_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["state_dict"]
-    for name, param in dpt_state_dict.items():
-        print(name, param.shape)
     # rename keys
     rename_keys = create_rename_keys_dpt(config)
     for src, dest in rename_keys:
         rename_key(dpt_state_dict, src, dest)
 
     # load original backbone state_dict from URL
-    original_model = torch.hub.load("facebookresearch/dinov2", "dinov2_vits14")
+    if "small" in model_name:
+        original_model = torch.hub.load("facebookresearch/dinov2", "dinov2_vits14")
+    elif "base" in model_name:
+        original_model = torch.hub.load("facebookresearch/dinov2", "dinov2_vitb14")
+    elif "large" in model_name:
+        original_model = torch.hub.load("facebookresearch/dinov2", "dinov2_vitl14")
+    elif "giant" in model_name:
+        original_model = torch.hub.load("facebookresearch/dinov2", "dinov2_vitg14")
+    else:
+        raise NotImplementedError("To do")
     original_model.eval()
     backbone_state_dict = original_model.state_dict()
 
@@ -304,8 +327,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
             expected_slice = torch.tensor(
                 [[3.3576, 3.4741, 3.4345], [3.4324, 3.5012, 3.2775], [3.2560, 3.3563, 3.2354]]
             )
-        else:
-            raise NotImplementedError("Model not yet supported")
+        # else:
+        #     raise NotImplementedError("Model not yet supported")
 
         assert predicted_depth.shape == torch.Size(expected_shape)
         assert torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-5)
@@ -319,8 +342,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
     if push_to_hub:
         print("Pushing model and processor to hub...")
-        model.push_to_hub(repo_id=f"nielsr/{model_name}")
-        processor.push_to_hub(repo_id=f"nielsr/{model_name}")
+        model.push_to_hub(repo_id=f"facebook/{model_name}")
+        processor.push_to_hub(repo_id=f"facebook/{model_name}")
 
 
 if __name__ == "__main__":
@@ -346,7 +369,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--verify_logits",
-        action="store_false",
+        action="store_true",
         required=False,
         help="Path to the output PyTorch model directory.",
     )
