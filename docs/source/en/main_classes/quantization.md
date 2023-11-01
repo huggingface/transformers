@@ -140,12 +140,11 @@ gptq_config = GPTQConfig(bits=4)
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config=gptq_config)
 ```
 
-With the release of the exllamav2 kernels, you can get faster inference speed compared to the exllama kernels. You just need to 
-pass `exllama_version=2` in [`GPTQConfig`] and disable exllama kernels:
+With the release of the exllamav2 kernels, you can get faster inference speed compared to the exllama kernels. You just need to pass `exllama_config={"version": 2}` in [`GPTQConfig`]:
 
 ```py
 import torch
-gptq_config = GPTQConfig(bits=4, exllama_version={"version":2})
+gptq_config = GPTQConfig(bits=4, exllama_config={"version":2})
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config = gptq_config)
 ```
 

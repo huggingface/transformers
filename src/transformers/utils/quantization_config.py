@@ -350,12 +350,12 @@ class GPTQConfig(QuantizationConfigMixin):
         pad_token_id (`int`, *optional*):
             The pad token id. Needed to prepare the dataset when `batch_size` > 1.
         use_exllama (`bool`, *optional*):
-            Whether to use exllama backend. Only works with `bits` = 4.
+            Whether to use exllama backend. Defaults to `True` if unset. Only works with `bits` = 4.
         max_input_length (`int`, *optional*):
             The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
             length. It is specific to the exllama backend with act-order.
         exllama_config (`Dict[str, Any]`, *optional*):
-            The exllama config. You can specify the version of the exllama kernel through the `version` key.
+            The exllama config. You can specify the version of the exllama kernel through the `version` key. Defaults to `{"version": 1}` if unset.
     """
 
     def __init__(
