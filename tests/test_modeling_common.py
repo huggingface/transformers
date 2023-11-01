@@ -2843,7 +2843,6 @@ class ModelTesterMixin:
                 if dummy_input.dtype in [torch.float32, torch.float16]:
                     dummy_input = dummy_input.to(torch.bfloat16)
 
-                "attention_mask" in set(inspect.signature(model.forward).parameters)
                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
 
                 if model.config.is_encoder_decoder:
@@ -2861,7 +2860,7 @@ class ModelTesterMixin:
                     else outputs.decoder_hidden_states[-1]
                 )
                 logits_fa = (
-                    outputs.hidden_states[-1]
+                    outputs_fa.hidden_states[-1]
                     if not model.config.is_encoder_decoder
                     else outputs_fa.decoder_hidden_states[-1]
                 )
@@ -2895,7 +2894,7 @@ class ModelTesterMixin:
                     else outputs.decoder_hidden_states[-1]
                 )
                 logits_fa = (
-                    outputs.hidden_states[-1]
+                    outputs_fa.hidden_states[-1]
                     if not model.config.is_encoder_decoder
                     else outputs_fa.decoder_hidden_states[-1]
                 )
@@ -2953,7 +2952,7 @@ class ModelTesterMixin:
                     else outputs.decoder_hidden_states[-1]
                 )
                 logits_fa = (
-                    outputs.hidden_states[-1]
+                    outputs_fa.hidden_states[-1]
                     if not model.config.is_encoder_decoder
                     else outputs_fa.decoder_hidden_states[-1]
                 )
@@ -2987,7 +2986,7 @@ class ModelTesterMixin:
                     else outputs.decoder_hidden_states[-1]
                 )
                 logits_fa = (
-                    outputs.hidden_states[-1]
+                    outputs_fa.hidden_states[-1]
                     if not model.config.is_encoder_decoder
                     else outputs_fa.decoder_hidden_states[-1]
                 )

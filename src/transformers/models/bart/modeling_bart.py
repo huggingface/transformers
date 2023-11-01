@@ -307,7 +307,8 @@ class BartFlashAttention2(BartAttention):
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # BartFlashAttention2 attention does not support output_attentions
-        output_attentions = False
+        if output_attentions:
+            raise ValueError("BartFlashAttention2 attention does not support output_attentions")
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
