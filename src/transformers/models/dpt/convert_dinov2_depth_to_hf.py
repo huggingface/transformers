@@ -55,7 +55,7 @@ def get_dpt_config(model_name):
         backbone_config = Dinov2Config.from_pretrained(
             "facebook/dinov2-giant", out_indices=[10, 20, 30, 40], apply_layernorm=False, reshape_hidden_states=False
         )
-        neck_hidden_sizes = [128, 256, 512, 1024]
+        neck_hidden_sizes = [192, 384, 768, 1536]
     else:
         raise NotImplementedError("To do")
 
@@ -279,6 +279,14 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
     # read in qkv matrices
     read_in_q_k_v(backbone_state_dict, config)
+
+    for key, val in backbone_state_dict.copy().items():
+        val = backbone_state_dict.pop(key)
+        if "w12" in key:
+            key = key.replace("w12", "weights_in")
+        if "w3" in key:
+            key = key.replace("w3", "weights_out")
+        backbone_state_dict[key] = val
 
     # merge state_dicts
     state_dict = {**backbone_state_dict, **dpt_state_dict}

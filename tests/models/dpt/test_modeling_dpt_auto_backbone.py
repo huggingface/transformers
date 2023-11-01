@@ -278,8 +278,8 @@ def prepare_img():
 @slow
 class DPTModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large")
-        model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large").to(torch_device)
+        image_processor = DPTImageProcessor.from_pretrained("facebook/dpt-dinov2-small-kitti")
+        model = DPTForDepthEstimation.from_pretrained("facebook/dpt-dinov2-small-kitti").to(torch_device)
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
@@ -290,11 +290,11 @@ class DPTModelIntegrationTest(unittest.TestCase):
             predicted_depth = outputs.predicted_depth
 
         # verify the predicted depth
-        expected_shape = torch.Size((1, 384, 384))
+        expected_shape = torch.Size((1, 576, 736))
         self.assertEqual(predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]]
+            [[6.0433, 7.1636, 7.4268], [6.9047, 7.2471, 7.2355], [7.9261, 8.0631, 8.0244]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
