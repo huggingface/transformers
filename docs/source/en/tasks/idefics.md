@@ -228,7 +228,7 @@ Let's get a new image for this task:
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-vqa.jpg" alt="Image of a couple having a picnic"/>
 </div>
 
-[Jarritos Mexican Soda](https://unsplash.com/@jarritos).Photo by 
+Photo by [Jarritos Mexican Soda](https://unsplash.com/@jarritos). 
 
 You can steer the model from image captioning to visual question answering by prompting it with appropriate instructions: 
 
