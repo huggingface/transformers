@@ -4576,7 +4576,9 @@ def expand_device_map(device_map, param_names):
     """
     new_device_map = {}
     for module, device in device_map.items():
-        new_device_map.update({p: device for p in param_names if p == module or p.startswith(f"{module}.")})
+        new_device_map.update(
+            {p: device for p in param_names if p == module or p.startswith(f"{module}.") or module == ""}
+        )
     return new_device_map
 
 
