@@ -4442,9 +4442,16 @@ class GenerationMixin:
                     encoder_outputs=assistant_encoder_outputs,
                     past_key_values=model_kwargs.get("assistant_past_key_values", None),
                 )
-                assistant_model_outputs = assistant_model(
-                    **assistant_inputs,
-                )
+                if assistant_inputs.get("past_key_values", None) is not None:
+                    if self.config.is_encoder_decoder:
+                        input_ids_len = assistant_inputs["decoder_input_ids"].shape[-1]
+                    else:
+                        input_ids_len = assistant_inputs["input_ids"].shape[-1]
+
+                    if input_ids_len not in (0, 1):
+                        raise ValueError("The length of the input ids in assistant inputs should be 1 or 2")
+
+                assistant_model_outputs = assistant_model(**assistant_inputs)
 
                 # 1.2. greedily select the next candidate token
                 model_kwargs["assistant_past_key_values"] = assistant_model_outputs.past_key_values
@@ -4602,7 +4609,7 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
 
-            # Update attention_mask
+            # Update attention_mask for the assistant's next round of generations
             if n_matches > 0 and model_kwargs.get("attention_mask", None) is not None:
                 attention_mask = model_kwargs["attention_mask"]
                 model_kwargs["attention_mask"] = torch.cat(
