@@ -26,12 +26,14 @@ from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
 
-MAX_WAV_VALUE = 32768.0	
+
+MAX_WAV_VALUE = 32768.0
 
 if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
+
 
 class VitsFeatureExtractor(SequenceFeatureExtractor):
     r"""
@@ -67,7 +69,7 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask,
         max_wav_value=32768.0,  # TODO : add to docstrings
-        spec_gain=1, # for now do nothin TODO - it is used for plotting
+        spec_gain=1,  # for now do nothin TODO - it is used for plotting
         **kwargs,
     ):
         super().__init__(
@@ -90,7 +92,7 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
         self.max_wav_value = max_wav_value
-        self.spec_gain = spec_gain # TODO: add - gain applied when converting amplitude to DB. Defaults to 20.
+        self.spec_gain = spec_gain  # TODO: add - gain applied when converting amplitude to DB. Defaults to 20.
         # improvement from coqui repo
 
     def _torch_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
@@ -241,10 +243,10 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [np.asarray([raw_speech]).T]
 
-        # if self.max_wav_value is not None:	
-        #     raw_speech = [	
-        #         speech if self.max_wav_value is None else speech / self.max_wav_value for speech in raw_speech	
-        #     ]	
+        # if self.max_wav_value is not None:
+        #     raw_speech = [
+        #         speech if self.max_wav_value is None else speech / self.max_wav_value for speech in raw_speech
+        #     ]
 
         batched_speech = BatchFeature({"input_features": raw_speech})
 

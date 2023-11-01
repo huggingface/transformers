@@ -15,9 +15,9 @@
 """ PyTorch VITS model."""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
-from collections.abc import Callable
 
 import numpy as np
 import torch
@@ -489,13 +489,13 @@ class VitsWaveNet(torch.nn.Module):
             torch.nn.utils.remove_weight_norm(layer)
         for layer in self.res_skip_layers:
             torch.nn.utils.remove_weight_norm(layer)
-            
+
     def apply_weight_norm(self):
         if hasattr(nn.utils.parametrizations, "weight_norm"):
             weight_norm = nn.utils.parametrizations.weight_norm
         else:
             weight_norm = nn.utils.weight_norm
-        
+
         if self.speaker_embedding_size != 0:
             weight_norm(self.cond_layer)
         for layer in self.in_layers:
@@ -520,24 +520,28 @@ class VitsPosteriorEncoder(nn.Module):
         mean, log_stddev = torch.split(stats, self.out_channels, dim=1)
         sampled = (mean + torch.randn_like(mean) * torch.exp(log_stddev)) * padding_mask
         return sampled, mean, log_stddev
-    
+
     def apply_weight_norm(self):
         self.wavenet.apply_weight_norm()
-    
+
     def remove_weight_norm(self):
         self.wavenet.remove_weight_norm()
-        
+
     def resize_speaker_embeddings(self, speaker_embedding_size: Optional[int] = None):
         self.wavenet.speaker_embedding_size = speaker_embedding_size
         hidden_size = self.wavenet.hidden_size
         num_layers = self.wavenet.num_layers
-        
+
         cond_layer = torch.nn.Conv1d(speaker_embedding_size, 2 * hidden_size * num_layers, 1)
         self.wavenet.cond_layer = nn.utils.weight_norm(cond_layer, name="weight")
         nn.init.kaiming_normal_(self.wavenet.cond_layer.weight)
         if self.wavenet.cond_layer.bias is not None:
-            k = math.sqrt(self.wavenet.cond_layer.groups / (self.wavenet.cond_layer.in_channels * self.wavenet.cond_layer.kernel_size[0]))
+            k = math.sqrt(
+                self.wavenet.cond_layer.groups
+                / (self.wavenet.cond_layer.in_channels * self.wavenet.cond_layer.kernel_size[0])
+            )
             nn.init.uniform_(self.wavenet.cond_layer.bias, a=-k, b=k)
+
 
 class HifiGanDiscriminatorScaleResidualBlock(nn.Module):
     def __init__(self, leaky_relu_slope=0.1):
@@ -732,7 +736,7 @@ class VitsHifiGan(nn.Module):
 
         if config.speaker_embedding_size != 0:
             self.cond = nn.Conv1d(config.speaker_embedding_size, config.upsample_initial_channel, 1)
-            
+
     def resize_speaker_embedding(self, speaker_embedding_size):
         self.config.speaker_embedding_size = speaker_embedding_size
         self.cond = nn.Conv1d(speaker_embedding_size, self.config.upsample_initial_channel, 1)
@@ -740,7 +744,7 @@ class VitsHifiGan(nn.Module):
         if self.cond.bias is not None:
             k = math.sqrt(self.cond.groups / (self.cond.in_channels * self.cond.kernel_size[0]))
             nn.init.uniform_(self.cond.bias, a=-k, b=k)
-    
+
     def apply_weight_norm(self):
         for layer in self.upsampler:
             nn.utils.weight_norm(layer)
@@ -818,11 +822,12 @@ class VitsResidualCouplingLayer(nn.Module):
         nn.utils.weight_norm(self.conv_pre)
         self.wavenet.apply_weight_norm()
         nn.utils.weight_norm(self.conv_post)
-    
+
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.conv_pre)
         self.wavenet.remove_weight_norm()
-        nn.utils.remove_weight_norm(self.conv_post)       
+        nn.utils.remove_weight_norm(self.conv_post)
+
 
 class VitsResidualCouplingBlock(nn.Module):
     def __init__(self, config: VitsConfig):
@@ -841,28 +846,32 @@ class VitsResidualCouplingBlock(nn.Module):
                 inputs = torch.flip(inputs, [1])
                 inputs, _ = flow(inputs, padding_mask, global_conditioning, reverse=True)
         return inputs
-    
+
     def apply_weight_norm(self):
         for flow in self.flows:
             flow.apply_weight_norm()
-    
+
     def remove_weight_norm(self):
         for flow in self.flows:
             flow.remove_weight_norm()
-            
+
     def resize_speaker_embeddings(self, speaker_embedding_size: Optional[int] = None):
         for flow in self.flows:
             flow.wavenet.speaker_embedding_size = speaker_embedding_size
             hidden_size = flow.wavenet.hidden_size
             num_layers = flow.wavenet.num_layers
-            
+
             cond_layer = torch.nn.Conv1d(speaker_embedding_size, 2 * hidden_size * num_layers, 1)
             flow.wavenet.cond_layer = nn.utils.weight_norm(cond_layer, name="weight")
             nn.init.kaiming_normal_(flow.wavenet.cond_layer.weight)
             if flow.wavenet.cond_layer.bias is not None:
-                k = math.sqrt(flow.wavenet.cond_layer.groups / (flow.wavenet.cond_layer.in_channels * flow.wavenet.cond_layer.kernel_size[0]))
+                k = math.sqrt(
+                    flow.wavenet.cond_layer.groups
+                    / (flow.wavenet.cond_layer.in_channels * flow.wavenet.cond_layer.kernel_size[0])
+                )
                 nn.init.uniform_(flow.wavenet.cond_layer.bias, a=-k, b=k)
-            
+
+
 class VitsDilatedDepthSeparableConv(nn.Module):
     def __init__(self, config: VitsConfig, dropout_rate=0.0):
         super().__init__()
@@ -1002,9 +1011,9 @@ class VitsStochasticDurationPredictor(nn.Module):
         self.post_flows.append(VitsElementwiseAffine(config))
         for _ in range(config.duration_predictor_num_flows):
             self.post_flows.append(VitsConvFlow(config))
-            
+
         self.filter_channels = filter_channels
-            
+
     def resize_speaker_embeddings(self, speaker_embedding_size):
         self.cond = nn.Conv1d(speaker_embedding_size, self.filter_channels, 1)
         nn.init.kaiming_normal_(self.cond.weight)
@@ -1104,9 +1113,9 @@ class VitsDurationPredictor(nn.Module):
 
         if config.speaker_embedding_size != 0:
             self.cond = nn.Conv1d(config.speaker_embedding_size, config.hidden_size, 1)
-            
+
         self.hidden_size = config.hidden_size
-            
+
     def resize_speaker_embeddings(self, speaker_embedding_size):
         self.cond = nn.Conv1d(speaker_embedding_size, self.hidden_size, 1)
         nn.init.kaiming_normal_(self.cond)
@@ -1773,8 +1782,8 @@ class VitsModel(VitsPreTrainedModel):
             hidden_states=text_encoder_output.hidden_states,
             attentions=text_encoder_output.attentions,
         )
-        
-        
+
+
 class VitsDiscriminator(VitsPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1803,7 +1812,7 @@ class VitsDiscriminator(VitsPreTrainedModel):
             discriminated_hidden_states_list.append(discriminated_hidden_states)
 
         return discriminated_hidden_states_list, fmaps
-    
+
     def apply_weight_norm(self):
         for disc in self.discriminators:
             disc.apply_weight_norm()
@@ -1811,7 +1820,6 @@ class VitsDiscriminator(VitsPreTrainedModel):
     def remove_weight_norm(self):
         for disc in self.discriminators:
             disc.remove_weight_norm()
-
 
 
 @add_start_docstrings(
@@ -1846,13 +1854,14 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-        
+
     def resize_speaker_embeddings(self, new_num_speakers: int, speaker_embedding_size: Optional[int] = None):
-        
         # first, take care of embed_speaker
         if self.config.num_speakers <= 1:
             if speaker_embedding_size is None:
-                raise ValueError("The current model had no previous speaker embedding, but `speaker_embedding_size` is not specified. Pass `speaker_embedding_size` to this method.")
+                raise ValueError(
+                    "The current model had no previous speaker embedding, but `speaker_embedding_size` is not specified. Pass `speaker_embedding_size` to this method."
+                )
             # create new embedding layer
             new_embeddings = nn.Embedding(
                 new_num_speakers,
@@ -1866,26 +1875,26 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             new_embeddings = self.resize_token_embeddings(self.embed_speaker, speaker_embedding_size)
 
         self.embed_speaker = new_embeddings
-        
+
         # then take care of sub-models
         self.flow.resize_speaker_embeddings(speaker_embedding_size)
         self.decoder.resize_speaker_embedding(speaker_embedding_size)
         self.duration_predictor.resize_speaker_embeddings(speaker_embedding_size)
         self.posterior_encoder.resize_speaker_embeddings(speaker_embedding_size)
-        
+
         self.config.num_speakers = new_num_speakers
         self.config.speaker_embedding_size = speaker_embedding_size
-        
+
     def apply_weight_norm(self):
         self.decoder.apply_weight_norm()
         self.flow.apply_weight_norm()
         self.posterior_encoder.apply_weight_norm()
-        
+
     def remove_weight_norm(self):
         self.decoder.remove_weight_norm()
         self.flow.remove_weight_norm()
         self.posterior_encoder.remove_weight_norm()
-        
+
     def discriminate(self, hidden_states):
         return self.discriminator(hidden_states)
 
@@ -1982,7 +1991,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.FloatTensor] = None,
         labels_attention_mask: Optional[torch.Tensor] = None,
-        monotic_alignment_function: Optional[Callable] = None, # TODO: add
+        monotic_alignment_function: Optional[Callable] = None,  # TODO: add
     ) -> Union[Tuple[Any], VitsModelOutput]:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`, *optional*):
@@ -2016,8 +2025,10 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
-        monotic_alignment_function = monotonic_align_max_path if monotic_alignment_function is None else monotic_alignment_function
+
+        monotic_alignment_function = (
+            monotonic_align_max_path if monotic_alignment_function is None else monotic_alignment_function
+        )
 
         if attention_mask is not None:
             input_padding_mask = attention_mask.unsqueeze(-1).float()
