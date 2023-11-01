@@ -512,6 +512,7 @@ class GPTQConfig(QuantizationConfigMixin):
         config = cls(**config_dict)
         return config
 
+
 @dataclass
 class AwqConfig(QuantizationConfigMixin):
     """
