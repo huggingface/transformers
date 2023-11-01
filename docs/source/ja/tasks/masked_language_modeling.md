@@ -344,7 +344,7 @@ This can be done by specifying where to push your model and tokenizer in the [`~
 <Tip>
 
 マスクされた言語モデリング用にモデルを微調整する方法のより詳細な例については、対応するドキュメントを参照してください。
-[PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/ language_modeling.ipynb)
+[PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
 または [TensorFlow ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)。
 
 </Tip>
