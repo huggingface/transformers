@@ -16,9 +16,6 @@
 """
 Fine-tuning the library Vits for TTS.
 """
-# TODO: adapt
-# You can also adapt this script on your own sequence to sequence speech
-# recognition task. Pointers for this are left as comments.
 
 import logging
 import math
@@ -52,6 +49,8 @@ from transformers.trainer_pt_utils import LengthGroupedSampler
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
+from transformers import ClapAudioModelWithProjection, ClapProcessor
+
 from utils import plot_alignment_to_numpy, plot_spectrogram_to_numpy
 
 
@@ -413,7 +412,6 @@ class DataCollatorTTSWithPadding:
             {"input_features": [i.T for i in label_features]}, return_tensors="pt", return_attention_mask=True
         )
 
-        # TODO: do we have to transpose
         labels = labels_batch["input_features"].transpose(1, 2)
         batch["labels"] = labels
         batch["labels_attention_mask"] = labels_batch["attention_mask"]
@@ -432,6 +430,70 @@ class DataCollatorTTSWithPadding:
         )
 
         return batch
+    
+def log_on_trackers(trackers, generated_audio,generated_attn,generated_spec,target_spec, full_generation_waveform, epoch, sampling_rate):
+    for tracker in trackers:
+        if tracker.name == "tensorboard":
+            for cpt, audio in enumerate(generated_audio[: min(len(generated_audio), 50)]):
+                tracker.writer.add_audio(
+                    f"train_step_audio_{cpt}", audio[None, :], epoch, sample_rate=sampling_rate
+                )
+
+            # TODO: add images
+        elif tracker.name == "wandb":
+            # wandb can only loads 100 audios per step
+            tracker.log(
+                {
+                    "alignments": [
+                        wandb.Image(plot_alignment_to_numpy(attn), caption=f"Audio epoch {epoch}")
+                        for attn in generated_attn[: min(len(generated_audio), 50)]
+                    ],
+                    "spectrogram": [
+                        wandb.Image(plot_spectrogram_to_numpy(spec), caption=f"Audio epoch {epoch}")
+                        for spec in generated_spec[: min(len(generated_audio), 50)]
+                    ],
+                    "target spectrogram": [
+                        wandb.Image(plot_spectrogram_to_numpy(spec), caption=f"Audio epoch {epoch}")
+                        for spec in target_spec[: min(len(generated_audio), 50)]
+                    ],
+                    "train generated audio": [
+                        wandb.Audio(
+                            audio[0],
+                            caption=f"Audio during train step epoch {epoch}",
+                            sample_rate=sampling_rate,
+                        )
+                        for audio in generated_audio[: min(len(generated_audio), 50)]
+                    ],
+                    "full generations samples": [
+                        wandb.Audio(
+                            w, caption=f"Full generation sample {epoch}", sample_rate=sampling_rate
+                        )
+                        for w in full_generation_waveform
+                    ],
+                }
+            )
+        else:
+            logger.warn(f"audio logging not implemented for {tracker.name}")
+            
+            
+def compute_val_metrics_and_losses(val_losses, accelerator, model_outputs, mel_scaled_generation, mel_scaled_target, batch_size, compute_clap_similarity=False):
+    waveform, _, _, _, _, labels_mask, _, prior_latents, prior_means, prior_lg, _, posterior_lg = model_outputs
+    
+    loss_mel = torch.nn.functional.l1_loss(mel_scaled_target, mel_scaled_generation)
+    loss_kl = kl_loss(
+            prior_latents, posterior_lg, prior_means, prior_lg, labels_mask
+        )
+    
+    losses_mel_kl = loss_mel + loss_kl
+    
+    losses = torch.stack([loss_mel,loss_kl,losses_mel_kl])
+    losses = accelerator.gather(losses.repeat(batch_size, 1)).mean(0)
+
+    # TODO: add CLAP audio similarity measure
+    for key, loss in zip(["val_loss_mel","val_loss_kl", "val_loss_mel_kl"], losses):
+        val_losses[key] = val_losses.get(key, 0) + loss.item()
+        
+    return val_losses
 
 
 def training_loop(
@@ -441,7 +503,6 @@ def training_loop(
     eval_dataset,
     feature_extractor,
     data_collator,
-    compute_metrics,
     project_name,
     full_generation_sample,
 ):
@@ -569,34 +630,12 @@ def training_loop(
     )
 
     if args.do_step_schedule_per_epoch:
-        # Potentially load in the weights and states from a previous save
-        if args.resume_from_checkpoint:
-            if args.resume_from_checkpoint != "latest":
-                path = os.path.basename(args.resume_from_checkpoint)
-            else:
-                # Get the most recent checkpoint
-                dirs = os.listdir(args.output_dir)
-                dirs = [d for d in dirs if d.startswith("checkpoint")]
-                dirs = sorted(dirs, key=lambda x: int(x.split("-")[1]))
-                path = dirs[-1] if len(dirs) > 0 else None
-
-            if path is None:
-                initial_global_step = 0
-            else:
-                global_step = int(path.split("-")[1])
-                initial_global_step = global_step
-        else:
-            initial_global_step = 0
-
-        first_epoch_lr = initial_global_step // num_update_steps_per_epoch + 1
-
         # TODO: add lr_decay to parameters
-        # TODO: fix when last_epoch != -1
         gen_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-            gen_optimizer, gamma=0.999875, last_epoch=first_epoch_lr - 2
+            gen_optimizer, gamma=0.999875, last_epoch= -1
         )
         disc_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-            disc_optimizer, gamma=0.999875, last_epoch=first_epoch_lr - 2
+            disc_optimizer, gamma=0.999875, last_epoch= -1
         )
     else:
         gen_lr_scheduler = get_scheduler(
@@ -833,7 +872,6 @@ def training_loop(
                 ) = train_losses
                 progress_bar.update(1)
                 global_step += 1
-                # TODO: enrich log
                 accelerator.log(
                     {
                         "train_summed_losses": train_summed_losses,
@@ -845,6 +883,7 @@ def training_loop(
                         "train_loss_kl": train_loss_kl,
                         "train_loss_fmaps": train_loss_fmaps,
                         "train_loss_gen": train_loss_gen,
+                        "lr": disc_lr_scheduler.get_last_lr()[0],
                     },
                     step=global_step,
                 )
@@ -903,6 +942,7 @@ def training_loop(
                 generated_attn = []
                 generated_spec = []
                 target_spec = []
+                val_losses = {}
                 for step, batch in enumerate(eval_dataloader):
                     print(
                         f"VALIDATION - batch {step}, process{accelerator.process_index}, waveform {(batch['waveform'].shape)}, tokens {(batch['input_ids'].shape)}... "
@@ -917,21 +957,16 @@ def training_loop(
                             return_dict=True,
                             monotic_alignment_function=maximum_path,
                         )
+                        
+                        waveform = model_outputs_train.training_outputs[0]
+                        attn = model_outputs_train.training_outputs[2]
+                        ids_slice = model_outputs_train.training_outputs[3]
 
-                        (
-                            waveform,
-                            log_duration,
-                            attn,
-                            ids_slice,
-                            input_padding_mask,
-                            labels_padding_mask,
-                            latents,
-                            prior_latents,
-                            prior_means,
-                            prior_log_variances,
-                            posterior_means,
-                            posterior_log_variances,
-                        ) = model_outputs_train.training_outputs
+                        mel_scaled_labels = batch["mel_scaled_input_features"]
+                        mel_scaled_target = slice_segments(mel_scaled_labels, ids_slice, model_segment_size)
+                        mel_scaled_generation = feature_extractor._torch_extract_fbank_features(waveform.squeeze(1))[1]
+                        
+                        val_losses = compute_val_metrics_and_losses(val_losses, accelerator, model_outputs_train.training_outputs, mel_scaled_generation, mel_scaled_target, per_device_train_batch_size, compute_clap_similarity=False)
 
                     print(f"VALIDATION - batch {step}, process{accelerator.process_index}, PADDING AND GATHER... ")
                     specs = feature_extractor._torch_extract_fbank_features(waveform.squeeze(1))[0]
@@ -962,51 +997,13 @@ def training_loop(
                     generated_attn = [attn.numpy() for attn_batch in generated_attn for attn in attn_batch]
                     generated_spec = [attn.numpy() for attn_batch in generated_spec for attn in attn_batch]
                     target_spec = [attn.numpy() for attn_batch in target_spec for attn in attn_batch]
-
                     full_generation_waveform = full_generation.waveform.cpu().numpy()
-                    for tracker in accelerator.trackers:
-                        if tracker.name == "tensorboard":
-                            for cpt, audio in enumerate(generated_audio[: min(len(generated_audio), 50)]):
-                                tracker.writer.add_audio(
-                                    f"train_step_audio_{cpt}", audio[None, :], epoch, sample_rate=sampling_rate
-                                )
 
-                            # TODO: add images
-                        elif tracker.name == "wandb":
-                            # wandb can only loads 100 audios per step
-                            tracker.log(
-                                {
-                                    "alignments": [
-                                        wandb.Image(plot_alignment_to_numpy(attn), caption=f"Audio epoch {epoch}")
-                                        for attn in generated_attn[: min(len(generated_audio), 50)]
-                                    ],
-                                    "spectrogram": [
-                                        wandb.Image(plot_spectrogram_to_numpy(spec), caption=f"Audio epoch {epoch}")
-                                        for spec in generated_spec[: min(len(generated_audio), 50)]
-                                    ],
-                                    "target spectrogram": [
-                                        wandb.Image(plot_spectrogram_to_numpy(spec), caption=f"Audio epoch {epoch}")
-                                        for spec in target_spec[: min(len(generated_audio), 50)]
-                                    ],
-                                    "train generated audio": [
-                                        wandb.Audio(
-                                            audio[0],
-                                            caption=f"Audio during train step epoch {epoch}",
-                                            sample_rate=sampling_rate,
-                                        )
-                                        for audio in generated_audio[: min(len(generated_audio), 50)]
-                                    ],
-                                    "full_generation_sample": [
-                                        wandb.Audio(
-                                            w, caption=f"Full generation sample {epoch}", sample_rate=sampling_rate
-                                        )
-                                        for w in full_generation_waveform
-                                    ],
-                                }
-                            )
-                        else:
-                            logger.warn(f"audio logging not implemented for {tracker.name}")
 
+                    accelerator.log(val_losses, step=global_step)
+                    
+                    log_on_trackers(accelerator.trackers, generated_audio,generated_attn,generated_spec,target_spec,full_generation_waveform,epoch, sampling_rate)
+                    
                     logger.info("Validation finished... ")
 
                 accelerator.wait_for_everyone()
@@ -1021,12 +1018,11 @@ def training_loop(
 
         if do_eval:
             logger.info("Running final validation... ")
-            # audios = []
-            # audios_lengths = []
             generated_audio = []
             generated_attn = []
             generated_spec = []
             target_spec = []
+            val_losses = {}
             for step, batch in enumerate(eval_dataloader):
                 print(
                     f"VALIDATION - batch {step}, process{accelerator.process_index}, waveform {(batch['waveform'].shape)}, tokens {(batch['input_ids'].shape)}... "
@@ -1041,66 +1037,24 @@ def training_loop(
                         return_dict=True,
                         monotic_alignment_function=maximum_path,
                     )
+                        
+                    waveform = model_outputs_train.training_outputs[0]
+                    attn = model_outputs_train.training_outputs[2]
+                    ids_slice = model_outputs_train.training_outputs[3]
 
-                    (
-                        waveform,
-                        log_duration,
-                        attn,
-                        ids_slice,
-                        input_padding_mask,
-                        labels_padding_mask,
-                        latents,
-                        prior_latents,
-                        prior_means,
-                        prior_log_variances,
-                        posterior_means,
-                        posterior_log_variances,
-                    ) = model_outputs_train.training_outputs
+                    mel_scaled_labels = batch["mel_scaled_input_features"]
+                    mel_scaled_target = slice_segments(mel_scaled_labels, ids_slice, model_segment_size)
+                    mel_scaled_generation = feature_extractor._torch_extract_fbank_features(waveform.squeeze(1))[1]
+                    
+                    val_losses = compute_val_metrics_and_losses(val_losses, accelerator, model_outputs_train.training_outputs, mel_scaled_generation, mel_scaled_target, per_device_train_batch_size, compute_clap_similarity=False)
+
 
             logger.info("Validation inference done, now evaluating... ")
             if accelerator.is_main_process:
                 full_generation_waveform = full_generation.waveform.cpu().numpy()
-                for tracker in accelerator.trackers:
-                    if tracker.name == "wandb":
-                        # wandb can only loads 100 audios per step
-                        tracker.log(
-                            {
-                                # "generated audio": [
-                                #     wandb.Audio(audio, caption=f"Audio epoch {epoch}", sample_rate=sampling_rate)
-                                #     for audio in audios[:min(len(audios), 100)]
-                                # ],
-                                "alignments": [
-                                    wandb.Image(plot_alignment_to_numpy(attn), caption=f"Audio epoch {epoch}")
-                                    for attn in generated_attn[: min(len(generated_audio), 50)]
-                                ],
-                                "spectrogram": [
-                                    wandb.Image(plot_spectrogram_to_numpy(spec), caption=f"Audio epoch {epoch}")
-                                    for spec in generated_spec[: min(len(generated_audio), 50)]
-                                ],
-                                "target spectrogram": [
-                                    wandb.Image(plot_spectrogram_to_numpy(spec), caption=f"Audio epoch {epoch}")
-                                    for spec in target_spec[: min(len(generated_audio), 50)]
-                                ],
-                                # "absolute spectrogram diff": [wandb.Image(plot_spectrogram_to_numpy(spec),caption=f"Audio epoch {epoch}") for spec in diff_spec[:min(len(generated_audio), 50)]],
-                                "train generated audio": [
-                                    wandb.Audio(
-                                        audio[0],
-                                        caption=f"Audio during train step epoch {epoch}",
-                                        sample_rate=sampling_rate,
-                                    )
-                                    for audio in generated_audio[: min(len(generated_audio), 50)]
-                                ],
-                                "full_generation_sample": [
-                                    wandb.Audio(
-                                        w, caption=f"Full generation sample {epoch}", sample_rate=sampling_rate
-                                    )
-                                    for w in full_generation_waveform
-                                ],
-                            }
-                        )
-                    else:
-                        logger.warn(f"audio logging not implemented for {tracker.name}")
+                log_on_trackers(accelerator.trackers, generated_audio,generated_attn,generated_spec,target_spec,full_generation_waveform,epoch, sampling_rate)
 
+                accelerator.log(val_losses, step=global_step)
                 logger.info("Validation finished... ")
 
             accelerator.wait_for_everyone()
@@ -1381,21 +1335,7 @@ def main():
         logger.info(f"Data preprocessing finished. Files cached at {cache}.")
         return
 
-    # 8. Load Metric
-    # TODO
-    # metric = evaluate.load("wer")
-
-    def compute_metrics(pred):
-        # pred_ids = pred.predictions
-        # pred.label_ids[pred.label_ids == -100] = tokenizer.pad_token_id
-        # pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-        ## we do not want to group tokens when computing the metrics
-        # label_str = tokenizer.batch_decode(pred.label_ids, skip_special_tokens=True)
-        # wer = metric.compute(predictions=pred_str, references=label_str)
-
-        return {"todo": 0.0}
-
-    # 9. Load pretrained model,
+    # 8. Load pretrained model,
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     model = VitsModelForPreTraining.from_pretrained(
@@ -1428,7 +1368,7 @@ def main():
                     "Same number of speakers on the new dataset than on the model. Embeddings are not reinitialized."
                 )
 
-    # 10. Save configs
+    # 9. Save configs
     # make sure all processes wait until data is saved
     with training_args.main_process_first():
         # only the main process saves them
@@ -1438,7 +1378,7 @@ def main():
             tokenizer.save_pretrained(training_args.output_dir)
             config.save_pretrained(training_args.output_dir)
 
-    # 11. Define data collator
+    # 10. Define data collator
     data_collator = DataCollatorTTSWithPadding(
         tokenizer=tokenizer,
         feature_extractor=feature_extractor,
@@ -1457,7 +1397,6 @@ def main():
         eval_dataset=vectorized_datasets.get("eval", None),
         feature_extractor=feature_extractor,
         data_collator=data_collator,
-        compute_metrics=compute_metrics,
         project_name=data_args.project_name,
         full_generation_sample=full_generation_sample,
     )
