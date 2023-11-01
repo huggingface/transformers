@@ -294,8 +294,9 @@ class BartFlashAttention2(BartAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
+    # Copied from transformers.models.bart.modeling_bart.BartAttention._shape
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
@@ -359,11 +360,6 @@ class BartFlashAttention2(BartAttention):
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
 
-        # TODO: Bart does not have dropout in the config??
-        # It is recommended to use dropout with FA according to the docs
-        # when training.
-        dropout_rate = 0.0  # if not self.training else self.attn_dropout
-
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in the correct dtype just to be sure everything works as expected.
@@ -389,7 +385,7 @@ class BartFlashAttention2(BartAttention):
             value_states = value_states.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+            query_states, key_states, value_states, attention_mask, q_len, dropout=self.dropout
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1)
