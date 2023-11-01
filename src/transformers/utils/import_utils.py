@@ -107,6 +107,8 @@ _onnx_available = _is_package_available("onnx")
 _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
 _auto_gptq_available = _is_package_available("auto_gptq")
+# `importlib.metadata.version` doesn't work with `awq`
+_auto_awq_available = importlib.util.find_spec("awq") is not None
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
@@ -673,6 +675,10 @@ def is_fsdp_available(min_version: str = "1.12.0"):
 
 def is_optimum_available():
     return _optimum_available
+
+
+def is_auto_awq_available():
+    return _auto_awq_available
 
 
 def is_auto_gptq_available():
