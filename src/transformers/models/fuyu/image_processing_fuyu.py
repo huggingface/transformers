@@ -481,7 +481,10 @@ class FuyuImageProcessor(BaseImageProcessor):
         image_unpadded_widths = [[image_size[1]] for image_size in image_sizes]
 
         # scale_h is the same as scale_w
-        image_scale_factors = [[resized_size[0] / original_size[0]] for original_size, resized_size in zip(original_image_sizes, image_sizes)]
+        image_scale_factors = [
+            [resized_size[0] / original_size[0]]
+            for original_size, resized_size in zip(original_image_sizes, image_sizes)
+        ]
 
         if do_pad:
             batch_images = [

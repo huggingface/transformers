@@ -191,9 +191,7 @@ def _transform_within_tags(text: str, scale_factor: float, tokenizer) -> List[in
     num_ints = [float(num.strip()) for num in num_int_strs]
     # scale to transformed image siz
     if len(num_ints) == 2:
-        num_ints_translated = scale_point_to_transformed_image(
-            x=num_ints[0], y=num_ints[1], scale_factor=scale_factor
-        )
+        num_ints_translated = scale_point_to_transformed_image(x=num_ints[0], y=num_ints[1], scale_factor=scale_factor)
     elif len(num_ints) == 4:
         num_ints_translated = scale_bbox_to_transformed_image(
             top=num_ints[0],
@@ -298,7 +296,9 @@ def scale_point_to_transformed_image(x: float, y: float, scale_factor: float) ->
     return [x_scaled, y_scaled]
 
 
-def scale_bbox_to_transformed_image(top: float, left: float, bottom: float, right: float, scale_factor: float) -> List[int]:
+def scale_bbox_to_transformed_image(
+    top: float, left: float, bottom: float, right: float, scale_factor: float
+) -> List[int]:
     top_scaled = original_to_transformed_w_coords(np.array([top / 2]), scale_factor)[0]
     left_scaled = original_to_transformed_h_coords(np.array([left / 2]), scale_factor)[0]
     bottom_scaled = original_to_transformed_w_coords(np.array([bottom / 2]), scale_factor)[0]
@@ -600,7 +600,7 @@ class FuyuProcessor(ProcessorMixin):
                 max_height, max_width = target_size
             if width <= max_width and height <= max_height:
                 return 1.0
-            return min(max_height/height, max_width/width)
+            return min(max_height / height, max_width / width)
 
         def find_delimiters_pair(tokens, start_token, end_token):
             start_id = self.tokenizer.convert_tokens_to_ids(start_token)
@@ -614,17 +614,20 @@ class FuyuProcessor(ProcessorMixin):
             return (None, None)
 
         def tokens_to_boxes(tokens, original_size):
-            while (pair := find_delimiters_pair(tokens, TOKEN_BBOX_OPEN_STRING, TOKEN_BBOX_CLOSE_STRING)) != (None, None):
+            while (pair := find_delimiters_pair(tokens, TOKEN_BBOX_OPEN_STRING, TOKEN_BBOX_CLOSE_STRING)) != (
+                None,
+                None,
+            ):
                 start, end = pair
                 if end != start + 5:
                     continue
 
                 # Retrieve transformed coordinates from tokens
-                coords = self.tokenizer.convert_ids_to_tokens(tokens[start+1:end])
+                coords = self.tokenizer.convert_ids_to_tokens(tokens[start + 1 : end])
 
                 # Scale back to original image size and multiply by 2
                 scale = scale_factor_to_fit(original_size)
-                top, left, bottom, right = [2 * int(float(c)/scale) for c in coords]
+                top, left, bottom, right = [2 * int(float(c) / scale) for c in coords]
 
                 # Replace the IDs so they get detokenized right
                 replacement = f" {TEXT_REPR_BBOX_OPEN}{top}, {left}, {bottom}, {right}{TEXT_REPR_BBOX_CLOSE}"
@@ -632,21 +635,24 @@ class FuyuProcessor(ProcessorMixin):
                 replacement = self.tokenizer.convert_tokens_to_ids(replacement)
                 replacement = torch.tensor(replacement).to(tokens)
 
-                tokens = torch.cat([tokens[:start], replacement, tokens[end+1:]], 0)
+                tokens = torch.cat([tokens[:start], replacement, tokens[end + 1 :]], 0)
             return tokens
 
         def tokens_to_points(tokens, original_size):
-            while (pair := find_delimiters_pair(tokens, TOKEN_POINT_OPEN_STRING, TOKEN_POINT_CLOSE_STRING)) != (None, None):
+            while (pair := find_delimiters_pair(tokens, TOKEN_POINT_OPEN_STRING, TOKEN_POINT_CLOSE_STRING)) != (
+                None,
+                None,
+            ):
                 start, end = pair
                 if end != start + 3:
                     continue
 
                 # Retrieve transformed coordinates from tokens
-                coords = self.tokenizer.convert_ids_to_tokens(tokens[start+1:end])
+                coords = self.tokenizer.convert_ids_to_tokens(tokens[start + 1 : end])
 
                 # Scale back to original image size and multiply by 2
                 scale = scale_factor_to_fit(original_size)
-                x, y = [2 * int(float(c)/scale) for c in coords]
+                x, y = [2 * int(float(c) / scale) for c in coords]
 
                 # Replace the IDs so they get detokenized right
                 replacement = f" {TEXT_REPR_POINT_OPEN}{x}, {y}{TEXT_REPR_POINT_CLOSE}"
@@ -654,7 +660,7 @@ class FuyuProcessor(ProcessorMixin):
                 replacement = self.tokenizer.convert_tokens_to_ids(replacement)
                 replacement = torch.tensor(replacement).to(tokens)
 
-                tokens = torch.cat([tokens[:start], replacement, tokens[end+1:]], 0)
+                tokens = torch.cat([tokens[:start], replacement, tokens[end + 1 :]], 0)
             return tokens
 
         if target_sizes is None:
