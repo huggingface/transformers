@@ -86,15 +86,15 @@ class TFConvNextEmbeddings(tf.keras.layers.Layer):
         if isinstance(pixel_values, dict):
             pixel_values = pixel_values["pixel_values"]
 
-        num_channels = shape_list(pixel_values)[1]
-        if tf.executing_eagerly() and num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
+        tf.debugging.assert_equal(
+            shape_list(pixel_values)[1],
+            self.num_channels,
+            message="Make sure that the channel dimension of the pixel values match with the one set in the configuration.",
+        )
 
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
-        # shape = (batch_size, in_height, in_width, in_channels=num_channels)
+        # shape = (batch_size, in_height, in_width, in_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
 
         embeddings = self.patch_embeddings(pixel_values)
