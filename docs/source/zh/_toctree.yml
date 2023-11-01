@@ -31,6 +31,6 @@
     title: 导出为 ONNX
   title: 开发者指南
 - sections:
-  - local: 任务综述
+  - local: task_summary
     title: 🤗Transformers能做什么
   title: 概念指南
