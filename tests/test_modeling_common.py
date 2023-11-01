@@ -2843,7 +2843,7 @@ class ModelTesterMixin:
                 if dummy_input.dtype in [torch.float32, torch.float16]:
                     dummy_input = dummy_input.to(torch.bfloat16)
 
-                accepts_attention_mask = "attention_mask" in set(inspect.signature(model.forward).parameters)
+                "attention_mask" in set(inspect.signature(model.forward).parameters)
                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
 
                 if model.config.is_encoder_decoder:
@@ -3019,6 +3019,9 @@ class ModelTesterMixin:
                     dummy_input = dummy_input.to(torch.float16)
 
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                # make sure we do left padding
+                dummy_attention_mask[:, :-1] = 0
+                dummy_attention_mask[:, -1:] = 1
 
                 out = model.generate(
                     dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
