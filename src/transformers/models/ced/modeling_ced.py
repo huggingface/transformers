@@ -375,10 +375,6 @@ class CedModel(CedPreTrainedModel):
         )
         self.norm = norm_layer(config.embed_dim)
 
-        # Make `check_config_attributes` happy
-        if not self.config.name.startswith("ced"):
-            raise NotImplementedError
-
         # Initialize weights and apply final processing
         self.post_init()
 
