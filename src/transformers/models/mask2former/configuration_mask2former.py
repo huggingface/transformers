@@ -93,7 +93,7 @@ class Mask2FormerConfig(PretrainedConfig):
             Ratio of points that are sampled via importance sampling.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (`float``, *optional*, defaults to 1.0):
+        init_xavier_std (`float`, *optional*, defaults to 1.0):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
         use_auxiliary_loss (`boolean``, *optional*, defaults to `True`):
             If `True` [`Mask2FormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed using

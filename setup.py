@@ -113,6 +113,7 @@ _deps = [
     "fastapi",
     "filelock",
     "flax>=0.4.1,<=0.7.0",
+    "fsspec<2023.10.0",
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
@@ -166,6 +167,7 @@ _deps = [
     "starlette",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
+    "tensorboard",
     # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
     "tensorflow-cpu>=2.6,<2.15",
     "tensorflow>=2.6,<2.15",
@@ -318,6 +320,7 @@ extras["testing"] = (
         "sacremoses",
         "rjieba",
         "beautifulsoup4",
+        "tensorboard",
     )
     + extras["retrieval"]
     + extras["modelcreation"]

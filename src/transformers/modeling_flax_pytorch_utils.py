@@ -27,7 +27,13 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 
 import transformers
 
+from . import is_safetensors_available
 from .utils import logging
+
+
+if is_safetensors_available():
+    from safetensors import safe_open
+    from safetensors.flax import load_file as safe_load_file
 
 
 logger = logging.get_logger(__name__)
@@ -56,7 +62,13 @@ def load_pytorch_checkpoint_in_flax_state_dict(
         pt_path = os.path.abspath(pytorch_checkpoint_path)
         logger.info(f"Loading PyTorch weights from {pt_path}")
 
-        pt_state_dict = torch.load(pt_path, map_location="cpu")
+        if pt_path.endswith(".safetensors"):
+            pt_state_dict = {}
+            with safe_open(pt_path, framework="pt") as f:
+                for k in f.keys():
+                    pt_state_dict[k] = f.get_tensor(k)
+        else:
+            pt_state_dict = torch.load(pt_path, map_location="cpu")
         logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters.")
 
         flax_state_dict = convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)
@@ -319,11 +331,15 @@ def load_flax_checkpoint_in_pytorch_model(model, flax_checkpoint_path):
     flax_cls = getattr(transformers, "Flax" + model.__class__.__name__)
 
     # load flax weight dict
-    with open(flax_checkpoint_path, "rb") as state_f:
-        try:
-            flax_state_dict = from_bytes(flax_cls, state_f.read())
-        except UnpicklingError:
-            raise EnvironmentError(f"Unable to convert {flax_checkpoint_path} to Flax deserializable object. ")
+    if flax_checkpoint_path.endswith(".safetensors"):
+        flax_state_dict = safe_load_file(flax_checkpoint_path)
+        flax_state_dict = unflatten_dict(flax_state_dict, sep=".")
+    else:
+        with open(flax_checkpoint_path, "rb") as state_f:
+            try:
+                flax_state_dict = from_bytes(flax_cls, state_f.read())
+            except UnpicklingError:
+                raise EnvironmentError(f"Unable to convert {flax_checkpoint_path} to Flax deserializable object. ")
 
     return load_flax_weights_in_pytorch_model(model, flax_state_dict)
 

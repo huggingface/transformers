@@ -78,10 +78,6 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, GPTNeoXModel):
-            module.gradient_checkpointing = value
-
 
 class GPTNeoXAttention(nn.Module):
     def __init__(self, config):
@@ -641,20 +637,15 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for layer_past
-                        return module(*inputs, use_cache, None, output_attentions)
-
-                    return custom_forward
-
-                outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer),
+                outputs = self._gradient_checkpointing_func(
+                    layer.__call__,
                     hidden_states,
                     attention_mask,
                     position_ids,
                     head_mask[i],
+                    use_cache,
+                    None,
+                    output_attentions,
                 )
             else:
                 outputs = layer(
@@ -808,9 +799,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
         input_shape = input_ids.shape
-        print(input_shape)
-        print(past_key_values[0][0].shape if past_key_values is not None else "no pkv")
-
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
@@ -841,7 +829,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
-        print(position_ids.shape)
         model_inputs.update(
             {
                 "attention_mask": attention_mask,
