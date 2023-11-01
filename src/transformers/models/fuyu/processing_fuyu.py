@@ -36,20 +36,15 @@ if is_torch_available():
     import torch
 
 
-BBOX_OPEN_STRING = "<0x00>"  # <bbox>
-BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
-POINT_OPEN_STRING = "<0x02>"  # <point>
-POINT_CLOSE_STRING = "<0x03>"  # </point>
-
 TEXT_REPR_BBOX_OPEN = "<box>"
 TEXT_REPR_BBOX_CLOSE = "</box>"
 TEXT_REPR_POINT_OPEN = "<point>"
 TEXT_REPR_POINT_CLOSE = "</point>"
 
-TOKEN_BBOX_OPEN_STRING = BBOX_OPEN_STRING = "<0x00>"  # <bbox>
-BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
-TOKEN_BBOX_CLOSE_STRING = TOKEN_POINT_OPEN_STRING = POINT_OPEN_STRING = "<0x02>"  # <point>
-TOKEN_POINT_CLOSE_STRING = POINT_CLOSE_STRING = "<0x03>"  # </point>
+TOKEN_BBOX_OPEN_STRING = "<0x00>"  # <bbox>
+TOKEN_BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
+TOKEN_POINT_OPEN_STRING = "<0x02>"  # <point>
+TOKEN_POINT_CLOSE_STRING = "<0x03>"  # </point>
 BEGINNING_OF_ANSWER_STRING = "<0x04>"  # <boa>
 
 
@@ -145,7 +140,7 @@ def _segment_prompt_into_text_token_conversions(prompt: str) -> List:
     return prompt_text_list
 
 
-def _transform_coordinates_and_tokenize(prompt: str, transformed_image, tokenizer) -> List[int]:
+def _transform_coordinates_and_tokenize(prompt: str, scale_factor: float, tokenizer) -> List[int]:
     """
     This function transforms the prompt in the following fashion:
     - <box> <point> and </box> </point> to their respective token mappings
@@ -169,7 +164,7 @@ def _transform_coordinates_and_tokenize(prompt: str, transformed_image, tokenize
     for elem in prompt_text_list:
         if elem[1]:
             # This is a location, we need to tokenize it
-            within_tag_tokenized = _transform_within_tags(elem[0], transformed_image, tokenizer)
+            within_tag_tokenized = _transform_within_tags(elem[0], scale_factor, tokenizer)
             # Surround the text with the open and close tags
             transformed_prompt_tokens.extend(within_tag_tokenized)
         else:
@@ -177,7 +172,7 @@ def _transform_coordinates_and_tokenize(prompt: str, transformed_image, tokenize
     return transformed_prompt_tokens
 
 
-def _transform_within_tags(text: str, transformed_image, tokenizer) -> List[int]:
+def _transform_within_tags(text: str, scale_factor: float, tokenizer) -> List[int]:
     """
     Given a bounding box of the fashion <box>1, 2, 3, 4</box> | <point>1, 2</point> This function is responsible for
     converting 1, 2, 3, 4 into tokens of 1 2 3 4 without any commas.
@@ -197,7 +192,7 @@ def _transform_within_tags(text: str, transformed_image, tokenizer) -> List[int]
     # scale to transformed image siz
     if len(num_ints) == 2:
         num_ints_translated = scale_point_to_transformed_image(
-            x=num_ints[0], y=num_ints[1], transformed_image=transformed_image
+            x=num_ints[0], y=num_ints[1], scale_factor=scale_factor
         )
     elif len(num_ints) == 4:
         num_ints_translated = scale_bbox_to_transformed_image(
@@ -205,7 +200,7 @@ def _transform_within_tags(text: str, transformed_image, tokenizer) -> List[int]
             left=num_ints[1],
             bottom=num_ints[2],
             right=num_ints[3],
-            transformed_image=transformed_image,
+            scale_factor=scale_factor,
         )
     else:
         raise ValueError(f"Invalid number of ints: {len(num_ints)}")
@@ -217,7 +212,7 @@ def _transform_within_tags(text: str, transformed_image, tokenizer) -> List[int]
 def _tokenize_prompts_with_image_and_batch(
     tokenizer,
     prompts: List[List[str]],
-    transformed_images: Optional[List[List["torch.Tensor"]]],
+    scale_factors: Optional[List[List["torch.Tensor"]]],
     max_tokens_to_generate: int,
     max_position_embeddings: int,
     add_BOS: bool,  # Same issue with types as above
@@ -231,13 +226,13 @@ def _tokenize_prompts_with_image_and_batch(
     """
 
     # If not tool use, tranform the coordinates while tokenizing
-    if transformed_images is not None:
+    if scale_factors is not None:
         transformed_prompt_tokens = []
-        for prompt_seq, transformed_image_seq in zip(prompts, transformed_images):
+        for prompt_seq, scale_factor_seq in zip(prompts, scale_factors):
             transformed_prompt_tokens.append(
                 [
-                    _transform_coordinates_and_tokenize(prompt, transformed_image, tokenizer)
-                    for prompt, transformed_image in zip(prompt_seq, transformed_image_seq)
+                    _transform_coordinates_and_tokenize(prompt, scale_factor.item(), tokenizer)
+                    for prompt, scale_factor in zip(prompt_seq, scale_factor_seq)
                 ]
             )
     else:
@@ -287,39 +282,27 @@ def _tokenize_prompts_with_image_and_batch(
     return prompts_tokens_tensor, prompts_length_tensor
 
 
-def original_to_transformed_h_coords(self, original_coords):
-    # apply crop
-    cropped_coords = (
-        self._clamp_coords(original_coords, min_value=self.crop_top, max_value=self.crop_bottom) - self.crop_top
-    )
-    # apply scale
-    scaled_coords = self._scale_coords(cropped_coords, scale=self.scaled_h / self.original_h)
-    # apply pad
-    return scaled_coords + self.padding_top
+# Simplified assuming self.crop_top = self.padding_top = 0
+def original_to_transformed_h_coords(original_coords, scale_h):
+    return np.round(original_coords * scale_h).astype(np.int32)
 
 
-def original_to_transformed_w_coords(self, original_coords):
-    # apply crop
-    cropped_coords = (
-        self._clamp_coords(original_coords, min_value=self.crop_left, max_value=self.crop_right) - self.crop_left
-    )
-    # apply scale
-    scaled_coords = self._scale_coords(cropped_coords, scale=self.scaled_w / self.original_w)
-    # apply pad
-    return scaled_coords + self.padding_left
+# Simplified assuming self.crop_left = self.padding_left = 0
+def original_to_transformed_w_coords(original_coords, scale_w):
+    return np.round(original_coords * scale_w).astype(np.int32)
 
 
-def scale_point_to_transformed_image(x: float, y: float) -> List[int]:
-    x_scaled = original_to_transformed_w_coords(np.array([x / 2]))[0]
-    y_scaled = original_to_transformed_h_coords(np.array([y / 2]))[0]
+def scale_point_to_transformed_image(x: float, y: float, scale_factor: float) -> List[int]:
+    x_scaled = original_to_transformed_w_coords(np.array([x / 2]), scale_factor)[0]
+    y_scaled = original_to_transformed_h_coords(np.array([y / 2]), scale_factor)[0]
     return [x_scaled, y_scaled]
 
 
-def scale_bbox_to_transformed_image(top: float, left: float, bottom: float, right: float) -> List[int]:
-    top_scaled = original_to_transformed_w_coords(np.array([top / 2]))[0]
-    left_scaled = original_to_transformed_h_coords(np.array([left / 2]))[0]
-    bottom_scaled = original_to_transformed_w_coords(np.array([bottom / 2]))[0]
-    right_scaled = original_to_transformed_h_coords(np.array([right / 2]))[0]
+def scale_bbox_to_transformed_image(top: float, left: float, bottom: float, right: float, scale_factor: float) -> List[int]:
+    top_scaled = original_to_transformed_w_coords(np.array([top / 2]), scale_factor)[0]
+    left_scaled = original_to_transformed_h_coords(np.array([left / 2]), scale_factor)[0]
+    bottom_scaled = original_to_transformed_w_coords(np.array([bottom / 2]), scale_factor)[0]
+    right_scaled = original_to_transformed_h_coords(np.array([right / 2]), scale_factor)[0]
     return [top_scaled, left_scaled, bottom_scaled, right_scaled]
 
 
@@ -401,7 +384,7 @@ class FuyuProcessor(ProcessorMixin):
     def get_sample_encoding(
         self,
         prompts,
-        batch_images,
+        scale_factors,
         image_unpadded_heights,
         image_unpadded_widths,
         image_placeholder_id,
@@ -422,7 +405,7 @@ class FuyuProcessor(ProcessorMixin):
         prompt_tokens, prompts_length = _tokenize_prompts_with_image_and_batch(
             tokenizer=self.tokenizer,
             prompts=prompts,
-            transformed_images=batch_images,
+            scale_factors=scale_factors,
             max_tokens_to_generate=self.max_tokens_to_generate,
             max_position_embeddings=self.max_position_embeddings,
             add_BOS=True,
@@ -556,6 +539,7 @@ class FuyuProcessor(ProcessorMixin):
         batch_images = image_encoding["images"]
         image_unpadded_heights = image_encoding["image_unpadded_heights"]
         image_unpadded_widths = image_encoding["image_unpadded_widths"]
+        scale_factors = image_encoding["image_scale_factors"]
         self.subsequence_length = 1  # Each batch contains only one sequence.
         self.batch_size = len(batch_images)
 
@@ -568,12 +552,12 @@ class FuyuProcessor(ProcessorMixin):
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
         all_encodings = []
 
-        for prompt, image, image_unpadded_height, image_unpadded_width, tensor_batch_image in zip(
-            prompts, batch_images, image_unpadded_heights, image_unpadded_widths, tensor_batch_images
+        for prompt, scale_factor, image_unpadded_height, image_unpadded_width, tensor_batch_image in zip(
+            prompts, scale_factors, image_unpadded_heights, image_unpadded_widths, tensor_batch_images
         ):
             sample_encoding = self.get_sample_encoding(
                 prompts=[prompt],
-                batch_images=[image],
+                scale_factors=[scale_factor],
                 image_unpadded_heights=torch.tensor([image_unpadded_height]),
                 image_unpadded_widths=torch.tensor([image_unpadded_width]),
                 image_placeholder_id=image_placeholder_id,
@@ -585,6 +569,109 @@ class FuyuProcessor(ProcessorMixin):
             model_inputs=all_encodings, return_attention_mask=return_attention_mask
         )
         return FuyuBatchFeature(data=batch_encoding)
+
+    def post_process_box_coordinates(self, outputs, target_sizes=None):
+        """
+        Transforms raw coordinates detected by [`FuyuForCausalLM`] to the original images' coordinate space.
+        Coordinates will be returned in "box" format, with the following pattern:
+            `<box>top, left, bottom, right</box>`
+
+        Point coordinates are not supported yet.
+
+        Args:
+            outputs ([`GenerateOutput`]):
+                Raw outputs from `generate`.
+            target_sizes (`torch.Tensor`, *optional*):
+                Tensor of shape (batch_size, 2) where each entry is the (height, width) of the corresponding image in
+                the batch. If set, found coordinates in the output sequence are rescaled to the target sizes. If left
+                to None, coordinates will not be rescaled.
+
+        Returns:
+            `GenerateOutput`: Same output type returned by `generate`, with output token ids replaced with
+                boxed and possible rescaled coordinates.
+        """
+
+        def scale_factor_to_fit(original_size, target_size=None):
+            height, width = original_size
+            if target_size is None:
+                max_height = self.image_processor.size["height"]
+                max_width = self.image_processor.size["width"]
+            else:
+                max_height, max_width = target_size
+            if width <= max_width and height <= max_height:
+                return 1.0
+            return min(max_height/height, max_width/width)
+
+        def find_delimiters_pair(tokens, start_token, end_token):
+            start_id = self.tokenizer.convert_tokens_to_ids(start_token)
+            end_id = self.tokenizer.convert_tokens_to_ids(end_token)
+
+            starting_positions = (tokens == start_id).nonzero(as_tuple=True)[0]
+            ending_positions = (tokens == end_id).nonzero(as_tuple=True)[0]
+
+            if torch.any(starting_positions) and torch.any(ending_positions):
+                return (starting_positions[0], ending_positions[0])
+            return (None, None)
+
+        def tokens_to_boxes(tokens, original_size):
+            while (pair := find_delimiters_pair(tokens, TOKEN_BBOX_OPEN_STRING, TOKEN_BBOX_CLOSE_STRING)) != (None, None):
+                start, end = pair
+                if end != start + 5:
+                    continue
+
+                # Retrieve transformed coordinates from tokens
+                coords = self.tokenizer.convert_ids_to_tokens(tokens[start+1:end])
+
+                # Scale back to original image size and multiply by 2
+                scale = scale_factor_to_fit(original_size)
+                top, left, bottom, right = [2 * int(float(c)/scale) for c in coords]
+
+                # Replace the IDs so they get detokenized right
+                replacement = f" {TEXT_REPR_BBOX_OPEN}{top}, {left}, {bottom}, {right}{TEXT_REPR_BBOX_CLOSE}"
+                replacement = self.tokenizer.tokenize(replacement)[1:]
+                replacement = self.tokenizer.convert_tokens_to_ids(replacement)
+                replacement = torch.tensor(replacement).to(tokens)
+
+                tokens = torch.cat([tokens[:start], replacement, tokens[end+1:]], 0)
+            return tokens
+
+        def tokens_to_points(tokens, original_size):
+            while (pair := find_delimiters_pair(tokens, TOKEN_POINT_OPEN_STRING, TOKEN_POINT_CLOSE_STRING)) != (None, None):
+                start, end = pair
+                if end != start + 3:
+                    continue
+
+                # Retrieve transformed coordinates from tokens
+                coords = self.tokenizer.convert_ids_to_tokens(tokens[start+1:end])
+
+                # Scale back to original image size and multiply by 2
+                scale = scale_factor_to_fit(original_size)
+                x, y = [2 * int(float(c)/scale) for c in coords]
+
+                # Replace the IDs so they get detokenized right
+                replacement = f" {TEXT_REPR_POINT_OPEN}{x}, {y}{TEXT_REPR_POINT_CLOSE}"
+                replacement = self.tokenizer.tokenize(replacement)[1:]
+                replacement = self.tokenizer.convert_tokens_to_ids(replacement)
+                replacement = torch.tensor(replacement).to(tokens)
+
+                tokens = torch.cat([tokens[:start], replacement, tokens[end+1:]], 0)
+            return tokens
+
+        if target_sizes is None:
+            target_sizes = ((self.image_processor.size["height"], self.image_processor.size["width"]),) * len(outputs)
+        elif target_sizes.shape[1] != 2:
+            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
+
+        if len(outputs) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as output sequences")
+
+        results = []
+        for seq, size in zip(outputs, target_sizes):
+            seq = tokens_to_boxes(seq, size)
+            seq = tokens_to_points(seq, size)
+            results.append(seq)
+
+        return results
 
     def batch_decode(self, *args, **kwargs):
         """
