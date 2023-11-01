@@ -21,7 +21,10 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_fast": ["FastConfig"], "image_processing_fast": ["FastImageProcessor"]}
+_import_structure = {
+    "configuration_fast": ["FAST_PRETRAINED_CONFIG_ARCHIVE_MAP", "FastConfig"],
+    "image_processing_fast": ["FastImageProcessor"],
+}
 
 try:
     if not is_torch_available():
@@ -32,7 +35,7 @@ else:
     _import_structure["modeling_fast"] = ["FASTForImageCaptioning", "FastPreTrainedModel"]
 
 if TYPE_CHECKING:
-    from .configuration_fast import FastConfig
+    from .configuration_fast import FAST_PRETRAINED_CONFIG_ARCHIVE_MAP, FastConfig
     from .image_processing_fast import FastImageProcessor
 
     try:
