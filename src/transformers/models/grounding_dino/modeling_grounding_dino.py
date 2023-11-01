@@ -67,7 +67,7 @@ else:
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
-
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
 class MultiScaleDeformableAttentionFunction(Function):
     @staticmethod
     def forward(
