@@ -26,10 +26,10 @@ RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 class Rwkv5Config(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`Rwkv5Model`]. It is used to instantiate a RWKV
+    This is the configuration class to store the configuration of a [`Rwkv5Model`]. It is used to instantiate a RWKV5
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the RWVK-4
-    [RWKV/rwkv-4-169m-pile](https://huggingface.co/RWKV/rwkv-4-169m-pile) architecture.
+    [RWKV/rwkv-5-world-1b5](https://huggingface.co/RWKV/rwkv-5-world-1b5) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -37,11 +37,8 @@ class Rwkv5Config(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 65536):
-            Vocabulary size of the RWKV model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the RWKV5 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Rwkv5Model`].
-        context_length (`int`, *optional*, defaults to 4096):
-            The maximum sequence length that this model can be be used with in a single forward (using it in RNN mode
-            lets use any sequence length).
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the embeddings and hidden states.
         num_hidden_layers (`int`, *optional*, defaults to 24):
@@ -53,10 +50,10 @@ class Rwkv5Config(PretrainedConfig):
             Dimensionality of the inner feed-forward layers. Will default to 4 times `hidden_size` if unset.
         layer_norm_epsilon (`<fill_type>`, *optional*, defaults to 1e-05): <fill_docstring>
         bos_token_id (`int`, *optional*, defaults to 0):
-            The id of the beginning of sentence token in the vocabulary. Defaults to 0 as RWKV uses the same tokenizer
+            The id of the beginning of sentence token in the vocabulary. Defaults to 0 as RWKV5 uses the same tokenizer
             as GPTNeoX.
         eos_token_id (`int`, *optional*, defaults to 0):
-            The id of the end of sentence token in the vocabulary. Defaults to 0 as RWKV uses the same tokenizer as
+            The id of the end of sentence token in the vocabulary. Defaults to 0 as RWKV5 uses the same tokenizer as
             GPTNeoX.
         rescale_every (`int`, *optional*, defaults to 6):
             At inference, the hidden states (and weights of the correponding output layers) are divided by 2 every
@@ -83,12 +80,10 @@ class Rwkv5Config(PretrainedConfig):
     ```"""
 
     model_type = "rwkv5"
-    attribute_map = {"max_position_embeddings": "context_length"}
 
     def __init__(  # 1.5B World
         self,
         vocab_size=65536,
-        context_length=4096,
         hidden_size=768,
         num_hidden_layers=24,
         attention_hidden_size=None,
@@ -103,7 +98,6 @@ class Rwkv5Config(PretrainedConfig):
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.context_length = context_length
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.attention_hidden_size = attention_hidden_size if attention_hidden_size is not None else hidden_size

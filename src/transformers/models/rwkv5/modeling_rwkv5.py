@@ -37,7 +37,7 @@ from .configuration_rwkv5 import Rwkv5Config
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "RWKV/rwkv-5-world"
+_CHECKPOINT_FOR_DOC = "RWKV/rwkv-5-world-1b5"
 _CONFIG_FOR_DOC = "Rwkv5Config"
 
 RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST = [
