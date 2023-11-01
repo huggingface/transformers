@@ -590,7 +590,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         Args:
             image_input (`torch.Tensor` of shape [batch_size, subsequence_size, num_channels, height, width]):
                 Tensor of images padded to model input size.
-            image_present (`torch.Tensor` of shape [batch_size, subsequence_size]):
+            image_present (`torch.Tensor` of shape [batch_size, subsequence_size, num_images]):
                 Tensor of 1s and 0s indicating whether an image is present.
             image_unpadded_h (`torch.Tensor` of shape [batch_size, subsequence_size]):
                 Tensor of unpadded image heights.
