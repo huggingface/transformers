@@ -185,18 +185,9 @@ class FastImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-    def reduce_label(self, label: ImageInput) -> np.ndarray:
-        label = to_numpy_array(label)
-        # Avoid using underflow conversion
-        label[label == 0] = 255
-        label = label - 1
-        label[label == 254] = 255
-        return label
-
     def _preprocess(
         self,
         image: ImageInput,
-        do_reduce_labels: bool = None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -209,9 +200,6 @@ class FastImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
-        if do_reduce_labels:
-            image = self.reduce_label(image)
-
         if do_resize:
             image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
 
@@ -254,7 +242,6 @@ class FastImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(image)
         image = self._preprocess(
             image,
-            do_reduce_labels=False,
             do_resize=do_resize,
             size=size,
             resample=resample,
@@ -270,47 +257,6 @@ class FastImageProcessor(BaseImageProcessor):
         if data_format is not None:
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
         return image
-
-    def _preprocess_segmentation_map(
-        self,
-        segmentation_map: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_reduce_labels: bool = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ):
-        """Preprocesses a single segmentation map."""
-        # All transformations expect numpy arrays.
-        segmentation_map = to_numpy_array(segmentation_map)
-        # Add an axis to the segmentation maps for transformations.
-        if segmentation_map.ndim == 2:
-            segmentation_map = segmentation_map[None, ...]
-            added_dimension = True
-            input_data_format = ChannelDimension.FIRST
-        else:
-            added_dimension = False
-            if input_data_format is None:
-                input_data_format = infer_channel_dimension_format(segmentation_map, num_channels=1)
-        segmentation_map = self._preprocess(
-            image=segmentation_map,
-            do_reduce_labels=do_reduce_labels,
-            do_resize=do_resize,
-            resample=resample,
-            size=size,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_normalize=False,
-            do_rescale=False,
-            input_data_format=ChannelDimension.FIRST,
-        )
-        # Remove extra axis if added
-        if added_dimension:
-            segmentation_map = np.squeeze(segmentation_map, axis=0)
-        segmentation_map = segmentation_map.astype(np.int64)
-        return segmentation_map
 
     def __call__(self, images, segmentation_maps=None, **kwargs):
         # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
@@ -331,7 +277,6 @@ class FastImageProcessor(BaseImageProcessor):
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_reduce_labels: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -366,10 +311,6 @@ class FastImageProcessor(BaseImageProcessor):
                 Image mean.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
-            do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-                Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-                is used for background, and background itself is not included in all classes of a dataset (e.g.
-                ADE20k). The background label will be replaced by 255.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -401,7 +342,6 @@ class FastImageProcessor(BaseImageProcessor):
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
         images = make_list_of_images(images)
         if segmentation_maps is not None:
@@ -451,21 +391,6 @@ class FastImageProcessor(BaseImageProcessor):
         ]
 
         data = {"pixel_values": images}
-
-        if segmentation_maps is not None:
-            segmentation_maps = [
-                self._preprocess_segmentation_map(
-                    segmentation_map=segmentation_map,
-                    do_reduce_labels=do_reduce_labels,
-                    do_resize=do_resize,
-                    resample=resample,
-                    size=size,
-                    do_center_crop=do_center_crop,
-                    crop_size=crop_size,
-                )
-                for segmentation_map in segmentation_maps
-            ]
-            data["labels"] = segmentation_maps
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 

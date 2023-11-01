@@ -409,7 +409,7 @@ class FastModelIntegrationTest(unittest.TestCase):
         assert final_out[0]["bboxes"][0] == [224, 120, 246, 120, 246, 134, 224, 134]
         assert round(float(final_out[0]["scores"][0]), 5) == 0.95541
 
-    @slow
+    # @slow
     def test_inference_fast_base_800_total_text_ic17mlt_model(self):
         model = FASTForImageCaptioning.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
 
