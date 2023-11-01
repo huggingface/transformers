@@ -450,14 +450,14 @@ class GPTQConfig(QuantizationConfigMixin):
             if "version" not in self.exllama_config:
                 raise ValueError("`exllama_config` needs to have a `version` key.")
             elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
-                version = self.exllama_config["version"]
+                exllama_version = self.exllama_config["version"]
                 raise ValueError(
-                    f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {version}"
+                    f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
                 )
 
         if self.bits == 4 and self.use_exllama:
             if self.exllama_config["version"] == ExllamaVersion.ONE:
-                logger.log(
+                logger.info(
                     "You have activated exllama backend. Note that you can get better inference "
                     "speed using exllamav2 kernel by setting `exllama_config`."
                 )

@@ -315,8 +315,6 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         """
         self.check_inference_correctness(self.quantized_model)
 
-    # this test will fail until the next release of optimum
-    @pytest.mark.skip
     def test_max_input_length(self):
         """
         Test if the max_input_length works. It modifies the maximum input length that of the model that runs with exllama backend.
