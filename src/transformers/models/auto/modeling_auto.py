@@ -575,6 +575,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("blip-2", "Blip2ForConditionalGeneration"),
         ("git", "GitForCausalLM"),
         ("instructblip", "InstructBlipForConditionalGeneration"),
+        ("llava", "LlaVaForCausalLM"),
         ("kosmos-2", "Kosmos2ForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
