@@ -147,17 +147,7 @@ class Seq2seqTrainerTester(TestCasePlus):
         model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
         data_collator = DataCollatorForSeq2Seq(tokenizer, model=model, return_tensors="pt", padding="longest")
-        gen_config = GenerationConfig.from_pretrained("t5-small")
-        config_params = {
-            "_from_model_config": None,
-            "max_length": None,
-            "min_lenght": None,
-            "max_new_tokens": 256,
-            "min_new_tokens": 1,
-            "num_beams": 5,
-        }
-        for k, v in config_params.items():
-            setattr(gen_config, k, v)
+        gen_config = GenerationConfig.from_pretrained("t5-small",max_length=None, min_lenght=None, max_new_tokens=256, min_new_tokens=1, num_beams=5)
 
         training_args = Seq2SeqTrainingArguments(".", predict_with_generate=True)
 
@@ -184,7 +174,7 @@ class Seq2seqTrainerTester(TestCasePlus):
         dataset_len = len(prepared_dataset)  # 38
 
         for num_return_sequences in range(1, 4):
-            setattr(gen_config, "num_return_sequences", num_return_sequences)
+            gen_config.num_return_sequences = num_return_sequences
             metrics = trainer.evaluate(eval_dataset=prepared_dataset, generation_config=gen_config)
             assert (
                 metrics["eval_samples"] == dataset_len * num_return_sequences
