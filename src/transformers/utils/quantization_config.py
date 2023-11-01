@@ -310,6 +310,11 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         return serializable_config_dict
 
 
+class ExllamaVersion(int, Enum):
+    ONE = 1
+    TWO = 2
+
+
 @dataclass
 class GPTQConfig(QuantizationConfigMixin):
     """
@@ -355,11 +360,14 @@ class GPTQConfig(QuantizationConfigMixin):
             The batch size used when processing the dataset
         pad_token_id (`int`, *optional*):
             The pad token id. Needed to prepare the dataset when `batch_size` > 1.
-        disable_exllama (`bool`, *optional*, defaults to `False`):
-            Whether to use exllama backend. Only works with `bits` = 4.
+        use_exllama (`bool`, *optional*):
+            Whether to use exllama backend. Defaults to `True` if unset. Only works with `bits` = 4.
         max_input_length (`int`, *optional*):
             The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
             length. It is specific to the exllama backend with act-order.
+        exllama_config (`Dict[str, Any]`, *optional*):
+            The exllama config. You can specify the version of the exllama kernel through the `version` key. Defaults
+            to `{"version": 1}` if unset.
         cache_block_outputs (`bool`, *optional*, defaults to `True`):
                 Whether to cache block outputs to reuse as inputs for the succeeding block.
     """
@@ -380,8 +388,9 @@ class GPTQConfig(QuantizationConfigMixin):
         module_name_preceding_first_block: Optional[List[str]] = None,
         batch_size: int = 1,
         pad_token_id: Optional[int] = None,
-        disable_exllama: bool = False,
+        use_exllama: Optional[bool] = None,
         max_input_length: Optional[int] = None,
+        exllama_config: Optional[Dict[str, Any]] = None,
         cache_block_outputs: bool = True,
         **kwargs,
     ):
@@ -400,14 +409,16 @@ class GPTQConfig(QuantizationConfigMixin):
         self.module_name_preceding_first_block = module_name_preceding_first_block
         self.batch_size = batch_size
         self.pad_token_id = pad_token_id
-        self.disable_exllama = disable_exllama
+        self.use_exllama = use_exllama
         self.max_input_length = max_input_length
+        self.exllama_config = exllama_config
+        self.disable_exllama = kwargs.pop("disable_exllama", None)
         self.cache_block_outputs = cache_block_outputs
         self.post_init()
 
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["disable_exllama", "use_cuda_fp16", "max_input_length"]
+        loading_attibutes = ["disable_exllama", "use_exllama", "exllama_config", "use_cuda_fp16", "max_input_length"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
 
@@ -433,6 +444,73 @@ class GPTQConfig(QuantizationConfigMixin):
                     f"""dataset needs to be either a list of string or a value in
                     ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
                 )
+
+        if self.disable_exllama is None and self.use_exllama is None:
+            # New default behaviour
+            self.use_exllama = True
+        elif self.disable_exllama is not None and self.use_exllama is None:
+            # Follow pattern of old config
+            logger.warning(
+                "Using `disable_exllama` is deprecated and will be removed in version 4.37. Use `use_exllama` instead and specify the version with `exllama_config`."
+                "The value of `use_exllama` will be overwritten by `disable_exllama` passed in `GPTQConfig` or stored in your config file."
+            )
+            self.use_exllama = not self.disable_exllama
+        elif self.disable_exllama is not None and self.use_exllama is not None:
+            # Only happens if user explicitly passes in both arguments
+            raise ValueError("Cannot specify both `disable_exllama` and `use_exllama`. Please use just `use_exllama`")
+
+        if self.exllama_config is None:
+            self.exllama_config = {"version": ExllamaVersion.ONE}
+        else:
+            if "version" not in self.exllama_config:
+                raise ValueError("`exllama_config` needs to have a `version` key.")
+            elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
+                exllama_version = self.exllama_config["version"]
+                raise ValueError(
+                    f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
+                )
+
+        if self.bits == 4 and self.use_exllama:
+            if self.exllama_config["version"] == ExllamaVersion.ONE:
+                logger.info(
+                    "You have activated exllama backend. Note that you can get better inference "
+                    "speed using exllamav2 kernel by setting `exllama_config`."
+                )
+            elif self.exllama_config["version"] == ExllamaVersion.TWO:
+                optimum_version = version.parse(importlib.metadata.version("optimum"))
+                autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
+                if optimum_version <= version.parse("1.13.2") or autogptq_version <= version.parse("0.4.2"):
+                    raise ValueError(
+                        f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
+                    )
+
+    def to_dict(self):
+        config_dict = super().to_dict()
+        config_dict.pop("disable_exllama", None)
+        return config_dict
+
+    def to_dict_optimum(self):
+        """
+        Get compatible dict for optimum gptq config
+        """
+        quant_dict = self.to_dict()
+        # make it compatible with optimum config
+        quant_dict["disable_exllama"] = not self.use_exllama
+        return quant_dict
+
+    @classmethod
+    def from_dict_optimum(cls, config_dict):
+        """
+        Get compatible class with optimum gptq config dict
+        """
+
+        if "disable_exllama" in config_dict:
+            config_dict["use_exllama"] = not config_dict["disable_exllama"]
+            # switch to None to not trigger the warning
+            config_dict["disable_exllama"] = None
+
+        config = cls(**config_dict)
+        return config
 
 
 @dataclass
