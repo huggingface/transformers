@@ -430,7 +430,7 @@ class FastPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
 
-class TextNet(nn.Module):
+class FastTextNet(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.first_conv = ConvLayer(
@@ -447,7 +447,6 @@ class TextNet(nn.Module):
             config.backbone_dropout_rate,
             config.backbone_ops_order,
         )
-        # self.first_conv.apply(self._init_weights)
         stage1 = []
         for stage_config in zip(
             config.backbone_stage1_in_channels,
@@ -496,25 +495,25 @@ class TextNet(nn.Module):
             stage4.append(RepConvLayer(*stage_config))
         self.stage4 = nn.ModuleList(stage4)
 
-    def forward(self, x):
-        x = self.first_conv(x)
+    def forward(self, hidden_states):
+        hidden_states = self.first_conv(hidden_states)
         output = []
 
         for block in self.stage1:
-            x = block(x)
-        output.append(x)
+            hidden_states = block(hidden_states)
+        output.append(hidden_states)
 
         for block in self.stage2:
-            x = block(x)
-        output.append(x)
+            hidden_states = block(hidden_states)
+        output.append(hidden_states)
 
         for block in self.stage3:
-            x = block(x)
-        output.append(x)
+            hidden_states = block(hidden_states)
+        output.append(hidden_states)
 
         for block in self.stage4:
-            x = block(x)
-        output.append(x)
+            hidden_states = block(hidden_states)
+        output.append(hidden_states)
 
         return output
 
@@ -532,13 +531,9 @@ class FASTNeck(nn.Module):
                 config.neck_groups,
             )
         )
-        self.layers_count = len(reduce_layer_configs)
+        self.num_layers = len(reduce_layer_configs)
         for layer_ix in range(0, len(reduce_layer_configs)):
             setattr(self, f"reduce_layer{layer_ix + 1}", RepConvLayer(*reduce_layer_configs[layer_ix]))
-        # self.reduce_layer1 = RepConvLayer(*reduce_layer_configs[0])
-        # self.reduce_layer2 = RepConvLayer(*reduce_layer_configs[1])
-        # self.reduce_layer3 = RepConvLayer(*reduce_layer_configs[2])
-        # self.reduce_layer4 = RepConvLayer(*reduce_layer_configs[3])
 
         self._initialize_weights()
 
@@ -550,22 +545,21 @@ class FASTNeck(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-    def _upsample(self, x, y):
-        _, _, H, W = y.size()
-        return F.upsample(x, size=(H, W), mode="bilinear")
+    def _upsample(self, layer_out, height, width):
+        return F.upsample(layer_out, size=(height, width), mode="bilinear")
 
-    def forward(self, x):
-        f1 = x[0]
-        f1 = self.reduce_layer1(f1)
-        output_stages = [f1]
+    def forward(self, hidden_states):
+        first_layer_hidden = hidden_states[0]
+        first_layer_hidden = self.reduce_layer1(first_layer_hidden)
+        output_stages = [first_layer_hidden]
 
-        for layer_ix in range(1, self.layers_count):
-            layer_out = getattr(self, f"reduce_layer{layer_ix + 1}")(x[layer_ix])
-            layer_out = self._upsample(layer_out, f1)
+        for layer_ix in range(1, self.num_layers):
+            layer_out = getattr(self, f"reduce_layer{layer_ix + 1}")(hidden_states[layer_ix])
+            layer_out = self._upsample(layer_out, first_layer_hidden[2], first_layer_hidden[3])
             output_stages.append(layer_out)
 
-        f = torch.cat(output_stages, 1)
-        return f
+        combined_hidden_states = torch.cat(output_stages, 1)
+        return combined_hidden_states
 
 
 class FASTHead(nn.Module):
@@ -621,55 +615,12 @@ class FASTHead(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-    def forward(self, x):
-        x = self.conv(x)
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
         if self.dropout is not None:
-            x = self.dropout(x)
-        x = self.final(x)
-        return x
-
-    # def get_results(self, out, img_meta, scale=2):
-    #     org_img_size = img_meta["org_img_size"]
-    #     img_size = img_meta["img_size"]  # 640*640
-    #     batch_size = out.size(0)
-    #     outputs = {}
-    #
-    #     texts = F.interpolate(
-    #         out[:, 0:1, :, :], size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
-    #     )  # B*1*320*320
-    #     texts = self._max_pooling(texts, scale=scale)  # B*1*320*320
-    #     score_maps = torch.sigmoid_(texts)  # B*1*320*320~
-    #     score_maps = F.interpolate(score_maps, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
-    #     score_maps = score_maps.squeeze(1)  # B*640*640
-    #
-    #     kernels = (out[:, 0, :, :] > 0).to(torch.uint8)  # B*160*160
-    #     labels_ = []
-    #     for kernel in kernels.numpy():
-    #         ret, label_ = cv2.connectedComponents(kernel)
-    #         labels_.append(label_)
-    #     labels_ = np.array(labels_)
-    #     labels_ = torch.from_numpy(labels_)
-    #     labels = labels_.unsqueeze(1).to(torch.float32)  # B*1*160*160
-    #     labels = F.interpolate(
-    #         labels, size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
-    #     )  # B*1*320*320
-    #     labels = self._max_pooling(labels, scale=scale)
-    #     labels = F.interpolate(labels, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
-    #     labels = labels.squeeze(1).to(torch.int32)  # B*640*640
-    #
-    #     keys = [torch.unique(labels_[i], sorted=True) for i in range(batch_size)]
-    #
-    #     outputs.update({"kernels": kernels.data.cpu()})
-    #
-    #     scales = (float(org_img_size[1]) / float(img_size[1]), float(org_img_size[0]) / float(img_size[0]))
-    #
-    #     results = []
-    #     for i in range(batch_size):
-    #         bboxes, scores = self.generate_bbox(keys[i], labels[i], score_maps[i], scales)
-    #         results.append({"bboxes": bboxes, "scores": scores})
-    #     outputs.update({"results": results})
-    #
-    #     return outputs
+            hidden_states = self.dropout(hidden_states)
+        hidden_states = self.final(hidden_states)
+        return hidden_states
 
     def _max_pooling(self, x, scale=1):
         if scale == 1:
@@ -677,39 +628,6 @@ class FASTHead(nn.Module):
         elif scale == 2:
             x = self.pooling_2s(x)
         return x
-
-    # def generate_bbox(self, keys, label, score, scales):
-    #     label_num = len(keys)
-    #     bboxes = []
-    #     scores = []
-    #     for index in range(1, label_num):
-    #         i = keys[index]
-    #         ind = label == i
-    #         ind_np = ind.data.cpu().numpy()
-    #         points = np.array(np.where(ind_np)).transpose((1, 0))
-    #         if points.shape[0] < self.min_area:
-    #             label[ind] = 0
-    #             continue
-    #         score_i = score[ind].mean().item()
-    #         if score_i < self.min_score:
-    #             label[ind] = 0
-    #             continue
-    #
-    #         if self.bbox_type == "rect":
-    #             rect = cv2.minAreaRect(points[:, ::-1])
-    #             alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
-    #             rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
-    #             bbox = cv2.boxPoints(rect) * scales
-    #         else:
-    #             binary = np.zeros(label.shape, dtype="uint8")
-    #             binary[ind_np] = 1
-    #             contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    #             bbox = contours[0] * scales
-    #
-    #         bbox = bbox.astype("int32")
-    #         bboxes.append(bbox.reshape(-1).tolist())
-    #         scores.append(score_i)
-    #     return bboxes, scores
 
 
 def emb_loss(
@@ -921,7 +839,7 @@ class FASTForImageCaptioningOutput(ModelOutput):
 class FASTForImageCaptioning(FastPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.backbone = TextNet(config=config)
+        self.backbone = FastTextNet(config=config)
         self.neck = FASTNeck(config=config)
         self.det_head = FASTHead(config=config)
         self.loss_bg = config.loss_bg
@@ -996,21 +914,19 @@ class FASTForImageCaptioning(FastPreTrainedModel):
         target_sizes) >>> print(text_locations[0]["bboxes"][0][:10]) [484, 175, 484, 178, 483, 179, 452, 179, 452, 182]"""
         # outputs = {}
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        f = self.backbone(pixel_values)
+        hidden_states = self.backbone(pixel_values)
 
-        f = self.neck(f)
+        hidden_states = self.neck(hidden_states)
 
-        det_out = self.det_head(f)
+        text_detection_output = self.det_head(hidden_states)
 
         loss = None
         if labels:
-            out = self._upsample(det_out, pixel_values.size(), scale=1)
+            out = self._upsample(text_detection_output, pixel_values.size(), scale=1)
             loss = self.loss(out, labels)
-        # det_res = self.det_head.get_results(det_out, img_metas, scale=2)
-        # outputs.update(det_res)
-        det_out = self._upsample(det_out, pixel_values.size(), scale=4)
+        text_detection_output = self._upsample(text_detection_output, pixel_values.size(), scale=4)
 
         if not return_dict:
-            return (loss, det_out) if loss is not None else (det_out,)
+            return (loss, text_detection_output) if loss is not None else (text_detection_output,)
 
-        return FASTForImageCaptioningOutput(loss, det_out)
+        return FASTForImageCaptioningOutput(loss, text_detection_output)
