@@ -385,7 +385,7 @@ class FuyuImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
+                Images to preprocess. Expects a single image, a list or images or a list of lists of images. Pixel values range from 0 to 255, or between 0 and 1 if `do_rescale` is `False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image to `size`.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
