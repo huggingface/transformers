@@ -49,9 +49,26 @@ RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all RWKV models at https://huggingface.co/models?filter=rwkv
 ]
 
-def rwkv_linear_attention_v5_0(H, S, T, hidden, time_decay, time_first, receptance, key, value, lxw, lxb, ow, state, return_state=False, seq_mode=True):
-    time_decay = torch.exp(-torch.exp(time_decay.float())).reshape(-1,1,1)
-    time_first = torch.exp(time_first.float()).reshape(-1,1,1)
+
+def rwkv_linear_attention_v5_0(
+    H,
+    S,
+    T,
+    hidden,
+    time_decay,
+    time_first,
+    receptance,
+    key,
+    value,
+    lxw,
+    lxb,
+    ow,
+    state,
+    return_state=False,
+    seq_mode=True,
+):
+    time_decay = torch.exp(-torch.exp(time_decay.float())).reshape(-1, 1, 1)
+    time_first = torch.exp(time_first.float()).reshape(-1, 1, 1)
     lxw = lxw.float()
     lxb = lxb.float()
 
@@ -59,7 +76,7 @@ def rwkv_linear_attention_v5_0(H, S, T, hidden, time_decay, time_first, receptan
         w = time_decay.reshape(-1, 1)
         u = time_first.reshape(-1, 1)
         ws = w.pow(T).reshape(H, 1, 1)
-        ind = torch.arange(T-1, -1, -1, device=w.device).unsqueeze(0).repeat(H, 1)
+        ind = torch.arange(T - 1, -1, -1, device=w.device).unsqueeze(0).repeat(H, 1)
         w = w.repeat(1, T).pow(ind)
         wk = w.reshape(H, 1, T)
         wb = wk.transpose(-2, -1).flip(1)
@@ -67,11 +84,11 @@ def rwkv_linear_attention_v5_0(H, S, T, hidden, time_decay, time_first, receptan
         w = F.pad(w, (0, T))
         w = torch.tile(w, [T])
         w = w[:, :-T].reshape(-1, T, 2 * T - 1)
-        w = w[:, :, T-1:].reshape(H, T, T)
+        w = w[:, :, T - 1 :].reshape(H, T, T)
         out = ((receptance @ key) * w) @ value + (receptance @ state) * wb
         state = ws * state + (key * wk) @ value
-        
-        out = out.transpose(1, 2).contiguous().reshape(T, H*S)
+
+        out = out.transpose(1, 2).contiguous().reshape(T, H * S)
         out = F.group_norm(out, num_groups=H, weight=lxw, bias=lxb)
         out = out.to(dtype=hidden.dtype)
         out = out @ ow
@@ -86,22 +103,41 @@ def rwkv_linear_attention_v5_0(H, S, T, hidden, time_decay, time_first, receptan
 
     return out, state
 
-def rwkv_linear_attention(H, S, T, n_head, hidden, time_decay, time_first, receptance, key, value, gate, lxw, lxb, ow, state, return_state=False, seq_mode=True):
-    time_decay = torch.exp(-torch.exp(time_decay.float())).reshape(-1,1,1).reshape(n_head, -1, 1)
-    time_first = time_first.float().reshape(-1,1,1).reshape(n_head, -1, 1)
+
+def rwkv_linear_attention(
+    H,
+    S,
+    T,
+    n_head,
+    hidden,
+    time_decay,
+    time_first,
+    receptance,
+    key,
+    value,
+    gate,
+    lxw,
+    lxb,
+    ow,
+    state,
+    return_state=False,
+    seq_mode=True,
+):
+    time_decay = torch.exp(-torch.exp(time_decay.float())).reshape(-1, 1, 1).reshape(n_head, -1, 1)
+    time_first = time_first.float().reshape(-1, 1, 1).reshape(n_head, -1, 1)
     lxw = lxw.float()
     lxb = lxb.float()
     if seq_mode:
         out = torch.empty((T, H, S), dtype=receptance.dtype, device=receptance.device)
         for t in range(T):
-            rt = receptance[:,t:t+1,:]
-            kt = key[:,:,t:t+1]
-            vt = value[:,t:t+1,:]
+            rt = receptance[:, t : t + 1, :]
+            kt = key[:, :, t : t + 1]
+            vt = value[:, t : t + 1, :]
             at = kt @ vt
             out[t] = (rt @ (time_first * at + state.squeeze(0))).squeeze(1)
             state = at + time_decay * state
 
-        out = out.reshape(T, H*S)
+        out = out.reshape(T, H * S)
         out = F.group_norm(out, num_groups=H, weight=lxw, bias=lxb)
         out = out.to(dtype=hidden.dtype) * gate
         out = out @ ow
@@ -130,7 +166,6 @@ class RwkvSelfAttention(nn.Module):
             config.attention_hidden_size if config.attention_hidden_size is not None else hidden_size
         )
         self.attention_hidden_size = attention_hidden_size
-
 
         self.time_decay = nn.Parameter(torch.empty(num_attention_heads, config.num_attention_heads))
         self.time_faaaa = nn.Parameter(torch.empty(num_attention_heads, config.num_attention_heads))
@@ -161,7 +196,7 @@ class RwkvSelfAttention(nn.Module):
         key = hidden * self.time_mix_key + shifted * (1 - self.time_mix_key)
         value = hidden * self.time_mix_value + shifted * (1 - self.time_mix_value)
         receptance = hidden * self.time_mix_receptance + shifted * (1 - self.time_mix_receptance)
-        gate = hidden* self.time_mix_gate + shifted * (1 - self.time_mix_gate)
+        gate = hidden * self.time_mix_gate + shifted * (1 - self.time_mix_gate)
 
         if hidden.size(1) == 1 and state is not None:
             receptance = self.receptance(receptance).to(torch.float32).view(H, 1, S)
@@ -177,7 +212,7 @@ class RwkvSelfAttention(nn.Module):
 
         if state is not None:
             state[0][:, :, self.layer_id] = hidden[:, -1]
-        
+
         return receptance, key, value, gate, state
 
     def forward(self, hidden, state=None, use_cache=False, seq_mode=True):
@@ -187,7 +222,7 @@ class RwkvSelfAttention(nn.Module):
 
         receptance, key, value, gate, state = self.extract_key_value(H, S, T, hidden, state=state)
         layer_state = state[1][:, :, :, :, self.layer_id] if state is not None else None
-        
+
         rwkv, layer_state = rwkv_linear_attention(
             H,
             S,
@@ -222,13 +257,15 @@ class RwkvFeedForward(nn.Module):
         hidden_size = config.hidden_size
         # https://github.com/BlinkDL/RWKV-LM/blob/3db37a72356b736966ddd377268f02b80963af3f/RWKV-v4neo/train.py#L168
         intermediate_size = (
-            config.intermediate_size if config.intermediate_size is not None else int((config.hidden_size * 3.5) // 32 * 32)
+            config.intermediate_size
+            if config.intermediate_size is not None
+            else int((config.hidden_size * 3.5) // 32 * 32)
         )
 
         self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
         self.time_mix_key = nn.Parameter(torch.empty(1, 1, hidden_size))
         self.time_mix_receptance = nn.Parameter(torch.empty(1, 1, hidden_size))
-        
+
         self.key = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.receptance = nn.Linear(hidden_size, hidden_size, bias=False)
         self.value = nn.Linear(intermediate_size, hidden_size, bias=False)
@@ -269,7 +306,6 @@ class RwkvBlock(nn.Module):
         self.feed_forward = RwkvFeedForward(config, layer_id)
 
     def forward(self, hidden, state=None, use_cache=False, output_attentions=False, seq_mode=True):
-
         attention, state = self.attention(self.ln1(hidden), state=state, use_cache=use_cache, seq_mode=seq_mode)
         hidden = hidden + attention
 
@@ -323,12 +359,13 @@ class Rwkv5PreTrainedModel(PreTrainedModel):
                 for h in range(attention_hidden_size)
             ]
             decay_speed = torch.tensor(decay_speed, dtype=module.time_decay.dtype, device=module.time_decay.device)
-            tmp = (
-                torch.tensor(
-                    [(1.0 - (i / (attention_hidden_size - 1.0))) * ratio_0_to_1 + 0.1 * ((i + 1) % 3 - 1) for i in range(attention_hidden_size)],
-                    dtype=module.time_faaaa.dtype,
-                    device=module.time_faaaa.device,
-                )
+            tmp = torch.tensor(
+                [
+                    (1.0 - (i / (attention_hidden_size - 1.0))) * ratio_0_to_1 + 0.1 * ((i + 1) % 3 - 1)
+                    for i in range(attention_hidden_size)
+                ],
+                dtype=module.time_faaaa.dtype,
+                device=module.time_faaaa.device,
             )
 
             with torch.no_grad():
@@ -424,7 +461,6 @@ class Rwkv5CausalLMOutput(ModelOutput):
     state: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-
 
 
 RWKV_START_DOCSTRING = r"""
@@ -525,7 +561,9 @@ class Rwkv5Model(Rwkv5PreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if self.training == self.layers_are_rescaled and (self.embeddings.weight.dtype == torch.float16 or self.embeddings.weight.dtype == torch.bfloat16):
+        if self.training == self.layers_are_rescaled and (
+            self.embeddings.weight.dtype == torch.float16 or self.embeddings.weight.dtype == torch.bfloat16
+        ):
             self._rescale_layers()
 
         if input_ids is not None and inputs_embeds is not None:
@@ -535,19 +573,51 @@ class Rwkv5Model(Rwkv5PreTrainedModel):
 
         if inputs_embeds is None:
             if not self.pre_ln_flag:
-                normalized_weight = F.layer_norm(self.embeddings.weight, (self.config.hidden_size, ), weight=self.blocks[0].pre_ln.weight, bias=self.blocks[0].pre_ln.bias)
+                normalized_weight = F.layer_norm(
+                    self.embeddings.weight,
+                    (self.config.hidden_size,),
+                    weight=self.blocks[0].pre_ln.weight,
+                    bias=self.blocks[0].pre_ln.bias,
+                )
                 self.embeddings.weight = nn.Parameter(normalized_weight)
                 self.pre_ln_flag = True
-            
+
             inputs_embeds = self.embeddings(input_ids)
 
         if use_cache and state is None:
             # https://github.com/BlinkDL/ChatRWKV/blob/main/rwkv_pip_package/src/rwkv/model.py#L904-L906
             state = []
             num_attention_heads = self.config.hidden_size // self.config.num_attention_heads
-            state.append(torch.zeros((inputs_embeds.size(0), self.config.hidden_size, self.config.num_hidden_layers), dtype=inputs_embeds.dtype, requires_grad=False, device=inputs_embeds.device).contiguous())
-            state.append(torch.zeros((inputs_embeds.size(0), num_attention_heads, self.config.hidden_size // num_attention_heads, self.config.hidden_size // num_attention_heads, self.config.num_hidden_layers), dtype=torch.float32, requires_grad=False, device=inputs_embeds.device).contiguous())
-            state.append(torch.zeros((inputs_embeds.size(0), self.config.hidden_size, self.config.num_hidden_layers), dtype=inputs_embeds.dtype, requires_grad=False, device=inputs_embeds.device).contiguous())
+            state.append(
+                torch.zeros(
+                    (inputs_embeds.size(0), self.config.hidden_size, self.config.num_hidden_layers),
+                    dtype=inputs_embeds.dtype,
+                    requires_grad=False,
+                    device=inputs_embeds.device,
+                ).contiguous()
+            )
+            state.append(
+                torch.zeros(
+                    (
+                        inputs_embeds.size(0),
+                        num_attention_heads,
+                        self.config.hidden_size // num_attention_heads,
+                        self.config.hidden_size // num_attention_heads,
+                        self.config.num_hidden_layers,
+                    ),
+                    dtype=torch.float32,
+                    requires_grad=False,
+                    device=inputs_embeds.device,
+                ).contiguous()
+            )
+            state.append(
+                torch.zeros(
+                    (inputs_embeds.size(0), self.config.hidden_size, self.config.num_hidden_layers),
+                    dtype=inputs_embeds.dtype,
+                    requires_grad=False,
+                    device=inputs_embeds.device,
+                ).contiguous()
+            )
 
         seq_mode = inputs_embeds.shape[1] > 1
         assert inputs_embeds.shape[0] == 1, "rwkv5 only support batch_size equals 1 now."
@@ -586,8 +656,8 @@ class Rwkv5Model(Rwkv5PreTrainedModel):
         return Rwkv5Output(
             last_hidden_state=hidden_states,
             state=state,
-            hidden_states=all_hidden_states, #None
-            attentions=all_self_attentions, #None
+            hidden_states=all_hidden_states,  # None
+            attentions=all_self_attentions,  # None
         )
 
     def _rescale_layers(self):

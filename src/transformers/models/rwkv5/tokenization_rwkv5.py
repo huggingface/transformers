@@ -94,10 +94,8 @@ class DATrie:
             w = word[idx]
             is_leaf = idx == (len(word) - 1)
             leaf_data = data if is_leaf else None
-            # 不存在则插入
             if not node.has_next(w):
                 node.add_node(w, self.Node(is_leaf=is_leaf, leaf_data=leaf_data))
-                # last word
             node = node.get_node(w)
             idx += 1
         if not node.is_leaf():
@@ -111,7 +109,6 @@ class DATrie:
             w = word[idx]
             if not node.has_next(w):
                 return None
-                # last word
             node = node.get_node(w)
             idx += 1
         if node.is_leaf():
@@ -126,7 +123,6 @@ class DATrie:
             w = word[idx]
             if not node.has_next(w):
                 return result
-                # last word
             node = node.get_node(w)
             if node.is_leaf():
                 result.append([word[: idx + 1], node.get_data()])
@@ -146,7 +142,6 @@ class DATrie:
             w = content[idx]
             if not node.has_next(w):
                 return result[-1]
-                # last word
             node = node.get_node(w)
             if node.is_leaf():
                 result.append([content[start_idx : idx + 1], node.get_data()])
@@ -164,7 +159,6 @@ class DATrie:
             w = content[idx]
             if not node.has_next(w):
                 break
-                # last word
             node = node.get_node(w)
             if node.is_leaf():
                 result.append([content[start_idx : idx + 1], node.get_data()])
@@ -174,13 +168,11 @@ class DATrie:
         return result[-1]
 
     def match(self, content, add_unk=True, unk_id=-1, **kwargs):
-        # length
         l = len(content)
         i = 0
         result_list = []
         while i < l:
             match_word = self.max_prefix(content=content, start_idx=i)
-            # print(match_word)
             w = match_word[0]
             if len(w) > 0:
                 result_list.append(match_word[1])
@@ -260,15 +252,6 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(self, vocab_file, errors="replace", **kwargs):
-        self.add_bos_token = False
-        self._bos_token = None
-        self._eos_token = None
-        self._unk_token = None
-        self._sep_token = None
-        self._pad_token = None
-        self._cls_token = None
-        self._mask_token = None
-        self._additional_special_tokens = []
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}

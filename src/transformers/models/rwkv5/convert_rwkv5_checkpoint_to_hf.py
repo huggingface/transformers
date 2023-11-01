@@ -47,6 +47,7 @@ HIDEN_SIZE_MAPPING = {
     "14B": 5120,
 }
 
+
 def convert_state_dict(state_dict):
     state_dict_keys = list(state_dict.keys())
     for name in state_dict_keys:
@@ -82,7 +83,15 @@ def convert_state_dict(state_dict):
 
 
 def convert_rwkv_checkpoint_to_hf_format(
-    repo_id, checkpoint_file, output_dir, size=None, tokenizer_file=None, push_to_hub=False, model_name=None, is_world_tokenizer=False, model_version="5_2",
+    repo_id,
+    checkpoint_file,
+    output_dir,
+    size=None,
+    tokenizer_file=None,
+    push_to_hub=False,
+    model_name=None,
+    is_world_tokenizer=False,
+    model_version="5_2",
 ):
     # 1. If possible, build the tokenizer.
     if tokenizer_file is None:
@@ -195,10 +204,12 @@ if __name__ == "__main__":
         type=str,
         help="Name of the pushed model on the Hub, including the username / organization.",
     )
-    parser.add_argument("--is_world_tokenizer",
+    parser.add_argument(
+        "--is_world_tokenizer",
         default=False,
         type=bool,
-        help="use RWKV world series model tokenizer or normal tokenizer.")
+        help="use RWKV world series model tokenizer or normal tokenizer.",
+    )
 
     args = parser.parse_args()
     convert_rwkv_checkpoint_to_hf_format(

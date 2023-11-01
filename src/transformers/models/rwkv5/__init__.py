@@ -34,7 +34,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_rwkv5"] = [
         "RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "Rwkv5ForCausalLM", 
+        "Rwkv5ForCausalLM",
         "Rwkv5Model",
         "Rwkv5PreTrainedModel",
     ]

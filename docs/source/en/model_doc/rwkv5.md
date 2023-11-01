@@ -14,11 +14,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# RWKV
+# RWKV5
 
 ## Overview
 
-The RWKV model was proposed in [this repo](https://github.com/BlinkDL/RWKV-LM)
+The RWKV5 model was proposed in [this repo](https://github.com/BlinkDL/RWKV-LM)
 
 It suggests a tweak in the traditional Transformer attention to make it linear. This way, the model can be used as recurrent network: passing inputs for timestamp 0 and timestamp 1 together is the same as passing inputs at timestamp 0, then inputs at timestamp 1 along with the state of timestamp 0 (see example below).
 
@@ -31,10 +31,10 @@ Example of use as an RNN:
 
 ```py
 import torch
-from transformers import AutoTokenizer, RwkvConfig, RwkvModel
+from transformers import AutoTokenizer, Rwkv5Config, Rwkv5Model
 
-model = RwkvModel.from_pretrained("sgugger/rwkv-430M-pile")
-tokenizer = AutoTokenizer.from_pretrained("sgugger/rwkv-430M-pile")
+model = Rwkv5Model.from_pretrained("RWKV/rwkv-5-world-1b5")
+tokenizer = AutoTokenizer.from_pretrained("RWKV/rwkv-5-world-1b5")
 
 inputs = tokenizer("This is an example.", return_tensors="pt")
 # Feed everything to the model
@@ -48,42 +48,29 @@ output_one = outputs.last_hidden_state
 outputs = model(inputs["input_ids"][:, 2:], state=outputs.state)
 output_two = outputs.last_hidden_state
 
-torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5)
+self.parent.assertTrue(torch.allclose(output_two, output_whole, atol=1e-5))
 ```
 
-If you want to make sure the model stops generating when `'\n\n'` is detected, we recommend using the following stopping criteria:
 
-```python 
-from transformers import StoppingCriteria
+## Rwkv5Config
 
-class RwkvStoppingCriteria(StoppingCriteria):
-    def __init__(self, eos_sequence = [187,187], eos_token_id = 537):
-        self.eos_sequence = eos_sequence
-        self.eos_token_id = eos_token_id
+[[autodoc]] Rwkv5Config
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
-        last_2_ids = input_ids[:,-2:].tolist()
-        return self.eos_sequence in last_2_ids
+## RWKVWorldTokenizer
 
+[[autodoc]] RWKVWorldTokenizer
 
-output = model.generate(inputs["input_ids"], max_new_tokens=64, stopping_criteria = [RwkvStoppingCriteria()])
-```
+## Rwkv5Model
 
-## RwkvConfig
-
-[[autodoc]] RwkvConfig
-
-## RwkvModel
-
-[[autodoc]] RwkvModel
+[[autodoc]] Rwkv5Model
     - forward
 
-## RwkvLMHeadModel
+## Rwkv5LMHeadModel
 
-[[autodoc]] RwkvForCausalLM
+[[autodoc]] Rwkv5ForCausalLM
     - forward
 
-## Rwkv attention and the recurrent formulas
+## Rwkv5 attention and the recurrent formulas
 
 In a traditional auto-regressive Transformer, attention is written as
 

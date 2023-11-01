@@ -21,9 +21,7 @@ from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
-RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    
-}
+RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class Rwkv5Config(PretrainedConfig):
@@ -87,7 +85,7 @@ class Rwkv5Config(PretrainedConfig):
     model_type = "rwkv5"
     attribute_map = {"max_position_embeddings": "context_length"}
 
-    def __init__( #1.5B World
+    def __init__(  # 1.5B World
         self,
         vocab_size=65536,
         context_length=4096,
