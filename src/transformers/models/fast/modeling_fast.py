@@ -6,9 +6,36 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers import FastConfig, PreTrainedModel
+from transformers import FastConfig, PreTrainedModel, add_start_docstrings
 from transformers.utils import ModelOutput
 
+FAST_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `({0})`):
+            Indices of input sequence tokens in the vocabulary.
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+            [What are input IDs?](../glossary#input-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`BeitImageProcessor.__call__`] for details.
+        language_masked_pos (`torch.LongTensor` of shape `({0})`):
+            language_masked_pos for denoting tokens for captioning
+            - 1 indicates the token is **Present**,
+            - 0 indicates the token is **absent**.
+        text_len (`torch.LongTensor` of shape `({0})`):
+            Length of text for captioning
+        past_key_value (`Dict`):
+            A Dictionary containing the incremental states layerwise
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
+            classification loss is computed (Cross-Entropy) against these labels.
+"""
 
 def get_same_padding(kernel_size):
     if isinstance(kernel_size, tuple):
@@ -401,9 +428,9 @@ class FastPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
 
-class TextNet(FastPreTrainedModel):
+class TextNet(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.first_conv = ConvLayer(
             config.backbone_in_channels,
             config.backbone_out_channels,
@@ -418,7 +445,7 @@ class TextNet(FastPreTrainedModel):
             config.backbone_dropout_rate,
             config.backbone_ops_order,
         )
-        self.first_conv.apply(self._init_weights)
+        # self.first_conv.apply(self._init_weights)
         stage1 = []
         for stage_config in zip(
             config.backbone_stage1_in_channels,
@@ -500,9 +527,9 @@ class TextNet(FastPreTrainedModel):
         return output
 
 
-class FASTNeck(FastPreTrainedModel):
+class FASTNeck(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         reduce_layer_configs = list(
             zip(
                 config.neck_in_channels,
@@ -549,9 +576,9 @@ class FASTNeck(FastPreTrainedModel):
         return f
 
 
-class FASTHead(FastPreTrainedModel):
+class FASTHead(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.conv = RepConvLayer(
             config.head_conv_in_channels,
             config.head_conv_out_channels,
@@ -891,7 +918,13 @@ class FASTForImageCaptioningOutput(ModelOutput):
     loss: Optional[torch.Tensor] = None
     hidden_states: Optional[torch.FloatTensor] = None
 
-
+@add_start_docstrings(
+    """BEiT-3 is a general-purpose multimodal foundation model that excels in both vision and vision-language tasks. It
+        utilizes [Multiway transformers] (https://arxiv.org/abs/2208.10442) for deep fusion and modality-specific
+        encoding, and unifies masked modeling on images, texts, and image-text pairs, achieving top performance on
+        multiple benchmarks.""",
+    FAST_FOR_CAPTIONING_INPUTS_DOCSTRING,
+)
 class FASTForImageCaptioning(FastPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

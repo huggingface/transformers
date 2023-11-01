@@ -46,9 +46,7 @@ from .utils import (
     logging,
 )
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 # Base objects, independent of any specific backend
 _import_structure = {
@@ -331,7 +329,7 @@ _import_structure = {
     "models.ernie_m": ["ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieMConfig"],
     "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
     "models.falcon": ["FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FalconConfig"],
-    "models.fast": ["FastConfig"],
+    "models.fast": ["FastConfig", "FastImageProcessor"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -903,7 +901,6 @@ else:
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
 
-
 try:
     if not (is_sentencepiece_available() and is_tokenizers_available()):
         raise OptionalDependencyNotAvailable()
@@ -1007,7 +1004,6 @@ else:
     _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
-
 
 # PyTorch-backed objects
 try:
@@ -1807,6 +1803,7 @@ else:
     _import_structure["models.fast"].extend(
         [
             "FASTForImageCaptioning",
+            "FastPreTrainedModel",
         ]
     )
     _import_structure["models.flaubert"].extend(
@@ -3933,14 +3930,13 @@ else:
     _import_structure["tf_utils"] = []
     _import_structure["trainer_tf"] = ["TFTrainer"]
 
-
 try:
     if not (
-        is_librosa_available()
-        and is_essentia_available()
-        and is_scipy_available()
-        and is_torch_available()
-        and is_pretty_midi_available()
+            is_librosa_available()
+            and is_essentia_available()
+            and is_scipy_available()
+            and is_torch_available()
+            and is_pretty_midi_available()
     ):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -3955,7 +3951,6 @@ else:
     _import_structure["models.pop2piano"].append("Pop2PianoFeatureExtractor")
     _import_structure["models.pop2piano"].append("Pop2PianoTokenizer")
     _import_structure["models.pop2piano"].append("Pop2PianoProcessor")
-
 
 # FLAX-backed objects
 try:
@@ -4254,7 +4249,6 @@ else:
         ]
     )
 
-
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # Configuration
@@ -4520,7 +4514,7 @@ if TYPE_CHECKING:
     from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
     from .models.falcon import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconConfig
-    from .models.fast import FastConfig
+    from .models.fast import FastConfig,FastImageProcessor
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5804,6 +5798,7 @@ if TYPE_CHECKING:
         )
         from .models.fast import (
             FASTForImageCaptioning,
+            FastPreTrainedModel
         )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7535,11 +7530,11 @@ if TYPE_CHECKING:
 
     try:
         if not (
-            is_librosa_available()
-            and is_essentia_available()
-            and is_scipy_available()
-            and is_torch_available()
-            and is_pretty_midi_available()
+                is_librosa_available()
+                and is_essentia_available()
+                and is_scipy_available()
+                and is_torch_available()
+                and is_pretty_midi_available()
         ):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
@@ -7779,7 +7774,6 @@ else:
         module_spec=__spec__,
         extra_objects={"__version__": __version__},
     )
-
 
 if not is_tf_available() and not is_torch_available() and not is_flax_available():
     logger.warning(

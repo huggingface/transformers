@@ -30,10 +30,19 @@ than most networks that are searched for image classification
 
 [[autodoc]] FastConfig
 
-## Fast
+## FastImageProcessor
+
+[[autodoc]] FastImageProcessor
+
+## FASTForImageCaptioning
+
+[[autodoc]] FASTForImageCaptioning
+- forward
+
+## FASTForImageCaptioningOutput
 
 [[autodoc]] FASTForImageCaptioningOutput
-    - forward
+- forward
 
 
 
