@@ -25,4 +25,6 @@
     title: 共享自定义模型
   - local: serialization
     title: 导出为 ONNX
+  - local: troubleshooting
+    title: 故障排除
   title: 开发者指南
