@@ -1945,7 +1945,7 @@ SPECIAL_TOKENS = [101, 102, 1012, 1029]
 def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTensor) -> Tuple[Tensor, Tensor]:
     """Generate attention mask between each pair of special tokens and positional ids.
     Args:
-        input_ids (torch.LongTensor): input ids. Shape: [bs, num_token]
+        input_ids (`torch.LongTensor`): input ids. Shape: [batch_size, num_token]
     Returns:
         Tuple[torch.Tensor]: attention mask between each special tokens and position_ids
     """
