@@ -22,7 +22,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CED_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "xiaomi/ced-tiny": "https://huggingface.co/xiaomi/ced-tiny/resolve/main/config.json",
+    "mispeech/ced-tiny": "https://huggingface.co/mispeech/ced-tiny/resolve/main/config.json",
 }
 
 

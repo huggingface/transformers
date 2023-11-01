@@ -37,20 +37,20 @@ from .configuration_ced import CedConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "CedConfig"
-_CHECKPOINT_FOR_DOC = "xiaomi/ced-tiny"
+_CHECKPOINT_FOR_DOC = "mispeech/ced-tiny"
 _SEQ_CLASS_EXPECTED_OUTPUT = 0
 _SEQ_CLASS_EXPECTED_LOSS = 0.01
 
 # Audio classification docstring
-_SEQ_CLASS_CHECKPOINT = "xiaomi/ced-tiny"
+_SEQ_CLASS_CHECKPOINT = "mispeech/ced-tiny"
 
 
 CED_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "xiaomi/ced-tiny",
-    "xiaomi/ced-mini",
-    "xiaomi/ced-small",
-    "xiaomi/ced-base",
-    # See all CED models at https://huggingface.co/models?filter=ced
+    "mispeech/ced-tiny",
+    "mispeech/ced-mini",
+    "mispeech/ced-small",
+    "mispeech/ced-base",
+    # See all CED models at https://huggingface.co/models?search=mispeech%2Fced
 ]
 
 

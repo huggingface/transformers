@@ -36,7 +36,7 @@ class CedModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_audio_classification(self):
         feature_extractor = CedFeatureExtractor()
-        model = CedForAudioClassification.from_pretrained("xiaomi/ced-tiny").eval()
+        model = CedForAudioClassification.from_pretrained("mispeech/ced-tiny").eval()
         audio = torch.arange(1, 16000).unsqueeze(0) / 1e4
         feature = feature_extractor(audio)["input_values"]
         outputs = model(feature)
