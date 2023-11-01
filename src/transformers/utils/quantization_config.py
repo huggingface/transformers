@@ -355,7 +355,8 @@ class GPTQConfig(QuantizationConfigMixin):
             The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
             length. It is specific to the exllama backend with act-order.
         exllama_config (`Dict[str, Any]`, *optional*):
-            The exllama config. You can specify the version of the exllama kernel through the `version` key. Defaults to `{"version": 1}` if unset.
+            The exllama config. You can specify the version of the exllama kernel through the `version` key. Defaults
+            to `{"version": 1}` if unset.
     """
 
     def __init__(
