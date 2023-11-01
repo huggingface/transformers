@@ -4448,7 +4448,7 @@ class GenerationMixin:
                     else:
                         input_ids_len = assistant_inputs["input_ids"].shape[-1]
 
-                    if input_ids_len not in (0, 1):
+                    if input_ids_len not in (1, 2):
                         raise ValueError("The length of the input ids in assistant inputs should be 1 or 2")
 
                 assistant_model_outputs = assistant_model(**assistant_inputs)
