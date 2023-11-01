@@ -2824,7 +2824,7 @@ class ModelTesterMixin:
             if not model_class._supports_flash_attn_2:
                 return
 
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -2839,15 +2839,21 @@ class ModelTesterMixin:
                 )
                 model.to(torch_device)
 
-                dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[0, 1, 1, 1, 1]]).to(torch_device)
+                dummy_input = inputs_dict[model.main_input_name]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
+
+                accepts_attention_mask = "attention_mask" in set(inspect.signature(model.forward).parameters)
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
 
                 if model.config.is_encoder_decoder:
-                    outputs = model(dummy_input, decoder_input_ids=dummy_input, output_hidden_states=True)
-                    outputs_fa = model(dummy_input, decoder_input_ids=dummy_input, output_hidden_states=True)
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)
+
+                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                    outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
                 else:
                     outputs = model(dummy_input, output_hidden_states=True)
-                    outputs_fa = model(dummy_input, output_hidden_states=True)
+                    outputs_fa = model_fa(dummy_input, output_hidden_states=True)
 
                 logits = (
                     outputs.hidden_states[-1]
@@ -2863,23 +2869,25 @@ class ModelTesterMixin:
                 self.assertTrue(torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2))
 
                 if model.config.is_encoder_decoder:
-                    outputs = model(
-                        dummy_input,
-                        attention_mask=dummy_attention_mask,
-                        decoder_input_ids=dummy_input,
-                        decoder_attention_mask=dummy_attention_mask,
-                        output_hidden_states=True,
-                    )
-                    outputs_fa = model(
-                        dummy_input,
-                        attention_mask=dummy_attention_mask,
-                        decoder_input_ids=dummy_input,
-                        decoder_attention_mask=dummy_attention_mask,
-                        output_hidden_states=True,
-                    )
+                    other_inputs = {
+                        "decoder_input_ids": decoder_input_ids,
+                        "decoder_attention_mask": dummy_attention_mask,
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    outputs_fa = model_fa(dummy_input, **other_inputs)
                 else:
-                    outputs = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
-                    outputs_fa = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                    other_inputs = {
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    outputs_fa = model_fa(dummy_input, **other_inputs)
 
                 logits = (
                     outputs.hidden_states[-1]
@@ -2896,7 +2904,7 @@ class ModelTesterMixin:
 
                 # check with inference + dropout
                 model.train()
-                _ = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                _ = model_fa(dummy_input, **other_inputs)
 
     @require_flash_attn
     @require_torch_gpu
@@ -2909,7 +2917,7 @@ class ModelTesterMixin:
             if not model_class._supports_flash_attn_2:
                 return
 
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -2924,15 +2932,20 @@ class ModelTesterMixin:
                 )
                 model.to(torch_device)
 
-                dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1, 0]]).to(torch_device)
+                dummy_input = inputs_dict[model.main_input_name]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
 
                 if model.config.is_encoder_decoder:
-                    outputs = model(dummy_input, decoder_input_ids=dummy_input, output_hidden_states=True)
-                    outputs_fa = model(dummy_input, decoder_input_ids=dummy_input, output_hidden_states=True)
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)
+
+                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                    outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
                 else:
                     outputs = model(dummy_input, output_hidden_states=True)
-                    outputs_fa = model(dummy_input, output_hidden_states=True)
+                    outputs_fa = model_fa(dummy_input, output_hidden_states=True)
 
                 logits = (
                     outputs.hidden_states[-1]
@@ -2948,23 +2961,25 @@ class ModelTesterMixin:
                 self.assertTrue(torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2))
 
                 if model.config.is_encoder_decoder:
-                    outputs = model(
-                        dummy_input,
-                        attention_mask=dummy_attention_mask,
-                        decoder_input_ids=dummy_input,
-                        decoder_attention_mask=dummy_attention_mask,
-                        output_hidden_states=True,
-                    )
-                    outputs_fa = model(
-                        dummy_input,
-                        attention_mask=dummy_attention_mask,
-                        decoder_input_ids=dummy_input,
-                        decoder_attention_mask=dummy_attention_mask,
-                        output_hidden_states=True,
-                    )
+                    other_inputs = {
+                        "decoder_input_ids": decoder_input_ids,
+                        "decoder_attention_mask": dummy_attention_mask,
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    outputs_fa = model_fa(dummy_input, **other_inputs)
                 else:
-                    outputs = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
-                    outputs_fa = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                    other_inputs = {
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    outputs_fa = model_fa(dummy_input, **other_inputs)
 
                 logits = (
                     outputs.hidden_states[-1]
@@ -2990,7 +3005,7 @@ class ModelTesterMixin:
             if not model_class._supports_flash_attn_2:
                 return
 
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -2999,8 +3014,11 @@ class ModelTesterMixin:
                     tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False, low_cpu_mem_usage=True
                 ).to(torch_device)
 
-                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+                dummy_input = inputs_dict[model.main_input_name]
+                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                    dummy_input = dummy_input.to(torch.float16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
 
                 out = model.generate(
                     dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
@@ -3027,7 +3045,7 @@ class ModelTesterMixin:
             if not model_class._supports_flash_attn_2:
                 return
 
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -3036,8 +3054,11 @@ class ModelTesterMixin:
                     tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False, low_cpu_mem_usage=True
                 ).to(torch_device)
 
-                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
+                dummy_input = inputs_dict[model.main_input_name]
+                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                    dummy_input = dummy_input.to(torch.float16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
 
                 out = model.generate(
                     dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
@@ -3064,7 +3085,7 @@ class ModelTesterMixin:
             if not model_class._supports_flash_attn_2:
                 return
 
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             # make sure that all models have at least 40 position ids
             if hasattr(config, "max_position_embeddings"):
@@ -3075,8 +3096,11 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
-                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+                dummy_input = inputs_dict[model.main_input_name]
+                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                    dummy_input = dummy_input.to(torch.float16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
 
                 model = model_class.from_pretrained(
                     tmpdirname,
@@ -3102,18 +3126,18 @@ class ModelTesterMixin:
             if not model_class._supports_flash_attn_2:
                 return
 
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
-                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+                dummy_input = inputs_dict[model.main_input_name]
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
 
                 if model.config.is_encoder_decoder:
-                    dummy_decoder_input_ids = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                    dummy_decoder_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+                    dummy_decoder_input_ids = inputs_dict["decoder_input_ids"]
+                    dummy_decoder_attention_mask = inputs_dict["decoder_attention_mask"]
 
                 model = model_class.from_pretrained(
                     tmpdirname,
@@ -3129,18 +3153,18 @@ class ModelTesterMixin:
                         param.data = param.data.to(torch.float32)
 
                 if model.config.is_encoder_decoder:
-                    _ = model(input_ids=dummy_input, decoder_input_ids=dummy_decoder_input_ids)
+                    _ = model(dummy_input, decoder_input_ids=dummy_decoder_input_ids)
                     # with attention mask
                     _ = model(
-                        input_ids=dummy_input,
+                        dummy_input,
                         attention_mask=dummy_attention_mask,
                         decoder_input_ids=dummy_decoder_input_ids,
                         decoder_attention_mask=dummy_decoder_attention_mask,
                     )
                 else:
-                    _ = model(input_ids=dummy_input)
+                    _ = model(dummy_input)
                     # with attention mask
-                    _ = model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
+                    _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
 
 global_rng = random.Random()
