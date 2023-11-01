@@ -637,7 +637,6 @@ class FuyuImageProcessor(BaseImageProcessor):
                         image = image[:, :new_h, :new_w]
                         image_height, image_width = new_h, new_w
 
-                    # images[batch_index].append(image)
                     num_patches = self.get_num_patches(image_height=image_height, image_width=image_width)
                     tensor_of_image_ids = torch.full(
                         [num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device
