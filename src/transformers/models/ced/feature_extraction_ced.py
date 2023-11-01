@@ -35,7 +35,7 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
 
     Args:
         f_min (int, *optional*, defaults to 0): Minimum frequency for the Mel filterbank. Default: 0.
-        sample_rate (int, *optional*, defaults to 16000):
+        sampling_rate (int, *optional*, defaults to 16000):
             Sampling rate of the input audio signal. Default: 16000.
         win_size (int, *optional*, defaults to 512): Window size for the STFT. Default: 512.
         center (bool, *optional*, defaults to `True`):
@@ -43,7 +43,7 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
         n_fft (int, *optional*, defaults to 512): Number of FFT points for the STFT. Default: 512.
         f_max (int, optional, *optional*): Maximum frequency for the Mel filterbank. Default: None.
         hop_size (int, *optional*, defaults to 160): Hop size for the STFT. Default: 160.
-        n_mels (int, *optional*, defaults to 64): Number of Mel bands to generate. Default: 64.
+        feature_size (int, *optional*, defaults to 64): Number of Mel bands to generate. Default: 64.
 
     Returns:
         BatchFeature: A BatchFeature object containing the extracted features.
@@ -52,24 +52,23 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
     def __init__(
         self,
         f_min: int = 0,
-        sample_rate: int = 16000,
+        sampling_rate: int = 16000,
         win_size: int = 512,
         center: bool = True,
         n_fft: int = 512,
         f_max: Optional[int] = None,
         hop_size: int = 160,
-        n_mels: int = 64,
+        feature_size: int = 64,
+        padding_value=0.0,
         **kwargs,
     ):
-        super().__init__(feature_size=n_mels, sampling_rate=sample_rate, padding_value=0.0, **kwargs)
+        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.f_min = f_min
-        self.sample_rate = sample_rate
         self.win_size = win_size
         self.center = center
         self.n_fft = n_fft
         self.f_max = f_max
         self.hop_size = hop_size
-        self.n_mels = n_mels
 
     def __call__(self, x: torch.Tensor) -> BatchFeature:
         r"""
@@ -83,13 +82,13 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
         """
         mel_spectrogram = audio_transforms.MelSpectrogram(
             f_min=self.f_min,
-            sample_rate=self.sample_rate,
+            sample_rate=self.sampling_rate,
             win_length=self.win_size,
             center=self.center,
             n_fft=self.n_fft,
             f_max=self.f_max,
             hop_length=self.hop_size,
-            n_mels=self.n_mels,
+            n_mels=self.feature_size,
         )
         amplitude_to_db = audio_transforms.AmplitudeToDB(top_db=120)
 
