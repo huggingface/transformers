@@ -22,14 +22,11 @@ import numpy as np
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, TruncationStrategy
-from ...utils import TensorType, is_torch_available, is_vision_available, logging, requires_backends
+from ...utils import TensorType, is_torch_available, logging, requires_backends
 
 
 if is_torch_available():
     from .image_processing_fuyu import FuyuBatchFeature
-
-    if is_vision_available():
-        from .image_processing_fuyu import FuyuImageProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -351,7 +348,6 @@ class FuyuProcessor(ProcessorMixin):
         self.max_position_embeddings = 16384  # TODO Can't derive this from model files: where to set it?
         self.pad_token_id = 0
         self.dummy_image_index = -1
-        self.image_processor = FuyuImageProcessor()
 
     def _left_pad_inputs_with_attention_mask(self, model_inputs: List[Dict], return_attention_mask: bool):
         max_length_input_ids = max(entry["input_ids"].shape[1] for entry in model_inputs)
@@ -557,7 +553,6 @@ class FuyuProcessor(ProcessorMixin):
 
         # FIXME - We hard code "pt" here because the rest of the processing assumes torch tensors
         image_encoding = self.image_processor.preprocess(images, return_tensors="pt")
-        # Double check this - should this be a list of list of tensors of list of tensors?
         batch_images = image_encoding["images"]
         image_unpadded_heights = image_encoding["image_unpadded_heights"]
         image_unpadded_widths = image_encoding["image_unpadded_widths"]

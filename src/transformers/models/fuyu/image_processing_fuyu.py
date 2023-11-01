@@ -47,11 +47,9 @@ from ...utils import (
 )
 
 
-if is_vision_available():
-    pass
-
 if is_torch_available():
     import torch
+
 
 logger = logging.get_logger(__name__)
 
@@ -238,7 +236,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,  # FIXME check default value
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_pad: bool = True,
         padding_value: float = 1.0,
         padding_mode: str = "constant",
@@ -385,7 +383,8 @@ class FuyuImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Images to preprocess. Expects a single image, a list or images or a list of lists of images. Pixel values range from 0 to 255, or between 0 and 1 if `do_rescale` is `False`.
+                Images to preprocess. Expects a single image, a list or images or a list of lists of images. Pixel
+                values range from 0 to 255, or between 0 and 1 if `do_rescale` is `False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image to `size`.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
