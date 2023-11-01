@@ -9,13 +9,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# 使用 🤗 PEFT 加载`adapters`
+# 使用 🤗 PEFT 加载adapters
 
 [[open-in-colab]]
 
-[参数高效微调（PEFT）方法](https://huggingface.co/blog/peft)在微调过程中冻结预训练模型的参数，并在其顶部添加少量可训练参数（`adapters`）。`adapters`被训练以学习特定任务的信息。这种方法已被证明非常节省内存，同时具有较低的计算使用量，同时产生与完全微调模型相当的结果。
+[参数高效微调（PEFT）方法](https://huggingface.co/blog/peft)在微调过程中冻结预训练模型的参数，并在其顶部添加少量可训练参数（adapters）。adapters被训练以学习特定任务的信息。这种方法已被证明非常节省内存，同时具有较低的计算使用量，同时产生与完全微调模型相当的结果。
 
-使用PEFT训练的`adapters`通常比完整模型小一个数量级，使其方便共享、存储和加载。
+使用PEFT训练的adapters通常比完整模型小一个数量级，使其方便共享、存储和加载。
 
 <div class="flex flex-col justify-center">
   <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/peft/PEFT-hub-screenshot.png"/>
@@ -42,7 +42,7 @@ pip install git+https://github.com/huggingface/peft.git
 ```
 ## 支持的 PEFT 模型
 
-Transformers原生支持一些PEFT方法，这意味着你可以加载本地存储或在Hub上的`adapter`权重，并使用几行代码轻松运行或训练它们。以下是受支持的方法：
+Transformers原生支持一些PEFT方法，这意味着你可以加载本地存储或在Hub上的adapter权重，并使用几行代码轻松运行或训练它们。以下是受支持的方法：
 
 - [Low Rank Adapters](https://huggingface.co/docs/peft/conceptual_guides/lora)
 - [IA3](https://huggingface.co/docs/peft/conceptual_guides/ia3)
@@ -52,7 +52,7 @@ Transformers原生支持一些PEFT方法，这意味着你可以加载本地存�
 
 ## 加载 PEFT adapter
 
-要从huggingface的Transformers库中加载并使用PEFT`adapter`模型，请确保Hub仓库或本地目录包含一个`adapter_config.json`文件和`adapter`权重，如上例所示。然后，您可以使用`AutoModelFor`类加载PEFT `adapter` 模型。例如，要为因果语言建模加载一个PEFT `adapter`模型：
+要从huggingface的Transformers库中加载并使用PEFTadapter模型，请确保Hub仓库或本地目录包含一个`adapter_config.json`文件和adapter权重，如上例所示。然后，您可以使用`AutoModelFor`类加载PEFT adapter模型。例如，要为因果语言建模加载一个PEFT adapter模型：
 
 1. 指定PEFT模型id
 2. 将其传递给[`AutoModelForCausalLM`]类
@@ -71,7 +71,7 @@ model = AutoModelForCausalLM.from_pretrained(peft_model_id)
 
 </Tip>
 
-您也可以通过`load_adapter`方法来加载 PEFT `adapter`。
+您也可以通过`load_adapter`方法来加载 PEFT adapter。
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
