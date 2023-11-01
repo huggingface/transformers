@@ -113,7 +113,7 @@ pip install -q datasets transformers evaluate
 <frameworkcontent>
 <pt>
 
-モデルを過学習に対してより堅牢にするために、画像データセットにいくつかのデータ拡張を適用するのが一般的です。このガイドでは、[torchvision](https://pytorch.org) の [`ColorJitter`](https://pytorch.org/vision/stable/generated/torchvision.transforms.ColorJitter.html) 関数を使用します。 /vision/stable/index.html) を使用して画像の色のプロパティをランダムに変更しますが、任意の画像ライブラリを使用することもできます。
+モデルを過学習に対してより堅牢にするために、画像データセットにいくつかのデータ拡張を適用するのが一般的です。このガイドでは、[torchvision](https://pytorch.org/vision/stable/index.html) の [`ColorJitter`](https://pytorch.org/vision/stable/generated/torchvision.transforms.ColorJitter.html) 関数を使用します。 ) を使用して画像の色のプロパティをランダムに変更しますが、任意の画像ライブラリを使用することもできます。
 
 ```py
 >>> from torchvision.transforms import ColorJitter
