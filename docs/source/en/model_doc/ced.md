@@ -37,25 +37,18 @@ The original code can be found [here](https://github.com/RicherMans/CED).
 ### Example
 
 ```python
-
 >>> import torch
+>>> from transformers import AutoModelForAudioClassification, AutoFeatureExtractor
 
->>> from transformers import CedConfig, CedForAudioClassification, CedFeatureExtractor
-
->>> model_name = "ced-tiny"
-
->>> config = CedConfig(model_name)
-
->>> feature_extractor = CedFeatureExtractor()
-
->>> model = CedForAudioClassification(config).from_pretrained(f"mispeech/{model_name}").eval()
+>>> model_path = "mispeech/ced-tiny"
+>>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_path)
+>>> model = AutoModelForAudioClassification.from_pretrained(model_path)
 
 >>> audio = torch.arange(1, 16000).unsqueeze(0) / 1e4
-
 >>> output = model(feature_extractor(audio)['input_values']).squeeze(0)
 ```
 
-The `output` is a 527-dimensional vector, where each element is the logit for one of the 527 classes in Audioset (http://storage.googleapis.com/us_audioset/youtube_corpus/v1/csv/class_labels_indices.csv).
+The `output` would be a 527-dimensional vector, where each element is the logit for one of the 527 classes in Audioset (http://storage.googleapis.com/us_audioset/youtube_corpus/v1/csv/class_labels_indices.csv).
 
 
 ## CedConfig

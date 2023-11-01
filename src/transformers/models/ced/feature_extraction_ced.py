@@ -34,16 +34,17 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
     CedFeatureExtractor extracts Mel spectrogram features from audio signals.
 
     Args:
-        f_min (int, *optional*, defaults to 0): Minimum frequency for the Mel filterbank. Default: 0.
+        f_min (int, *optional*, defaults to 0): Minimum frequency for the Mel filterbank.
         sampling_rate (int, *optional*, defaults to 16000):
-            Sampling rate of the input audio signal. Default: 16000.
-        win_size (int, *optional*, defaults to 512): Window size for the STFT. Default: 512.
+            Sampling rate of the input audio signal.
+        win_size (int, *optional*, defaults to 512): Window size for the STFT.
         center (bool, *optional*, defaults to `True`):
-            Whether to pad the signal on both sides to center it. Default: True.
-        n_fft (int, *optional*, defaults to 512): Number of FFT points for the STFT. Default: 512.
-        f_max (int, optional, *optional*): Maximum frequency for the Mel filterbank. Default: None.
-        hop_size (int, *optional*, defaults to 160): Hop size for the STFT. Default: 160.
-        feature_size (int, *optional*, defaults to 64): Number of Mel bands to generate. Default: 64.
+            Whether to pad the signal on both sides to center it.
+        n_fft (int, *optional*, defaults to 512): Number of FFT points for the STFT.
+        f_max (int, optional, *optional*): Maximum frequency for the Mel filterbank.
+        hop_size (int, *optional*, defaults to 160): Hop size for the STFT.
+        feature_size (int, *optional*, defaults to 64): Number of Mel bands to generate.
+        padding_value (float, *optional*, defaults to 0.0): Value for padding.
 
     Returns:
         BatchFeature: A BatchFeature object containing the extracted features.
@@ -59,7 +60,7 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
         f_max: Optional[int] = None,
         hop_size: int = 160,
         feature_size: int = 64,
-        padding_value=0.0,
+        padding_value: float = 0.0,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
