@@ -75,7 +75,7 @@ class FuyuBatchFeature(BatchFeature):
     """
     BatchFeature class for Fuyu image processor and processor.
 
-    The outputs are not a dictionary of tensors, but rather a dictionary of lists of tensors.
+    The outputs dictionary from the processors contains a mix of tensors and lists of tensors.
     """
 
     def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
