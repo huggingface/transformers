@@ -13,3 +13,5 @@ image = Image.open(io.BytesIO(requests.get(url).content))
 prompt = "Generate a coco-style caption.\n"
 
 results = pipe(image, prompt=prompt)
+
+print(results)
