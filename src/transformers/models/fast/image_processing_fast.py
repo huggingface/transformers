@@ -14,7 +14,6 @@
 # limitations under the License.
 """Image processor class for Fast."""
 import math
-import warnings
 from typing import Any, Dict, List, Optional, Union
 
 from ...utils.import_utils import is_cv2_available
@@ -93,10 +92,10 @@ class FastImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             The standard deviation to use if normalizing the image. This is a float or list of floats of length of the
             number of channels of the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        min_area (`int`, *optional*, defaults to 10): <fill_docstring>
-        min_score (`float`, *optional*, defaults to 0.88): <fill_docstring>
-        bbox_type (`str`, *optional*, defaults to `"rect"`): <fill_docstring>
-        pooling_size (`int`, *optional*, defaults to 9): <fill_docstring>
+        min_area (`int`, *optional*, defaults to 200): Threshold for min area for results
+        min_score (`float`, *optional*, defaults to 0.88): Threshold for min score for results
+        bbox_type (`str`, *optional*, defaults to `"rect"`): Type of bbox, rect or poly
+        pooling_size (`int`, *optional*, defaults to 9): Pooling size for text detection
     """
 
     model_input_names = ["pixel_values"]
@@ -113,13 +112,12 @@ class FastImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        min_area: int = 10,
+        min_area: int = 200,
         min_score: float = 0.88,
         bbox_type: str = "rect",
         pooling_size: int = 9,
         **kwargs,
     ) -> None:
-
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 640, "width": 640}
         size = get_size_dict(size)
