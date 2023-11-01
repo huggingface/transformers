@@ -1031,7 +1031,8 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            inputs_embeds (`torch.FloatTensor` of
                 shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
@@ -1864,6 +1865,9 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.model.get_input_embeddings()
 
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
     def set_decoder(self, decoder):
         self.model.decoder = decoder
 
@@ -1918,6 +1922,10 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
                 `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
                 don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
                 `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored

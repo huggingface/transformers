@@ -2231,14 +2231,17 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
             config=config, input_ids=inputs_dict["input_ids"]
         )
 
+    @unittest.skip("Generate needs input ids")
     def test_generate_without_input_ids(self):
         # generate only works with input ids for whisper
         pass
 
+    @unittest.skip("Decoder can't keep attention grads")
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         return
 
+    @unittest.skip("The model doesn't support fast init from base")
     def test_save_load_fast_init_from_base(self):
         pass
 
