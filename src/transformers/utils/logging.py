@@ -31,7 +31,7 @@ from logging import (
     WARNING,  # NOQA
 )
 from logging import (
-    captureWarnings as _captureWarnings
+    captureWarnings as _captureWarnings,
 )
 from typing import Optional
 
