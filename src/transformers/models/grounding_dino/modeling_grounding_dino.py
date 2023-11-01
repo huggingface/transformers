@@ -904,23 +904,18 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
             )
 
         attn_weights = attn_weights - attn_weights.max()
-
+        # Do not increase -50000/50000, data type half has quite limited range
         attn_weights = torch.clamp(
-            attn_weights, min=-50000
-        )  # Do not increase -50000, data type half has quite limited range
-        attn_weights = torch.clamp(
-            attn_weights, max=50000
-        )  # Do not increase 50000, data type half has quite limited range
+            attn_weights, min=-50000, max=50000
+        ) 
 
         attn_weights_T = attn_weights.transpose(1, 2)
         text_attn_weights = attn_weights_T - torch.max(attn_weights_T, dim=-1, keepdim=True)[0]
 
+        # Do not increase -50000/50000, data type half has quite limited range
         text_attn_weights = torch.clamp(
-            text_attn_weights, min=-50000
-        )  # Do not increase -50000, data type half has quite limited range
-        text_attn_weights = torch.clamp(
-            text_attn_weights, max=50000
-        )  # Do not increase 50000, data type half has quite limited range
+            text_attn_weights, min=-50000, max=50000
+        )
 
         # mask vison for language
         if vision_attention_mask is not None:
