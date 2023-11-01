@@ -46,6 +46,7 @@ from .utils import (
     logging,
 )
 
+
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
@@ -3932,11 +3933,11 @@ else:
 
 try:
     if not (
-            is_librosa_available()
-            and is_essentia_available()
-            and is_scipy_available()
-            and is_torch_available()
-            and is_pretty_midi_available()
+        is_librosa_available()
+        and is_essentia_available()
+        and is_scipy_available()
+        and is_torch_available()
+        and is_pretty_midi_available()
     ):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -4514,7 +4515,7 @@ if TYPE_CHECKING:
     from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
     from .models.falcon import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconConfig
-    from .models.fast import FastConfig,FastImageProcessor
+    from .models.fast import FastConfig, FastImageProcessor
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5796,10 +5797,7 @@ if TYPE_CHECKING:
             FalconModel,
             FalconPreTrainedModel,
         )
-        from .models.fast import (
-            FASTForImageCaptioning,
-            FastPreTrainedModel
-        )
+        from .models.fast import FASTForImageCaptioning, FastPreTrainedModel
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             FlaubertForMultipleChoice,
@@ -7530,11 +7528,11 @@ if TYPE_CHECKING:
 
     try:
         if not (
-                is_librosa_available()
-                and is_essentia_available()
-                and is_scipy_available()
-                and is_torch_available()
-                and is_pretty_midi_available()
+            is_librosa_available()
+            and is_essentia_available()
+            and is_scipy_available()
+            and is_torch_available()
+            and is_pretty_midi_available()
         ):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:

@@ -9,13 +9,13 @@ import torch.nn.functional as F
 from transformers import FastConfig, PreTrainedModel, add_start_docstrings
 from transformers.utils import ModelOutput
 
+
 FAST_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-            [What are input IDs?](../glossary#input-ids)
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
@@ -36,6 +36,7 @@ FAST_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
             Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
             classification loss is computed (Cross-Entropy) against these labels.
 """
+
 
 def get_same_padding(kernel_size):
     if isinstance(kernel_size, tuple):
@@ -917,6 +918,7 @@ class FASTForImageCaptioningOutput(ModelOutput):
 
     loss: Optional[torch.Tensor] = None
     hidden_states: Optional[torch.FloatTensor] = None
+
 
 @add_start_docstrings(
     """BEiT-3 is a general-purpose multimodal foundation model that excels in both vision and vision-language tasks. It

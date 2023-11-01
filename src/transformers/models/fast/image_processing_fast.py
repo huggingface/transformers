@@ -68,22 +68,22 @@ class FastImageProcessor(BaseImageProcessor):
         size (`Dict[str, int]` *optional*, defaults to `{"height": 256, "width": 256}`):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
+        do_center_crop (`bool`, *optional*, defaults to `False`):
             Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
             is padded with 0's and then center cropped. Can be overridden by the `do_center_crop` parameter in the
             `preprocess` method.
         crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
             Can be overridden by the `crop_size` parameter in the `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
-            parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
+            parameter in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
@@ -98,6 +98,10 @@ class FastImageProcessor(BaseImageProcessor):
             used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k). The
             background label will be replaced by 255. Can be overridden by the `do_reduce_labels` parameter in the
             `preprocess` method.
+        min_area (`int`, *optional*, defaults to 10): <fill_docstring>
+        min_score (`float`, *optional*, defaults to 0.88): <fill_docstring>
+        bbox_type (`str`, *optional*, defaults to `"rect"`): <fill_docstring>
+        pooling_size (`int`, *optional*, defaults to 9): <fill_docstring>
     """
 
     model_input_names = ["pixel_values"]
