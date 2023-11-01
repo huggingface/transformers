@@ -291,7 +291,7 @@ Result: Modern tools are used, such as immersion blenders
 #### Reasoning
 
 LLM にとって推論は最も困難なタスクの 1 つであり、良い結果を達成するには、多くの場合、次のような高度なプロンプト テクニックを適用する必要があります。
-[思考の連鎖](chain-of-thought)。
+[Chain-of-thought](#chain-of-thought)。
 
 基本的なプロンプトを使用して、単純な算術タスクに関するモデル推論を作成できるかどうか試してみましょう。
 
