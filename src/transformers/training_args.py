@@ -620,10 +620,12 @@ class TrainingArguments:
 
             This flag is experimental and subject to change in future releases.
         split_batches (`bool`, *optional*):
-            Whether or not the accelerator should split the batches yielded by the dataloaders across the devices during distributed training. If
-            
-            set to `True`, the actual batch size used will be the same on any kind of distributed processes, but it must be a
-            
+            Whether or not the accelerator should split the batches yielded by the dataloaders across the devices
+            during distributed training. If
+
+            set to `True`, the actual batch size used will be the same on any kind of distributed processes, but it
+            must be a
+
             round multiple of the number of processes you are using (such as GPUs).
         include_tokens_per_second (`bool`, *optional*):
             Whether or not to compute the number of tokens per second per device for training speed metrics.
