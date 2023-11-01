@@ -610,14 +610,6 @@ def training_loop(
         eps=args.adam_epsilon,
     )
 
-    # model.text_encoder = torch.compile(model.text_encoder)
-    # model.flow = torch.compile(model.flow)
-    # model.decoder = torch.compile(model.decoder)
-    # model.posterior_encoder = torch.compile(model.posterior_encoder)
-    # model.duration_predictor = torch.compile(model.duration_predictor)
-    # model = torch.compile(model)
-    # discriminator = torch.compile(discriminator)
-
     num_warmups_steps = (
         args.get_warmup_steps(args.num_train_epochs * accelerator.num_processes)
         if args.do_step_schedule_per_epoch
