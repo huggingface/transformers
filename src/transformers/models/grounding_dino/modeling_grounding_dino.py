@@ -2116,9 +2116,9 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         """
         batch_size = enc_output.shape[0]
         proposals = []
-        _cur = 0
+        current_position = 0
         for level, (height, width) in enumerate(spatial_shapes):
-            mask_flatten_ = padding_mask[:, _cur : (_cur + height * width)].view(batch_size, height, width, 1)
+            mask_flatten_ = padding_mask[:, current_position : (current_position + height * width)].view(batch_size, height, width, 1)
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
@@ -2134,7 +2134,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             width_heigth = torch.ones_like(grid) * 0.05 * (2.0**level)
             proposal = torch.cat((grid, width_heigth), -1).view(batch_size, -1, 4)
             proposals.append(proposal)
-            _cur += height * width
+            current_position += height * width
 
         output_proposals = torch.cat(proposals, 1)
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
