@@ -347,7 +347,9 @@ class Rwkv5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                             [-2.0, 2.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-                elif any(x in name for x in ["time_mix_key", "time_mix_value", "time_mix_receptance", "time_mix_gate"]):
+                elif any(
+                    x in name for x in ["time_mix_key", "time_mix_value", "time_mix_receptance", "time_mix_gate"]
+                ):
                     if param.requires_grad:
                         self.assertInterval(
                             param.data,
@@ -422,7 +424,7 @@ class Rwkv5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 list(self_attentions[0].shape[-3:]),
                 [batch_size, seq_len, config.hidden_size],
             )
-    
+
     def test_resize_tokens_embeddings(self):
         (
             original_config,
