@@ -93,11 +93,6 @@ class FastImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             The standard deviation to use if normalizing the image. This is a float or list of floats of length of the
             number of channels of the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_reduce_labels (`bool`, *optional*, defaults to `False`):
-            Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0 is
-            used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k). The
-            background label will be replaced by 255. Can be overridden by the `do_reduce_labels` parameter in the
-            `preprocess` method.
         min_area (`int`, *optional*, defaults to 10): <fill_docstring>
         min_score (`float`, *optional*, defaults to 0.88): <fill_docstring>
         bbox_type (`str`, *optional*, defaults to `"rect"`): <fill_docstring>
@@ -118,20 +113,13 @@ class FastImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_reduce_labels: bool = False,
         min_area: int = 10,
         min_score: float = 0.88,
         bbox_type: str = "rect",
         pooling_size: int = 9,
         **kwargs,
     ) -> None:
-        if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` parameter is deprecated and will be removed in a future version. Please use"
-                " `do_reduce_labels` instead.",
-                FutureWarning,
-            )
-            do_reduce_labels = kwargs.pop("reduce_labels")
+
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 640, "width": 640}
         size = get_size_dict(size)
@@ -147,7 +135,6 @@ class FastImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
-        self.do_reduce_labels = do_reduce_labels
         self.min_area = min_area
         self.min_score = min_score
         self.bbox_type = bbox_type
