@@ -1998,7 +1998,6 @@ class WhisperStandaloneDecoderModelTester:
         self,
         parent,
         batch_size=2,
-        seq_length=60,
         is_training=True,
         use_labels=False,
         vocab_size=200,
@@ -2023,7 +2022,6 @@ class WhisperStandaloneDecoderModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.seq_length = seq_length
         self.is_training = is_training
         self.use_labels = use_labels
         self.vocab_size = vocab_size
@@ -2073,6 +2071,10 @@ class WhisperStandaloneDecoderModelTester:
 
     @property
     def encoder_seq_length(self):
+        return 5
+
+    @property
+    def seq_length(self):
         return 5
 
     def get_config(self):
