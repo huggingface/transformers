@@ -615,7 +615,6 @@ class FuyuImageProcessor(BaseImageProcessor):
         # Image input ids for every subsequence, including ones with no image present.
         batch_image_input_ids: List[List[torch.Tensor]] = []
         for batch_index in range(image_input.shape[0]):
-            # images.append([])
             image_input_ids = []
             image_patches = []
             for subseq_index in range(image_input.shape[1]):
