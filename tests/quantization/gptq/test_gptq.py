@@ -218,11 +218,11 @@ class GPTQTest(unittest.TestCase):
             self.quantized_model.save_pretrained(tmpdirname)
             if not self.use_exllama:
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname).to(0)
-                self.check_quantized_layers_type(quantized_model_from_saved,"cuda-old")
+                self.check_quantized_layers_type(quantized_model_from_saved, "cuda-old")
             else:
                 # we need to put it directly to the gpu. Otherwise, we won't be able to initialize the exllama kernel
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map={"": 0})
-                self.check_quantized_layers_type(quantized_model_from_saved,"exllama")
+                self.check_quantized_layers_type(quantized_model_from_saved, "exllama")
             self.check_inference_correctness(quantized_model_from_saved)
 
     @require_accelerate
@@ -249,7 +249,7 @@ class GPTQTest(unittest.TestCase):
                 )
                 self.assertEqual(quantized_model_from_saved.config.quantization_config.use_exllama, True)
                 self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
-                self.check_quantized_layers_type(quantized_model_from_saved,"exllama")
+                self.check_quantized_layers_type(quantized_model_from_saved, "exllama")
                 self.check_inference_correctness(quantized_model_from_saved)
 
 
