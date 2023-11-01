@@ -4551,13 +4551,6 @@ class LlaVaForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class LlavaForCausalLM(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class LlaVaForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 

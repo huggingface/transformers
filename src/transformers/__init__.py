@@ -2151,7 +2151,7 @@ else:
             "load_tf_weights_in_llava",
         ]
     )
-    _import_structure["models.llava"].extend(["LlavaForCausalLM", "LlavaTextModel", "LlavaTextPreTrainedModel"])
+    _import_structure["models.llava"].extend(["LlaVaForCausalLM", "LlavaTextModel", "LlavaTextPreTrainedModel"])
     _import_structure["models.longformer"].extend(
         [
             "LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -6105,7 +6105,6 @@ if TYPE_CHECKING:
         from .models.llava import (
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LlaVaForCausalLM,
-            LlavaForCausalLM,
             LlaVaForMaskedLM,
             LlaVaForMultipleChoice,
             LlaVaForQuestionAnswering,

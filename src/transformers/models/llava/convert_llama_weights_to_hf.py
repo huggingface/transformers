@@ -6,7 +6,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import LlaVaConfig
+from transformers import LlaVaConfig, LlaVaForCausalLM
 from transformers.utils import logging
 
 
@@ -106,7 +106,7 @@ def convert_llava_checkpoint(
     config.save_pretrained("./temp")
 
     # print("Loading the checkpoint in a Llama model.")
-    model = LlavaForCausalLM.from_pretrained(
+    model = LlaVaForCausalLM.from_pretrained(
         "./temp", torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, device_map="cuda"
     )
     # Avoid saving this as part of the config.

@@ -68,7 +68,9 @@ class LlaVaConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        Example:
+        pad_token_id (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        bos_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        eos_token_id (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
 
     ```python
     >>> from transformers import LlaVaModel, LlaVaConfig

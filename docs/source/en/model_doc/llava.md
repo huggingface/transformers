@@ -35,7 +35,7 @@ The architecture is very similar to the first Llama, with the addition of Groupe
 Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM). For the 13B model, it's thus 26GB of RAM needed.
 
 ```python
->>> from transformers import LlaVaProcessor, LlavaForCausalLM
+>>> from transformers import LlaVaProcessor, LlaVaForCausalLM
 >>> from PIL import Image
 
 >>> import requests
@@ -43,7 +43,7 @@ Note that executing the script requires enough CPU RAM to host the whole model i
 
 >>> checkpoint = "liuhaotian/llava-v1.5-7b"
 
->>> model = LlavaForCausalLM.from_pretrained(checkpoint)
+>>> model = LlaVaForCausalLM.from_pretrained(checkpoint)
 >>> processor = LlaVaProcessor.from_pretrained(checkpoint)
 
 >>> url = "https://llava-vl.github.io/static/images/view.jpg"

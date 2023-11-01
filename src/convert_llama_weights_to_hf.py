@@ -23,7 +23,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import LlaVaConfig
+from transformers import LlaVaConfig, LlaVaForCausalLM, LlaVaProcessor
 from transformers.utils import logging
 
 
@@ -76,7 +76,7 @@ def convert_llava_checkpoint(
 
     state_dict.update(llava_state_dict)
 
-    model = LlavaForCausalLM(config)
+    model = LlaVaForCausalLM(config)
     model.eval()
 
     # load state_dict of original model, remove and rename some keys
