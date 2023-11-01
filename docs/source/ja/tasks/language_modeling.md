@@ -117,7 +117,7 @@ pip install transformers datasets evaluate
 ```
 
 上の例からわかるように、`text`フィールドは実際には`answers`内にネストされています。つまり、次のことが必要になります。
-[` flatten`](https://huggingface.co/docs/datasets/process.html# flatten) メソッドを使用して、ネストされた構造から `text` サブフィールドを抽出します。
+[` flatten`](https://huggingface.co/docs/datasets/process.html#flatten) メソッドを使用して、ネストされた構造から `text` サブフィールドを抽出します。
 
 ```py
 >>> eli5 = eli5.flatten()
