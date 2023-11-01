@@ -595,7 +595,7 @@ def build_position_encoding(config):
 
     return position_embedding
 
-
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
 def multi_scale_deformable_attention(
     value: Tensor, value_spatial_shapes: Tensor, sampling_locations: Tensor, attention_weights: Tensor
 ) -> Tensor:
