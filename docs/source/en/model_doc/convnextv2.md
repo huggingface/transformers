@@ -59,3 +59,14 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] ConvNextV2ForImageClassification
     - forward
+
+## TFConvNextV2Model
+
+[[autodoc]] TFConvNextV2Model
+    - call
+
+
+## TFConvNextV2ForImageClassification
+
+[[autodoc]] TFConvNextV2ForImageClassification
+    - call

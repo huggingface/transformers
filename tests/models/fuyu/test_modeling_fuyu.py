@@ -4,7 +4,7 @@ import unittest
 import requests
 
 from transformers import AutoTokenizer, FuyuConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_modeling_common import ids_tensor, random_attention_mask
 
@@ -257,7 +257,7 @@ class FuyuModelTester:
 
 
 @require_torch
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
     """
@@ -279,7 +279,6 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
         self.bus_image_pil = Image.open(io.BytesIO(requests.get(self.bus_image_url).content))
 
     @slow
-    @require_torch_gpu
     def test_model_8b_chat_greedy_generation_bus_captioning(self):
         EXPECTED_TEXT_COMPLETION = """A bus parked on the side of a road.|ENDOFTEXT|"""
         text_prompt_coco_captioning = "Generate a coco-style caption.\n"

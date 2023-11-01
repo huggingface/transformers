@@ -24,7 +24,8 @@ from tests.test_modeling_common import floats_tensor
 from transformers import OneFormerConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
+    require_torch_fp16,
     require_torch_multi_gpu,
     require_vision,
     slow,
@@ -540,7 +541,8 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         self.assertTrue(torch.allclose(class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
 
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_torch_fp16
     def test_inference_fp16(self):
         model = (
             OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)

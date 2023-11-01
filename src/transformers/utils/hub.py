@@ -372,7 +372,8 @@ def cached_file(
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
@@ -563,7 +564,8 @@ def get_file_from_repo(
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
@@ -632,7 +634,8 @@ def has_file(
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
@@ -724,6 +727,7 @@ class PushToHubMixin:
         token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
         revision: str = None,
+        commit_description: str = None,
     ):
         """
         Uploads all modified files in `working_dir` to `repo_id`, based on `files_timestamps`.
@@ -778,6 +782,7 @@ class PushToHubMixin:
             repo_id=repo_id,
             operations=operations,
             commit_message=commit_message,
+            commit_description=commit_description,
             token=token,
             create_pr=create_pr,
             revision=revision,
@@ -792,8 +797,9 @@ class PushToHubMixin:
         token: Optional[Union[bool, str]] = None,
         max_shard_size: Optional[Union[int, str]] = "5GB",
         create_pr: bool = False,
-        safe_serialization: bool = False,
+        safe_serialization: bool = True,
         revision: str = None,
+        commit_description: str = None,
         **deprecated_kwargs,
     ) -> str:
         """
@@ -821,10 +827,12 @@ class PushToHubMixin:
                 Google Colab instances without any CPU OOM issues.
             create_pr (`bool`, *optional*, defaults to `False`):
                 Whether or not to create a PR with the uploaded files or directly commit.
-            safe_serialization (`bool`, *optional*, defaults to `False`):
+            safe_serialization (`bool`, *optional*, defaults to `True`):
                 Whether or not to convert the model weights in safetensors format for safer serialization.
             revision (`str`, *optional*):
                 Branch to push the uploaded files to.
+            commit_description (`str`, *optional*):
+                The description of the commit that will be created
 
         Examples:
 
@@ -843,7 +851,8 @@ class PushToHubMixin:
         use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(
@@ -901,6 +910,7 @@ class PushToHubMixin:
                 token=token,
                 create_pr=create_pr,
                 revision=revision,
+                commit_description=commit_description,
             )
 
 
@@ -1005,7 +1015,8 @@ def get_checkpoint_shard_files(
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")

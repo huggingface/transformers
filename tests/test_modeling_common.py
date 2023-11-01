@@ -91,6 +91,7 @@ if is_accelerate_available():
 
 if is_torch_available():
     import torch
+    from safetensors.torch import save_file as safe_save_file
     from torch import nn
 
     from transformers import MODEL_MAPPING, AdaptiveEmbedding
@@ -349,9 +350,23 @@ class ModelTesterMixin:
             model.gradient_checkpointing_enable()
             self.assertTrue(model.is_gradient_checkpointing)
 
+            # Loop over all modules and check that relevant modules have gradient_checkpointing set to True
+            for n, m in model.named_modules():
+                if hasattr(m, "gradient_checkpointing"):
+                    self.assertTrue(
+                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to True"
+                    )
+
             # check disable works
             model.gradient_checkpointing_disable()
             self.assertFalse(model.is_gradient_checkpointing)
+
+            # Loop over all modules and check that relevant modules have gradient_checkpointing set to False
+            for n, m in model.named_modules():
+                if hasattr(m, "gradient_checkpointing"):
+                    self.assertFalse(
+                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
+                    )
 
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -525,6 +540,44 @@ class ModelTesterMixin:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
+        if not self.model_tester.is_training:
+            return
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.use_cache = False
+            config.return_dict = True
+
+            if (
+                model_class.__name__
+                in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
+                or not model_class.supports_gradient_checkpointing
+            ):
+                continue
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            model.to(torch_device)
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.train()
+
+            # unfreeze additional layers
+            for p in model.parameters():
+                p.requires_grad_(True)
+
+            optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+            optimizer.step()
+
+            for k, v in model.named_parameters():
+                if v.requires_grad:
+                    self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+
     def test_training(self):
         if not self.model_tester.is_training:
             return
@@ -547,27 +600,18 @@ class ModelTesterMixin:
             loss.backward()
 
     def test_training_gradient_checkpointing(self):
-        if not self.model_tester.is_training:
-            return
+        # Scenario - 1 default behaviour
+        self.check_training_gradient_checkpointing()
 
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.use_cache = False
-            config.return_dict = True
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        # Scenario - 2 with `use_reentrant=True` - this is the default value that is used in pytorch's
+        # torch.utils.checkpoint.checkpoint
+        self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
 
-            if (
-                model_class.__name__
-                in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
-                or not model_class.supports_gradient_checkpointing
-            ):
-                continue
-            model = model_class(config)
-            model.to(torch_device)
-            model.gradient_checkpointing_enable()
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        # Scenario - 3 with `use_reentrant=False` pytorch suggests users to use this value for
+        # future releases: https://pytorch.org/docs/stable/checkpoint.html
+        self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": False})
 
     def test_attention_outputs(self):
         if not self.has_attentions:
@@ -1708,8 +1752,8 @@ class ModelTesterMixin:
 
                 # We are nuking ALL weights on file, so every parameter should
                 # yell on load. We're going to detect if we yell too much, or too little.
-                with open(os.path.join(tmp_dir, "pytorch_model.bin"), "wb") as f:
-                    torch.save({}, f)
+                placeholder_dict = {"tensor": torch.tensor([1, 2])}
+                safe_save_file(placeholder_dict, os.path.join(tmp_dir, "model.safetensors"), metadata={"format": "pt"})
                 model_reloaded, infos = model_class.from_pretrained(tmp_dir, output_loading_info=True)
 
                 prefix = f"{model_reloaded.base_model_prefix}."
@@ -2534,7 +2578,45 @@ class ModelTesterMixin:
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_gpu
-    def test_disk_offload(self):
+    def test_disk_offload_bin(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
+
+            model_size = compute_module_sizes(model)[""]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir, safe_serialization=False)
+
+                with self.assertRaises(ValueError):
+                    max_size = int(self.model_split_percents[0] * model_size)
+                    max_memory = {0: max_size, "cpu": max_size}
+                    # This errors out cause it's missing an offload folder
+                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+
+                max_size = int(self.model_split_percents[1] * model_size)
+                max_memory = {0: max_size, "cpu": max_size}
+                new_model = model_class.from_pretrained(
+                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
+                )
+
+                self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                torch.manual_seed(0)
+                new_output = new_model(**inputs_dict_class)
+
+                self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
+
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_gpu
+    def test_disk_offload_safetensors(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -2551,17 +2633,11 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
-                with self.assertRaises(ValueError):
-                    max_size = int(self.model_split_percents[0] * model_size)
-                    max_memory = {0: max_size, "cpu": max_size}
-                    # This errors out cause it's missing an offload folder
-                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
-
                 max_size = int(self.model_split_percents[1] * model_size)
                 max_memory = {0: max_size, "cpu": max_size}
-                new_model = model_class.from_pretrained(
-                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
-                )
+
+                # This doesn't error out as it's in safetensors and doesn't need an offload folder
+                new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
                 torch.manual_seed(0)
@@ -2780,7 +2856,7 @@ class ModelTesterMixin:
             if not model_class._supports_flash_attn_2:
                 return
 
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -2795,25 +2871,76 @@ class ModelTesterMixin:
                 )
                 model.to(torch_device)
 
-                dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[0, 1, 1, 1, 1]]).to(torch_device)
+                dummy_input = inputs_dict[model.main_input_name][:1]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
 
-                logits = model(dummy_input, output_hidden_states=True).hidden_states[-1]
-                logits_fa = model_fa(dummy_input, output_hidden_states=True).hidden_states[-1]
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
 
-                self.assertTrue(torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2))
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    dummy_attention_mask[:, 1:] = 1
+                    dummy_attention_mask[:, :1] = 0
 
-                output_fa = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
-                logits_fa = output_fa.hidden_states[-1]
+                if model.config.is_encoder_decoder:
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
 
-                output = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
-                logits = output.hidden_states[-1]
+                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                    outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                else:
+                    outputs = model(dummy_input, output_hidden_states=True)
+                    outputs_fa = model_fa(dummy_input, output_hidden_states=True)
 
-                self.assertTrue(torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2))
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+                if model.config.is_encoder_decoder:
+                    other_inputs = {
+                        "decoder_input_ids": decoder_input_ids,
+                        "decoder_attention_mask": dummy_attention_mask,
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    outputs_fa = model_fa(dummy_input, **other_inputs)
+                else:
+                    other_inputs = {
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    outputs_fa = model_fa(dummy_input, **other_inputs)
+
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
 
                 # check with inference + dropout
                 model.train()
-                _ = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                _ = model_fa(dummy_input, **other_inputs)
 
     @require_flash_attn
     @require_torch_gpu
@@ -2826,7 +2953,7 @@ class ModelTesterMixin:
             if not model_class._supports_flash_attn_2:
                 return
 
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -2841,21 +2968,72 @@ class ModelTesterMixin:
                 )
                 model.to(torch_device)
 
-                dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1, 0]]).to(torch_device)
+                dummy_input = inputs_dict[model.main_input_name][:1]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
 
-                logits = model(dummy_input, output_hidden_states=True).hidden_states[-1]
-                logits_fa = model_fa(dummy_input, output_hidden_states=True).hidden_states[-1]
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
 
-                self.assertTrue(torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2))
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    dummy_attention_mask[:, :-1] = 1
+                    dummy_attention_mask[:, -1:] = 0
 
-                output_fa = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
-                logits_fa = output_fa.hidden_states[-1]
+                if model.config.is_encoder_decoder:
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
 
-                output = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
-                logits = output.hidden_states[-1]
+                    outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                    outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                else:
+                    outputs = model(dummy_input, output_hidden_states=True)
+                    outputs_fa = model_fa(dummy_input, output_hidden_states=True)
 
-                self.assertTrue(torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2))
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+                if model.config.is_encoder_decoder:
+                    other_inputs = {
+                        "decoder_input_ids": decoder_input_ids,
+                        "decoder_attention_mask": dummy_attention_mask,
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    outputs_fa = model_fa(dummy_input, **other_inputs)
+                else:
+                    other_inputs = {
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs = model(dummy_input, **other_inputs)
+                    outputs_fa = model_fa(dummy_input, **other_inputs)
+
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_fa.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
     @require_flash_attn
     @require_torch_gpu
@@ -2868,7 +3046,7 @@ class ModelTesterMixin:
             if not model_class._supports_flash_attn_2:
                 return
 
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -2877,8 +3055,14 @@ class ModelTesterMixin:
                     tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False, low_cpu_mem_usage=True
                 ).to(torch_device)
 
-                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+                dummy_input = inputs_dict[model.main_input_name]
+                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                    dummy_input = dummy_input.to(torch.float16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                # make sure we do left padding
+                dummy_attention_mask[:, :-1] = 0
+                dummy_attention_mask[:, -1:] = 1
 
                 out = model.generate(
                     dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
@@ -2905,7 +3089,7 @@ class ModelTesterMixin:
             if not model_class._supports_flash_attn_2:
                 return
 
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -2914,8 +3098,14 @@ class ModelTesterMixin:
                     tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False, low_cpu_mem_usage=True
                 ).to(torch_device)
 
-                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
+                dummy_input = inputs_dict[model.main_input_name]
+                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                    dummy_input = dummy_input.to(torch.float16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+                # make sure we do left padding
+                dummy_attention_mask[:, :-1] = 1
+                dummy_attention_mask[:, -1:] = 0
 
                 out = model.generate(
                     dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
@@ -2938,26 +3128,39 @@ class ModelTesterMixin:
     def test_flash_attn_2_generate_use_cache(self):
         import torch
 
+        max_new_tokens = 30
+
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
                 return
 
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
-                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
 
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    use_flash_attention_2=True,
+                    low_cpu_mem_usage=True,
                 ).to(torch_device)
 
                 # Just test that a large cache works as expected
                 _ = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=30, do_sample=False
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
                 )
 
     @require_flash_attn
@@ -2972,14 +3175,18 @@ class ModelTesterMixin:
             if not model_class._supports_flash_attn_2:
                 return
 
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
-                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+                dummy_input = inputs_dict[model.main_input_name]
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+
+                if model.config.is_encoder_decoder:
+                    dummy_decoder_input_ids = inputs_dict["decoder_input_ids"]
+                    dummy_decoder_attention_mask = inputs_dict["decoder_attention_mask"]
 
                 model = model_class.from_pretrained(
                     tmpdirname,
@@ -2994,10 +3201,19 @@ class ModelTesterMixin:
                     if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
                         param.data = param.data.to(torch.float32)
 
-                _ = model(input_ids=dummy_input)
-
-                # with attention mask
-                _ = model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
+                if model.config.is_encoder_decoder:
+                    _ = model(dummy_input, decoder_input_ids=dummy_decoder_input_ids)
+                    # with attention mask
+                    _ = model(
+                        dummy_input,
+                        attention_mask=dummy_attention_mask,
+                        decoder_input_ids=dummy_decoder_input_ids,
+                        decoder_attention_mask=dummy_decoder_attention_mask,
+                    )
+                else:
+                    _ = model(dummy_input)
+                    # with attention mask
+                    _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
 
 global_rng = random.Random()

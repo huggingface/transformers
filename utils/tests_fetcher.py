@@ -949,6 +949,10 @@ def infer_tests_to_run(
     if "setup.py" in modified_files:
         test_files_to_run = ["tests", "examples"]
         repo_utils_launch = True
+    # in order to trigger pipeline tests even if no code change at all
+    elif "tests/utils/tiny_model_summary.json" in modified_files:
+        test_files_to_run = ["tests"]
+        repo_utils_launch = any(f.split(os.path.sep)[0] == "utils" for f in modified_files)
     else:
         # All modified tests need to be run.
         test_files_to_run = [
