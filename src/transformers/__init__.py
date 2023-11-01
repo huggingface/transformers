@@ -128,7 +128,6 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.llava": ["LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlaVaConfig", "LlaVaTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -416,7 +415,13 @@ _import_structure = {
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
     "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
-    "models.llava": ["LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlavaConfig", "LlavaProcessor", "LlavaVisionConfig"],
+    "models.llava": [
+        "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LlavaConfig",
+        "LlavaProcessor",
+        "LlaVaTokenizer",
+        "LlavaVisionConfig",
+    ],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
@@ -840,7 +845,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
-    _import_structure["models.llava"].append("LlaVaTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -875,6 +879,7 @@ else:
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizerFast")
     _import_structure["models.led"].append("LEDTokenizerFast")
     _import_structure["models.llama"].append("LlamaTokenizerFast")
+    _import_structure["models.llava"].append("LlaVaTokenizerFast")
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
     _import_structure["models.markuplm"].append("MarkupLMTokenizerFast")
@@ -1100,22 +1105,6 @@ else:
 
     # PyTorch models structure
 
-    _import_structure["models.llava"].extend(
-        [
-            "LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "LlaVaForMaskedLM",
-            "LlaVaForCausalLM",
-            "LlaVaForMultipleChoice",
-            "LlaVaForQuestionAnswering",
-            "LlaVaForSequenceClassification",
-            "LlaVaForTokenClassification",
-            "LlaVaLayer",
-            "LlaVaModel",
-            "LlaVaPreTrainedModel",
-            "load_tf_weights_in_llava",
-        ]
-    )
-
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1130,6 +1119,7 @@ else:
             "load_tf_weights_in_albert",
         ]
     )
+
     _import_structure["models.align"].extend(
         [
             "ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2145,6 +2135,21 @@ else:
     )
     _import_structure["models.llama"].extend(
         ["LlamaForCausalLM", "LlamaForSequenceClassification", "LlamaModel", "LlamaPreTrainedModel"]
+    )
+    _import_structure["models.llava"].extend(
+        [
+            "LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LlaVaForCausalLM",
+            "LlaVaForMaskedLM",
+            "LlaVaForMultipleChoice",
+            "LlaVaForQuestionAnswering",
+            "LlaVaForSequenceClassification",
+            "LlaVaForTokenClassification",
+            "LlaVaLayer",
+            "LlaVaModel",
+            "LlaVaPreTrainedModel",
+            "load_tf_weights_in_llava",
+        ]
     )
     _import_structure["models.llava"].extend(["LlavaForCausalLM", "LlavaTextModel", "LlavaTextPreTrainedModel"])
     _import_structure["models.longformer"].extend(
@@ -4355,7 +4360,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.llava import LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlaVaConfig, LlaVaTokenizer
     from .models.align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AlignConfig,
@@ -4630,7 +4634,14 @@ if TYPE_CHECKING:
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
     from .models.llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
-    from .models.llava import LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlavaConfig, LlavaProcessor, LlavaVisionConfig
+    from .models.llava import (
+        LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LlaVaConfig,
+        LlavaConfig,
+        LlavaProcessor,
+        LlaVaTokenizer,
+        LlavaVisionConfig,
+    )
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.longt5 import LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP, LongT5Config
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
@@ -5021,7 +5032,6 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
-        from .models.llava import LlaVaTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -5054,6 +5064,7 @@ if TYPE_CHECKING:
         from .models.layoutxlm import LayoutXLMTokenizerFast
         from .models.led import LEDTokenizerFast
         from .models.llama import LlamaTokenizerFast
+        from .models.llava import LlaVaTokenizerFast
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
         from .models.markuplm import MarkupLMTokenizerFast
@@ -6090,7 +6101,24 @@ if TYPE_CHECKING:
             LiltPreTrainedModel,
         )
         from .models.llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
-        from .models.llava import LlavaForCausalLM, LlavaTextModel, LlavaTextPreTrainedModel
+
+        # PyTorch model imports
+        from .models.llava import (
+            LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LlaVaForCausalLM,
+            LlavaForCausalLM,
+            LlaVaForMaskedLM,
+            LlaVaForMultipleChoice,
+            LlaVaForQuestionAnswering,
+            LlaVaForSequenceClassification,
+            LlaVaForTokenClassification,
+            LlaVaLayer,
+            LlaVaModel,
+            LlaVaPreTrainedModel,
+            LlavaTextModel,
+            LlavaTextPreTrainedModel,
+            load_tf_weights_in_llava,
+        )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             LongformerForMaskedLM,
@@ -6572,22 +6600,6 @@ if TYPE_CHECKING:
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
             SamModel,
             SamPreTrainedModel,
-        )
-
-        # PyTorch model imports
-
-        from .models.llava import (
-            LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            LlaVaForMaskedLM,
-            LlaVaForCausalLM,
-            LlaVaForMultipleChoice,
-            LlaVaForQuestionAnswering,
-            LlaVaForSequenceClassification,
-            LlaVaForTokenClassification,
-            LlaVaLayer,
-            LlaVaModel,
-            LlaVaPreTrainedModel,
-            load_tf_weights_in_llava,
         )
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,

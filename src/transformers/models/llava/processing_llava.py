@@ -16,7 +16,6 @@
 Processor class for LlavaModel
 """
 
-import os
 from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
@@ -29,11 +28,13 @@ from ...utils import (
     is_vision_available,
 )
 
+
 if is_vision_available():
     from PIL import Image
 
 if is_torch_available():
     import torch
+
 
 class LlavaProcessor(ProcessorMixin):
     r"""
@@ -148,7 +149,7 @@ class LlavaProcessor(ProcessorMixin):
 
             else:
                 image_encoding = self.image_processor.preprocess(images, return_tensors=return_tensors)["pixel_values"]
-            
+
             dummy["pixel_values"] = image_encoding
             encoding.update(dummy)
         return encoding
@@ -193,5 +194,3 @@ class LlavaProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
-

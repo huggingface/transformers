@@ -23,12 +23,13 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import LlavaConfig, LlavaProcessor, LlavaForCausalLM
+from transformers import LlavaConfig, LlavaForCausalLM, LlavaProcessor
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
 
 def remove_classification_head_(state_dict):
     ignore_keys = ["head.weight", "head.bias"]
@@ -51,7 +52,7 @@ def prepare_img():
 
 @torch.no_grad()
 def convert_llava_checkpoint(
-    checkpoint_path_llava_1,checkpoint_path_llava_2, checkpoint_path_clip, pytorch_dump_folder_path
+    checkpoint_path_llava_1, checkpoint_path_llava_2, checkpoint_path_clip, pytorch_dump_folder_path
 ):
     """
     Copy/paste/tweak model's weights to our ProPainter structure.
@@ -65,24 +66,23 @@ def convert_llava_checkpoint(
     llava_state_dict = torch.load(checkpoint_path_llava_1, map_location="cpu")
     llava_state_dict.update(torch.load(checkpoint_path_llava_2, map_location="cpu"))
     for i in llava_state_dict:
-        i = i.replace("model","model.text_model")
+        i = i.replace("model", "model.text_model")
 
     state_dict = OrderedDict()
     state_dict.update(torch.load(checkpoint_path_clip, map_location="cpu"))
 
     for i in state_dict:
-        i = i.replace("model","model.vision_model")
+        i = i.replace("model", "model.vision_model")
 
     state_dict.update(llava_state_dict)
 
     model = LlavaForCausalLM(config)
     model.eval()
 
-
     # load state_dict of original model, remove and rename some keys
-    #rename_keys = create_rename_keys(depths())
-    #print(rename_keys)
-    #for src, dest in rename_keys:
+    # rename_keys = create_rename_keys(depths())
+    # print(rename_keys)
+    # for src, dest in rename_keys:
     #    rename_key(state_dict, src, dest)
     model.load_state_dict(state_dict)
     print(model)

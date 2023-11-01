@@ -30,7 +30,6 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-        ("llava", "LlaVaConfig"),
         ("albert", "AlbertConfig"),
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
@@ -126,6 +125,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("levit", "LevitConfig"),
         ("lilt", "LiltConfig"),
         ("llama", "LlamaConfig"),
+        ("llava", "LlaVaConfig"),
         ("llava", "LlavaConfig"),
         ("longformer", "LongformerConfig"),
         ("longt5", "LongT5Config"),
@@ -252,7 +252,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
-        ("llava", "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("align", "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -343,6 +342,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("levit", "LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("lilt", "LILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("llama", "LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("llava", "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("llava", "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("longformer", "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("longt5", "LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -452,7 +452,6 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("llava", "LlaVa"),
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
@@ -563,6 +562,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("lilt", "LiLT"),
         ("llama", "LLaMA"),
         ("llama2", "Llama2"),
+        ("llava", "LlaVa"),
         ("llava", "Llava"),
         ("longformer", "Longformer"),
         ("longt5", "LongT5"),

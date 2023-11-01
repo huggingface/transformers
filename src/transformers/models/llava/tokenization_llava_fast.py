@@ -39,6 +39,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "liuhaotian/llava-v1.5-13b": 1024,
 }
 
+
 class LlaVaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" LLaVA tokenizer (backed by HuggingFace's *tokenizers* library).
@@ -46,6 +47,12 @@ class LlaVaTokenizerFast(PreTrainedTokenizerFast):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
+        merges_file (`<fill_type>`): <fill_docstring>
+        unk_token (`<fill_type>`, *optional*, defaults to `"<|endoftext|>"`): <fill_docstring>
+        bos_token (`<fill_type>`, *optional*, defaults to `"<|endoftext|>"`): <fill_docstring>
+        eos_token (`<fill_type>`, *optional*, defaults to `"<|endoftext|>"`): <fill_docstring>
+        add_prefix_space (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        trim_offsets (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -54,15 +61,15 @@ class LlaVaTokenizerFast(PreTrainedTokenizerFast):
     slow_tokenizer_class = LlaVaTokenizer
 
     def __init__(
-            self,
-            vocab_file,
-            merges_file,
-            unk_token="<|endoftext|>",
-            bos_token="<|endoftext|>",
-            eos_token="<|endoftext|>",
-            add_prefix_space=False,
-            trim_offsets=True,
-            **kwargs
+        self,
+        vocab_file,
+        merges_file,
+        unk_token="<|endoftext|>",
+        bos_token="<|endoftext|>",
+        eos_token="<|endoftext|>",
+        add_prefix_space=False,
+        trim_offsets=True,
+        **kwargs,
     ):
         super().__init__(
             ByteLevelBPETokenizer(
@@ -85,13 +92,12 @@ class LlaVaTokenizerFast(PreTrainedTokenizerFast):
 
         return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
 
-
     def create_token_type_ids_from_sequences(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        LLaVA does not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. LLaVA does not
+        make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (`List[int]`):
@@ -100,7 +106,7 @@ class LlaVaTokenizerFast(PreTrainedTokenizerFast):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`:  List of zeros.
+            `List[int]`: List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -108,6 +114,3 @@ class LlaVaTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
-
-
-
