@@ -21,7 +21,10 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "liuhaotian/llava-v1.5-7b": "https://huggingface.co/liuhaotian/llava-v1.5-7b/resolve/main/config.json",
     "liuhaotian/llava-v1.5-13b": "https://huggingface.co/liuhaotian/llava-v1.5-13b/resolve/main/config.json",
+    "liuhaotian/llava-v1.5-7b-lora": "https://huggingface.co/liuhaotian/llava-v1.5-7b-lora/resolve/main/config.json",
+    "liuhaotian/llava-v1.5-13b-lora": "https://huggingface.co/liuhaotian/llava-v1.5-13b-lora/resolve/main/config.json",
     # See all LLaVA models at https://huggingface.co/models?filter=llava
 }
 
@@ -68,9 +71,12 @@ class LlaVaConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        pad_token_id (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        bos_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
-        eos_token_id (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        pad_token_id (`int`, *optional*, defaults to 1):
+            The padding token ID.
+        bos_token_id (`int`, *optional*, defaults to 0):
+            The Beginning-Of-Sentence token ID.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            The End-Of-Sentence token ID.
 
     ```python
     >>> from transformers import LlaVaModel, LlaVaConfig
