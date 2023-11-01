@@ -1949,9 +1949,9 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     Returns:
         `Tuple[torch.Tensor]`: attention mask between each special tokens and position_ids
     """
-    bs, num_token = input_ids.shape
-    # special_tokens_mask: bs, num_token. 1 for special tokens. 0 for normal tokens
-    special_tokens_mask = torch.zeros((bs, num_token), device=input_ids.device).bool()
+    batch_size, num_token = input_ids.shape
+    # special_tokens_mask: batch_size, num_token. 1 for special tokens. 0 for normal tokens
+    special_tokens_mask = torch.zeros((batch_size, num_token), device=input_ids.device).bool()
     for special_token in SPECIAL_TOKENS:
         special_tokens_mask |= input_ids == special_token
 
@@ -1959,8 +1959,8 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     idxs = torch.nonzero(special_tokens_mask)
 
     # generate attention mask and positional ids
-    attention_mask = torch.eye(num_token, device=input_ids.device).bool().unsqueeze(0).repeat(bs, 1, 1)
-    position_ids = torch.zeros((bs, num_token), device=input_ids.device)
+    attention_mask = torch.eye(num_token, device=input_ids.device).bool().unsqueeze(0).repeat(batch_size, 1, 1)
+    position_ids = torch.zeros((batch_size, num_token), device=input_ids.device)
     previous_col = 0
     for i in range(idxs.shape[0]):
         row, col = idxs[i]
