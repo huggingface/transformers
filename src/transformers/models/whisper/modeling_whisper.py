@@ -471,10 +471,11 @@ class WhisperAttention(nn.Module):
 # Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->Whisper
 class WhisperFlashAttention2(WhisperAttention):
     """
-    Bart flash attention module. This module inherits from `BartAttention` as the weights of the module stays
+    Whisper flash attention module. This module inherits from `WhisperAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
+
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
 
@@ -487,7 +488,7 @@ class WhisperFlashAttention2(WhisperAttention):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # BartFlashAttention2 attention does not support output_attentions
+        # WhisperFlashAttention2 attention does not support output_attentions
         output_attentions = False
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -539,7 +540,7 @@ class WhisperFlashAttention2(WhisperAttention):
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
 
-        # TODO: Bart does not have dropout in the config??
+        # TODO: Whisper does not have dropout in the config??
         # It is recommended to use dropout with FA according to the docs
         # when training.
         dropout_rate = 0.0  # if not self.training else self.attn_dropout
@@ -587,6 +588,7 @@ class WhisperFlashAttention2(WhisperAttention):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
         first unpad the input, then computes the attention scores and pad the final attention scores.
+
         Args:
             query_states (`torch.Tensor`):
                 Input query states to be passed to Flash Attention API
@@ -678,20 +680,11 @@ class WhisperEncoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        if getattr(config, "_flash_attn_2_enabled", False):
-            self.self_attn = WhisperFlashAttention2(
-                embed_dim=self.embed_dim,
-                num_heads=config.encoder_attention_heads,
-                dropout=config.attention_dropout,
-                config=config,
-            )
-        else:
-            self.self_attn = WhisperAttention(
-                embed_dim=self.embed_dim,
-                num_heads=config.encoder_attention_heads,
-                dropout=config.attention_dropout,
-                config=config,
-            )
+        self.self_attn = WhisperAttention(
+            embed_dim=self.embed_dim,
+            num_heads=config.encoder_attention_heads,
+            dropout=config.attention_dropout,
+        )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -757,45 +750,23 @@ class WhisperDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        if getattr(config, "_flash_attn_2_enabled", False):
-            self.self_attn= WhisperFlashAttention2(
-                embed_dim=self.embed_dim,
-                num_heads=config.decoder_attention_heads,
-                dropout=config.attention_dropout,
-                is_decoder=True,
-                config=config,
-            )
-        else:
-            self.self_attn = WhisperAttention(
-                embed_dim=self.embed_dim,
-                num_heads=config.decoder_attention_heads,
-                dropout=config.attention_dropout,
-                is_decoder=True,
-                config=config,
-            )
+        self.self_attn = WhisperAttention(
+            embed_dim=self.embed_dim,
+            num_heads=config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+            is_decoder=True,
+        )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        if getattr(config, "_flash_attn_2_enabled", False):
-            self.encoder_attn = WhisperFlashAttention2(
-                embed_dim=self.embed_dim,
-                num_heads=config.decoder_attention_heads,
-                dropout=config.attention_dropout,
-                is_decoder=True,
-                is_causal=True,
-                config=config,
-            )
-        else:
-            self.encoder_attn = WhisperAttention(
-                embed_dim=self.embed_dim,
-                num_heads=config.decoder_attention_heads,
-                dropout=config.attention_dropout,
-                is_decoder=True,
-                is_causal=True,
-                config=config,
-            )
+        self.encoder_attn = WhisperAttention(
+            self.embed_dim,
+            config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+            is_decoder=True,
+        )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
