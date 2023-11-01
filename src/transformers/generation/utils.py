@@ -2848,7 +2848,12 @@ class GenerationMixin:
             # stop if we exceed the maximum length
             if stopping_criteria(input_ids, scores):
                 this_peer_finished = True
-
+            if streamer is not None:
+                del next_tokens
+                del next_token_logits
+                del outputs
+                del model_inputs
+                torch.cuda.empty_cache()
             if this_peer_finished and not synced_gpus:
                 break
 
