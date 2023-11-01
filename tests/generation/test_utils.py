@@ -3014,7 +3014,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
     def test_assisted_decoding_encoder_decoder_shared_encoder(self):
         # PT-only test: TF doesn't support assisted decoding yet.
-        # Bart subclass with a kwarg that distorts the output
+        # Bart subclass with a kwarg called foo that distorts the output
         class FakeBart(BartForConditionalGeneration):
             def forward(self, input_ids, foo=False, **kwargs):
                 outs = super().forward(input_ids, **kwargs)
@@ -3045,10 +3045,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertEqual(outputs_normal.shape, (1, 20))
 
         # Should be different with foo
-        outputs_foo = model.generate(
-            input_ids,
-            foo=True,
-        )
+        outputs_foo = model.generate(input_ids, foo=True)
         with self.assertRaises(AssertionError):
             self.assertListEqual(outputs_foo.tolist(), outputs_normal.tolist())
 
