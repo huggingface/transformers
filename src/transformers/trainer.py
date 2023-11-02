@@ -646,7 +646,7 @@ class Trainer:
         unwrapped_model = unwrap_model(model)
 
         if is_peft_available() and isinstance(unwrapped_model, PeftModel):
-            embeddings = unwrapped_model.base_model.get_input_embeddings()
+            embeddings = unwrapped_model.base_model.model.get_input_embeddings()
         else:
             embeddings = unwrapped_model.get_input_embeddings()
 
@@ -667,7 +667,7 @@ class Trainer:
         unwrapped_model = unwrap_model(model)
 
         if is_peft_available() and isinstance(unwrapped_model, PeftModel):
-            embeddings = unwrapped_model.base_model.get_input_embeddings()
+            embeddings = unwrapped_model.base_model.model.get_input_embeddings()
         else:
             embeddings = unwrapped_model.get_input_embeddings()
 
