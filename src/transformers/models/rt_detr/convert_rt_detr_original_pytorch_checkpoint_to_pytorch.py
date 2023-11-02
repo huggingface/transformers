@@ -16,28 +16,13 @@
 
 import argparse
 from pathlib import Path
-
+import json
 import requests
 import torch
 from PIL import Image
+from huggingface_hub import hf_hub_download
 
-from transformers import RTDetrConfig, RTDetrForObjectDetection, RTDetrImageProcessor, RTDetrModel
-
-
-# TODO: Rafael Convert all these weights (?)
-# rtdetr_r18vd_5x_coco_objects365_from_paddle.pth -> https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r18vd_5x_coco_objects365_from_paddle.pth
-# rtdetr_r18vd_1x_objects365_from_paddle.pth -> https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r18vd_1x_objects365_from_paddle.pth
-
-# rtdetr_r50vd_6x_coco_from_paddle.pth -> https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_6x_coco_from_paddle.pth
-# rtdetr_r50vd_2x_coco_objects365_from_paddle.pth -> https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_2x_coco_objects365_from_paddle.pth
-# rtdetr_r50vd_1x_objects365_from_paddle.pth -> https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_1x_objects365_from_paddle.pth
-
-# rtdetr_r101vd_6x_coco_from_paddle.pth -> https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r101vd_6x_coco_from_paddle.pth
-# rtdetr_r101vd_2x_coco_objects365_from_paddle.pth -> https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r101vd_2x_coco_objects365_from_paddle.pth
-# rtdetr_r101vd_1x_objects365_from_paddle.pth-> https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r101vd_1x_objects365_from_paddle.pth
-
-# Weights downloaded from: https://github.com/lyuwenyu/RT-DETR/issues/42
-#########################
+from transformers import RTDetrConfig, RTDetrImageProcessor, RTDetrModel
 
 # TODO: (Rafael) Make this dictionary more efficient/shorter. Too many repetitive parts.
 replaces = {
@@ -346,20 +331,21 @@ def get_sample_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     return Image.open(requests.get(url, stream=True).raw)
 
-
 def update_config_values(config, checkpoint_name):
+    config.num_labels = 91
+    repo_id = "huggingface/label-files"
+    filename = "coco-detection-id2label.json"
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
+
     # Real values for rtdetr_r50vd_6x_coco_from_paddle.pth
-    # backbone = {"depth": 50, "variant": "d", "freeze_at": 0, "return_idx": [1, 2, 3], "num_stages": 4, "freeze_norm": True, "pretrained": True}
-    # encoder = {"in_channels": [512, 1024, 2048], "feat_strides": [8, 16, 32], "hidden_dim": 256, "use_encoder_idx": [2], "num_encoder_layers": 1, "num_head": 8, "dim_feedforward": 1024, "dropout": 0.0, "enc_act": "gelu", "pe_temperature": 10000, "expansion": 1.0, "depth_mult": 1, "act_encoder": "silu", "eval_spatial_size": [640, 640]}
-    # decoder = {"feat_channels": [256, 256, 256], "feat_strides": [8, 16, 32], "hidden_dim": 256, "num_levels": 3, "num_queries": 300, "num_decoder_layers": 6, "num_denoising": 100, "eval_idx": -1, "eval_spatial_size": [640, 640]}
     if checkpoint_name == "rtdetr_r50vd_6x_coco_from_paddle.pth":
-        config.freeze_at = 0
-        config.return_idx = [1, 2, 3]
         config.eval_spatial_size = [640, 640]
         config.feat_channels = [256, 256, 256]
     else:
-        raise ValueError("ERRORS")
-
+        raise ValueError(f"Checkpoint {checkpoint_name} is not valid")
     
 def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub, repo_id):
     config = RTDetrConfig()
@@ -388,12 +374,11 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
         new_val = state_dict_for_object_detection.pop(old_key)
         new_key = new_key.replace("model.","")
         state_dict_for_object_detection[new_key] = new_val
-    # missing, unnesp = model.load_state_dict(state_dict_for_object_detection, strict=False)
 
     # Transfer mapped weights
     model.load_state_dict(state_dict_for_object_detection)
     model.eval()
-        
+    
     # Prepare image
     img = get_sample_img()
     image_processor = RTDetrImageProcessor()
@@ -432,6 +417,7 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
 
     if push_to_hub:
         model.push_to_hub(repo_id=repo_id, commit_message="Add model")
+        image_processor.push_to_hub(repo_id=repo_id, commit_message="Add model")
 
 
 if __name__ == "__main__":
@@ -451,13 +437,5 @@ if __name__ == "__main__":
         type=str,
         help="repo_id where the model will be pushed to.",
     )
-
-    args = parser.parse_args()
-    # TODO: Rafael remove it from here
-    args.checkpoint_url = (
-        "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_6x_coco_from_paddle.pth"
-    )
-    args.repo_id = "rafaelpadilla/porting_rt_detr"
-    ####
 
     convert_rt_detr_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id)
