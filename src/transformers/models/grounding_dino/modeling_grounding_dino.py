@@ -346,8 +346,8 @@ class GroundingDINOObjectDetectionOutput(ModelOutput):
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
 
 
-def _get_clones(module, N):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
+def _get_clones(module, num_copies):
+    return nn.ModuleList([copy.deepcopy(module) for i in range(num_copies)])
 
 
 def inverse_sigmoid(x, eps=1e-5):
