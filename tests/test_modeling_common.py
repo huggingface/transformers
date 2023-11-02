@@ -632,7 +632,7 @@ class ModelTesterMixin:
 
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
-            for k, v in inputs:
+            for k, v in inputs.items():
                 if torch.is_floating_point(v):
                     v = v.to(target_dtype)
 
