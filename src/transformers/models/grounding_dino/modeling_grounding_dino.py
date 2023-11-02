@@ -874,21 +874,21 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
         Returns:
             _type_: _description_
         """
-        bsz, tgt_len, _ = vision_features.size()
+        batch_size, tgt_len, _ = vision_features.size()
 
         vision_query_states = self.vision_proj(vision_features) * self.scale
-        vision_query_states = self._shape(vision_query_states, tgt_len, bsz)
+        vision_query_states = self._shape(vision_query_states, tgt_len, batch_size)
 
         text_key_states = self.text_proj(text_features)
-        text_key_states = self._shape(text_key_states, -1, bsz)
+        text_key_states = self._shape(text_key_states, -1, batch_size)
 
         vision_value_states = self.values_vision_proj(vision_features)
-        vision_value_states = self._shape(vision_value_states, -1, bsz)
+        vision_value_states = self._shape(vision_value_states, -1, batch_size)
 
         text_value_states = self.values_text_proj(text_features)
-        text_value_states = self._shape(text_value_states, -1, bsz)
+        text_value_states = self._shape(text_value_states, -1, batch_size)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
 
         vision_query_states = vision_query_states.view(*proj_shape)
         text_key_states = text_key_states.view(*proj_shape)
@@ -898,9 +898,9 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
         src_len = text_key_states.size(1)
         attn_weights = torch.bmm(vision_query_states, text_key_states.transpose(1, 2))  # bs*nhead, nimg, ntxt
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+        if attn_weights.size() != (batch_size * self.num_heads, tgt_len, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+                f"Attention weights should be of size {(batch_size * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
             )
 
         attn_weights = attn_weights - attn_weights.max()
@@ -938,23 +938,23 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
         vision_attn_output = torch.bmm(vision_attn_probs, text_value_states)
         text_attn_output = torch.bmm(text_attn_probs, vision_value_states)
 
-        if vision_attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+        if vision_attn_output.size() != (batch_size * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`vision_attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {vision_attn_output.size()}"
+                f"`vision_attn_output` should be of size {(batch_size, self.num_heads, tgt_len, self.head_dim)}, but is {vision_attn_output.size()}"
             )
 
-        if text_attn_output.size() != (bsz * self.num_heads, src_len, self.head_dim):
+        if text_attn_output.size() != (batch_size * self.num_heads, src_len, self.head_dim):
             raise ValueError(
-                f"`text_attn_output` should be of size {(bsz, self.num_heads, src_len, self.head_dim)}, but is {text_attn_output.size()}"
+                f"`text_attn_output` should be of size {(batch_size, self.num_heads, src_len, self.head_dim)}, but is {text_attn_output.size()}"
             )
 
-        vision_attn_output = vision_attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+        vision_attn_output = vision_attn_output.view(batch_size, self.num_heads, tgt_len, self.head_dim)
         vision_attn_output = vision_attn_output.transpose(1, 2)
-        vision_attn_output = vision_attn_output.reshape(bsz, tgt_len, self.embed_dim)
+        vision_attn_output = vision_attn_output.reshape(batch_size, tgt_len, self.embed_dim)
 
-        text_attn_output = text_attn_output.view(bsz, self.num_heads, src_len, self.head_dim)
+        text_attn_output = text_attn_output.view(batch_size, self.num_heads, src_len, self.head_dim)
         text_attn_output = text_attn_output.transpose(1, 2)
-        text_attn_output = text_attn_output.reshape(bsz, src_len, self.embed_dim)
+        text_attn_output = text_attn_output.reshape(batch_size, src_len, self.embed_dim)
 
         vision_attn_output = self.out_vision_proj(vision_attn_output)
         text_attn_output = self.out_text_proj(text_attn_output)
