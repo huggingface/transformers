@@ -22,8 +22,6 @@ rendered properly in your Markdown viewer.
   <figcaption class="text-center">与完整尺寸的模型权重（约为700MB）相比，存储在Hub上的OPTForCausalLM模型的adapter权重仅为~6MB。</figcaption>
 </div>
 
-<br>
-
 如果您对学习更多关于🤗 PEFT库感兴趣，请查看[文档](https://huggingface.co/docs/peft/index)。
 
 
@@ -85,7 +83,7 @@ model.load_adapter(peft_model_id)
 
 ## 基于8bit或4bit进行加载
 
-`bitsandbytes`集成支持8bit和4bit精度数据类型，这对于加载大模型非常有用，因为它可以节省内存（请参阅`bitsandbytes`集成指南以了解更多信息）。要有效地将模型分配到您的硬件，请在[`~PreTrainedModel.from_pretrained`]中添加`load_in_8bit`或`load_in_4bit`参数，并将`device_map="auto"`设置为：
+`bitsandbytes`集成支持8bit和4bit精度数据类型，这对于加载大模型非常有用，因为它可以节省内存（请参阅`bitsandbytes`[指南](./quantization#bitsandbytes-integration)以了解更多信息）。要有效地将模型分配到您的硬件，请在[`~PreTrainedModel.from_pretrained`]中添加`load_in_8bit`或`load_in_4bit`参数，并将`device_map="auto"`设置为：
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
