@@ -542,6 +542,7 @@ class Rwkv5Model(Rwkv5PreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,  # noqa
         inputs_embeds: Optional[torch.FloatTensor] = None,
         state: Optional[List[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,

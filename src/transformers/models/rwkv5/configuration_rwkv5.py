@@ -45,10 +45,12 @@ class Rwkv5Config(PretrainedConfig):
             Number of hidden layers in the model.
         attention_hidden_size (`int`, *optional*):
             Dimensionality of the attention hidden states. Will default to `hidden_size` if unset.
-        num_attention_heads (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
+        num_attention_heads (`int`, *optional*, defaults to 64):
+            The attention heads to use in rwkv5 self_attention module.
         intermediate_size (`int`, *optional*):
             Dimensionality of the inner feed-forward layers. Will default to 4 times `hidden_size` if unset.
-        layer_norm_epsilon (`<fill_type>`, *optional*, defaults to 1e-05): <fill_docstring>
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
+            The epsilon to use in the layer normalization layers.
         bos_token_id (`int`, *optional*, defaults to 0):
             The id of the beginning of sentence token in the vocabulary. Defaults to 0 as RWKV5 uses the same tokenizer
             as GPTNeoX.
