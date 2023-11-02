@@ -1755,6 +1755,11 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         self.encoder.word_embeddings = self.word_embeddings
         self.decoder.word_embeddings = self.word_embeddings
 
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.encoder.word_embeddings, self.word_embeddings)
+            self._tie_or_clone_weights(self.decoder.word_embeddings, self.word_embeddings)
+
     def get_encoder(self):
         return self.encoder
 
@@ -1875,6 +1880,10 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.prophetnet.word_embeddings, self.lm_head)
 
     def get_input_embeddings(self):
         return self.prophetnet.word_embeddings
@@ -2100,6 +2109,10 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.prophetnet.decoder.word_embeddings, self.lm_head)
+
     def set_decoder(self, decoder):
         self.prophetnet.decoder = decoder
 
@@ -2312,6 +2325,9 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
     def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
         self.decoder = ProphetNetDecoder(config)
+
+        # This is a link so that tied weights work across classes
+        self.word_embeddings = self.decoder.word_embeddings
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
