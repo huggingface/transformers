@@ -205,7 +205,6 @@ class MultiHeadSelfAttention(nn.Module):
         mask: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        **kwargs,
     ) -> Tuple[torch.Tensor, ...]:
         """
         Parameters:
@@ -218,11 +217,6 @@ class MultiHeadSelfAttention(nn.Module):
             weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        if "padding_mask" in kwargs:
-            logger.warning_once(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
         bs, q_length, dim = query.size()
         k_length = key.size(1)
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
@@ -283,7 +277,6 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
         mask: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        **kwargs,
     ) -> Tuple[torch.Tensor, ...]:
         """
         Parameters:
@@ -296,14 +289,6 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
             weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        if "padding_mask" in kwargs:
-            logger.warning_once(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
-            # overwrite mask with padding_mask
-            mask = kwargs.pop("padding_mask")
-
         bs, q_length, dim = query.size()
 
         dim_per_head = self.dim // self.n_heads
@@ -493,7 +478,6 @@ class TransformerBlock(nn.Module):
         attn_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        **kwargs,
     ) -> Tuple[torch.Tensor, ...]:
         """
         Parameters:
@@ -504,11 +488,6 @@ class TransformerBlock(nn.Module):
             sa_weights: torch.tensor(bs, n_heads, seq_length, seq_length) The attention weights ffn_output:
             torch.tensor(bs, seq_length, dim) The output of the transformer block contextualization.
         """
-        if "padding_mask" in kwargs:
-            logger.warning_once(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
         # Self-Attention
         sa_output = self.attention(
             query=x,
@@ -517,7 +496,6 @@ class TransformerBlock(nn.Module):
             mask=attn_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
-            **kwargs,
         )
         if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
