@@ -391,10 +391,6 @@ class Rwkv5PreTrainedModel(PreTrainedModel):
                 module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
                 module.time_mix_receptance.data = torch.pow(time_weight, ratio_1_to_almost0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, Rwkv5Model):
-            module.gradient_checkpointing = value
-
 
 @dataclass
 class Rwkv5Output(ModelOutput):
@@ -523,6 +519,8 @@ class Rwkv5Model(Rwkv5PreTrainedModel):
 
         self.layers_are_rescaled = False
         self.pre_ln_flag = False
+
+        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
