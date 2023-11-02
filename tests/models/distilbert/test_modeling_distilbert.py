@@ -288,7 +288,7 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference(self):
@@ -341,7 +341,7 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 self.assertTrue(torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2))
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_padding_right(self):

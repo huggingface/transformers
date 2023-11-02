@@ -45,15 +45,14 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_available,
-    is_torch_fx_available,
+    is_flash_attn_2_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_distilbert import DistilBertConfig
 
 
-if is_flash_attn_available():
+if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
@@ -77,27 +76,10 @@ DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
 
 
-# TODO: @younesbelkada move that in pytorch_utils and document it
-if is_torch_fx_available():
-
-    @torch.fx.wrap
-    def check_padding_in_attention_mask(attention_mask):
-        if 0 in attention_mask:
-            return attention_mask
-        return None
-
-else:
-
-    def check_padding_in_attention_mask(attention_mask):
-        if 0 in attention_mask:
-            return attention_mask
-        return None
-
-
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(padding_mask):
-    seqlens_in_batch = padding_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(padding_mask.flatten(), as_tuple=False).flatten()
+def _get_unpad_data(attention_mask):
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
     return (
@@ -179,10 +161,12 @@ class Embeddings(nn.Module):
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
+        self.config = config
 
         self.n_heads = config.n_heads
         self.dim = config.dim
         self.dropout = nn.Dropout(p=config.attention_dropout)
+        self.is_causal = False
 
         # Have an even number of multi heads that divide the dimensions
         if self.dim % self.n_heads != 0:
@@ -221,7 +205,7 @@ class MultiHeadSelfAttention(nn.Module):
         mask: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        padding_mask: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Tuple[torch.Tensor, ...]:
         """
         Parameters:
@@ -234,6 +218,11 @@ class MultiHeadSelfAttention(nn.Module):
             weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
+        if "padding_mask" in kwargs:
+            logger.warning_once(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
+
         bs, q_length, dim = query.size()
         k_length = key.size(1)
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
@@ -294,7 +283,7 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
         mask: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        padding_mask: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Tuple[torch.Tensor, ...]:
         """
         Parameters:
@@ -307,6 +296,14 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
             weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
+        if "padding_mask" in kwargs:
+            logger.warning_once(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
+
+            # overwrite mask with padding_mask
+            mask = kwargs.pop("padding_mask")
+
         bs, q_length, dim = query.size()
 
         dim_per_head = self.dim // self.n_heads
@@ -325,20 +322,29 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 just to be sure everything works as expected.
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32. (LlamaRMSNorm handles it correctly)
+
         input_dtype = q.dtype
         if input_dtype == torch.float32:
+            # Handle the case where the model is quantized
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_lin.weight.dtype
+
             logger.warning_once(
-                "The input hidden states seems to be silently casted in float32, this might be related to"
-                " the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                " float16."
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
             )
 
-            q = q.to(torch.float16)
-            k = k.to(torch.float16)
-            v = v.to(torch.float16)
+            q = q.to(target_dtype)
+            k = k.to(target_dtype)
+            v = v.to(target_dtype)
 
-        attn_weights = self._flash_attention_forward(q, k, v, padding_mask, q_length, dropout=attn_dropout)
+        attn_weights = self._flash_attention_forward(q, k, v, mask, q_length, dropout=attn_dropout)
 
         attn_weights_reshaped = attn_weights.reshape(bs, q_length, self.n_heads * dim_per_head)
         attn_output = self.out_lin(attn_weights_reshaped)
@@ -350,7 +356,7 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward with causal=True->causal=False
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, padding_mask, query_length, dropout=0.0, softmax_scale=None
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -363,7 +369,7 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
                 Input key states to be passed to Flash Attention API
             value_states (`torch.Tensor`):
                 Input value states to be passed to Flash Attention API
-            padding_mask (`torch.Tensor`):
+            attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
             dropout (`int`, *optional*):
@@ -372,10 +378,10 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
         # Contains at least one padding token in the sequence
-        if padding_mask is not None:
+        if attention_mask is not None:
             batch_size = query_states.shape[0]
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, padding_mask, query_length
+                query_states, key_states, value_states, attention_mask, query_length
             )
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
@@ -391,27 +397,31 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=False,
+                causal=self.is_causal,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=False
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=self.is_causal
             )
 
         return attn_output
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
-    def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
-        batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input with num_heads->n_heads
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
+        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
-        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
+        key_layer = index_first_axis(
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        value_layer = index_first_axis(
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
+                query_layer.reshape(batch_size * kv_seq_len, self.n_heads, head_dim), indices_k
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -425,8 +435,8 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
             query_layer = query_layer.squeeze(1)
         else:
             # The -q_len: slice assumes left padding.
-            padding_mask = padding_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, padding_mask)
+            attention_mask = attention_mask[:, -query_length:]
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
 
         return (
             query_layer,
@@ -483,7 +493,7 @@ class TransformerBlock(nn.Module):
         attn_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        padding_mask: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Tuple[torch.Tensor, ...]:
         """
         Parameters:
@@ -494,6 +504,11 @@ class TransformerBlock(nn.Module):
             sa_weights: torch.tensor(bs, n_heads, seq_length, seq_length) The attention weights ffn_output:
             torch.tensor(bs, seq_length, dim) The output of the transformer block contextualization.
         """
+        if "padding_mask" in kwargs:
+            logger.warning_once(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
+
         # Self-Attention
         sa_output = self.attention(
             query=x,
@@ -502,7 +517,7 @@ class TransformerBlock(nn.Module):
             mask=attn_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
-            padding_mask=padding_mask,
+            **kwargs,
         )
         if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
@@ -556,8 +571,6 @@ class Transformer(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        padding_mask = check_padding_in_attention_mask(attn_mask)
-
         hidden_state = x
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -577,7 +590,6 @@ class Transformer(nn.Module):
                     attn_mask,
                     head_mask[i],
                     output_attentions,
-                    padding_mask,
                 )
 
             hidden_state = layer_outputs[-1]
@@ -796,13 +808,16 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=device)  # (bs, seq_length)
-
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embeddings = self.embeddings(input_ids, inputs_embeds)  # (bs, seq_length, dim)
+
+        if getattr(self.config, "_flash_attn_2_enabled", False):
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        else:
+            if attention_mask is None:
+                attention_mask = torch.ones(input_shape, device=device)  # (bs, seq_length)
 
         return self.transformer(
             x=embeddings,
