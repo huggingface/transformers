@@ -587,7 +587,7 @@ class ModelTesterMixin:
         training_context = (
             torch.amp.autocast(device_type=torch_device, dtype=mixed_precision_dtype)
             if mixed_precision_training
-            else nullcontext
+            else nullcontext()
         )
 
         for model_class in self.all_model_classes:
