@@ -307,16 +307,14 @@ def get_oneformer_resize_output_image_size(
     Computes the output size given the desired size.
 
     Args:
-        image (`np.ndarray`):
+        input_image (`np.ndarray`):
             The input image.
-        size (`int` or `Tuple[int, int]` or `List[int]` or `Tuple[int]`):
+        size (`int`, `Tuple[int, int]`, `List[int]`, `Tuple[int]`):
             The size of the output image.
         max_size (`int`, *optional*):
             The maximum size of the output image.
         default_to_square (`bool`, *optional*, defaults to `True`):
             Whether to default to square if no size is provided.
-        input_data_format (`ChannelDimension` or `str`, *optional*):
-            The channel dimension format of the input image. If unset, will use the inferred format from the input.
 
     Returns:
         `Tuple[int, int]`: The output size.

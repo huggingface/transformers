@@ -939,8 +939,15 @@ class ClapAudioEncoder(nn.Module):
             input_dimensions = self.input_resolutions[i]
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__, hidden_states, input_dimensions, layer_head_mask, output_attentions
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
                 )
             else:
                 layer_outputs = layer_module(
@@ -1588,15 +1595,20 @@ class ClapTextEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, past_key_value, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -1688,6 +1700,10 @@ class ClapPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.weight, std=in_proj_std)
             if module.bias is not None:
                 module.bias.data.zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, ClapTextEncoder):
+            module.gradient_checkpointing = value
 
 
 class ClapAudioModel(ClapPreTrainedModel):

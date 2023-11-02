@@ -21,14 +21,7 @@ from parameterized import parameterized
 from pytest import mark
 
 from transformers import LlamaConfig, is_torch_available, set_seed
-from transformers.testing_utils import (
-    require_flash_attn,
-    require_torch,
-    require_torch_accelerator,
-    require_torch_gpu,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_flash_attn, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -541,7 +534,7 @@ end
 """,
     ]
 
-    @require_torch_accelerator
+    @require_torch_gpu
     @slow
     def test_model_7b_logits(self):
         model = LlamaForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf").to(torch_device)

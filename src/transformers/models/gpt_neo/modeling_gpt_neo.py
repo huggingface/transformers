@@ -384,6 +384,10 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, GPTNeoModel):
+            module.gradient_checkpointing = value
+
 
 GPT_NEO_START_DOCSTRING = r"""
 
@@ -600,14 +604,20 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        # None for past_key_value
+                        return module(*inputs, use_cache, output_attentions)
+
+                    return custom_forward
+
+                outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(block),
                     hidden_states,
                     None,
                     attention_mask,
                     head_mask[i],
-                    use_cache,
-                    output_attentions,
                 )
             else:
                 outputs = block(

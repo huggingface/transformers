@@ -557,6 +557,10 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (ProphetNetDecoder, ProphetNetEncoder)):
+            module.gradient_checkpointing = value
+
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
@@ -1325,12 +1329,18 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
                 encoder_hidden_states = encoder_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(encoder_layer),
                     hidden_states,
                     extended_attention_mask,
                     (head_mask[idx] if head_mask is not None else None),
-                    output_attentions,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -1559,8 +1569,16 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        # None for past_key_value
+                        return module(*inputs, use_cache, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(decoder_layer),
                     hidden_states,
                     extended_attention_mask,
                     encoder_hidden_states,
@@ -1572,8 +1590,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                     predict_relative_position_buckets,
                     position_ids,
                     None,
-                    use_cache,
-                    output_attentions,
                 )
             else:
                 layer_outputs = decoder_layer(

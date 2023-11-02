@@ -20,14 +20,7 @@ import timeout_decorator  # noqa
 from parameterized import parameterized
 
 from transformers import FSMTConfig, is_torch_available
-from transformers.testing_utils import (
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-    require_torch_fp16,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -405,12 +398,12 @@ class FSMTHeadTests(unittest.TestCase):
         self.assertEqual(n_pad_after, n_pad_before - 1)
         self.assertTrue(torch.eq(shifted[:, 0], 2).all())
 
-    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_ids, batch_size = self._get_config_and_data()
         attention_mask = input_ids.ne(1).to(torch_device)
         model = FSMTForConditionalGeneration(config).eval().to(torch_device)
-        model.half()
+        if torch_device == "cuda":
+            model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -545,7 +538,8 @@ class FSMTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_translation_pipeline(self, pair):
         tokenizer, model, src_text, tgt_text = self.translation_setup(pair)
-        pipeline = TranslationPipeline(model, tokenizer, framework="pt", device=torch_device)
+        device = 0 if torch_device == "cuda" else -1
+        pipeline = TranslationPipeline(model, tokenizer, framework="pt", device=device)
         output = pipeline([src_text])
         self.assertEqual([tgt_text], [x["translation_text"] for x in output])
 

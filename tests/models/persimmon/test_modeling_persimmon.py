@@ -21,14 +21,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import PersimmonConfig, is_torch_available, set_seed
-from transformers.testing_utils import (
-    backend_empty_cache,
-    require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -420,13 +413,12 @@ class PersimmonIntegrationTest(unittest.TestCase):
         # fmt: on
         torch.testing.assert_close(out.cpu()[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
-        backend_empty_cache(torch_device)
+        torch.cuda.empty_cache()
         del model
         gc.collect()
 
     @slow
-    @require_torch_accelerator
-    @require_torch_fp16
+    @require_torch_gpu
     def test_model_8b_chat_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """human: Simply put, the theory of relativity states that?\n\nadept: The theory of relativity states that the laws of physics are the same for all observers, regardless of their relative motion."""
         prompt = "human: Simply put, the theory of relativity states that?\n\nadept:"
@@ -441,6 +433,6 @@ class PersimmonIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
-        backend_empty_cache(torch_device)
+        torch.cuda.empty_cache()
         del model
         gc.collect()

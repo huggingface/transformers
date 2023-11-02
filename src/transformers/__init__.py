@@ -388,11 +388,6 @@ _import_structure = {
         "JukeboxTokenizer",
         "JukeboxVQVAEConfig",
     ],
-    "models.kosmos2": [
-        "KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Kosmos2Config",
-        "Kosmos2Processor",
-    ],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.layoutlmv2": [
         "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -521,12 +516,6 @@ _import_structure = {
         "SamProcessor",
         "SamPromptEncoderConfig",
         "SamVisionConfig",
-    ],
-    "models.seamless_m4t": [
-        "SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "SeamlessM4TConfig",
-        "SeamlessM4TFeatureExtractor",
-        "SeamlessM4TProcessor",
     ],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
@@ -677,7 +666,6 @@ _import_structure = {
         "ImageToImagePipeline",
         "ImageToTextPipeline",
         "JsonPipelineDataFormat",
-        "MaskGenerationPipeline",
         "NerPipeline",
         "ObjectDetectionPipeline",
         "PipedPipelineDataFormat",
@@ -778,7 +766,7 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
-    "utils.quantization_config": ["AwqConfig", "BitsAndBytesConfig", "GPTQConfig"],
+    "utils.quantization_config": ["BitsAndBytesConfig", "GPTQConfig"],
 }
 
 # sentencepiece-backed objects
@@ -817,7 +805,6 @@ else:
     _import_structure["models.plbart"].append("PLBartTokenizer")
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.rembert"].append("RemBertTokenizer")
-    _import_structure["models.seamless_m4t"].append("SeamlessM4TTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.speecht5"].append("SpeechT5Tokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
@@ -890,7 +877,6 @@ else:
     _import_structure["models.rembert"].append("RemBertTokenizerFast")
     _import_structure["models.roberta"].append("RobertaTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
-    _import_structure["models.seamless_m4t"].append("SeamlessM4TTokenizerFast")
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
@@ -1096,7 +1082,6 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
-
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2056,14 +2041,6 @@ else:
             "JukeboxVQVAE",
         ]
     )
-    _import_structure["models.kosmos2"].extend(
-        [
-            "KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Kosmos2ForConditionalGeneration",
-            "Kosmos2Model",
-            "Kosmos2PreTrainedModel",
-        ]
-    )
     _import_structure["models.layoutlm"].extend(
         [
             "LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2706,21 +2683,6 @@ else:
             "SamPreTrainedModel",
         ]
     )
-    _import_structure["models.seamless_m4t"].extend(
-        [
-            "SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SeamlessM4TCodeHifiGan",
-            "SeamlessM4TForSpeechToSpeech",
-            "SeamlessM4TForSpeechToText",
-            "SeamlessM4TForTextToSpeech",
-            "SeamlessM4TForTextToText",
-            "SeamlessM4THifiGan",
-            "SeamlessM4TModel",
-            "SeamlessM4TPreTrainedModel",
-            "SeamlessM4TTextToUnitForConditionalGeneration",
-            "SeamlessM4TTextToUnitModel",
-        ]
-    )
     _import_structure["models.segformer"].extend(
         [
             "SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3090,7 +3052,6 @@ else:
         [
             "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "WhisperForAudioClassification",
-            "WhisperForCausalLM",
             "WhisperForConditionalGeneration",
             "WhisperModel",
             "WhisperPreTrainedModel",
@@ -3413,13 +3374,6 @@ else:
             "TFConvNextForImageClassification",
             "TFConvNextModel",
             "TFConvNextPreTrainedModel",
-        ]
-    )
-    _import_structure["models.convnextv2"].extend(
-        [
-            "TFConvNextV2ForImageClassification",
-            "TFConvNextV2Model",
-            "TFConvNextV2PreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -4582,11 +4536,6 @@ if TYPE_CHECKING:
         JukeboxTokenizer,
         JukeboxVQVAEConfig,
     )
-    from .models.kosmos2 import (
-        KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Kosmos2Config,
-        Kosmos2Processor,
-    )
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.layoutlmv2 import (
         LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4708,12 +4657,6 @@ if TYPE_CHECKING:
         SamProcessor,
         SamPromptEncoderConfig,
         SamVisionConfig,
-    )
-    from .models.seamless_m4t import (
-        SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        SeamlessM4TConfig,
-        SeamlessM4TFeatureExtractor,
-        SeamlessM4TProcessor,
     )
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
@@ -4841,7 +4784,6 @@ if TYPE_CHECKING:
         ImageToImagePipeline,
         ImageToTextPipeline,
         JsonPipelineDataFormat,
-        MaskGenerationPipeline,
         NerPipeline,
         ObjectDetectionPipeline,
         PipedPipelineDataFormat,
@@ -4951,7 +4893,7 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import AwqConfig, BitsAndBytesConfig, GPTQConfig
+    from .utils.quantization_config import BitsAndBytesConfig, GPTQConfig
 
     try:
         if not is_sentencepiece_available():
@@ -4983,7 +4925,6 @@ if TYPE_CHECKING:
         from .models.plbart import PLBartTokenizer
         from .models.reformer import ReformerTokenizer
         from .models.rembert import RemBertTokenizer
-        from .models.seamless_m4t import SeamlessM4TTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.speecht5 import SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
@@ -5049,7 +4990,6 @@ if TYPE_CHECKING:
         from .models.rembert import RemBertTokenizerFast
         from .models.roberta import RobertaTokenizerFast
         from .models.roformer import RoFormerTokenizerFast
-        from .models.seamless_m4t import SeamlessM4TTokenizerFast
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
@@ -5217,6 +5157,8 @@ if TYPE_CHECKING:
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
+
+        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -6012,12 +5954,6 @@ if TYPE_CHECKING:
             JukeboxPrior,
             JukeboxVQVAE,
         )
-        from .models.kosmos2 import (
-            KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Kosmos2ForConditionalGeneration,
-            Kosmos2Model,
-            Kosmos2PreTrainedModel,
-        )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMForMaskedLM,
@@ -6549,21 +6485,6 @@ if TYPE_CHECKING:
             SamModel,
             SamPreTrainedModel,
         )
-
-        # PyTorch model imports
-        from .models.seamless_m4t import (
-            SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SeamlessM4TCodeHifiGan,
-            SeamlessM4TForSpeechToSpeech,
-            SeamlessM4TForSpeechToText,
-            SeamlessM4TForTextToSpeech,
-            SeamlessM4TForTextToText,
-            SeamlessM4THifiGan,
-            SeamlessM4TModel,
-            SeamlessM4TPreTrainedModel,
-            SeamlessM4TTextToUnitForConditionalGeneration,
-            SeamlessM4TTextToUnitModel,
-        )
         from .models.segformer import (
             SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SegformerDecodeHead,
@@ -6853,7 +6774,6 @@ if TYPE_CHECKING:
         from .models.whisper import (
             WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
             WhisperForAudioClassification,
-            WhisperForCausalLM,
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,
@@ -7134,11 +7054,6 @@ if TYPE_CHECKING:
             TFConvBertPreTrainedModel,
         )
         from .models.convnext import TFConvNextForImageClassification, TFConvNextModel, TFConvNextPreTrainedModel
-        from .models.convnextv2 import (
-            TFConvNextV2ForImageClassification,
-            TFConvNextV2Model,
-            TFConvNextV2PreTrainedModel,
-        )
         from .models.ctrl import (
             TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFCTRLForSequenceClassification,

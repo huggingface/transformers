@@ -19,14 +19,7 @@ import tempfile
 import unittest
 
 from transformers import SwitchTransformersConfig, is_torch_available
-from transformers.testing_utils import (
-    require_tokenizers,
-    require_torch,
-    require_torch_accelerator,
-    require_torch_bf16,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_tokenizers, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -1024,8 +1017,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
 @require_torch
 @require_tokenizers
 class SwitchTransformerModelIntegrationTests(unittest.TestCase):
-    @require_torch_accelerator
-    @require_torch_bf16
+    @require_torch_gpu
     def test_small_logits(self):
         r"""
         Logits testing to check implementation consistency between `t5x` implementation

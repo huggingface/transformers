@@ -22,8 +22,7 @@ from transformers import ViTConfig
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
+    require_torch_gpu,
     require_vision,
     slow,
     torch_device,
@@ -317,8 +316,7 @@ class ViTModelIntegrationTest(unittest.TestCase):
 
     @slow
     @require_accelerate
-    @require_torch_accelerator
-    @require_torch_fp16
+    @require_torch_gpu
     def test_inference_fp16(self):
         r"""
         A small test to make sure that inference work in half precision without any problem.

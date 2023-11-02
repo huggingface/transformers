@@ -19,7 +19,7 @@ import os
 import re
 import time
 from fnmatch import fnmatch
-from typing import Dict, List
+from typing import Dict
 
 import requests
 from slack_sdk import WebClient
@@ -132,42 +132,30 @@ class Message:
         }
 
     @property
-    def category_failures(self) -> List[Dict]:
-        failure_blocks = []
-
-        MAX_ERROR_TEXT = 3000 - len("The following examples had failures:\n\n\n\n") - len("[Truncated]\n")
+    def category_failures(self) -> Dict:
         line_length = 40
         category_failures = {k: v["failed"] for k, v in doc_test_results.items() if isinstance(v, dict)}
 
-        def single_category_failures(category, failures):
-            text = ""
-            if len(failures) == 0:
-                return ""
-            text += f"*{category} failures*:".ljust(line_length // 2).rjust(line_length // 2) + "\n"
-
-            for idx, failure in enumerate(failures):
-                new_text = text + f"`{failure}`\n"
-                if len(new_text) > MAX_ERROR_TEXT:
-                    text = text + "[Truncated]\n"
-                    break
-                text = new_text
-
-            return text
-
+        report = ""
         for category, failures in category_failures.items():
-            report = single_category_failures(category, failures)
-            if len(report) == 0:
+            if len(failures) == 0:
                 continue
-            block = {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"The following examples had failures:\n\n\n{report}\n",
-                },
-            }
-            failure_blocks.append(block)
 
-        return failure_blocks
+            if report != "":
+                report += "\n\n"
+
+            report += f"*{category} failures*:".ljust(line_length // 2).rjust(line_length // 2) + "\n"
+            report += "`"
+            report += "`\n`".join(failures)
+            report += "`"
+
+        return {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"The following examples had failures:\n\n\n{report}\n",
+            },
+        }
 
     @property
     def payload(self) -> str:
@@ -177,7 +165,7 @@ class Message:
             blocks.append(self.failures)
 
         if self.n_failures > 0:
-            blocks.extend(self.category_failures)
+            blocks.extend([self.category_failures])
 
         if self.n_failures == 0:
             blocks.append(self.no_failures)
@@ -223,19 +211,10 @@ class Message:
         )
 
     def get_reply_blocks(self, job_name, job_link, failures, text):
-        # `text` must be less than 3001 characters in Slack SDK
-        # keep some room for adding "[Truncated]" when necessary
-        MAX_ERROR_TEXT = 3000 - len("[Truncated]")
-
-        failure_text = ""
+        failures_text = ""
         for key, value in failures.items():
-            new_text = failure_text + f"*{key}*\n_{value}_\n\n"
-            if len(new_text) > MAX_ERROR_TEXT:
-                # `failure_text` here has length <= 3000
-                failure_text = failure_text + "[Truncated]"
-                break
-            # `failure_text` here has length <= MAX_ERROR_TEXT
-            failure_text = new_text
+            value = value[:200] + " [Truncated]" if len(value) > 250 else value
+            failures_text += f"*{key}*\n_{value}_\n\n"
 
         title = job_name
         content = {"type": "section", "text": {"type": "mrkdwn", "text": text}}
@@ -250,7 +229,7 @@ class Message:
         return [
             {"type": "header", "text": {"type": "plain_text", "text": title.upper(), "emoji": True}},
             content,
-            {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": failures_text}},
         ]
 
     def post_reply(self):

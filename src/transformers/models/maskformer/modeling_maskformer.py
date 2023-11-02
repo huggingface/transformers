@@ -25,7 +25,6 @@ from torch import Tensor, nn
 
 from ... import AutoBackbone
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -703,6 +702,21 @@ class DetrDecoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.detr.modeling_detr._expand_mask
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[int] = None):
+    """
+    Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, target_seq_len, source_seq_len]`.
+    """
+    batch_size, source_len = mask.size()
+    target_len = target_len if target_len is not None else source_len
+
+    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, target_len, source_len).to(dtype)
+
+    inverted_mask = 1.0 - expanded_mask
+
+    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
+
+
 class DetrDecoder(nn.Module):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DetrDecoderLayer`].
@@ -803,12 +817,18 @@ class DetrDecoder(nn.Module):
             hidden_states = inputs_embeds
             input_shape = inputs_embeds.size()[:-1]
 
+        combined_attention_mask = None
+
+        if attention_mask is not None and combined_attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            combined_attention_mask = combined_attention_mask + _expand_mask(
+                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            )
+
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-            )
+            encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # optional intermediate hidden states
         intermediate = () if self.config.auxiliary_loss else None
@@ -828,19 +848,25 @@ class DetrDecoder(nn.Module):
                     continue
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(decoder_layer),
                     hidden_states,
-                    None,
+                    combined_attention_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     None,
-                    output_attentions,
                 )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=None,
+                    attention_mask=combined_attention_mask,
                     object_queries=object_queries,
                     query_position_embeddings=query_position_embeddings,
                     encoder_hidden_states=encoder_hidden_states,
@@ -1592,6 +1618,12 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, MaskFormerPixelLevelModule):
+            module.encoder.gradient_checkpointing = value
+        if isinstance(module, DetrDecoder):
+            module.gradient_checkpointing = value
 
 
 @add_start_docstrings(

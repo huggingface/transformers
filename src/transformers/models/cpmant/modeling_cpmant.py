@@ -536,6 +536,7 @@ class CpmAntPreTrainedModel(PreTrainedModel):
 
     config_class = CpmAntConfig
     base_model_prefix = "cpmant"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -554,6 +555,10 @@ class CpmAntPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, CpmAntSegmentPositionEmbedding):
             module.relative_attention_bias.data.normal_(mean=0.0, std=self.config.init_std)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, CpmAntEncoder):
+            module.gradient_checkpointing = value
 
 
 CPMANT_START_DOCSTRING = r"""
