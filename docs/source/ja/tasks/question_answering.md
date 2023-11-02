@@ -68,7 +68,7 @@ pip install transformers datasets evaluate
 >>> squad = load_dataset("squad", split="train[:5000]")
 ```
 
-Split the dataset's `train` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
+[`~datasets.Dataset.train_test_split`] メソッドを使用して、データセットの `train` 分割をトレイン セットとテスト セットに分割します。
 
 ```py
 >>> squad = squad.train_test_split(test_size=0.2)

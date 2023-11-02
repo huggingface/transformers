@@ -562,7 +562,7 @@ DETR モデルを微調整して評価し、Hugging Face Hub にアップロー�
 >>> obj_detector(image)
 ```
 
-You can also manually replicate the results of the pipeline if you'd like:
+必要に応じて、パイプラインの結果を手動で複製することもできます。
 
 ```py
 >>> image_processor = AutoImageProcessor.from_pretrained("devonho/detr-resnet-50_finetuned_cppe5")

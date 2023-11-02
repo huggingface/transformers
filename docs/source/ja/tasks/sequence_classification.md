@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Semantic segmentation
+# Sequence classification
 
 [[open-in-colab]]
 

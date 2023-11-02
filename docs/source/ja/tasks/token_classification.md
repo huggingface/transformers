@@ -123,7 +123,7 @@ pip install transformers datasets evaluate seqeval
 ただし、これによりいくつかの特別なトークン `[CLS]` と `[SEP]` が追加され、サブワードのトークン化により入力とラベルの間に不一致が生じます。 1 つのラベルに対応する 1 つの単語を 2 つのサブワードに分割できるようになりました。次の方法でトークンとラベルを再調整する必要があります。
 
 1. [`word_ids`](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.BatchEncoding.word_ids) メソッドを使用して、すべてのトークンを対応する単語にマッピングします。
-2. 特別なトークン `[CLS]` と `[SEP]` にラベル `-100` を割り当て、それらが PyTorch 損失関数によって無視されるようにします ([CrossEntropyLoss](https://pytorch.org/docs/ を参照)安定/生成/torch.nn.CrossEntropyLoss.html))。
+2. 特別なトークン `[CLS]` と `[SEP]` にラベル `-100` を割り当て、それらが PyTorch 損失関数によって無視されるようにします ([CrossEntropyLoss](https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html))。
 3. 特定の単語の最初のトークンのみにラベルを付けます。同じ単語の他のサブトークンに `-100`を割り当てます。
 
 トークンとラベルを再調整し、シーケンスを DistilBERT の最大入力長以下に切り詰める関数を作成する方法を次に示します。

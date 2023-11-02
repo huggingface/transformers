@@ -50,7 +50,7 @@ X ベクトル スピーカーの埋め込みを通じて複数のスピーカ�
 
 このガイドの残りの部分では、次の方法を説明します。
 
-1. [VoxPopuli](https://huggingface.co/datasets/facebook) のオランダ語 (`nl`) 言語サブセット上の英語音声で元々トレーニングされた [SpeechT5](../model_doc/speecht5) を微調整します。 /voxpopuli) データセット。
+1. [VoxPopuli](https://huggingface.co/datasets/facebook/voxpopuli) のオランダ語 (`nl`) 言語サブセット上の英語音声で元々トレーニングされた [SpeechT5](../model_doc/speecht5) を微調整します。 データセット。
 2. パイプラインを使用するか直接使用するかの 2 つの方法のいずれかで、洗練されたモデルを推論に使用します。
 
 始める前に、必要なライブラリがすべてインストールされていることを確認してください。
