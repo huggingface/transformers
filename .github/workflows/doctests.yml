@@ -3,7 +3,7 @@ name: Doctests
 on:
   push:
     branches:
-      - doctest*
+      - run_fc639143_002
   repository_dispatch:
   schedule:
     - cron: "17 2 * * *"
@@ -20,7 +20,7 @@ env:
 
 jobs:
   run_doctests:
-    runs-on: [single-gpu, nvidia-gpu, t4, doctest-ci]
+    runs-on: [single-gpu, nvidia-gpu, yih-dar-shieh-debug-doctest, doctest-ci]
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -39,6 +39,16 @@ jobs:
       - name: GPU visibility
         run: |
           python3 utils/print_env.py
+
+      - name: Uninstall and reInstall torch
+        run: |
+          python3 -m pip install -U torch==2.1.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+          python3 -m pip uninstall -y accelerate && python3 -m pip install -U accelerate@git+https://github.com/huggingface/accelerate@c3ec7ff5a9e1e3bddd3be0061e6362ff1bcb08a1
+          python3 -m pip uninstall -y peft && python3 -m pip install -U peft@git+https://github.com/huggingface/peft@2464c572eba6b60a9d19ba1913fcec6bc0a2724b
+          python3 -m pip install -U alembic==1.12.0 dash==2.14.0 Flask==2.2.5 onnx==1.14.1 plac==1.4.0 plotly==5.17.0 Werkzeug==2.2.3
+          python3 -m pip uninstall -y blinker
+#          python3 -m pip install -U cmake==3.25.0
+#          python3 -m pip install -U lit==15.0.7
 
       - name: Show installed libraries and their versions
         run: pip freeze
