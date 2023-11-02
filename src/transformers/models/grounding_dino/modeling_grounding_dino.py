@@ -909,8 +909,8 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
             attn_weights, min=-50000, max=50000
         ) 
 
-        attn_weights_T = attn_weights.transpose(1, 2)
-        text_attn_weights = attn_weights_T - torch.max(attn_weights_T, dim=-1, keepdim=True)[0]
+        attn_weights_transposed = attn_weights.transpose(1, 2)
+        text_attn_weights = attn_weights_transposed - torch.max(attn_weights_transposed, dim=-1, keepdim=True)[0]
 
         # Do not increase -50000/50000, data type half has quite limited range
         text_attn_weights = torch.clamp(
