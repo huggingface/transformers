@@ -70,7 +70,7 @@ class NucleusXConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         forward_mode (`str`, *optional*, defaults to `"parallel"`):
             The three modes of Retentive Network: `"parallel"`, `"recurrent"`, or `"chunkwise"`.
-        activation_fn (`str` or `function`, *optional*, defaults to `"gelu"`):
+        activation_fn (`str` or `function`, *optional*, defaults to `"swish"`):
             The non-linear activation function (function or string) in the decoder.
         dropout (`float`, *optional*, defaults to `0.0`):
             Dropout probability

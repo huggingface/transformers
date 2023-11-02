@@ -144,74 +144,89 @@ class NucleusXRelPos(nn.Module):
         self, slen, forward_mode="parallel", recurrent_chunk_size=None, retention_mask=None, get_decay_scale=True
     ):
         if forward_mode == "recurrent":
-            sin = torch.sin(self.angle * (slen - 1))
-            cos = torch.cos(self.angle * (slen - 1))
-            retention_rel_pos = ((sin, cos), self.decay.view(1, -1, 1, 1).exp())
+            return self.recurrent_relpos(slen)
         elif forward_mode == "chunkwise":
-            if recurrent_chunk_size is None:
-                recurrent_chunk_size = self.recurrent_chunk_size
-            index = torch.arange(slen).to(self.decay)
-            sin = torch.sin(index[:, None] * self.angle[None, :])
-            cos = torch.cos(index[:, None] * self.angle[None, :])
-
-            block_index = torch.arange(recurrent_chunk_size).to(self.decay)
-            mask = torch.tril(torch.ones(recurrent_chunk_size, recurrent_chunk_size)).to(self.decay)
-            mask = torch.masked_fill(block_index[:, None] - block_index[None, :], ~mask.bool(), float("inf"))
-            mask = torch.exp(mask * self.decay[:, None, None])
-            mask = torch.nan_to_num(mask)
-            mask = mask.unsqueeze(0)  # [1, h, t, t]
-            # TODO: need to handle retention_mask
-            # scaling
-            value_inner_decay = mask[:, :, -1] / mask[:, :, -1].sum(dim=-1, keepdim=True)
-            value_inner_decay = value_inner_decay.unsqueeze(-1)
-            scale = mask.sum(dim=-1, keepdim=True).sqrt()
-            inner_mask = mask / scale
-
-            cross_decay = torch.exp(self.decay * recurrent_chunk_size)
-            query_inner_decay = torch.exp(self.decay[:, None] * (block_index + 1))
-            cross_decay = cross_decay[None, :, None, None]
-            query_inner_decay = query_inner_decay[None, :, :, None] / (
-                scale / mask[:, :, -1].sum(dim=-1)[:, :, None, None]
+            return self.chunkwise_relpos(
+                slen,
+                recurrent_chunk_size=recurrent_chunk_size,
+                retention_mask=retention_mask,
+                get_decay_scale=get_decay_scale,
             )
-            # decay_scale (used for kv cache)
-            if get_decay_scale:
-                decay_scale = self.compute_decay_scale(slen, retention_mask)
-            else:
-                decay_scale = None
-            retention_rel_pos = (
-                (sin, cos),
-                (inner_mask, cross_decay, query_inner_decay, value_inner_decay, decay_scale),
-            )
-        else:  # parallel
-            index = torch.arange(slen).to(self.decay)
-            sin = torch.sin(index[:, None] * self.angle[None, :])
-            cos = torch.cos(index[:, None] * self.angle[None, :])
-            mask = torch.tril(torch.ones(slen, slen)).to(self.decay)
-            mask = torch.masked_fill(index[:, None] - index[None, :], ~mask.bool(), float("inf"))
-            mask = torch.exp(mask * self.decay[:, None, None])
-            mask = torch.nan_to_num(mask)
-            mask = mask.unsqueeze(0)  # [1, h, t, t]
-            if retention_mask is not None:
-                # this is required for left padding
-                mask = mask * retention_mask.float().view(-1, 1, 1, slen).to(mask)
+        # parallel
+        return self.parallel_relpos(slen, retention_mask=retention_mask, get_decay_scale=get_decay_scale)
+
+    def recurrent_relpos(self, slen):
+        sin = torch.sin(self.angle * (slen - 1))
+        cos = torch.cos(self.angle * (slen - 1))
+        retention_rel_pos = ((sin, cos), self.decay.view(1, -1, 1, 1).exp())
+        return retention_rel_pos
+
+    def parallel_relpos(self, slen, retention_mask=None, get_decay_scale=True):
+        index = torch.arange(slen).to(self.decay)
+        sin = torch.sin(index[:, None] * self.angle[None, :])
+        cos = torch.cos(index[:, None] * self.angle[None, :])
+        mask = torch.tril(torch.ones(slen, slen)).to(self.decay)
+        mask = torch.masked_fill(index[:, None] - index[None, :], ~mask.bool(), float("inf"))
+        mask = torch.exp(mask * self.decay[:, None, None])
+        mask = torch.nan_to_num(mask)
+        mask = mask.unsqueeze(0)  # [1, h, t, t]
+        if retention_mask is not None:
+            # this is required for left padding
+            mask = mask * retention_mask.float().view(-1, 1, 1, slen).to(mask)
 
             # scaling
-            mask = mask / mask.sum(dim=-1, keepdim=True).sqrt()
-            mask = torch.nan_to_num(mask, nan=0.0)
-            # decay_scale (used for kv cache)
-            if get_decay_scale:
-                decay_scale = self.compute_decay_scale(slen, retention_mask)
-            else:
-                decay_scale = None
+        mask = mask / mask.sum(dim=-1, keepdim=True).sqrt()
+        mask = torch.nan_to_num(mask, nan=0.0)
+        # decay_scale (used for kv cache)
+        if get_decay_scale:
+            decay_scale = self.compute_decay_scale(slen, retention_mask)
+        else:
+            decay_scale = None
             # mask processing for intra decay
-            if retention_mask is not None:
-                max_non_zero = torch.cumsum(retention_mask, dim=-1).max(dim=-1).indices  # [b,]
-                intra_decay = mask[range(mask.shape[0]), :, max_non_zero]
-            else:
-                intra_decay = mask[:, :, -1]
+        if retention_mask is not None:
+            max_non_zero = torch.cumsum(retention_mask, dim=-1).max(dim=-1).indices  # [b,]
+            intra_decay = mask[range(mask.shape[0]), :, max_non_zero]
+        else:
+            intra_decay = mask[:, :, -1]
 
-            retention_rel_pos = ((sin, cos), (mask, intra_decay, decay_scale))
+        retention_rel_pos = ((sin, cos), (mask, intra_decay, decay_scale))
+        return retention_rel_pos
 
+    def chunkwise_relpos(self, slen, recurrent_chunk_size=None, retention_mask=None, get_decay_scale=True):
+        if recurrent_chunk_size is None:
+            recurrent_chunk_size = self.recurrent_chunk_size
+        index = torch.arange(slen).to(self.decay)
+        sin = torch.sin(index[:, None] * self.angle[None, :])
+        cos = torch.cos(index[:, None] * self.angle[None, :])
+
+        block_index = torch.arange(recurrent_chunk_size).to(self.decay)
+        mask = torch.tril(torch.ones(recurrent_chunk_size, recurrent_chunk_size)).to(self.decay)
+        mask = torch.masked_fill(block_index[:, None] - block_index[None, :], ~mask.bool(), float("inf"))
+        mask = torch.exp(mask * self.decay[:, None, None])
+        mask = torch.nan_to_num(mask)
+        mask = mask.unsqueeze(0)  # [1, h, t, t]
+        # TODO: need to handle retention_mask
+        # scaling
+        value_inner_decay = mask[:, :, -1] / mask[:, :, -1].sum(dim=-1, keepdim=True)
+        value_inner_decay = value_inner_decay.unsqueeze(-1)
+        scale = mask.sum(dim=-1, keepdim=True).sqrt()
+        inner_mask = mask / scale
+
+        cross_decay = torch.exp(self.decay * recurrent_chunk_size)
+        query_inner_decay = torch.exp(self.decay[:, None] * (block_index + 1))
+        cross_decay = cross_decay[None, :, None, None]
+        query_inner_decay = query_inner_decay[None, :, :, None] / (
+            scale / mask[:, :, -1].sum(dim=-1)[:, :, None, None]
+        )
+        # decay_scale (used for kv cache)
+        if get_decay_scale:
+            decay_scale = self.compute_decay_scale(slen, retention_mask)
+        else:
+            decay_scale = None
+        retention_rel_pos = (
+            (sin, cos),
+            (inner_mask, cross_decay, query_inner_decay, value_inner_decay, decay_scale),
+        )
         return retention_rel_pos
 
     def compute_decay_scale(self, slen, retention_mask=None):
@@ -1024,6 +1039,11 @@ class NucleusXModel(NucleusXPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
+                if use_cache:
+                    logger.warning(
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                    )
+                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
