@@ -18,13 +18,13 @@ rendered properly in your Markdown viewer.
 
 除了 🤗 Transformers [notebooks](./noteboks/README)，还有示例脚本演示了如何使用[PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch)、[TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow)或[JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax)训练模型以解决特定任务。
 
-您还可以在这些示例中找到我们在[研究项目](https://github.com/huggingface/transformers/tree/main/examples/research_projects)和[遗留示例](https://github.com/huggingface/transformers/tree/main/examples/legacy)中使用过的脚本，这些脚本主要是由社区贡献的。这些脚本已不再被积极维护，可能与库的最新版本不兼容。
+您还可以在这些示例中找到我们在[研究项目](https://github.com/huggingface/transformers/tree/main/examples/research_projects)和[遗留示例](https://github.com/huggingface/transformers/tree/main/examples/legacy)中使用过的脚本，这些脚本主要是由社区贡献的。这些脚本已不再被积极维护，需要使用特定版本的🤗 Transformers， 可能与库的最新版本不兼容。
 
-示例脚本可能无法直接解决每个问题，您可能需要根据要解决的问题调整脚本。为了帮助您，大多数脚本都完全暴露了数据预处理的方式，允许您根据需要对其进行编辑。
+示例脚本可能无法在初始配置下直接解决每个问题，您可能需要根据要解决的问题调整脚本。为了帮助您，大多数脚本都完全暴露了数据预处理的方式，允许您根据需要对其进行编辑。
 
 如果您想在示例脚本中实现任何功能，请在[论坛](https://discuss.huggingface.co/)或[issue](https://github.com/huggingface/transformers/issues)上讨论，然后再提交Pull Request。虽然我们欢迎修复错误，但不太可能合并添加更多功能的Pull Request，因为这会降低可读性。
 
-本指南将向您展示如何在[PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization)和[TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization)中运行示例摘要训练脚本。除非另有说明，否则所有示例都应在两个框架中工作。
+本指南将向您展示如何在[PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization)和[TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization)中运行示例摘要训练脚本。除非另有说明，否则所有示例都可以在两个框架中工作。
 
 ## 设置
 
@@ -39,7 +39,7 @@ pip install .
 对于旧版本的示例脚本，请点击下面的切换按钮：
 
 <details>
-  <summary>Examples for older versions of 🤗 Transformers</summary>
+  <summary>老版本🤗 Transformers示例 </summary>
 	<ul>
 		<li><a href="https://github.com/huggingface/transformers/tree/v4.5.1/examples">v4.5.1</a></li>
 		<li><a href="https://github.com/huggingface/transformers/tree/v4.4.2/examples">v4.4.2</a></li>
@@ -77,7 +77,7 @@ pip install .
 git checkout tags/v3.5.1
 ```
 
-在安装了正确的库版本后，进入您选择的`example`文件夹并安装特定于例子的要求：
+在安装了正确的库版本后，进入您选择的版本的`example`文件夹并安装例子要求的环境：
 
 ```bash
 pip install -r requirements.txt
@@ -88,7 +88,7 @@ pip install -r requirements.txt
 <frameworkcontent>
 <pt>
 
-示例脚本从huggingface的[Datasets](https://huggingface.co/docs/datasets/)库下载并预处理数据集。然后，脚本通过[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer)使用支持摘要任务的架构对数据集进行微调。以下示例展示了如何微调[T5-small](https://huggingface.co/t5-small)在[CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail)数据集上。由于T5模型的训练方式，它需要一个额外的`source_prefix`参数。这个提示让T5知道这是一个摘要任务。
+示例脚本从huggingface的[Datasets](https://huggingface.co/docs/datasets/)库下载并预处理数据集。然后，脚本通过[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer)使用支持摘要任务的架构对数据集进行微调。以下示例展示了如何在[CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail)数据集上微调[T5-small](https://huggingface.co/t5-small)。由于T5模型的训练方式，它需要一个额外的`source_prefix`参数。这个提示让T5知道这是一个摘要任务。
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
@@ -107,7 +107,7 @@ python examples/pytorch/summarization/run_summarization.py \
 </pt>
 <tf>
 
-示例脚本从  🤗 [Datasets](https://huggingface.co/docs/datasets/) 库下载并预处理数据集。然后，脚本使用 Keras 在支持摘要的架构上微调数据集。以下示例展示了如何微调 [T5-small](https://huggingface.co/t5-small) 在 [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) 数据集上。T5 模型由于训练方式需要额外的 `source_prefix` 参数。这个提示让 T5 知道这是一个摘要任务。
+示例脚本从  🤗 [Datasets](https://huggingface.co/docs/datasets/) 库下载并预处理数据集。然后，脚本使用 Keras 在支持摘要的架构上微调数据集。以下示例展示了如何在 [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) 数据集上微调 [T5-small](https://huggingface.co/t5-small)。T5 模型由于训练方式需要额外的 `source_prefix` 参数。这个提示让 T5 知道这是一个摘要任务。
 
 ```bash
 python examples/tensorflow/summarization/run_summarization.py  \
@@ -126,7 +126,7 @@ python examples/tensorflow/summarization/run_summarization.py  \
 
 ## 分布式训练和混合精度
 
-[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) 支持分布式训练和混合精度，这意味着你也可以在脚本中使用它。要启用这两个功能：
+[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) 支持分布式训练和混合精度，这意味着你也可以在脚本中使用它。要启用这两个功能，可以做如下设置：
 
 - 添加 `fp16` 参数以启用混合精度。
 - 使用 `nproc_per_node` 参数设置使用的GPU数量。
@@ -156,7 +156,7 @@ TensorFlow脚本使用[`MirroredStrategy`](https://www.tensorflow.org/guide/dist
 <frameworkcontent>
 <pt>
 
-张量处理单元（TPU）是专门设计用于加速性能的。PyTorch使用[XLA](https://www.tensorflow.org/xla)深度学习编译器支持TPU（更多细节请参见[这里](https://github.com/pytorch/xla/blob/master/README.md)）。要使用TPU，请启动`xla_spawn.py`脚本并使用`num_cores`参数设置要使用的TPU核心数量。
+张量处理单元（TPUs）是专门设计用于加速性能的。PyTorch使用[XLA](https://www.tensorflow.org/xla)深度学习编译器支持TPU（更多细节请参见[这里](https://github.com/pytorch/xla/blob/master/README.md)）。要使用TPU，请启动`xla_spawn.py`脚本并使用`num_cores`参数设置要使用的TPU核心数量。
 
 ```bash
 python xla_spawn.py --num_cores 8 \
@@ -176,7 +176,7 @@ python xla_spawn.py --num_cores 8 \
 </pt>
 <tf>
 
-张量处理单元（TPU）是专门设计用于加速性能的。TensorFlow脚本使用[`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy)在TPU上进行训练。要使用TPU，请将TPU资源的名称传递给`tpu`参数。
+张量处理单元（TPUs）是专门设计用于加速性能的。TensorFlow脚本使用[`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy)在TPU上进行训练。要使用TPU，请将TPU资源的名称传递给`tpu`参数。
 
 ```bash
 python run_summarization.py  \
@@ -198,13 +198,13 @@ python run_summarization.py  \
 
 🤗 [Accelerate](https://huggingface.co/docs/accelerate) 是一个仅支持 PyTorch 的库，它提供了一种统一的方法来在不同类型的设置（仅 CPU、多个 GPU、多个TPU）上训练模型，同时保持对 PyTorch 训练循环的完全可见性。如果你还没有安装 🤗 Accelerate，请确保你已经安装了它：
 
-> 注意：由于 Accelerate 正在快速发展，因此必须安装 git 版本的 accelerate 才能运行脚本。
+> 注意：由于 Accelerate 正在快速发展，因此必须安装 git 版本的 accelerate 来运行脚本。
 
 ```bash
 pip install git+https://github.com/huggingface/accelerate
 ```
 
-你需要使用`run_summarization_no_trainer.py`脚本，而不是`run_summarization.py`脚本。🤗 Accelerate支持的脚本将在文件夹中有一个`task_no_trainer.py`文件。首先运行以下命令以创建并保存配置文件：
+你需要使用`run_summarization_no_trainer.py`脚本，而不是`run_summarization.py`脚本。🤗 Accelerate支持的脚本需要在文件夹中有一个`task_no_trainer.py`文件。首先运行以下命令以创建并保存配置文件：
 
 ```bash
 accelerate config
@@ -228,7 +228,7 @@ accelerate launch run_summarization_no_trainer.py \
 
 ## 使用自定义数据集
 
-翻译结果为：摘要脚本支持自定义数据集，只要它们是CSV或JSON Line文件。当你使用自己的数据集时，需要指定一些额外的参数：
+摘要脚本支持自定义数据集，只要它们是CSV或JSON Line文件。当你使用自己的数据集时，需要指定一些额外的参数：
 - `train_file` 和 `validation_file` 分别指定您的训练和验证文件的路径。
 - `text_column` 是输入要进行摘要的文本。
 - `summary_column` 是目标输出的文本。
