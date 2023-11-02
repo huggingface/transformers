@@ -29,6 +29,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 from pytest import mark
+from safetensors.torch import load_file as safe_load_file
 
 import transformers
 from transformers import (
@@ -76,7 +77,7 @@ from transformers.testing_utils import (
 from transformers.utils import (
     CONFIG_NAME,
     GENERATION_CONFIG_NAME,
-    WEIGHTS_NAME,
+    SAFE_WEIGHTS_NAME,
     is_accelerate_available,
     is_flax_available,
     is_tf_available,
@@ -311,17 +312,20 @@ class ModelTesterMixin:
             # check that certain keys didn't get saved with the model
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                output_model_file = os.path.join(tmpdirname, WEIGHTS_NAME)
-                state_dict_saved = torch.load(output_model_file)
+                output_model_file = os.path.join(tmpdirname, SAFE_WEIGHTS_NAME)
+                state_dict_saved = safe_load_file(output_model_file)
+
                 for k in _keys_to_ignore_on_save:
                     self.assertNotIn(k, state_dict_saved.keys(), "\n".join(state_dict_saved.keys()))
 
                 # Test we can load the state dict in the model, necessary for the checkpointing API in Trainer.
                 load_result = model.load_state_dict(state_dict_saved, strict=False)
-                self.assertTrue(
-                    len(load_result.missing_keys) == 0
-                    or set(load_result.missing_keys) == set(model._keys_to_ignore_on_save)
-                )
+                keys = set(model._keys_to_ignore_on_save)
+
+                if hasattr(model, "_tied_weights_keys"):
+                    keys.update(set(model._tied_weights_keys))
+
+                self.assertTrue(len(load_result.missing_keys) == 0 or set(load_result.missing_keys) == keys)
                 self.assertTrue(len(load_result.unexpected_keys) == 0)
 
     def test_gradient_checkpointing_backward_compatibility(self):
