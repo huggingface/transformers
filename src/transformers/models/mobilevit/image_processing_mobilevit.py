@@ -78,6 +78,10 @@ class MobileViTImageProcessor(BaseImageProcessor):
         do_flip_channel_order (`bool`, *optional*, defaults to `True`):
             Whether to flip the color channels from RGB to BGR. Can be overridden by the `do_flip_channel_order`
             parameter in the `preprocess` method.
+        use_square_size (`bool`, *optional*, defaults to `False`):
+            The value to be passed to `get_size_dict` as `default_to_square` when computing the image size. If the
+            `size` argument in `get_size_dict` is an `int`, it determines whether to default to a square image or not.
+            Note that this attribute is not used in computing `crop_size` via calling `get_size_dict`.
     """
 
     model_input_names = ["pixel_values"]
@@ -92,11 +96,12 @@ class MobileViTImageProcessor(BaseImageProcessor):
         do_center_crop: bool = True,
         crop_size: Dict[str, int] = None,
         do_flip_channel_order: bool = True,
+        use_square_size: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 224}
-        size = get_size_dict(size, default_to_square=False)
+        size = get_size_dict(size, default_to_square=use_square_size)
         crop_size = crop_size if crop_size is not None else {"height": 256, "width": 256}
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
@@ -108,6 +113,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
         self.do_flip_channel_order = do_flip_channel_order
+        self.use_square_size = use_square_size
 
     # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.resize with PILImageResampling.BICUBIC->PILImageResampling.BILINEAR
     def resize(
@@ -135,11 +141,14 @@ class MobileViTImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        size = get_size_dict(size, default_to_square=False)
+        size = get_size_dict(size, default_to_square=self.use_square_size)
         if "shortest_edge" not in size:
             raise ValueError(f"The `size` parameter must contain the key `shortest_edge`. Got {size.keys()}")
         output_size = get_resize_output_image_size(
-            image, size=size["shortest_edge"], default_to_square=False, input_data_format=input_data_format
+            image,
+            size=size["shortest_edge"],
+            default_to_square=self.use_square_size,
+            input_data_format=input_data_format,
         )
         return resize(
             image,
@@ -237,7 +246,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         )
 
         size = size if size is not None else self.size
-        size = get_size_dict(size, default_to_square=False)
+        size = get_size_dict(size, default_to_square=self.use_square_size)
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 

@@ -836,6 +836,27 @@ class TFConvNextPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFConvNextV2ForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFConvNextV2Model(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFConvNextV2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

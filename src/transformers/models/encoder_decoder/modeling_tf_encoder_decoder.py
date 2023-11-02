@@ -306,17 +306,21 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         # here that the config model_type is the same as the name of the MainLayer. I don't know of anywhere that's
         # not the case, and I wasn't sure how else to go from the config to the correct MainLayer name!
 
-        if kwargs.get("from_pt", False):
-            config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
-            encoder_model_type = config.encoder.model_type
+        # This override is only needed in the case where we're crossloading weights from PT. However, since weights are
+        # often safetensors now, we don't know if we're going to be crossloading until we sniff the weights file.
+        # Therefore, we specify tf_to_pt_weight_rename anyway, and let the super method figure out if it needs it
+        # or not.
 
-            def tf_to_pt_weight_rename(tf_weight):
-                if "encoder" in tf_weight and "decoder" not in tf_weight:
-                    return re.sub(rf"encoder\.{encoder_model_type}\.", "encoder.", tf_weight)
-                else:
-                    return tf_weight
+        config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+        encoder_model_type = config.encoder.model_type
 
-            kwargs["tf_to_pt_weight_rename"] = tf_to_pt_weight_rename
+        def tf_to_pt_weight_rename(tf_weight):
+            if "encoder" in tf_weight and "decoder" not in tf_weight:
+                return re.sub(rf"encoder\.{encoder_model_type}\.", "encoder.", tf_weight)
+            else:
+                return tf_weight
+
+        kwargs["tf_to_pt_weight_rename"] = tf_to_pt_weight_rename
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod

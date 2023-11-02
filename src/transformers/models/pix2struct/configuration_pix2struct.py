@@ -203,7 +203,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 1e-10):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1.0):
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
         seq_len (`int`, *optional*, defaults to 4096):

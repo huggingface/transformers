@@ -388,6 +388,11 @@ _import_structure = {
         "JukeboxTokenizer",
         "JukeboxVQVAEConfig",
     ],
+    "models.kosmos2": [
+        "KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Kosmos2Config",
+        "Kosmos2Processor",
+    ],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.layoutlmv2": [
         "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -673,6 +678,7 @@ _import_structure = {
         "ImageToImagePipeline",
         "ImageToTextPipeline",
         "JsonPipelineDataFormat",
+        "MaskGenerationPipeline",
         "NerPipeline",
         "ObjectDetectionPipeline",
         "PipedPipelineDataFormat",
@@ -773,7 +779,7 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
-    "utils.quantization_config": ["BitsAndBytesConfig", "GPTQConfig"],
+    "utils.quantization_config": ["AwqConfig", "BitsAndBytesConfig", "GPTQConfig"],
 }
 
 # sentencepiece-backed objects
@@ -2051,6 +2057,14 @@ else:
             "JukeboxVQVAE",
         ]
     )
+    _import_structure["models.kosmos2"].extend(
+        [
+            "KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Kosmos2ForConditionalGeneration",
+            "Kosmos2Model",
+            "Kosmos2PreTrainedModel",
+        ]
+    )
     _import_structure["models.layoutlm"].extend(
         [
             "LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3086,6 +3100,7 @@ else:
         [
             "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "WhisperForAudioClassification",
+            "WhisperForCausalLM",
             "WhisperForConditionalGeneration",
             "WhisperModel",
             "WhisperPreTrainedModel",
@@ -3408,6 +3423,13 @@ else:
             "TFConvNextForImageClassification",
             "TFConvNextModel",
             "TFConvNextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.convnextv2"].extend(
+        [
+            "TFConvNextV2ForImageClassification",
+            "TFConvNextV2Model",
+            "TFConvNextV2PreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -4570,6 +4592,11 @@ if TYPE_CHECKING:
         JukeboxTokenizer,
         JukeboxVQVAEConfig,
     )
+    from .models.kosmos2 import (
+        KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Kosmos2Config,
+        Kosmos2Processor,
+    )
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.layoutlmv2 import (
         LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4825,6 +4852,7 @@ if TYPE_CHECKING:
         ImageToImagePipeline,
         ImageToTextPipeline,
         JsonPipelineDataFormat,
+        MaskGenerationPipeline,
         NerPipeline,
         ObjectDetectionPipeline,
         PipedPipelineDataFormat,
@@ -4934,7 +4962,7 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import BitsAndBytesConfig, GPTQConfig
+    from .utils.quantization_config import AwqConfig, BitsAndBytesConfig, GPTQConfig
 
     try:
         if not is_sentencepiece_available():
@@ -5995,6 +6023,12 @@ if TYPE_CHECKING:
             JukeboxPrior,
             JukeboxVQVAE,
         )
+        from .models.kosmos2 import (
+            KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Kosmos2ForConditionalGeneration,
+            Kosmos2Model,
+            Kosmos2PreTrainedModel,
+        )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMForMaskedLM,
@@ -6837,6 +6871,7 @@ if TYPE_CHECKING:
         from .models.whisper import (
             WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
             WhisperForAudioClassification,
+            WhisperForCausalLM,
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,
@@ -7117,6 +7152,11 @@ if TYPE_CHECKING:
             TFConvBertPreTrainedModel,
         )
         from .models.convnext import TFConvNextForImageClassification, TFConvNextModel, TFConvNextPreTrainedModel
+        from .models.convnextv2 import (
+            TFConvNextV2ForImageClassification,
+            TFConvNextV2Model,
+            TFConvNextV2PreTrainedModel,
+        )
         from .models.ctrl import (
             TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFCTRLForSequenceClassification,

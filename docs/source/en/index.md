@@ -97,7 +97,7 @@ Flax), PyTorch, and/or TensorFlow.
 |              [Conditional DETR](model_doc/conditional_detr)              |       ✅        |         ❌         |      ❌      |
 |                      [ConvBERT](model_doc/convbert)                      |       ✅        |         ✅         |      ❌      |
 |                      [ConvNeXT](model_doc/convnext)                      |       ✅        |         ✅         |      ❌      |
-|                    [ConvNeXTV2](model_doc/convnextv2)                    |       ✅        |         ❌         |      ❌      |
+|                    [ConvNeXTV2](model_doc/convnextv2)                    |       ✅        |         ✅         |      ❌      |
 |                           [CPM](model_doc/cpm)                           |       ✅        |         ✅         |      ✅      |
 |                       [CPM-Ant](model_doc/cpmant)                        |       ✅        |         ❌         |      ❌      |
 |                          [CTRL](model_doc/ctrl)                          |       ✅        |         ✅         |      ❌      |
@@ -158,6 +158,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [Informer](model_doc/informer)                      |       ✅        |         ❌         |      ❌      |
 |                  [InstructBLIP](model_doc/instructblip)                  |       ✅        |         ❌         |      ❌      |
 |                       [Jukebox](model_doc/jukebox)                       |       ✅        |         ❌         |      ❌      |
+|                      [KOSMOS-2](model_doc/kosmos-2)                      |       ✅        |         ❌         |      ❌      |
 |                      [LayoutLM](model_doc/layoutlm)                      |       ✅        |         ✅         |      ❌      |
 |                    [LayoutLMv2](model_doc/layoutlmv2)                    |       ✅        |         ❌         |      ❌      |
 |                    [LayoutLMv3](model_doc/layoutlmv3)                    |       ✅        |         ✅         |      ❌      |
