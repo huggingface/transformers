@@ -1610,8 +1610,6 @@ class GenerationMixin:
                     "num_return_sequences has to be 1 when doing assisted generate, "
                     f"but is {generation_config.num_return_sequences}."
                 )
-            # if batch_size > 1:
-            #    raise ValueError("assisted generate is only supported for batch_size = 1")
             if not model_kwargs["use_cache"]:
                 raise ValueError("assisted generate requires `use_cache=True`")
 
