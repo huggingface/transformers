@@ -1156,13 +1156,10 @@ class GroundingDINOEncoderLayer(nn.Module):
     ) -> Tensor:
         batch_size, seq_length, _ = text_features.shape
         if text_position_embedding is None and text_position_ids is None:
-            text_position_embedding = (
-                torch.arange(seq_length, device=text_features.device)
-                .float()
-                .unsqueeze(0)
-                .unsqueeze(-1)
-                .repeat(batch_size, 1, 1)
-            )
+            text_position_embedding = torch.arange(seq_length, device=text_features.device)
+            text_position_embedding = text_position_embedding.float()
+            text_position_embedding = text_position_embedding.unsqueeze(0).unsqueeze(-1)
+            text_position_embedding = text_position_embedding.repeat(batch_size, 1, 1)
             text_position_embedding = get_sine_pos_embed(
                 text_position_embedding, num_pos_feats=self.d_model, exchange_xy=False
             )
