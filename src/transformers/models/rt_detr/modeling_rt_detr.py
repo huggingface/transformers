@@ -23,7 +23,6 @@ from transformers import TimmBackbone, TimmBackboneConfig
 import torch
 from torch import nn, Tensor
 
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ..timm_backbone import TimmBackbone
 from ...utils import (
@@ -31,11 +30,11 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
-    is_timm_available,
-    is_vision_available,
+    is_torchvision_available,
     logging,
     replace_return_docstrings,
-    requires_backends
+    requires_backends,
+    
 )
 from .configuration_rt_detr import RTDetrConfig
 
@@ -43,12 +42,9 @@ from .configuration_rt_detr import RTDetrConfig
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
-if is_timm_available():
-    pass
-
-if is_vision_available():
-    pass
-
+if is_torchvision_available():
+    from torchvision.ops.misc import FrozenBatchNorm2d
+    
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RTDetrConfig"
@@ -62,7 +58,7 @@ RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-class RTDetrObjectDetectionOutput(ModelOutput):
+class RTDetrModelOutput(ModelOutput):
     """
     Output type of [`RTDetrModel`].
 
@@ -147,7 +143,7 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     if tensor_list[0].ndim == 3:
         max_size = _max_by_axis([list(img.shape) for img in tensor_list])
         batch_shape = [len(tensor_list)] + max_size
-        batch_size, num_channels, height, width = batch_shape
+        batch_size, _, height, width = batch_shape
         dtype = tensor_list[0].dtype
         device = tensor_list[0].device
         tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
@@ -326,7 +322,6 @@ def get_contrastive_denoising_training_group(targets,
     input_query_class = class_embed(input_query_class)
 
     tgt_size = num_denoising + num_queries
-    # attn_mask = torch.ones([tgt_size, tgt_size], device=device) < 0
     attn_mask = torch.full([tgt_size, tgt_size], False, dtype=torch.bool, device=device)
     # match query cannot see the reconstruction
     attn_mask[num_denoising:, :num_denoising] = True
@@ -366,160 +361,6 @@ class ConvNormLayer(nn.Module):
 
     def forward(self, x):
         return self.activation(self.norm(self.conv(x)))
-
-
-class BottleNeck(nn.Module):
-    expansion = 4
-
-    def __init__(self, channels_in, channels_out, stride, shortcut, activation="relu", variant="b"):
-        super().__init__()
-
-        if variant == "a":
-            stride1, stride2 = stride, 1
-        else:
-            stride1, stride2 = 1, stride
-
-        width = channels_out
-
-        self.branch2a = ConvNormLayer(channels_in, width, 1, stride1, activation=activation)
-        self.branch2b = ConvNormLayer(width, width, 3, stride2, activation=activation)
-        self.branch2c = ConvNormLayer(width, channels_out * self.expansion, 1, 1)
-
-        self.shortcut = shortcut
-        if not shortcut:
-            if variant == "d" and stride == 2:
-                self.short = nn.Sequential(
-                    OrderedDict(
-                        [
-                            ("pool", nn.AvgPool2d(2, 2, 0, ceil_mode=True)),
-                            ("conv", ConvNormLayer(channels_in, channels_out * self.expansion, 1, 1)),
-                        ]
-                    )
-                )
-            else:
-                self.short = ConvNormLayer(channels_in, channels_out * self.expansion, 1, stride)
-
-        self.activation = nn.Identity() if activation is None else get_activation(activation)
-
-    def forward(self, x):
-        out = self.branch2a(x)
-        out = self.branch2b(out)
-        out = self.branch2c(out)
-
-        if self.shortcut:
-            short = x
-        else:
-            short = self.short(x)
-
-        out = out + short
-        out = self.activation(out)
-
-        return out
-
-
-class BasicBlock(nn.Module):
-    expansion = 1
-
-    def __init__(self, channels_in, channels_out, stride, shortcut, activation="relu", variant="b"):
-        super().__init__()
-
-        self.shortcut = shortcut
-
-        if not shortcut:
-            if variant == "d" and stride == 2:
-                self.short = nn.Sequential(
-                    OrderedDict(
-                        [
-                            ("pool", nn.AvgPool2d(2, 2, 0, ceil_mode=True)),
-                            ("conv", ConvNormLayer(channels_in, channels_out, 1, 1)),
-                        ]
-                    )
-                )
-            else:
-                self.short = ConvNormLayer(channels_in, channels_out, 1, stride)
-
-        self.branch2a = ConvNormLayer(channels_in, channels_out, 3, stride, activation=activation)
-        self.branch2b = ConvNormLayer(channels_out, channels_out, 3, 1, activation=None)
-        self.activation = nn.Identity() if activation is None else get_activation(activation)
-
-    def forward(self, x):
-        out = self.branch2a(x)
-        out = self.branch2b(out)
-        if self.shortcut:
-            short = x
-        else:
-            short = self.short(x)
-        out = out + short
-        out = self.activation(out)
-
-        return out
-
-
-class Blocks(nn.Module):
-    def __init__(self, block, channels_in, channels_out, count, stage_num, activation="relu", variant="b"):
-        super().__init__()
-
-        self.blocks = nn.ModuleList()
-        for i in range(count):
-            self.blocks.append(
-                block(
-                    channels_in,
-                    channels_out,
-                    stride=2 if i == 0 and stage_num != 2 else 1,
-                    shortcut=False if i == 0 else True,
-                    variant=variant,
-                    activation=activation,
-                )
-            )
-
-            if i == 0:
-                channels_in = channels_out * block.expansion
-
-    def forward(self, x):
-        out = x
-        for block in self.blocks:
-            out = block(out)
-        return out
-
-
-# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->RTDetr
-class RTDetrFrozenBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
-    torchvision.models.resnet[18,34,50,101] produce nans.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-        self.epsilon = 1e-5
-        
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        num_batches_tracked_key = prefix + "num_batches_tracked"
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        scale = weight * (running_var + self.epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
 
 
 def bias_init_with_prob(prior_prob=0.01):
@@ -1117,7 +958,7 @@ class RTDetrTransformer(nn.Module):
         else:
             anchors, valid_mask = self.anchors.to(device), self.valid_mask.to(device)
 
-        memory = valid_mask.to(feat_flatten.dtype) * feat_flatten  # TODO fix type error for onnx export
+        memory = valid_mask.to(feat_flatten.dtype) * feat_flatten  
 
         output_memory = self.enc_output(memory)
 
@@ -1377,7 +1218,6 @@ class RTDetrLoss(nn.Module):
         source_masks = outputs["pred_masks"]
         source_masks = source_masks[source_idx]
         masks = [t["masks"] for t in targets]
-        # TODO use valid to mask invalid areas due to padding in loss
         target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
         target_masks = target_masks.to(source_masks)
         target_masks = target_masks[target_idx]
@@ -1525,7 +1365,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initalize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d, RTDetrFrozenBatchNorm2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d, FrozenBatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1536,10 +1376,11 @@ class RTDetrPreTrainedModel(PreTrainedModel):
 
 class HybridEncoder(RTDetrPreTrainedModel):
     """
-    Decoder consisting of TODO
+    Decoder consists of a projection layer, a set of `TransformerEncoder`, a top-down Feature Pyramid Network (FPN) and a bottom-up Path Aggregation Network (PAN).
+    More details on the paper: https://arxiv.org/abs/2304.08069
     
     Args:
-        config: DetaConfig
+        config: RTDetrConfig
     """
     
     def __init__(self, config: RTDetrConfig):
@@ -1683,7 +1524,7 @@ class HybridEncoder(RTDetrPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The bare RT_DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further decoded into scores and classes.
+    RT_DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further decoded into scores and classes.
     """,
     RT_DETR_START_DOCSTRING,
 )
@@ -1714,13 +1555,20 @@ class RTDetrModel(RTDetrPreTrainedModel):
             param.requires_grad_(True)
 
     @add_start_docstrings_to_model_forward(RT_DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RTDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=RTDetrModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
+        labels: Optional[List[dict]] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], RTDetrObjectDetectionOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], RTDetrModelOutput]:
         r"""
+        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+
         Returns:
 
         Examples:
@@ -1729,6 +1577,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         >>> from transformers import AutoImageProcessor, RTDetrModel
         >>> from PIL import Image
         >>> import requests
+        >>> import torch
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1749,6 +1598,22 @@ class RTDetrModel(RTDetrPreTrainedModel):
         >>> boxes = outputs.pred_boxes
         >>> list(boxes.shape)
         [1, 300, 4]
+        
+        >>> # convert outputs (bounding boxes and class logits) to COCO API
+        >>> target_sizes = torch.tensor([image.size[::-1]])
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[0]
+        
+        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     print(
+        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...         f"{round(score.item(), 3)} at location {box}"
+        ...     )
+        # Detected couch with confidence 0.97 at location [0.14, 0.38, 640.13, 476.21]
+        # Detected cat with confidence 0.96 at location [343.38, 24.28, 640.14, 371.5]
+        # Detected cat with confidence 0.958 at location [13.23, 54.18, 318.98, 472.22]
+        # Detected remote with confidence 0.951 at location [40.11, 73.44, 175.96, 118.48]
+        # Detected remote with confidence 0.924 at location [333.73, 76.58, 369.97, 186.99]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1756,91 +1621,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
         encoder_outputs = self.encoder(features["feature_maps"])
         outputs = self.decoder(encoder_outputs)
         
-        pred_boxes = outputs["pred_boxes"]
-        logits = outputs["logits"]
-
-        return RTDetrObjectDetectionOutput(
-            logits=logits,
-            pred_boxes=pred_boxes,
-        )
-
-
-@add_start_docstrings(
-    """
-    RT_DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection boxes, scores and classes, for tasks
-    such as COCO detection.
-    """,
-    RT_DETR_START_DOCSTRING,
-)
-class RTDetrForObjectDetection(RTDetrPreTrainedModel): 
-    def __init__(self, config: RTDetrConfig):
-        super().__init__(config)
-
-        self.model = RTDetrModel(config)
-        
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(RT_DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RTDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        labels: Optional[List[dict]] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], RTDetrObjectDetectionOutput]:
-        r"""
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoImageProcessor, RTDetrForObjectDetection
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> image_processor = AutoImageProcessor.from_pretrained(_CHECKPOINT_FOR_DOC)
-        >>> model = RTDetrForObjectDetection.from_pretrained(_CHECKPOINT_FOR_DOC)
-
-        >>> inputs = image_processor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> # convert outputs (bounding boxes and class logits) to COCO API
-        >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
-        ...     0
-        ... ]
-        # TODO: id2label is not mapped
-        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
-        ...     box = [round(i, 2) for i in box.tolist()]
-        ...     print(
-        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
-        ...         f"{round(score.item(), 3)} at location {box}"
-        ...     )
-        Detected remote with confidence 0.998 at location [40.16, 70.81, 175.55, 117.98]
-        Detected remote with confidence 0.996 at location [333.24, 72.55, 368.33, 187.66]
-        Detected couch with confidence 0.995 at location [-0.02, 1.15, 639.73, 473.76]
-        Detected cat with confidence 0.999 at location [13.24, 52.05, 314.02, 470.93]
-        Detected cat with confidence 0.999 at location [345.4, 23.85, 640.37, 368.72]
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # First, sent images through RTDetr base model to obtain encoder + decoder outputs
-        outputs = self.model(
-            pixel_values,
-            return_dict=return_dict,
-        )
-
         pred_boxes = outputs["pred_boxes"]
         logits = outputs["logits"]
         
@@ -1880,12 +1660,13 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             weight_dict = {"loss_vfl": self.config.weight_loss_vfl, "loss_bbox": self.config.weight_loss_bbox, "loss_giou": self.config.weight_loss_giou}
             weight_loss_scaled = {k: v * loss_dict[k] for k, v in weight_dict.items()}
             reduced_loss_unscaled = {f"{k}_unscaled": v for k, v in loss_dict.items()}
-            losses_dict = {"loss_dict": loss_dict, 
+            loss_dict = {"loss_dict": loss_dict, 
                            "weight_loss_scaled": weight_loss_scaled,
                            "reduced_loss_unscaled": reduced_loss_unscaled}
         
             loss = sum(loss_dict.values())
-        return RTDetrObjectDetectionOutput(
+        
+        return RTDetrModelOutput(
             loss=loss,
             loss_dict=loss_dict,
             logits=logits,
