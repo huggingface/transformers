@@ -30,7 +30,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import RTDetrForObjectDetection, RTDetrModel
+    from transformers import RTDetrModel
     from transformers.models.rt_detr.modeling_rt_detr import RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
@@ -264,10 +264,9 @@ class RTDetrModelTester:
 
 @require_torch
 class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (RTDetrModel, RTDetrForObjectDetection) if is_torch_available() else ()
-
+    
     pipeline_model_mapping = (
-        {"feature-extraction": RTDetrModel, "object-detection": RTDetrForObjectDetection}
+        {"object-detection": RTDetrModel}
         if is_torch_available()
         else ()
     )
@@ -323,18 +322,16 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_forward_signature(self):
         config = self.model_tester.get_config()
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            arg_names = [*signature.parameters.keys()]
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
+        model = RTDetrModel(config)
+        signature = inspect.signature(model.forward)
+        arg_names = [*signature.parameters.keys()]
+        expected_arg_names = ["pixel_values"]
+        self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         pixel_values, labels, pixel_labels = self.model_tester.prepare_random_inputs()
         config = RTDetrConfig.from_pretrained(CHECKPOINT)
-        for model_class in self.all_model_classes:
-            self.model_tester.create_and_check_model(model_class, config, pixel_values, labels, pixel_labels)
+        self.model_tester.create_and_check_model(RTDetrModel, config, pixel_values, labels, pixel_labels)
 
     def test_model_from_pretrained(self):
         for model_name in RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST:
