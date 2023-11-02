@@ -80,7 +80,7 @@ The resources provided in the following sections consist of a list of official H
 
 - A blog post on how to train AlBERT with Blurr for sequence classification can be done by adapting this [example](https://huggingface.co/blog/fastai).
 - A blog post on how to use [Ray to tune hyperparameters](https://huggingface.co/blog/ray-tune) can be adapted for AlBERT.
-- A notebook on how to [Fine-tune ALBERT for sentence-pair classification](https://github.com/NadirEM/nlp-notebooks/blob/master/Fine_tune_ALBERT_sentence_pair_classification.ipynb)
+- A notebook on how to [Fine-tune ALBERT for sentence-pair classification](https://github.com/NadirEM/nlp-notebooks/blob/master/Fine_tune_ALBERT_sentence_pair_classification.ipynb). 🌎
 - A notebook on how to [Fine Tuning Transformer for MultiLabel Text Classification](https://github.com/abhimishra91/transformers-tutorials/blob/master/transformers_multi_label_classification.ipynb)
 
 - Adapt this blog post on [Getting Started with Sentiment Analysis using Python](https://huggingface.co/blog/sentiment-analysis-python) for AlBERT.
