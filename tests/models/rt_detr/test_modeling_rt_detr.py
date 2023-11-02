@@ -31,7 +31,7 @@ if is_torch_available():
     import torch
 
     from transformers import RTDetrModel
-    from transformers.models.rt_detr.modeling_rt_detr import RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.rt_detr.modeling_rt_detr import RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -332,7 +332,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model(RTDetrModel, config, pixel_values, labels, pixel_labels)
 
     def test_model_from_pretrained(self):
-        for model_name in RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST:
+        for model_name in RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST:
             model = RTDetrModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
