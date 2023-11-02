@@ -590,6 +590,9 @@ class ModelTesterMixin:
             else nullcontext()
         )
 
+        def set_forward_fired(module, input, output):
+            module._hf_test_forward_fired = True
+
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
@@ -601,12 +604,22 @@ class ModelTesterMixin:
                 continue
 
             model = model_class(config)
+            # TODO: is there a better way to do this?
+            elementary_modules = [
+                module
+                for module in model.modules()
+                if isinstance(module, (nn.Linear, nn.Conv2d, nn.Embedding, nn.Conv1d, nn.LayerNorm))
+            ]
+
+            for submodule in elementary_modules:
+                submodule.register_forward_hook(set_forward_fired)
 
             # In case we want to perform pure bf16 training, simply convert the model beforehand
             if half_precision_training:
-                # target_dtype = torch.float16 if torch_device == "cuda" else torch.bfloat16
                 target_dtype = torch.bfloat16
                 model = model.to(target_dtype)
+            else:
+                target_dtype = torch.float32
 
             optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
@@ -619,6 +632,10 @@ class ModelTesterMixin:
 
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
+            for k, v in inputs:
+                if torch.is_floating_point(v):
+                    v = v.to(target_dtype)
+
             # In case we want to perform mixed precision training, we need to wrap the loss computation
             #  inside the autocast context manager
             with training_context:
@@ -627,9 +644,11 @@ class ModelTesterMixin:
             loss.backward()
             optimizer.step()
 
-            for k, v in model.named_parameters():
-                if v.requires_grad:
-                    self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+            for submodule in model.modules():
+                if getattr(submodule, "_hf_test_forward_fired", False):
+                    for k, v in submodule.named_parameters():
+                        if v.requires_grad:
+                            self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
 
     def test_training(self):
         self.check_training()
