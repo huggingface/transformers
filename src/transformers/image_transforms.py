@@ -378,7 +378,7 @@ def normalize(
 
     # We cast to float32 to avoid errors that can occur when subtracting uint8 values.
     # We preserve the original dtype if it is a float type to prevent upcasting float16.
-    if not isinstance(image.dtype, np.floating):
+    if not np.issubdtype(image.dtype, np.floating):
         image = image.astype(np.float32)
 
     if isinstance(mean, Iterable):
