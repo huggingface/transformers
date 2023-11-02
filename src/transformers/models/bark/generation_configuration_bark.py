@@ -44,6 +44,7 @@ class BarkSemanticGenerationConfig(GenerationConfig):
         semantic_vocab_size=10_000,
         max_input_semantic_length=256,
         semantic_rate_hz=49.9,
+        min_eos_p=None,
         **kwargs,
     ):
         """Class that holds a generation configuration for [`BarkSemanticModel`].
@@ -86,6 +87,10 @@ class BarkSemanticGenerationConfig(GenerationConfig):
                 Max length of semantic input vector.
             semantic_rate_hz (`float`, *optional*, defaults to 49.9):
                 Semantic rate in Hertz.
+            min_eos_p (`float`, *optional*):
+                Minimum threshold of the probability of the EOS token for it to be sampled. This is an early stopping
+                strategy to mitigate potential unwanted generations at the end of a prompt. The original implementation
+                suggests a default value of 0.2.
         """
         super().__init__(
             temperature=temperature,
@@ -107,6 +112,7 @@ class BarkSemanticGenerationConfig(GenerationConfig):
         self.semantic_vocab_size = semantic_vocab_size
         self.max_input_semantic_length = max_input_semantic_length
         self.semantic_rate_hz = semantic_rate_hz
+        self.min_eos_p = min_eos_p
 
 
 class BarkCoarseGenerationConfig(GenerationConfig):

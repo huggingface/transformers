@@ -97,7 +97,7 @@ Flax), PyTorch, and/or TensorFlow.
 |              [Conditional DETR](model_doc/conditional_detr)              |       ✅        |         ❌         |      ❌      |
 |                      [ConvBERT](model_doc/convbert)                      |       ✅        |         ✅         |      ❌      |
 |                      [ConvNeXT](model_doc/convnext)                      |       ✅        |         ✅         |      ❌      |
-|                    [ConvNeXTV2](model_doc/convnextv2)                    |       ✅        |         ❌         |      ❌      |
+|                    [ConvNeXTV2](model_doc/convnextv2)                    |       ✅        |         ✅         |      ❌      |
 |                           [CPM](model_doc/cpm)                           |       ✅        |         ✅         |      ✅      |
 |                       [CPM-Ant](model_doc/cpmant)                        |       ✅        |         ❌         |      ❌      |
 |                          [CTRL](model_doc/ctrl)                          |       ✅        |         ✅         |      ❌      |
@@ -138,6 +138,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [FNet](model_doc/fnet)                          |       ✅        |         ❌         |      ❌      |
 |                      [FocalNet](model_doc/focalnet)                      |       ✅        |         ❌         |      ❌      |
 |                  [Funnel Transformer](model_doc/funnel)                  |       ✅        |         ✅         |      ❌      |
+|                          [Fuyu](model_doc/fuyu)                          |       ✅        |         ❌         |      ❌      |
 |                           [GIT](model_doc/git)                           |       ✅        |         ❌         |      ❌      |
 |                          [GLPN](model_doc/glpn)                          |       ✅        |         ❌         |      ❌      |
 |                       [GPT Neo](model_doc/gpt_neo)                       |       ✅        |         ❌         |      ✅      |
@@ -157,6 +158,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [Informer](model_doc/informer)                      |       ✅        |         ❌         |      ❌      |
 |                  [InstructBLIP](model_doc/instructblip)                  |       ✅        |         ❌         |      ❌      |
 |                       [Jukebox](model_doc/jukebox)                       |       ✅        |         ❌         |      ❌      |
+|                      [KOSMOS-2](model_doc/kosmos-2)                      |       ✅        |         ❌         |      ❌      |
 |                      [LayoutLM](model_doc/layoutlm)                      |       ✅        |         ✅         |      ❌      |
 |                    [LayoutLMv2](model_doc/layoutlmv2)                    |       ✅        |         ❌         |      ❌      |
 |                    [LayoutLMv3](model_doc/layoutlmv3)                    |       ✅        |         ✅         |      ❌      |
@@ -209,6 +211,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                    [OpenLlama](model_doc/open-llama)                     |       ✅        |         ❌         |      ❌      |
 |                           [OPT](model_doc/opt)                           |       ✅        |         ✅         |      ✅      |
 |                       [OWL-ViT](model_doc/owlvit)                        |       ✅        |         ❌         |      ❌      |
+|                         [OWLv2](model_doc/owlv2)                         |       ✅        |         ❌         |      ❌      |
 |                       [Pegasus](model_doc/pegasus)                       |       ✅        |         ✅         |      ✅      |
 |                     [PEGASUS-X](model_doc/pegasus_x)                     |       ✅        |         ❌         |      ❌      |
 |                     [Perceiver](model_doc/perceiver)                     |       ✅        |         ❌         |      ❌      |
@@ -234,6 +237,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [RoFormer](model_doc/roformer)                      |       ✅        |         ✅         |      ✅      |
 |                          [RWKV](model_doc/rwkv)                          |       ✅        |         ❌         |      ❌      |
 |                           [SAM](model_doc/sam)                           |       ✅        |         ✅         |      ❌      |
+|                  [SeamlessM4T](model_doc/seamless_m4t)                   |       ✅        |         ❌         |      ❌      |
 |                     [SegFormer](model_doc/segformer)                     |       ✅        |         ✅         |      ❌      |
 |                           [SEW](model_doc/sew)                           |       ✅        |         ❌         |      ❌      |
 |                         [SEW-D](model_doc/sew-d)                         |       ✅        |         ❌         |      ❌      |

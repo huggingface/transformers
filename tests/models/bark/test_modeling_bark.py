@@ -32,7 +32,13 @@ from transformers.models.bark.generation_configuration_bark import (
     BarkFineGenerationConfig,
     BarkSemanticGenerationConfig,
 )
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_fp16,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -570,13 +576,13 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = self.all_generative_model_classes[0](config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -636,13 +642,13 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = self.all_generative_model_classes[0](config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -700,14 +706,14 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         # take first codebook channel
 
         model = self.all_model_classes[0](config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
 
         # toy generation_configs
         semantic_generation_config = BarkSemanticGenerationConfig(semantic_vocab_size=0)
@@ -917,7 +923,51 @@ class BarkModelIntegrationTests(unittest.TestCase):
                 temperature=1.0,
                 semantic_generation_config=self.semantic_generation_config,
             )
+        self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
+    @slow
+    def test_generate_semantic_early_stop(self):
+        input_ids = self.inputs
+        min_eos_p = 0.01
+
+        # fmt: off
+        # check first ids
+        expected_output_ids = [7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927,]
+        # fmt: on
+
+        # Should be able to read min_eos_p from kwargs
+        with torch.no_grad():
+            torch.manual_seed(0)
+            output_ids_without_min_eos_p = self.model.semantic.generate(
+                **input_ids,
+                do_sample=False,
+                temperature=0.9,
+                semantic_generation_config=self.semantic_generation_config,
+            )
+            torch.manual_seed(0)
+            output_ids_kwargs = self.model.semantic.generate(
+                **input_ids,
+                do_sample=False,
+                temperature=0.9,
+                semantic_generation_config=self.semantic_generation_config,
+                min_eos_p=min_eos_p,
+            )
+        self.assertListEqual(output_ids_without_min_eos_p[0, : len(expected_output_ids)].tolist(), expected_output_ids)
+        self.assertLess(len(output_ids_kwargs[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist()))
+
+        # Should be able to read min_eos_p from the semantic generation config
+        self.semantic_generation_config.min_eos_p = min_eos_p
+        with torch.no_grad():
+            torch.manual_seed(0)
+            output_ids = self.model.semantic.generate(
+                **input_ids,
+                do_sample=False,
+                temperature=0.9,
+                semantic_generation_config=self.semantic_generation_config,
+            )
+
+        self.assertEqual(output_ids.shape, output_ids_kwargs.shape)
+        self.assertLess(len(output_ids[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist()))
         self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
     @slow
@@ -1022,26 +1072,30 @@ class BarkModelIntegrationTests(unittest.TestCase):
         input_ids = self.inputs
 
         with torch.no_grad():
+            torch.manual_seed(0)
             self.model.generate(
                 **input_ids, do_sample=False, temperature=1.0, coarse_do_sample=True, coarse_temperature=0.7
             )
-            self.model.generate(
+            output_ids_without_min_eos_p = self.model.generate(
                 **input_ids,
-                do_sample=False,
-                temperature=1.0,
+                do_sample=True,
+                temperature=0.9,
                 coarse_do_sample=True,
                 coarse_temperature=0.7,
                 fine_temperature=0.3,
             )
-            self.model.generate(
+
+            output_ids_with_min_eos_p = self.model.generate(
                 **input_ids,
                 do_sample=True,
-                temperature=0.6,
-                penalty_alpha=0.6,
-                semantic_temperature=0.9,
-                coarse_temperature=0.2,
-                fine_temperature=0.1,
+                temperature=0.9,
+                coarse_temperature=0.7,
+                fine_temperature=0.3,
+                min_eos_p=0.1,
             )
+        self.assertLess(
+            len(output_ids_with_min_eos_p[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist())
+        )
 
     @require_torch_gpu
     @slow

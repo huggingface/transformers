@@ -19,10 +19,10 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 Flan-UL2 is an encoder decoder model based on the T5 architecture. It uses the same configuration as the [UL2](ul2) model released earlier last year. 
-It was fine tuned using the "Flan" prompt tuning and dataset collection. Similiar to `Flan-T5`,  one can directly use FLAN-UL2 weights without finetuning the model:
+It was fine tuned using the "Flan" prompt tuning and dataset collection. Similar to `Flan-T5`,  one can directly use FLAN-UL2 weights without finetuning the model:
 
 
-According ot the original blog here are the notable improvements:
+According to the original blog here are the notable improvements:
 
 - The original UL2 model was only trained with receptive field of 512, which made it non-ideal for N-shot prompting where N is large.
 - The Flan-UL2 checkpoint uses a receptive field of 2048 which makes it more usable for few-shot in-context learning.
@@ -53,4 +53,4 @@ The model is pretty heavy (~40GB in half precision) so if you just want to run t
 
 ## Inference
 
-The inference protocol is exaclty the same as any `T5` model, please have a look at the [T5's documentation page](t5) for more details.
+The inference protocol is exactly the same as any `T5` model, please have a look at the [T5's documentation page](t5) for more details.
