@@ -367,7 +367,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
         remap_coco_category: bool = True,
     ):
         """
-        Converts the raw output of [`RTDetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        Converts the raw output of [`RTDetrModel`] into final bounding boxes in (top_left_x, top_left_y,
         bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:

@@ -25,6 +25,7 @@ RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "rafaelpadilla/porting_rt_detr": "https://huggingface.co/rafaelpadilla/porting_rt_detr/raw/main/config.json",
 }
 
+
 class RTDetrConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RTDetrModel`]. It is used to instantiate a
@@ -38,16 +39,17 @@ class RTDetrConfig(PretrainedConfig):
     Args:
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        backbone (`str`, *optional*, defaults to "resnet50d"):
+        backbone (`str`, *optional*, defaults to `"resnet50d"`):
             Name of convolutional backbone to use.
-        out_indices (`List[int]`, *optional*, defaults to [2,3,4]): 
-            List of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the backbone has). 
-        freeze_batch_norm_2d (`bool`, *optional*, defaults to True):
-            If True, all `BatchNorm2d` and `SyncBatchNorm` layers of the backbone will be replaced by `FrozenBatchNorm2d`.
-        in_channels (`List[int]`, *optional*, defaults to [512, 1024, 2048]):
+        out_indices (`List[int]`, *optional*, defaults to `[2, 3, 4]`):
+            List of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how many stages the
+            backbone has).
+        freeze_batch_norm_2d (`bool`, *optional*, defaults to `True`):
+            If True, all `BatchNorm2d` and `SyncBatchNorm` layers of the backbone will be replaced by
+            `FrozenBatchNorm2d`.
+        in_channels (`List[int]`, *optional*, defaults to `[512, 1024, 2048]`):
             List of input channel sizes to be used in each block of the backbone's convolutional layers.
-        feat_strides (`List[int]`, *optional*, defaults to [8, 16, 32]):
+        feat_strides (`List[int]`, *optional*, defaults to `[8, 16, 32]`):
             Strides used in each feature map.
         hidden_dim (`int`, *optional*, defaults to 256):
             Dimension for hidden states in transformer encoder and decoder.
@@ -55,31 +57,33 @@ class RTDetrConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the transformer encoder and decoder.
         dim_feedforward (`int`, *optional*, defaults to 1024):
             Dimension for feedforward network layer in transformer encoder and decoder.
-        dropout (`float`, *optional*, defaults to 0.):
+        dropout (`float`, *optional*, defaults to 0.0):
             The ratio for all dropout layers.
-        enc_act (`str`, *optional*, defaults to "gelu"): 
+        enc_act (`str`, *optional*, defaults to `"gelu"`):
             Activation function of the encoder used in the `TransformerEncoderLayer`.
-        use_encoder_idx (`List[int]`, *optional*, defaults to [2]):
+        use_encoder_idx (`List[int]`, *optional*, defaults to `[2]`):
             Indexes of the projected layers to be used in the encoder.
         num_encoder_layers (`int`, *optional*, defaults to 1):
             Total of layers to be used by the encoder.
         pe_temperature (`int`, *optional*, defaults to 10000):
             The temperature parameter used to create the positional encodings.
-        expansion (`float`, *optional*, defaults to 1.):
+        expansion (`float`, *optional*, defaults to 1.0):
             Expansion factor used by the `CSPRepLayer` module.
-        depth_mult (`float`, *optional*, defaults to 1.):
+        depth_mult (`float`, *optional*, defaults to 1.0):
             Depth multiplicator factor used to create the `CSPRepLayer` module.
-        act_encoder (`str`, *optional*, defaults to "silu"):
-            Activation function of the encoder used in the top-down Feature Pyramid Network and the bottom-up Path Aggregation Network. 
-        eval_size (`Tuple[int, int]`, *optional*, defaults to None):
-            Height and width used to computes the effective height and width of the position embeddings after taking into account the stride.
+        act_encoder (`str`, *optional*, defaults to `"silu"`):
+            Activation function of the encoder used in the top-down Feature Pyramid Network and the bottom-up Path
+            Aggregation Network.
+        eval_size (`Tuple[int, int]`, *optional*):
+            Height and width used to computes the effective height and width of the position embeddings after taking
+            into account the stride.
         num_classes (`int`, *optional*, defaults to 80):
             Number of target classes or labels used by the detector.
         num_queries (`int`, *optional*, defaults to 300):
             Number of object queries.
-        position_embed_type (`str`, *optional*, defaults to "sine"):
+        position_embed_type (`str`, *optional*, defaults to `"sine"`):
             A string indicating the type of positional embedding to use. Supported values ["sine", "learned"]
-        feat_channels (`List[int]`, *optional*, defaults to [256, 256, 256]):
+        feat_channels (`List[int]`, *optional*, defaults to `[256, 256, 256]`):
             A list of integers representing the number of feature channels at various layers or stages of the network
         num_levels (`int`, *optional*, defaults to 3):
             The number of feature levels used by the `RTDetrTransformers`.
@@ -87,7 +91,7 @@ class RTDetrConfig(PretrainedConfig):
             Number of points used by the `TransformerDecoderLayer`.
         num_decoder_layers (`int`, *optional*, defaults to 6):
             Number of layers of the decoder.
-        act_decoder (`str`, *optional*, defaults to "relu"):
+        act_decoder (`str`, *optional*, defaults to `"relu"`):
             Activation function used by the decoder.
         num_denoising (`int`, *optional*, defaults to 100):
             The total number of denoising tasks or queries to be used for contrastive denoising.
@@ -95,14 +99,14 @@ class RTDetrConfig(PretrainedConfig):
             The fraction of denoising labels to which random noise should be added.
         box_noise_scale (`float`, *optional*, defaults to 1.0):
             Scale or magnitude of noise to be added to the bounding boxes.
-        learnt_init_query (`bool`, *optional*, defaults to False):
+        learnt_init_query (`bool`, *optional*, defaults to `False`):
             Indicates whether the initial query embeddings for the decoder should be learned during training
-        eval_spatial_size  (`Tuple[int, int]`, *optional*, defaults to [640, 640]):
+        eval_spatial_size (`Tuple[int, int]`, *optional*, defaults to `[640, 640]`):
             Height and width used during evaluation to generate the bounding box anchors.
         eval_idx (`int`, *optional*, defaults to -1):
             Id of the decoder layer used to obtain the logits and bounding boxes.
-        eps (`float`, *optional*, defaults to 1e-2):
-            A small positive value used to define the valid range for anchor coordinates. 
+        eps (`float`, *optional*, defaults to 0.01):
+            A small positive value used to define the valid range for anchor coordinates.
         matcher_alpha (`float`, *optional*, defaults to 0.25):
             Parameter alpha used by the Hungarian Matcher.
         matcher_gamma (`float`, *optional*, defaults to 2.0):
@@ -113,19 +117,19 @@ class RTDetrConfig(PretrainedConfig):
             The relative weight of the bounding box loss used by the Hungarian Matcher.
         matcher_giou_cost (`float`, *optional*, defaults to 2.0):
             The relative weight of the giou loss of used by the Hungarian Matcher.
-        use_focal_loss (`bool`, *optional*, defaults to True):
+        use_focal_loss (`bool`, *optional*, defaults to `True`):
             Parameter informing if focal focal should be used.
-        aux_loss (`bool`, *optional*, defaults to True):
+        aux_loss (`bool`, *optional*, defaults to `True`):
             Parameter informing if auxiliar focal should be used.
         focal_loss_alpha (`float`, *optional*, defaults to 0.75):
             Parameter alpha used to compute the focal loss.
         focal_loss_gamma (`float`, *optional*, defaults to 2.0):
             Parameter gamma used to compute the focal loss.
-        weight_loss_vfl (`float`, *optional*, defaults to 1):
+        weight_loss_vfl (`float`, *optional*, defaults to 1.0):
             Relative weight of the varifocal loss in the object detection loss.
-        weight_loss_bbox (`float`, *optional*, defaults to 5):
+        weight_loss_bbox (`float`, *optional*, defaults to 5.0):
             Relative weight of the L1 bounding box loss in the object detection loss.
-        weight_loss_giou (`float`, *optional*, defaults to 2):
+        weight_loss_giou (`float`, *optional*, defaults to 2.0):
             Relative weight of the generalized IoU loss in the object detection loss.
         eos_coefficient (`float`, *optional*, defaults to 0.1):
             Relative classification weight of the 'no-object' class in the object detection loss.
@@ -157,7 +161,7 @@ class RTDetrConfig(PretrainedConfig):
         initializer_range=0.02,
         # Backbone
         backbone="resnet50d",
-        out_indices=[2,3,4], 
+        out_indices=[2, 3, 4],
         freeze_batch_norm_2d=True,
         # encoder HybridEncoder
         in_channels=[512, 1024, 2048],

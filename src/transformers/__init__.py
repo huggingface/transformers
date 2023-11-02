@@ -299,7 +299,6 @@ _import_structure = {
     "models.deprecated.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.deta": ["DETA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetaConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
-    "models.rt_detr": ["RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "RTDetrConfig"],
     "models.dialogpt": [],
     "models.dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DinatConfig"],
     "models.dinov2": ["DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Dinov2Config"],
@@ -509,6 +508,7 @@ _import_structure = {
     "models.roberta_prelayernorm": ["ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaPreLayerNormConfig"],
     "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
+    "models.rt_detr": ["RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "RTDetrConfig"],
     "models.rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig"],
     "models.sam": [
         "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1652,14 +1652,6 @@ else:
             "DetrPreTrainedModel",
         ]
     )
-    _import_structure["models.rt_detr"].extend(
-        [
-            "RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "RTDetrForObjectDetection",
-            "RTDetrModel",
-            "RTDetrPreTrainedModel",
-        ]
-    )
     _import_structure["models.dinat"].extend(
         [
             "DINAT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2676,6 +2668,13 @@ else:
             "RoFormerModel",
             "RoFormerPreTrainedModel",
             "load_tf_weights_in_roformer",
+        ]
+    )
+    _import_structure["models.rt_detr"].extend(
+        [
+            "RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RTDetrModel",
+            "RTDetrPreTrainedModel",
         ]
     )
     _import_structure["models.rwkv"].extend(
@@ -6488,7 +6487,6 @@ if TYPE_CHECKING:
         )
         from .models.rt_detr import (
             RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            RTDetrForObjectDetection,
             RTDetrModel,
             RTDetrPreTrainedModel,
         )

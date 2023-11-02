@@ -264,12 +264,7 @@ class RTDetrModelTester:
 
 @require_torch
 class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    
-    pipeline_model_mapping = (
-        {"object-detection": RTDetrModel}
-        if is_torch_available()
-        else ()
-    )
+    pipeline_model_mapping = {"object-detection": RTDetrModel} if is_torch_available() else ()
 
     test_torchscript = False
     test_pruning = False
@@ -347,7 +342,7 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
         return RTDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     def test_inference(self):
-        model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
+        model = RTDetrModel.from_pretrained(CHECKPOINT).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
