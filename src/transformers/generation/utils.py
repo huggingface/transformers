@@ -1626,6 +1626,10 @@ class GenerationMixin:
             if not model_kwargs["use_cache"]:
                 raise ValueError("assisted generate requires `use_cache=True`")
 
+            assistant_accepts_encoder_outputs = "encoder_outputs" in set(
+                inspect.signature(assistant_model.forward).parameters.keys()
+            )
+
             # 11. If the assistant model is an encoder-decoder, prepare its encoder outputs
             if assistant_model.config.is_encoder_decoder and "assistant_encoder_outputs" not in model_kwargs:
                 assistant_model_kwargs = copy.deepcopy(model_kwargs)
@@ -1636,6 +1640,17 @@ class GenerationMixin:
                     inputs_tensor, assistant_model_kwargs, model_input_name
                 )
                 model_kwargs["assistant_encoder_outputs"] = assistant_model_kwargs["encoder_outputs"]
+
+            if (
+                not assistant_model.config.is_encoder_decoder
+                and assistant_accepts_encoder_outputs
+                and "encoder_outputs" in model_kwargs
+            ):
+                # some assistants might be assymetric (many more enc layers than dec layers)
+                # encoder-decoder models that share the exact same encoder as the teacher
+                # in this case the assistant only needs to load the light-weight decoder,
+                # but still requires `encoder_outputs` to be passed
+                model_kwargs["assistant_encoder_outputs"] = model_kwargs["encoder_outputs"]
 
             # 12. run assisted generate
             return self.assisted_decoding(
@@ -4368,6 +4383,11 @@ class GenerationMixin:
         else:
             num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
 
+        # check if assistant model accepts encoder_outputs
+        assistant_accepts_encoder_outputs = "encoder_outputs" in set(
+            inspect.signature(assistant_model.forward).parameters.keys()
+        )
+
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
@@ -4454,9 +4474,13 @@ class GenerationMixin:
                             encoder_outputs=model_kwargs["assistant_encoder_outputs"],
                         )
                     else:
+                        encoder_kwargs = {}
+
+                        if assistant_accepts_encoder_outputs and "assistant_encoder_outputs" in model_kwargs:
+                            encoder_kwargs["encoder_outputs"] = model_kwargs["assistant_encoder_outputs"]
+
                         assistant_model_outputs = assistant_model(
-                            assist_inputs,
-                            past_key_values=model_kwargs["assistant_past_key_values"],
+                            assist_inputs, past_key_values=model_kwargs["assistant_past_key_values"], **encoder_kwargs
                         )
                 else:
                     if assistant_model.config.is_encoder_decoder:
@@ -4465,7 +4489,12 @@ class GenerationMixin:
                             encoder_outputs=model_kwargs["assistant_encoder_outputs"],
                         )
                     else:
-                        assistant_model_outputs = assistant_model(candidate_input_ids)
+                        encoder_kwargs = {}
+
+                        if assistant_accepts_encoder_outputs and "assistant_encoder_outputs" in model_kwargs:
+                            encoder_kwargs["encoder_outputs"] = model_kwargs["assistant_encoder_outputs"]
+
+                        assistant_model_outputs = assistant_model(candidate_input_ids, **encoder_kwargs)
 
                 # 1.2. greedily select the next candidate token
                 model_kwargs["assistant_past_key_values"] = assistant_model_outputs.past_key_values

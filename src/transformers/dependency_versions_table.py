@@ -73,6 +73,7 @@ deps = {
     "starlette": "starlette",
     "sudachipy": "sudachipy>=0.6.6",
     "sudachidict_core": "sudachidict_core>=20220729",
+    "tensorboard": "tensorboard",
     "tensorflow-cpu": "tensorflow-cpu>=2.6,<2.15",
     "tensorflow": "tensorflow>=2.6,<2.15",
     "tensorflow-text": "tensorflow-text<2.15",

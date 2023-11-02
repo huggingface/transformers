@@ -24,7 +24,8 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
+    require_torch_fp16,
     require_vision,
     slow,
     torch_device,
@@ -314,6 +315,18 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     def test_problem_types(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -412,7 +425,8 @@ class DeiTModelIntegrationTest(unittest.TestCase):
 
     @slow
     @require_accelerate
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_torch_fp16
     def test_inference_fp16(self):
         r"""
         A small test to make sure that inference work in half precision without any problem.

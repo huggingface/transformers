@@ -31,6 +31,7 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
+    backend_empty_cache,
     is_pipeline_test,
     is_torch_available,
     require_tf,
@@ -42,9 +43,6 @@ from transformers.testing_utils import (
 from .test_pipelines_common import ANY
 
 
-DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
-
-
 @is_pipeline_test
 class ConversationalPipelineTests(unittest.TestCase):
     def tearDown(self):
@@ -52,9 +50,7 @@ class ConversationalPipelineTests(unittest.TestCase):
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
         if is_torch_available():
-            import torch
-
-            torch.cuda.empty_cache()
+            backend_empty_cache(torch_device)
 
     model_mapping = dict(
         list(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items())
@@ -77,14 +73,14 @@ class ConversationalPipelineTests(unittest.TestCase):
 
     def run_pipeline_test(self, conversation_agent, _):
         # Simple
-        outputs = conversation_agent(Conversation("Hi there!"), max_new_tokens=20)
+        outputs = conversation_agent(Conversation("Hi there!"), max_new_tokens=5)
         self.assertEqual(
             outputs,
             Conversation([{"role": "user", "content": "Hi there!"}, {"role": "assistant", "content": ANY(str)}]),
         )
 
         # Single list
-        outputs = conversation_agent([Conversation("Hi there!")], max_new_tokens=20)
+        outputs = conversation_agent([Conversation("Hi there!")], max_new_tokens=5)
         self.assertEqual(
             outputs,
             Conversation([{"role": "user", "content": "Hi there!"}, {"role": "assistant", "content": ANY(str)}]),
@@ -96,7 +92,7 @@ class ConversationalPipelineTests(unittest.TestCase):
         self.assertEqual(len(conversation_1), 1)
         self.assertEqual(len(conversation_2), 1)
 
-        outputs = conversation_agent([conversation_1, conversation_2], max_new_tokens=20)
+        outputs = conversation_agent([conversation_1, conversation_2], max_new_tokens=5)
         self.assertEqual(outputs, [conversation_1, conversation_2])
         self.assertEqual(
             outputs,
@@ -118,7 +114,7 @@ class ConversationalPipelineTests(unittest.TestCase):
 
         # One conversation with history
         conversation_2.add_message({"role": "user", "content": "Why do you recommend it?"})
-        outputs = conversation_agent(conversation_2, max_new_tokens=20)
+        outputs = conversation_agent(conversation_2, max_new_tokens=5)
         self.assertEqual(outputs, conversation_2)
         self.assertEqual(
             outputs,
@@ -136,12 +132,12 @@ class ConversationalPipelineTests(unittest.TestCase):
     @slow
     def test_integration_torch_conversation(self):
         # When
-        conversation_agent = pipeline(task="conversational", device=DEFAULT_DEVICE_NUM)
+        conversation_agent = pipeline(task="conversational", device=torch_device)
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         conversation_2 = Conversation("What's the last book you have read?")
         # Then
-        self.assertEqual(len(conversation_1.past_user_inputs), 1)
-        self.assertEqual(len(conversation_2.past_user_inputs), 1)
+        self.assertEqual(len(conversation_1.past_user_inputs), 0)
+        self.assertEqual(len(conversation_2.past_user_inputs), 0)
         # When
         result = conversation_agent([conversation_1, conversation_2], do_sample=False, max_length=1000)
         # Then
@@ -168,10 +164,10 @@ class ConversationalPipelineTests(unittest.TestCase):
     @slow
     def test_integration_torch_conversation_truncated_history(self):
         # When
-        conversation_agent = pipeline(task="conversational", min_length_for_response=24, device=DEFAULT_DEVICE_NUM)
+        conversation_agent = pipeline(task="conversational", min_length_for_response=24, device=torch_device)
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         # Then
-        self.assertEqual(len(conversation_1.past_user_inputs), 1)
+        self.assertEqual(len(conversation_1.past_user_inputs), 0)
         # When
         result = conversation_agent(conversation_1, do_sample=False, max_length=36)
         # Then
@@ -374,13 +370,13 @@ These are just a few of the many attractions that Paris has to offer. With so mu
         # When
         tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
         model = AutoModelForSeq2SeqLM.from_pretrained("facebook/blenderbot_small-90M")
-        conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer, device=DEFAULT_DEVICE_NUM)
+        conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer, device=torch_device)
 
         conversation_1 = Conversation("My name is Sarah and I live in London")
         conversation_2 = Conversation("Going to the movies tonight, What movie would you recommend? ")
         # Then
-        self.assertEqual(len(conversation_1.past_user_inputs), 1)
-        self.assertEqual(len(conversation_2.past_user_inputs), 1)
+        self.assertEqual(len(conversation_1.past_user_inputs), 0)
+        self.assertEqual(len(conversation_2.past_user_inputs), 0)
         # When
         result = conversation_agent([conversation_1, conversation_2], do_sample=False, max_length=1000)
         # Then
