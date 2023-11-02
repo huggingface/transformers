@@ -255,13 +255,7 @@ class GPTNeoSelfAttention(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-        **kwargs,
     ):
-        if "padding_mask" in kwargs:
-            logger.warning_once(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
@@ -309,16 +303,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-        **kwargs,
     ):
-        if "padding_mask" in kwargs:
-            logger.warning_once(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
-            # overwrite attention_mask with padding_mask
-            attention_mask = kwargs.pop("padding_mask")
-
         bsz, _, _ = hidden_states.size()
 
         query = self.q_proj(hidden_states)
@@ -556,13 +541,7 @@ class GPTNeoBlock(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-        **kwargs,
     ):
-        if "padding_mask" in kwargs:
-            logger.warning_once(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_outputs = self.attn(
@@ -572,7 +551,6 @@ class GPTNeoBlock(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            **kwargs,
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
