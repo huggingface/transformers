@@ -385,7 +385,7 @@ class GroundingDINOConfig(PretrainedConfig):
             self.text_backbone_config = text_backbone_config
         else:
             raise ValueError(
-                f"`text_backbone_config` should be either a `dict` or a `GroundingDINOTextPrenetConfig` instance instead got {type(text_backbone_config)}"
+                f"`text_backbone_config` should be either a `dict` or an instance of `GroundingDINOTextPrenetConfig`. Received {type(text_backbone_config)} instead."
             )
         self.max_text_len = max_text_len
         # Text Enhancer
