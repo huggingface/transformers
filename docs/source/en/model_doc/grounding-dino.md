@@ -26,10 +26,22 @@ The abstract from the paper is the following:
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- One can use [`GroundingDINOProcessor`] to prepare image-text pairs for the model.
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/grouding_dino_architecture.png"
+alt="drawing" width="600"/>
+
+<small> Grounding DINO overview. Taken from the <a href="https://arxiv.org/abs/2303.05499">original paper</a>. </small>
 
 This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco) and [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/IDEA-Research/GroundingDINO).
+
+
+## GroundingDINOImageProcessor
+
+[[autodoc]] GroundingDINOImageProcessor
+    - preprocess
+    - post_process_object_detection
 
 ## GroundingDINOProcessor
 
