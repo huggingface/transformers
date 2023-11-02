@@ -42,8 +42,8 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the `Short Time
-    Fourier Transform` which should match pytorch's `torch.stft` equivalent. TODO: change
+    This class extracts `Short Time Fourier Transform` from raw speech using a custom numpy implementation which should
+    match pytorch's `torch.stft`.
 
     Args:
         feature_size (`int`, defaults to 80):
@@ -56,6 +56,9 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
             Size of the Fourier transform.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
+        max_wav_value (`float`, defaults to 32768.0):
+            Maximum wav value. Used to normalize the input waveforms if `do_normalize=True` in the forward pass of this
+            feature extractor.
     """
 
     model_input_names = ["input_features"]
@@ -68,8 +71,7 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         n_fft=1024,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask,
-        max_wav_value=32768.0,  # TODO : add to docstrings
-        spec_gain=1,  # for now do nothin TODO - it is used for plotting
+        max_wav_value=32768.0,
         **kwargs,
     ):
         super().__init__(
@@ -92,8 +94,6 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
         self.max_wav_value = max_wav_value
-        self.spec_gain = spec_gain  # TODO: add - gain applied when converting amplitude to DB. Defaults to 20.
-        # improvement from coqui repo
 
     def _torch_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
         """
@@ -102,7 +102,6 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         if len(waveform.shape) == 1:
             waveform = waveform.unsqueeze(0)
 
-        # TODO: verify squeeze
         waveform = torch.nn.functional.pad(
             waveform,
             (int((self.n_fft - self.hop_length) / 2), int((self.n_fft - self.hop_length) / 2)),
@@ -127,31 +126,8 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         mel_filters = torch.from_numpy(self.mel_filters).type(torch.float32).to(waveform.device)
         mel_spec = mel_filters.T @ magnitudes
 
-        log_spec = torch.clamp(mel_spec, min=1e-5).log() * self.spec_gain
+        log_spec = torch.clamp(mel_spec, min=1e-5).log()
         return magnitudes, log_spec
-
-    @staticmethod
-    # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
-    def zero_mean_unit_var_norm(
-        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
-    ) -> List[np.ndarray]:
-        """
-        Every array in the list is normalized to have zero mean and unit variance
-        """
-        if attention_mask is not None:
-            attention_mask = np.array(attention_mask, np.int32)
-            normed_input_values = []
-
-            for vector, length in zip(input_values, attention_mask.sum(-1)):
-                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
-                if length < normed_slice.shape[0]:
-                    normed_slice[length:] = padding_value
-
-                normed_input_values.append(normed_slice)
-        else:
-            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
-
-        return normed_input_values
 
     def __call__(
         self,
@@ -208,8 +184,7 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
             padding_value (`float`, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
             do_normalize (`bool`, *optional*, defaults to `False`):
-                Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
-                improve the performance of the model.
+                Whether or not to divide the input waveform by `self.max_wav_value`.
         """
 
         if sampling_rate is not None:
@@ -243,15 +218,14 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [np.asarray([raw_speech]).T]
 
-        # if self.max_wav_value is not None:
-        #     raw_speech = [
-        #         speech if self.max_wav_value is None else speech / self.max_wav_value for speech in raw_speech
-        #     ]
+        if self.max_wav_value is not None and do_normalize:
+            raw_speech = [
+                speech if self.max_wav_value is None else speech / self.max_wav_value for speech in raw_speech
+            ]
 
         batched_speech = BatchFeature({"input_features": raw_speech})
 
         # convert into correct format for padding
-
         padded_inputs = self.pad(
             batched_speech,
             padding=padding,
@@ -261,15 +235,6 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=return_attention_mask or do_normalize,
             return_tensors="pt",
         )
-
-        # zero-mean and unit-variance normalization
-        if do_normalize:
-            padded_inputs["input_features"] = self.zero_mean_unit_var_norm(
-                padded_inputs["input_features"],
-                attention_mask=padded_inputs["attention_mask"],
-                padding_value=self.padding_value,
-            )
-            padded_inputs["input_features"] = np.stack(padded_inputs["input_features"], axis=0)
 
         # make sure list is in array format
         input_features = torch.tensor(padded_inputs.get("input_features")).transpose(1, 2).transpose(0, 1)

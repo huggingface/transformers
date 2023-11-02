@@ -46,7 +46,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import VitsModel, VitsTokenizer
+    from transformers import VitsDiscriminator, VitsModel, VitsModelForPreTraining, VitsTokenizer
 
 
 CONFIG_NAME = "config.json"
@@ -87,6 +87,9 @@ class VitsModelTester:
         upsample_kernel_sizes=[16, 4],
         resblock_kernel_sizes=[3, 7],
         resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5]],
+        discriminator_periods=[2],
+        discriminator_period_channels=[1, 2, 32],
+        discriminator_scale_channels=[1, 4, 16, 64],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -107,6 +110,9 @@ class VitsModelTester:
         self.upsample_kernel_sizes = upsample_kernel_sizes
         self.resblock_kernel_sizes = resblock_kernel_sizes
         self.resblock_dilation_sizes = resblock_dilation_sizes
+        self.discriminator_periods = discriminator_periods
+        self.discriminator_period_channels = discriminator_period_channels
+        self.discriminator_scale_channels = discriminator_scale_channels
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(2)
@@ -141,6 +147,9 @@ class VitsModelTester:
             upsample_kernel_sizes=self.upsample_kernel_sizes,
             resblock_kernel_sizes=self.resblock_kernel_sizes,
             resblock_dilation_sizes=self.resblock_dilation_sizes,
+            discriminator_periods=self.discriminator_periods,
+            discriminator_period_channels=self.discriminator_period_channels,
+            discriminator_scale_channels=self.discriminator_scale_channels,
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
@@ -155,7 +164,7 @@ class VitsModelTester:
 
 @require_torch
 class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (VitsModel,) if is_torch_available() else ()
+    all_model_classes = (VitsModel, VitsModelForPreTraining) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": VitsModel, "text-to-audio": VitsModel} if is_torch_available() else {}
     )
@@ -227,6 +236,8 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             "conv_post",
             "conv_proj",
             "conv_dds",
+            "convs",
+            "final_conv",
             "project",
             "wavenet.in_layers",
             "wavenet.res_skip_layers",
@@ -423,3 +434,39 @@ class VitsModelIntegrationTests(unittest.TestCase):
         )
         # fmt: on
         self.assertTrue(torch.allclose(outputs.waveform[0, 10000:10030].cpu(), EXPECTED_LOGITS, atol=1e-4))
+
+    def test_discriminator_forward(self):
+        model = VitsDiscriminator.from_pretrained("ylacombe/mms-tts-eng-discriminator")
+        model.to(torch_device)
+
+        set_seed(32)  # make deterministic
+        inputs = torch.rand((1, 1, 32000)).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(inputs)
+
+        # len -> 4
+        # len[0] -> 6
+        # shape[0][0] -> torch.Size([1, 125])
+        # len(outputs_disc[-1][0])
+        # 7
+        # len(outputs_disc[-1][0][0])
+        # 1
+        # outputs_disc[-1][0][0].shape
+        # torch.Size([1, 16, 32000])
+        # outputs_hf_disc[-1][0][0][0, 4, 250:275]
+
+        self.assertEqual((len(outputs), len(outputs[0])), (2, 6))
+        self.assertEqual(len(outputs[-1][0]), 7)
+        self.assertEqual(outputs[0][0].shape, (1, 125))
+        self.assertEqual(outputs[-1][0][0].shape, (1, 16, 32000))
+
+        # fmt: off
+        EXPECTED_LOGITS = torch.tensor(
+        [ 0.4837,  0.4715,  0.3306, -0.0715,  0.5710, -0.0939,  1.4107,  0.0799,
+        -0.0321, -0.1838,  1.3269, -0.0191,  1.3584, -0.0403,  0.0585, -0.1167,
+         0.9985, -0.0517,  0.6682, -0.0401,  0.2538, -0.0169,  1.0111, -0.0584,
+        -0.0302]
+        )
+        # fmt: on
+        self.assertTrue(torch.allclose(outputs[-1][0][0][0, 4, 250:275].cpu(), EXPECTED_LOGITS, atol=1e-4))

@@ -49,8 +49,6 @@ from transformers.trainer_pt_utils import LengthGroupedSampler
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-from transformers import ClapAudioModelWithProjection, ClapProcessor
-
 from utils import plot_alignment_to_numpy, plot_spectrogram_to_numpy
 
 
@@ -66,10 +64,6 @@ from transformers.models.vits.modeling_vits import VitsDiscriminator, VitsModelF
 
 
 ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=False)
-
-# TODO: add to arguments
-WEIGHT_KL = 1.0
-WEIGHT_MEL = 45  # 45
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.34.0.dev0")
@@ -208,6 +202,14 @@ class VITSTrainingArguments(TrainingArguments):
         default=True,
         metadata={"help": ("Whether or not to perform scheduler steps per epoch or per steps.")},
     )
+
+    weight_kl: float = field(default=1.0, metadata={"help": "KL loss weight."})
+
+    weight_mel: float = field(default=45.0, metadata={"help": "Mel-spectrogram loss weight"})
+
+    weight_disc: float = field(default=1.0, metadata={"help": "Discriminator loss weight"})
+
+    weight_gen: float = field(default=1.0, metadata={"help": "Generator loss weight"})
 
 
 @dataclass
@@ -430,69 +432,85 @@ class DataCollatorTTSWithPadding:
         )
 
         return batch
-    
-def log_on_trackers(trackers, generated_audio,generated_attn,generated_spec,target_spec, full_generation_waveform, epoch, sampling_rate):
+
+
+def log_on_trackers(
+    trackers,
+    generated_audio,
+    generated_attn,
+    generated_spec,
+    target_spec,
+    full_generation_waveform,
+    epoch,
+    sampling_rate,
+):
+    max_num_samples = min(len(generated_audio), 50)
+    generated_audio = generated_audio[:max_num_samples]
+    generated_attn = generated_attn[:max_num_samples]
+    generated_spec = generated_spec[:max_num_samples]
+    target_spec = target_spec[:max_num_samples]
+
     for tracker in trackers:
         if tracker.name == "tensorboard":
-            for cpt, audio in enumerate(generated_audio[: min(len(generated_audio), 50)]):
+            for cpt, audio in enumerate(generated_audio):
+                tracker.writer.add_audio(f"train_step_audio_{cpt}", audio[None, :], epoch, sample_rate=sampling_rate)
+
+            for cpt, audio in enumerate(full_generation_waveform):
                 tracker.writer.add_audio(
-                    f"train_step_audio_{cpt}", audio[None, :], epoch, sample_rate=sampling_rate
+                    f"full_generation_sample{cpt}", audio[None, :], epoch, sample_rate=sampling_rate
                 )
 
-            # TODO: add images
+            tracker.writer.add_images("alignements", np.stack(generated_attn), dataformats="NHWC")
+            tracker.writer.add_images("spectrogram", np.stack(generated_spec), dataformats="NHWC")
+            tracker.writer.add_images("target spectrogram", np.stack(target_spec), dataformats="NHWC")
         elif tracker.name == "wandb":
             # wandb can only loads 100 audios per step
             tracker.log(
                 {
-                    "alignments": [
-                        wandb.Image(plot_alignment_to_numpy(attn), caption=f"Audio epoch {epoch}")
-                        for attn in generated_attn[: min(len(generated_audio), 50)]
-                    ],
-                    "spectrogram": [
-                        wandb.Image(plot_spectrogram_to_numpy(spec), caption=f"Audio epoch {epoch}")
-                        for spec in generated_spec[: min(len(generated_audio), 50)]
-                    ],
-                    "target spectrogram": [
-                        wandb.Image(plot_spectrogram_to_numpy(spec), caption=f"Audio epoch {epoch}")
-                        for spec in target_spec[: min(len(generated_audio), 50)]
-                    ],
+                    "alignments": [wandb.Image(attn, caption=f"Audio epoch {epoch}") for attn in generated_attn],
+                    "spectrogram": [wandb.Image(spec, caption=f"Audio epoch {epoch}") for spec in generated_spec],
+                    "target spectrogram": [wandb.Image(spec, caption=f"Audio epoch {epoch}") for spec in target_spec],
                     "train generated audio": [
                         wandb.Audio(
                             audio[0],
                             caption=f"Audio during train step epoch {epoch}",
                             sample_rate=sampling_rate,
                         )
-                        for audio in generated_audio[: min(len(generated_audio), 50)]
+                        for audio in generated_audio
                     ],
                     "full generations samples": [
-                        wandb.Audio(
-                            w, caption=f"Full generation sample {epoch}", sample_rate=sampling_rate
-                        )
+                        wandb.Audio(w, caption=f"Full generation sample {epoch}", sample_rate=sampling_rate)
                         for w in full_generation_waveform
                     ],
                 }
             )
         else:
             logger.warn(f"audio logging not implemented for {tracker.name}")
-            
-            
-def compute_val_metrics_and_losses(val_losses, accelerator, model_outputs, mel_scaled_generation, mel_scaled_target, batch_size, compute_clap_similarity=False):
+
+
+def compute_val_metrics_and_losses(
+    val_losses,
+    accelerator,
+    model_outputs,
+    mel_scaled_generation,
+    mel_scaled_target,
+    batch_size,
+    compute_clap_similarity=False,
+):
     waveform, _, _, _, _, labels_mask, _, prior_latents, prior_means, prior_lg, _, posterior_lg = model_outputs
-    
+
     loss_mel = torch.nn.functional.l1_loss(mel_scaled_target, mel_scaled_generation)
-    loss_kl = kl_loss(
-            prior_latents, posterior_lg, prior_means, prior_lg, labels_mask
-        )
-    
+    loss_kl = kl_loss(prior_latents, posterior_lg, prior_means, prior_lg, labels_mask)
+
     losses_mel_kl = loss_mel + loss_kl
-    
-    losses = torch.stack([loss_mel,loss_kl,losses_mel_kl])
+
+    losses = torch.stack([loss_mel, loss_kl, losses_mel_kl])
     losses = accelerator.gather(losses.repeat(batch_size, 1)).mean(0)
 
     # TODO: add CLAP audio similarity measure
-    for key, loss in zip(["val_loss_mel","val_loss_kl", "val_loss_mel_kl"], losses):
+    for key, loss in zip(["val_loss_mel", "val_loss_kl", "val_loss_mel_kl"], losses):
         val_losses[key] = val_losses.get(key, 0) + loss.item()
-        
+
     return val_losses
 
 
@@ -623,12 +641,8 @@ def training_loop(
 
     if args.do_step_schedule_per_epoch:
         # TODO: add lr_decay to parameters
-        gen_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-            gen_optimizer, gamma=0.999875, last_epoch= -1
-        )
-        disc_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
-            disc_optimizer, gamma=0.999875, last_epoch= -1
-        )
+        gen_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(gen_optimizer, gamma=0.999875, last_epoch=-1)
+        disc_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(disc_optimizer, gamma=0.999875, last_epoch=-1)
     else:
         gen_lr_scheduler = get_scheduler(
             args.lr_scheduler_type,
@@ -793,7 +807,7 @@ def training_loop(
                 )
 
                 # backpropagate
-                accelerator.backward(loss_disc)
+                accelerator.backward(loss_disc * args.weight_disc)
                 if accelerator.sync_gradients:
                     accelerator.clip_grad_norm_(discriminator.parameters(), args.max_grad_norm)
                 disc_optimizer.step()
@@ -809,17 +823,20 @@ def training_loop(
                 discriminator_candidate, fmaps_candidate = discriminator(waveform)
 
                 loss_duration = torch.sum(log_duration.float())
-                loss_mel = torch.nn.functional.l1_loss(mel_scaled_target, mel_scaled_generation) * WEIGHT_MEL
-                loss_kl = (
-                    kl_loss(
-                        prior_latents, posterior_log_variances, prior_means, prior_log_variances, labels_padding_mask
-                    )
-                    * WEIGHT_KL
+                loss_mel = torch.nn.functional.l1_loss(mel_scaled_target, mel_scaled_generation)
+                loss_kl = kl_loss(
+                    prior_latents, posterior_log_variances, prior_means, prior_log_variances, labels_padding_mask
                 )
                 loss_fmaps = feature_loss(fmaps_target, fmaps_candidate)
                 loss_gen, losses_gen = generator_loss(discriminator_candidate)
 
-                total_generator_loss = loss_duration + loss_mel + loss_kl + loss_fmaps + loss_gen
+                total_generator_loss = (
+                    loss_duration
+                    + loss_mel * args.weight_mel
+                    + loss_kl * args.weight_kl
+                    + loss_fmaps
+                    + loss_gen * args.weight_gen
+                )
 
                 # backpropagate
                 accelerator.backward(total_generator_loss)
@@ -832,7 +849,8 @@ def training_loop(
 
                 losses = torch.stack(
                     [
-                        total_generator_loss,
+                        # for fair comparison, don't use weighted loss
+                        loss_duration + loss_mel + loss_kl + loss_fmaps + loss_gen,
                         loss_duration,
                         loss_mel,
                         loss_kl,
@@ -949,7 +967,7 @@ def training_loop(
                             return_dict=True,
                             monotic_alignment_function=maximum_path,
                         )
-                        
+
                         waveform = model_outputs_train.training_outputs[0]
                         attn = model_outputs_train.training_outputs[2]
                         ids_slice = model_outputs_train.training_outputs[3]
@@ -957,13 +975,21 @@ def training_loop(
                         mel_scaled_labels = batch["mel_scaled_input_features"]
                         mel_scaled_target = slice_segments(mel_scaled_labels, ids_slice, model_segment_size)
                         mel_scaled_generation = feature_extractor._torch_extract_fbank_features(waveform.squeeze(1))[1]
-                        
-                        val_losses = compute_val_metrics_and_losses(val_losses, accelerator, model_outputs_train.training_outputs, mel_scaled_generation, mel_scaled_target, per_device_train_batch_size, compute_clap_similarity=False)
+
+                        val_losses = compute_val_metrics_and_losses(
+                            val_losses,
+                            accelerator,
+                            model_outputs_train.training_outputs,
+                            mel_scaled_generation,
+                            mel_scaled_target,
+                            per_device_train_batch_size,
+                            compute_clap_similarity=False,
+                        )
 
                     print(f"VALIDATION - batch {step}, process{accelerator.process_index}, PADDING AND GATHER... ")
                     specs = feature_extractor._torch_extract_fbank_features(waveform.squeeze(1))[0]
                     padded_attn, specs, target_specs = accelerator.pad_across_processes(
-                        [attn.squeeze(), specs, batch["labels"]], dim=1
+                        [attn.squeeze(1), specs, batch["labels"]], dim=1
                     )
                     padded_attn, specs, target_specs = accelerator.pad_across_processes(
                         [padded_attn, specs, target_specs], dim=2
@@ -986,16 +1012,30 @@ def training_loop(
                 logger.info("Validation inference done, now evaluating... ")
                 if accelerator.is_main_process:
                     generated_audio = [audio.numpy() for audio_batch in generated_audio for audio in audio_batch]
-                    generated_attn = [attn.numpy() for attn_batch in generated_attn for attn in attn_batch]
-                    generated_spec = [attn.numpy() for attn_batch in generated_spec for attn in attn_batch]
-                    target_spec = [attn.numpy() for attn_batch in target_spec for attn in attn_batch]
+                    generated_attn = [
+                        plot_alignment_to_numpy(attn.numpy()) for attn_batch in generated_attn for attn in attn_batch
+                    ]
+                    generated_spec = [
+                        plot_spectrogram_to_numpy(attn.numpy()) for attn_batch in generated_spec for attn in attn_batch
+                    ]
+                    target_spec = [
+                        plot_spectrogram_to_numpy(attn.numpy()) for attn_batch in target_spec for attn in attn_batch
+                    ]
                     full_generation_waveform = full_generation.waveform.cpu().numpy()
 
-
                     accelerator.log(val_losses, step=global_step)
-                    
-                    log_on_trackers(accelerator.trackers, generated_audio,generated_attn,generated_spec,target_spec,full_generation_waveform,epoch, sampling_rate)
-                    
+
+                    log_on_trackers(
+                        accelerator.trackers,
+                        generated_audio,
+                        generated_attn,
+                        generated_spec,
+                        target_spec,
+                        full_generation_waveform,
+                        epoch,
+                        sampling_rate,
+                    )
+
                     logger.info("Validation finished... ")
 
                 accelerator.wait_for_everyone()
@@ -1029,7 +1069,7 @@ def training_loop(
                         return_dict=True,
                         monotic_alignment_function=maximum_path,
                     )
-                        
+
                     waveform = model_outputs_train.training_outputs[0]
                     attn = model_outputs_train.training_outputs[2]
                     ids_slice = model_outputs_train.training_outputs[3]
@@ -1037,14 +1077,62 @@ def training_loop(
                     mel_scaled_labels = batch["mel_scaled_input_features"]
                     mel_scaled_target = slice_segments(mel_scaled_labels, ids_slice, model_segment_size)
                     mel_scaled_generation = feature_extractor._torch_extract_fbank_features(waveform.squeeze(1))[1]
-                    
-                    val_losses = compute_val_metrics_and_losses(val_losses, accelerator, model_outputs_train.training_outputs, mel_scaled_generation, mel_scaled_target, per_device_train_batch_size, compute_clap_similarity=False)
 
+                    val_losses = compute_val_metrics_and_losses(
+                        val_losses,
+                        accelerator,
+                        model_outputs_train.training_outputs,
+                        mel_scaled_generation,
+                        mel_scaled_target,
+                        per_device_train_batch_size,
+                        compute_clap_similarity=False,
+                    )
+                specs = feature_extractor._torch_extract_fbank_features(waveform.squeeze(1))[0]
+                padded_attn, specs, target_specs = accelerator.pad_across_processes(
+                    [attn.squeeze(1), specs, batch["labels"]], dim=1
+                )
+                padded_attn, specs, target_specs = accelerator.pad_across_processes(
+                    [padded_attn, specs, target_specs], dim=2
+                )
+
+                generated_train_waveform, padded_attn, specs, target_specs = accelerator.gather_for_metrics(
+                    [waveform, padded_attn, specs, target_specs]
+                )
+
+                if accelerator.is_main_process:
+                    with torch.no_grad():
+                        speaker_id = None if num_speakers < 2 else list(range(min(5, num_speakers)))
+                        full_generation = model(**full_generation_sample.to(model.device), speaker_id=speaker_id)
+
+                    generated_audio.append(generated_train_waveform.cpu())
+                    generated_attn.append(padded_attn.cpu())
+                    generated_spec.append(specs.cpu())
+                    target_spec.append(target_specs.cpu())
 
             logger.info("Validation inference done, now evaluating... ")
             if accelerator.is_main_process:
+                generated_audio = [audio.numpy() for audio_batch in generated_audio for audio in audio_batch]
+                generated_attn = [
+                    plot_alignment_to_numpy(attn.numpy()) for attn_batch in generated_attn for attn in attn_batch
+                ]
+                generated_spec = [
+                    plot_spectrogram_to_numpy(attn.numpy()) for attn_batch in generated_spec for attn in attn_batch
+                ]
+                target_spec = [
+                    plot_spectrogram_to_numpy(attn.numpy()) for attn_batch in target_spec for attn in attn_batch
+                ]
                 full_generation_waveform = full_generation.waveform.cpu().numpy()
-                log_on_trackers(accelerator.trackers, generated_audio,generated_attn,generated_spec,target_spec,full_generation_waveform,epoch, sampling_rate)
+
+                log_on_trackers(
+                    accelerator.trackers,
+                    generated_audio,
+                    generated_attn,
+                    generated_spec,
+                    target_spec,
+                    full_generation_waveform,
+                    epoch,
+                    sampling_rate,
+                )
 
                 accelerator.log(val_losses, step=global_step)
                 logger.info("Validation finished... ")
@@ -1392,11 +1480,11 @@ def main():
         project_name=data_args.project_name,
         full_generation_sample=full_generation_sample,
     )
-    
+
     # 13. Push FE and tokenizer
     if training_args.push_to_hub:
         feature_extractor.push_to_hub(training_args.hub_model_id)
-        tokenizer.push_to_hub(training_args.hub_model_id)    
+        tokenizer.push_to_hub(training_args.hub_model_id)
 
     logger.info("***** Training / Inference Done *****")
 

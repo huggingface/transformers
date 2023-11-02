@@ -141,9 +141,17 @@ class VitsConfig(PretrainedConfig):
             Stride of the first channel of the 2D convolution layers used in the discriminator model.
         discriminator_periods (`Tuple[int]` or `List[int]`, *optional*, defaults to `[2, 3, 5, 7, 11]`):
             A tuple of integers defining the period of each sub-discriminator of the discriminator model.
+        discriminator_period_channels (`Tuple[int]` or `List[int]`, *optional*, defaults to `[1, 32, 128, 512, 1024]`):
+            A tuple of integers defining the number of convolutional layers and their channel sizes of each period
+            sub-discriminator of the discriminator model. Must have more 2 elements or more and be made of increasing
+            multiple of 2.
+        discriminator_scale_channels (`Tuple[int]` or `List[int]`, *optional*, defaults to `[1, 16, 64, 256, 1024]`):
+            A tuple of integers defining the number of convolutional layers and their channel sizes of the scale
+            sub-discriminator the discriminator model. Must have more 2 elements or more and be made of increasing
+            multiple of 4.
         segment_size (`int`, *optional*, defaults to 8192):
             Segment size of the spectrogam used to compute the recontruction loss during training.
-        hop_length (`int`, defaults to 256):
+        hop_length (`int`, *optional*, defaults to 256):
             Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients. Used during
             training.
     Example:
@@ -211,6 +219,8 @@ class VitsConfig(PretrainedConfig):
         discriminator_kernel_size=5,
         discriminator_stride=3,
         discriminator_periods=[2, 3, 5, 7, 11],
+        discriminator_period_channels=[1, 32, 128, 512, 1024],
+        discriminator_scale_channels=[1, 16, 64, 256, 1024],
         segment_size=8192,
         hop_length=256,
         **kwargs,
@@ -264,6 +274,8 @@ class VitsConfig(PretrainedConfig):
         self.discriminator_kernel_size = discriminator_kernel_size
         self.discriminator_stride = discriminator_stride
         self.discriminator_periods = discriminator_periods
+        self.discriminator_period_channels = discriminator_period_channels
+        self.discriminator_scale_channels = discriminator_scale_channels
         self.segment_size = segment_size
         self.hop_length = hop_length
 

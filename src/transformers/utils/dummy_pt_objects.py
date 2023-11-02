@@ -8185,7 +8185,21 @@ class VitMattePreTrainedModel(metaclass=DummyObject):
 VITS_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class VitsDiscriminator(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class VitsModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VitsModelForPreTraining(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

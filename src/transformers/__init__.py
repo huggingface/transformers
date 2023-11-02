@@ -3025,7 +3025,9 @@ else:
     _import_structure["models.vits"].extend(
         [
             "VITS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VitsDiscriminator",
             "VitsModel",
+            "VitsModelForPreTraining",
             "VitsPreTrainedModel",
         ]
     )
@@ -6779,7 +6781,9 @@ if TYPE_CHECKING:
         )
         from .models.vits import (
             VITS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VitsDiscriminator,
             VitsModel,
+            VitsModelForPreTraining,
             VitsPreTrainedModel,
         )
         from .models.vivit import (

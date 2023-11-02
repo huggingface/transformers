@@ -160,11 +160,9 @@ def rand_slice_segments(hidden_states, sample_lengths=None, segment_size=4):
     return ret, ids_str
 
 
-# TODO: original implementation use cython, should I use torchscript?
-# https://github.com/jaywalnut310/vits/tree/main/monotonic_align
-# TODO: make it work - optimization
-# @torch.jit.script
 def monotonic_align_max_path(neg_cent, mask):
+    # used for training - awfully slow
+    # an alternative is proposed in examples/pytorch/text-to-speech/run_vits_finetuning.py
     path = torch.zeros_like(neg_cent)
 
     text_length_maxs = mask.sum(1)[:, 0]
@@ -544,20 +542,22 @@ class VitsPosteriorEncoder(nn.Module):
 
 
 class HifiGanDiscriminatorScaleResidualBlock(nn.Module):
-    def __init__(self, leaky_relu_slope=0.1):
+    def __init__(self, discriminator_scale_channels, leaky_relu_slope=0.1):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
-        self.convs = nn.ModuleList(
-            [
-                nn.Conv1d(1, 16, 15, 1, padding=7),
-                nn.Conv1d(16, 64, 41, 4, groups=4, padding=20),
-                nn.Conv1d(64, 256, 41, 4, groups=16, padding=20),
-                nn.Conv1d(256, 1024, 41, 4, groups=64, padding=20),
-                nn.Conv1d(1024, 1024, 41, 4, groups=256, padding=20),
-                nn.Conv1d(1024, 1024, 5, 1, padding=2),
-            ]
-        )
-        self.final_conv = nn.Conv1d(1024, 1, 3, 1, padding=1)
+
+        in_channels, out_channels = discriminator_scale_channels[:2]
+        self.convs = nn.ModuleList([nn.Conv1d(in_channels, out_channels, 15, 1, padding=7)])
+
+        groups = 4
+        for in_channels, out_channels in zip(discriminator_scale_channels[1:-1], discriminator_scale_channels[2:]):
+            self.convs.append(nn.Conv1d(in_channels, out_channels, 41, 4, groups=groups, padding=20))
+            groups = groups * 4
+
+        channel_size = discriminator_scale_channels[-1]
+        self.convs.append(nn.Conv1d(channel_size, channel_size, 41, 4, groups=groups, padding=20))
+        self.convs.append(nn.Conv1d(channel_size, channel_size, 5, 1, padding=2))
+        self.final_conv = nn.Conv1d(channel_size, 1, 3, 1, padding=1)
 
     def apply_weight_norm(self):
         for layer in self.convs:
@@ -585,13 +585,13 @@ class HifiGanDiscriminatorScaleResidualBlock(nn.Module):
 
 
 class HifiGanDiscriminatorPeriodResidualBlock(nn.Module):
-    def __init__(self, period, kernel_size=5, stride=3, leaky_relu_slope=0.1):
+    def __init__(self, discriminator_period_channels, period, kernel_size=5, stride=3, leaky_relu_slope=0.1):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
         self.period = period
 
         self.convs = nn.ModuleList()
-        for in_channels, out_channels in [(1, 32), (32, 128), (128, 512), (512, 1024)]:
+        for in_channels, out_channels in zip(discriminator_period_channels[:-1], discriminator_period_channels[1:]):
             self.convs.append(
                 nn.Conv2d(
                     in_channels,
@@ -601,8 +601,12 @@ class HifiGanDiscriminatorPeriodResidualBlock(nn.Module):
                     padding=(self.get_padding(kernel_size, 1), 0),
                 )
             )
-        self.convs.append(nn.Conv2d(1024, 1024, (kernel_size, 1), 1, padding=(self.get_padding(kernel_size, 1), 0)))
-        self.final_conv = nn.Conv2d(1024, 1, (3, 1), 1, padding=(1, 0))
+
+        channel_size = discriminator_period_channels[-1]
+        self.convs.append(
+            nn.Conv2d(channel_size, channel_size, (kernel_size, 1), 1, padding=(self.get_padding(kernel_size, 1), 0))
+        )
+        self.final_conv = nn.Conv2d(channel_size, 1, (3, 1), 1, padding=(1, 0))
 
     def get_padding(self, kernel_size, dilation=1):
         return (kernel_size * dilation - dilation) // 2
@@ -1537,7 +1541,7 @@ class VitsPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1595,8 +1599,9 @@ VITS_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        speaker_id (`int`, *optional*):
-            Which speaker embedding to use. Only used for multispeaker models.
+        speaker_id (`int` or `Tuple[int,..]` or `List[int]` or `np.ndarray`, *optional*):
+            Which speaker embedding to use. Only used for multispeaker models. Only used for multi-speaker models. You
+            can use a single `speaker_id` or a list/tuple/numpy array, provided it is as long as the batch size.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1613,8 +1618,6 @@ VITS_INPUTS_DOCSTRING = r"""
     VITS_START_DOCSTRING,
 )
 class VitsModel(VitsPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["discriminator"]
-
     def __init__(self, config: VitsConfig):
         super().__init__(config)
         self.config = config
@@ -1696,7 +1699,7 @@ class VitsModel(VitsPreTrainedModel):
         if self.config.num_speakers > 1 and speaker_id is not None:
             if isinstance(speaker_id, int):
                 speaker_id = torch.full(size=(1,), fill_value=speaker_id, device=self.device)
-            elif isinstance(speaker_id, list) or isinstance(speaker_id, np.ndarray):
+            elif isinstance(speaker_id, (list, tuple, np.ndarray)):
                 speaker_id = torch.tensor(speaker_id, device=self.device)
 
             if not ((0 <= speaker_id).all() and (speaker_id < self.config.num_speakers).all()).item():
@@ -1788,19 +1791,22 @@ class VitsDiscriminator(VitsPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.discriminators = nn.ModuleList([HifiGanDiscriminatorScaleResidualBlock(config.leaky_relu_slope)])
+        self.discriminators = nn.ModuleList(
+            [HifiGanDiscriminatorScaleResidualBlock(config.discriminator_scale_channels, config.leaky_relu_slope)]
+        )
 
         self.discriminators.extend(
             [
                 HifiGanDiscriminatorPeriodResidualBlock(
-                    period, config.discriminator_kernel_size, config.discriminator_stride, config.leaky_relu_slope
+                    config.discriminator_period_channels,
+                    period,
+                    config.discriminator_kernel_size,
+                    config.discriminator_stride,
+                    config.leaky_relu_slope,
                 )
                 for period in config.discriminator_periods
             ]
         )
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
     def forward(self, hidden_states):
         fmaps = []
@@ -1823,7 +1829,7 @@ class VitsDiscriminator(VitsPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The complete VITS model, for text-to-speech synthesis.",
+    "VITS model with a discriminator, to train VITS.",
     VITS_START_DOCSTRING,
 )
 class VitsModelForPreTraining(VitsPreTrainedModel):
@@ -1855,8 +1861,12 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def resize_speaker_embeddings(self, new_num_speakers: int, speaker_embedding_size: Optional[int] = None,
-                                  pad_to_multiple_of: Optional[int] = 2):
+    def resize_speaker_embeddings(
+        self,
+        new_num_speakers: int,
+        speaker_embedding_size: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = 2,
+    ):
         if pad_to_multiple_of is not None:
             new_num_speakers = ((new_num_speakers + pad_to_multiple_of - 1) // pad_to_multiple_of) * pad_to_multiple_of
 
@@ -1871,7 +1881,6 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
                 new_num_speakers,
                 speaker_embedding_size,
                 device=self.device,
-                # dtype=self.dtype, # TODO: how to do that ?
             )
             # initialize all new embeddings
             self._init_weights(new_embeddings)
@@ -1995,24 +2004,32 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.FloatTensor] = None,
         labels_attention_mask: Optional[torch.Tensor] = None,
-        monotic_alignment_function: Optional[Callable] = None,  # TODO: add
+        monotic_alignment_function: Optional[Callable] = None,
     ) -> Union[Tuple[Any], VitsModelOutput]:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`, *optional*):
-            Float values of target spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
-            computation. TODO: is the time steps things True here ? Not true, set to 0
+            Float values of target spectrogram.
+        labels_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing convolution and attention on labels. Mask values selected in `[0, 1]`:
 
-        # TODO: change speaker id docstrings, and throughout the file, now it can take multiple spekaer id as well
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        monotic_alignment_function (`Callable`, *optional*):
+            Monotonic alignment function. Used for training, i.e when `labels` are provided. By default, it will use a
+            Pytorch implementation of the monotonic alignment function which is awfully slow. An alternative relying on
+            cython is proposed in examples/pytorch/text-to-speech/run_vits_finetuning.py
         Returns:
 
         Example:
 
         ```python
-        >>> from transformers import VitsTokenizer, VitsModel, set_seed
+        >>> from transformers import VitsTokenizer, VitsModelForPreTraining, set_seed
         >>> import torch
 
         >>> tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
-        >>> model = VitsModel.from_pretrained("facebook/mms-tts-eng")
+        >>> model = VitsModelForPreTraining.from_pretrained("facebook/mms-tts-eng")
 
         >>> inputs = tokenizer(text="Hello - my dog is cute", return_tensors="pt")
 
@@ -2042,7 +2059,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         if self.config.num_speakers > 1 and speaker_id is not None:
             if isinstance(speaker_id, int):
                 speaker_id = torch.full(size=(1,), fill_value=speaker_id, device=self.device)
-            elif isinstance(speaker_id, list) or isinstance(speaker_id, np.ndarray):
+            elif isinstance(speaker_id, (list, tuple, np.ndarray)):
                 speaker_id = torch.tensor(speaker_id, device=self.device)
 
             if not ((0 <= speaker_id).all() and (speaker_id < self.config.num_speakers).all()).item():
@@ -2127,11 +2144,6 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             log_duration = self.duration_predictor(hidden_states, input_padding_mask, speaker_embeddings)
             log_duration = torch.sum((log_duration - log_duration_padded) ** 2, [1, 2]) / torch.sum(input_padding_mask)
 
-        # optional, shall we keep it ?
-        # duration = torch.ceil(torch.exp(log_duration).unsqueeze(1).unsqueeze(2) * input_padding_mask)
-        # predicted_lengths = torch.clamp_min(torch.sum(duration, [1, 2]), 1).long()
-        # sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
-
         # expand priors
         prior_means = torch.matmul(attn.squeeze(1), prior_means.transpose(1, 2)).transpose(1, 2)
         prior_log_variances = torch.matmul(attn.squeeze(1), prior_log_variances.transpose(1, 2)).transpose(1, 2)
@@ -2140,13 +2152,6 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         latents_slice, ids_slice = rand_slice_segments(latents, label_lengths, segment_size=self.segment_size)
 
         waveform = self.decoder(latents_slice, speaker_embeddings)
-
-        # correspondance:
-        # o - waveform
-        # l_length - log_duration
-        # x_mask - input_padding_mask
-        # y_mask - label_padding_mask
-        # z, z_p, m_p, logs_p, m_q, logs_q -> latents, prior_latents, prior_means, prior_log_variances, posterior_means, posterior_log_variances
 
         if not return_dict:
             outputs = (

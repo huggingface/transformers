@@ -160,3 +160,13 @@ waveform = outputs.waveform[0]
 
 [[autodoc]] VitsModel
     - forward
+
+## VitsModelForPreTraining
+
+[[autodoc]] VitsModelForPreTraining
+    - forward
+
+## VitsDiscriminator
+
+[[autodoc]] VitsDiscriminator
+    - forward

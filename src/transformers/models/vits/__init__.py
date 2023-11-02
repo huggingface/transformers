@@ -38,7 +38,9 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_vits"] = [
         "VITS_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "VitsDiscriminator",
         "VitsModel",
+        "VitsModelForPreTraining",
         "VitsPreTrainedModel",
     ]
 
@@ -57,7 +59,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_vits import (
             VITS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VitsDiscriminator,
             VitsModel,
+            VitsModelForPreTraining,
             VitsPreTrainedModel,
         )
 
