@@ -23,7 +23,7 @@ import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
-from .english_normalizer import EnglishTextNormalizer
+from .english_normalizer import BasicTextNormalizer, EnglishTextNormalizer
 
 
 VOCAB_FILES_NAMES = {
@@ -219,12 +219,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods. Users should refer to
     the superclass for more information regarding such methods.
 
-     Args:
+    Args:
         vocab_file (`str`):
             Path to the vocabulary file.
         merges_file (`str`):
             Path to the merges file.
-        normalizer_file (`str`, *optional*, defaults to `None`):
+        normalizer_file (`str`, *optional*):
             Path to the normalizer_file file.
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
@@ -237,6 +237,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
             `"<|startoftranscript|>"` when generating.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
+        pad_token (`str`, *optional*):
+            The token used for padding, for example when batching sequences of different lengths.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
@@ -510,6 +512,15 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
 
+    @staticmethod
+    def _basic_normalize(text, remove_diacritics=False):
+        """
+        Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
+        multilingual text.
+        """
+        normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
+        return normalizer(text)
+
     def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02) -> str:
         """
         Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
@@ -617,6 +628,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
         output_offsets: bool = False,
         time_precision=0.02,
         decode_with_timestamps: bool = False,
+        normalize: bool = False,
+        basic_normalize: bool = False,
+        remove_diacritics: bool = False,
         **kwargs,
     ) -> str:
         """
@@ -633,8 +647,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
             clean_up_tokenization_spaces (`bool`, *optional*):
                 Whether or not to clean up the tokenization spaces. If `None`, will default to
                 `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
-            kwargs (additional keyword arguments, *optional*):
-                Will be passed to the underlying model specific decode method.
             output_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output the offsets of the tokens. This should only be set if the model predicted
                 timestamps.
@@ -642,6 +654,17 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 The time ratio to convert from token to time.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
                 Whether or not to decode with timestamps included in the raw text.
+            normalize (`bool`, *optional*, defaults to `False`):
+                Whether or not to apply the English text normalizer to the decoded text. Only applicable when the
+                target text is in English. Otherwise, the basic text normalizer should be applied.
+            basic_normalize (`bool`, *optional*, defaults to `False`):
+                Whether or not to apply the Basic text normalizer to the decoded text. Applicable to multilingual
+                target text.
+            remove_diacritics (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove diacritics when applying the Basic text normalizer. Removing diacritics may
+                destroy information in the decoded text, hence it should be used with caution.
+            kwargs (additional keyword arguments, *optional*):
+                Will be passed to the underlying model specific decode method.
         Returns:
             `str`: The decoded sentence.
         """
@@ -654,7 +677,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
             filtered_ids,
             skip_special_tokens=skip_special_tokens,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            decode_with_timestamps=decode_with_timestamps,
+            normalize=normalize,
+            basic_normalize=basic_normalize,
+            remove_diacritics=remove_diacritics,
             **kwargs,
         )
         if decode_with_timestamps:
@@ -676,7 +701,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
         token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
         normalize: bool = False,
-        decode_with_timestamps: bool = False,
+        basic_normalize: bool = False,
+        remove_diacritics: bool = False,
         **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
@@ -704,6 +730,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         if normalize:
             clean_text = self._normalize(text)
+            return clean_text
+        elif basic_normalize:
+            clean_text = self._basic_normalize(text, remove_diacritics=remove_diacritics)
             return clean_text
         else:
             return text
@@ -766,6 +795,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """
         A simple chat template that ignores role information and just concatenates messages with EOS tokens.
         """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):

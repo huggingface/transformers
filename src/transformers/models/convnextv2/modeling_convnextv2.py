@@ -303,7 +303,6 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
     config_class = ConvNextV2Config
     base_model_prefix = "convnextv2"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -316,10 +315,6 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ConvNextV2Encoder):
-            module.gradient_checkpointing = value
 
 
 CONVNEXTV2_START_DOCSTRING = r"""

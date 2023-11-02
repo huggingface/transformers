@@ -54,6 +54,7 @@ class Conversation:
 
         # This block deals with the legacy args - new code should just totally
         # avoid past_user_inputs and generated_responses
+        self._num_processed_user_inputs = 0
         generated_responses = deprecated_kwargs.pop("generated_responses", None)
         past_user_inputs = deprecated_kwargs.pop("past_user_inputs", None)
         if generated_responses is not None and past_user_inputs is None:
@@ -114,10 +115,11 @@ class Conversation:
 
     def mark_processed(self):
         """
-        This is a legacy method that no longer has any effect, as the Conversation no longer distinguishes between
-        processed and unprocessed user input.
+        This is a legacy method, as the Conversation no longer distinguishes between processed and unprocessed user
+        input. We set a counter here to keep behaviour mostly backward-compatible, but in general you should just read
+        the messages directly when writing new code.
         """
-        pass
+        self._num_processed_user_inputs = len(self._user_messages)
 
     def __iter__(self):
         for message in self.messages:
@@ -155,16 +157,38 @@ class Conversation:
             yield message["role"] == "user", message["content"]
 
     @property
-    def past_user_inputs(self):
+    def _user_messages(self):
         # This is a legacy property for backwards compatibility. It is recommended to just directly access
         # conversation.messages instead.
         return [message["content"] for message in self.messages if message["role"] == "user"]
+
+    @property
+    def past_user_inputs(self):
+        # This is a legacy property for backwards compatibility. It is recommended to just directly access
+        # conversation.messages instead. The modern class does not care about which messages are "processed"
+        # or not.
+        if not self._user_messages:
+            return []
+        # In the past, the most recent user message had to be mark_processed() before being included
+        # in past_user_messages. The class essentially had a single-message buffer, representing messages that
+        # had not yet been replied to. This is no longer the case, but we mimic the behaviour in this property
+        # for backward compatibility.
+        if self.messages[-1]["role"] != "user" or self._num_processed_user_inputs == len(self._user_messages):
+            return self._user_messages
+
+        return self._user_messages[:-1]
 
     @property
     def generated_responses(self):
         # This is a legacy property for backwards compatibility. It is recommended to just directly access
         # conversation.messages instead.
         return [message["content"] for message in self.messages if message["role"] == "assistant"]
+
+    @property
+    def new_user_input(self):
+        # This is a legacy property for backwards compatibility. It is recommended to just directly access
+        # conversation.messages instead.
+        return self._user_messages[-1]
 
 
 @add_end_docstrings(
@@ -235,13 +259,15 @@ class ConversationalPipeline(Pipeline):
             forward_params.update(generate_kwargs)
         return preprocess_params, forward_params, postprocess_params
 
-    def __call__(self, conversations: Union[Conversation, List[Conversation]], num_workers=0, **kwargs):
+    def __call__(self, conversations: Union[List[Dict], Conversation, List[Conversation]], num_workers=0, **kwargs):
         r"""
         Generate responses for the conversation(s) given as inputs.
 
         Args:
             conversations (a [`Conversation`] or a list of [`Conversation`]):
-                Conversations to generate responses for.
+                Conversation to generate responses for. Inputs can also be passed as a list of dictionaries with `role`
+                and `content` keys - in this case, they will be converted to `Conversation` objects automatically.
+                Multiple conversations in either format may be passed as a list.
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
@@ -256,13 +282,17 @@ class ConversationalPipeline(Pipeline):
         # Otherwise the threads will require a Conversation copy.
         # This will definitely hinder performance on GPU, but has to be opted
         # in because of this BC change.
+        if isinstance(conversations, list) and isinstance(conversations[0], dict):
+            conversations = Conversation(conversations)
+        elif isinstance(conversations, list) and isinstance(conversations[0], list):
+            conversations = [Conversation(conv) for conv in conversations]
         outputs = super().__call__(conversations, num_workers=num_workers, **kwargs)
         if isinstance(outputs, list) and len(outputs) == 1:
             return outputs[0]
         return outputs
 
     def preprocess(self, conversation: Conversation, min_length_for_response=32) -> Dict[str, Any]:
-        input_ids = self.tokenizer.apply_chat_template(conversation)
+        input_ids = self.tokenizer.apply_chat_template(conversation, add_generation_prompt=True)
 
         if self.framework == "pt":
             input_ids = torch.LongTensor([input_ids])
@@ -271,19 +301,10 @@ class ConversationalPipeline(Pipeline):
         return {"input_ids": input_ids, "conversation": conversation}
 
     def _forward(self, model_inputs, minimum_tokens=10, **generate_kwargs):
-        max_length = generate_kwargs.get("max_length", self.model.config.max_length)
-
         n = model_inputs["input_ids"].shape[1]
-        if max_length - minimum_tokens < n:
-            logger.warning(
-                f"Conversation input is too long ({n}), trimming it to {max_length - minimum_tokens} tokens. Consider increasing `max_length` to avoid truncation."
-            )
-            trim = max_length - minimum_tokens
-            model_inputs["input_ids"] = model_inputs["input_ids"][:, -trim:]
-            if "attention_mask" in model_inputs:
-                model_inputs["attention_mask"] = model_inputs["attention_mask"][:, -trim:]
         conversation = model_inputs.pop("conversation")
-        generate_kwargs["max_length"] = max_length
+        if "max_length" not in generate_kwargs and "max_new_tokens" not in generate_kwargs:
+            generate_kwargs["max_new_tokens"] = 256
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         if self.model.config.is_encoder_decoder:
             start_position = 1
