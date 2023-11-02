@@ -2324,10 +2324,15 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
 
     def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
-        self.decoder = ProphetNetDecoder(config)
 
-        # This is a link so that tied weights work across classes
-        self.word_embeddings = self.decoder.word_embeddings
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.decoder = ProphetNetDecoder(config, word_embeddings=self.word_embeddings)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def _tie_weights(self):
+        self._tie_or_clone_weights(self.word_embeddings, self.decoder.get_input_embeddings())
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
