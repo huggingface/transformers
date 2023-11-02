@@ -905,19 +905,30 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
         input_speech.pop("generate_speech")
         input_text.pop("generate_speech")
 
-        model = SeamlessM4TForTextToText.from_pretrained(self.tmpdirname)
-        self.update_generation(model)
-        model.to(torch_device)
-        model.eval()
+        state_dict = model.state_dict()
 
-        output_text = self.factory_generation_speech_test(model, input_text)
+        text_model = SeamlessM4TForTextToText.from_pretrained(self.tmpdirname)
+        self.update_generation(text_model)
+        text_model.to(torch_device)
+        text_model.eval()
 
-        model = SeamlessM4TForSpeechToText.from_pretrained(self.tmpdirname)
-        self.update_generation(model)
-        model.to(torch_device)
-        model.eval()
+        for name, tensor in text_model.state_dict().items():
+            right_tensor = state_dict.get(name)
+            self.assertEqual(tensor.tolist(), right_tensor.tolist())
 
-        output_speech = self.factory_generation_speech_test(model, input_speech)
+        output_text = self.factory_generation_speech_test(text_model, input_text)
+
+        speech_model = SeamlessM4TForSpeechToText.from_pretrained(self.tmpdirname)
+
+        for name, tensor in speech_model.state_dict().items():
+            right_tensor = state_dict.get(name)
+            self.assertEqual(tensor.tolist(), right_tensor.tolist(), f"Tensor {name}")
+
+        self.update_generation(speech_model)
+        speech_model.to(torch_device)
+        speech_model.eval()
+
+        output_speech = self.factory_generation_speech_test(speech_model, input_speech)
 
         # test same text output from input text
         self.assertListEqual(output_original_text[0].ravel().tolist(), output_text.ravel().tolist())
