@@ -211,6 +211,7 @@ class ConversationalPipeline(Pipeline):
     # Any model with a chat template can be used in a ConversationalPipeline.
 
     >>> chatbot = pipeline(model="facebook/blenderbot-400M-distill")
+    >>> # Conversation objects initialized with a string will treat it as a user message
     >>> conversation = Conversation("I'm looking for a movie - what's your favourite one?")
     >>> conversation = chatbot(conversation)
     >>> conversation.messages[-1]["content"]
