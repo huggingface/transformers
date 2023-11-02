@@ -264,6 +264,8 @@ class RTDetrModelTester:
 
 @require_torch
 class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (RTDetrModel,) if is_torch_available() else ()
+
     pipeline_model_mapping = {"object-detection": RTDetrModel} if is_torch_available() else ()
 
     test_torchscript = False
@@ -317,11 +319,12 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_forward_signature(self):
         config = self.model_tester.get_config()
 
-        model = RTDetrModel(config)
-        signature = inspect.signature(model.forward)
-        arg_names = [*signature.parameters.keys()]
-        expected_arg_names = ["pixel_values"]
-        self.assertListEqual(arg_names[:1], expected_arg_names)
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            arg_names = [*signature.parameters.keys()]
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         pixel_values, labels, pixel_labels = self.model_tester.prepare_random_inputs()
