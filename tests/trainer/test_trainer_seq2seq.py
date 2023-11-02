@@ -175,7 +175,7 @@ class Seq2seqTrainerTester(TestCasePlus):
         prepared_dataset = dataset.map(prepare_data, batched=True, remove_columns=[INPUT_COLUMN, TARGET_COLUMN])
         dataset_len = len(prepared_dataset)  # 38
 
-        for num_return_sequences in range(1, 4):
+        for num_return_sequences in range(3, 0, -1):
             gen_config.num_return_sequences = num_return_sequences
             metrics = trainer.evaluate(eval_dataset=prepared_dataset, generation_config=gen_config)
             assert (
