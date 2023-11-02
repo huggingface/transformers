@@ -195,7 +195,7 @@ if is_accelerate_available():
     from accelerate import __version__ as accelerate_version
     from accelerate.utils import DistributedDataParallelKwargs, GradientAccumulationPlugin
 
-    if version.parse(accelerate_version) > version.parse("0.20.3")
+    if version.parse(accelerate_version) > version.parse("0.20.3"):
         from accelerate.utils import (
             load_fsdp_model,
             load_fsdp_optimizer,
