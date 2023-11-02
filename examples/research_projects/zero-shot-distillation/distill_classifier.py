@@ -290,6 +290,7 @@ def main():
         training_args.no_cuda,
         training_args.fp16,
     )
+
     dataset = (
         Dataset.from_dict(
             {
@@ -303,9 +304,7 @@ def main():
 
     # 3. create student
     logger.info("Initializing student model")
-    model, tokenizer = initialize_student_model(
-        student_args.student_name_or_path, len(class_names), data_args.use_fast_tokenizer
-    )
+    model, tokenizer = initialize_student_model(student_args.student_name_or_path, len(class_names), data_args.use_fast_tokenizer)
     model.config.id2label = dict(enumerate(class_names))
     model.config.label2id = {label: i for i, label in enumerate(class_names)}
 
@@ -317,25 +316,22 @@ def main():
 
     trainer.save_model()
 
-
 if __name__ == "__main__":
     main()
 
-
 def initialize_student_model(student_name_or_path, num_labels, use_fast):
-    model = AutoModelForSequenceClassification.from_pretrained(student_name_or_path, num_labels=num_labels)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        student_name_or_path, num_labels=num_labels
+    )
     tokenizer = AutoTokenizer.from_pretrained(student_name_or_path, use_fast=use_fast)
     return model, tokenizer
-
 
 def create_compute_metrics_func():
     def compute_metrics(p, return_outputs=False):
         preds = p.predictions.argmax(-1)
         proxy_labels = p.label_ids.argmax(-1)  # "label_ids" are actually distributions
         return {"agreement": (preds == proxy_labels).mean().item()}
-
     return compute_metrics
-
 
 def create_distillation_trainer(model, tokenizer, training_args, dataset, compute_metrics):
     return DistillationTrainer(
@@ -345,7 +341,6 @@ def create_distillation_trainer(model, tokenizer, training_args, dataset, comput
         train_dataset=dataset,
         compute_metrics=compute_metrics,
     )
-
 
 def train_and_evaluate_model(trainer, training_args):
     if training_args.do_train:
