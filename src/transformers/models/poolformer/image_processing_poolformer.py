@@ -71,7 +71,7 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         crop_pct (`float`, *optional*, defaults to 0.9):
             Percentage of the image to crop from the center. Can be overridden by `crop_pct` in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `3`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
