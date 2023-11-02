@@ -76,7 +76,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("pop2piano", "Pop2PianoFeatureExtractor"),
         ("regnet", "ConvNextFeatureExtractor"),
         ("resnet", "ConvNextFeatureExtractor"),
-        ("seamless_m4t", "SeamlessM4TFeatureExtractor"),
         ("segformer", "SegformerFeatureExtractor"),
         ("sew", "Wav2Vec2FeatureExtractor"),
         ("sew-d", "Wav2Vec2FeatureExtractor"),
@@ -204,8 +203,7 @@ def get_feature_extractor_config(
     use_auth_token = kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
@@ -323,8 +321,7 @@ class AutoFeatureExtractor:
         use_auth_token = kwargs.pop("use_auth_token", None)
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if kwargs.get("token", None) is not None:
                 raise ValueError(

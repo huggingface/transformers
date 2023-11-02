@@ -18,15 +18,13 @@ import unittest
 from transformers import MODEL_FOR_MASKED_LM_MAPPING, TF_MODEL_FOR_MASKED_LM_MAPPING, FillMaskPipeline, pipeline
 from transformers.pipelines import PipelineException
 from transformers.testing_utils import (
-    backend_empty_cache,
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
     require_tf,
     require_torch,
-    require_torch_accelerator,
+    require_torch_gpu,
     slow,
-    torch_device,
 )
 
 from .test_pipelines_common import ANY
@@ -42,7 +40,9 @@ class FillMaskPipelineTests(unittest.TestCase):
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
         if is_torch_available():
-            backend_empty_cache(torch_device)
+            import torch
+
+            torch.cuda.empty_cache()
 
     @require_tf
     def test_small_model_tf(self):
@@ -148,14 +148,9 @@ class FillMaskPipelineTests(unittest.TestCase):
             ],
         )
 
-    @require_torch_accelerator
+    @require_torch_gpu
     def test_fp16_casting(self):
-        pipe = pipeline(
-            "fill-mask",
-            model="hf-internal-testing/tiny-random-distilbert",
-            device=torch_device,
-            framework="pt",
-        )
+        pipe = pipeline("fill-mask", model="hf-internal-testing/tiny-random-distilbert", device=0, framework="pt")
 
         # convert model to fp16
         pipe.model.half()

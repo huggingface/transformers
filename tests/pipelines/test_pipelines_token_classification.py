@@ -30,9 +30,8 @@ from transformers.testing_utils import (
     nested_simplify,
     require_tf,
     require_torch,
-    require_torch_accelerator,
+    require_torch_gpu,
     slow,
-    torch_device,
 )
 
 from .test_pipelines_common import ANY
@@ -392,13 +391,13 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             ],
         )
 
-    @require_torch_accelerator
+    @require_torch_gpu
     @slow
-    def test_accelerator(self):
+    def test_gpu(self):
         sentence = "This is dummy sentence"
         ner = pipeline(
             "token-classification",
-            device=torch_device,
+            device=0,
             aggregation_strategy=AggregationStrategy.SIMPLE,
         )
 

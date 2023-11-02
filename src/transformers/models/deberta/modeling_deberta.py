@@ -457,14 +457,20 @@ class DebertaEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    layer_module.__call__,
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                hidden_states = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module),
                     next_kv,
                     attention_mask,
                     query_states,
                     relative_pos,
                     rel_embeddings,
-                    output_attentions,
                 )
             else:
                 hidden_states = layer_module(
@@ -832,6 +838,10 @@ class DebertaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, DebertaEncoder):
+            module.gradient_checkpointing = value
 
 
 DEBERTA_START_DOCSTRING = r"""

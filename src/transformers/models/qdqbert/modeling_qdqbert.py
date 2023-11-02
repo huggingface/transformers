@@ -581,15 +581,20 @@ class QDQBertEncoder(nn.Module):
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, past_key_value, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -751,6 +756,10 @@ class QDQBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, QDQBertEncoder):
+            module.gradient_checkpointing = value
 
 
 QDQBERT_START_DOCSTRING = r"""

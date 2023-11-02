@@ -249,9 +249,7 @@ class GPTJAttention(nn.Module):
             value = torch.cat((past_value, value), dim=-2)
 
         if use_cache is True:
-            # Note that this cast is quite ugly, but is not implemented before ROPE as the original codebase keeps the key in float32 all along the computation.
-            # Reference: https://github.com/kingoflolz/mesh-transformer-jax/blob/f8315e3003033b23f21d78361b288953064e0e76/mesh_transformer/layers.py#L128
-            present = (key.to(hidden_states.dtype), value)
+            present = (key, value)
         else:
             present = None
 
@@ -362,6 +360,10 @@ class GPTJPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, GPTJModel):
+            module.gradient_checkpointing = value
 
 
 GPTJ_START_DOCSTRING = r"""
@@ -665,15 +667,21 @@ class GPTJModel(GPTJPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        # None for past_key_value
+                        return module(*inputs, use_cache, output_attentions)
+
+                    return custom_forward
+
+                outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(block),
                     hidden_states,
                     None,
                     attention_mask,
                     position_ids,
                     head_mask[i],
-                    use_cache,
-                    output_attentions,
                 )
             else:
                 outputs = block(

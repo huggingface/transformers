@@ -40,17 +40,15 @@ from transformers.testing_utils import (
     USER,
     CaptureLogger,
     RequestCounter,
-    backend_empty_cache,
     is_pipeline_test,
     is_staging_test,
     nested_simplify,
     require_tensorflow_probability,
     require_tf,
     require_torch,
-    require_torch_accelerator,
+    require_torch_gpu,
     require_torch_or_tf,
     slow,
-    torch_device,
 )
 from transformers.utils import direct_transformers_import, is_tf_available, is_torch_available
 from transformers.utils import logging as transformers_logging
@@ -513,7 +511,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
             # clean-up as much as possible GPU memory occupied by PyTorch
             gc.collect()
-            backend_empty_cache(torch_device)
+            torch.cuda.empty_cache()
 
     @slow
     @require_tf
@@ -543,20 +541,20 @@ class PipelineUtilsTest(unittest.TestCase):
 
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
-        backend_empty_cache(torch_device)
+        torch.cuda.empty_cache()
 
     @slow
     @require_torch
-    @require_torch_accelerator
-    def test_pipeline_accelerator(self):
-        pipe = pipeline("text-generation", device=torch_device)
+    @require_torch_gpu
+    def test_pipeline_cuda(self):
+        pipe = pipeline("text-generation", device="cuda")
         _ = pipe("Hello")
 
     @slow
     @require_torch
-    @require_torch_accelerator
-    def test_pipeline_accelerator_indexed(self):
-        pipe = pipeline("text-generation", device=torch_device)
+    @require_torch_gpu
+    def test_pipeline_cuda_indexed(self):
+        pipe = pipeline("text-generation", device="cuda:0")
         _ = pipe("Hello")
 
     @slow
