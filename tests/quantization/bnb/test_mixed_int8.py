@@ -369,7 +369,6 @@ class MixedInt8Test(BaseMixedInt8Test):
                 self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT
             )
 
-
     def test_int8_serialization_regression(self):
         r"""
         Test whether it is possible to serialize a model in 8-bit - using not safetensors
@@ -396,7 +395,6 @@ class MixedInt8Test(BaseMixedInt8Test):
             self.assertEqual(
                 self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT
             )
-
 
     def test_int8_serialization_sharded(self):
         r"""
