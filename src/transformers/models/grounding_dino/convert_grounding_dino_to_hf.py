@@ -94,13 +94,11 @@ def create_rename_keys(state_dict, config):
             # attention
             rename_keys.append((f"backbone.0.layers.{layer}.blocks.{block}.attn.relative_position_bias_table",
                                 f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.attention.self.relative_position_bias_table"))
-            # rename_keys.append((f"backbone.0.layers.{layer}.blocks.{block}.attn.relative_position_index",
-            #                     f"encoder.layers.{layer}.blocks.{block}.attention.relative_position_index"))
             rename_keys.append((f"backbone.0.layers.{layer}.blocks.{block}.attn.proj.weight",
                             f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.attention.output.dense.weight"))
             rename_keys.append((f"backbone.0.layers.{layer}.blocks.{block}.attn.proj.bias",
                             f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.attention.output.dense.bias"))
-            # intermediate
+            # intermidiate
             rename_keys.append((f"backbone.0.layers.{layer}.blocks.{block}.mlp.fc1.weight",
                             f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.intermediate.dense.weight"))
             rename_keys.append((f"backbone.0.layers.{layer}.blocks.{block}.mlp.fc1.bias",
@@ -237,10 +235,6 @@ def create_rename_keys(state_dict, config):
             rename_keys.append((source_prefix_decoder + source_name,
                                target_prefix_decoder + target_name))
     ########################################## DECODER - END
-
-    #TODO convert head
-    ########################################## HEAD - START
-    ########################################## HEAD - END
 
     ########################################## Additional - START
     for layer_name, params in state_dict.items():
