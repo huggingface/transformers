@@ -83,8 +83,6 @@ class LayoutLMConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
         max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum value that the 2D position embedding might ever used. Typically set this to something large
             just in case (e.g., 1024).

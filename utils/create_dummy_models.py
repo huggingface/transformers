@@ -1509,7 +1509,7 @@ if __name__ == "__main__":
         "--models_to_skip",
         type=list_str,
         help=(
-            "Comma-separated list of model class names(s) from which the tiny models won't be created.\nThis is usually"
+            "Comma-separated list of model class names(s) from which the tiny models won't be created.\nThis is usually "
             "the list of model classes that have their tiny versions already uploaded to the Hub."
         ),
     )

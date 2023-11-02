@@ -17,6 +17,7 @@ from ..utils import _LazyModule
 
 
 _import_structure = {
+    "awq": ["replace_with_awq_linear"],
     "bitsandbytes": [
         "get_keys_to_not_convert",
         "replace_8bit_linear",
@@ -57,7 +58,6 @@ _import_structure = {
         "is_codecarbon_available",
         "is_comet_available",
         "is_dagshub_available",
-        "is_fairscale_available",
         "is_flyte_deck_standard_available",
         "is_flytekit_available",
         "is_mlflow_available",
@@ -78,6 +78,7 @@ _import_structure = {
 }
 
 if TYPE_CHECKING:
+    from .awq import replace_with_awq_linear
     from .bitsandbytes import (
         get_keys_to_not_convert,
         replace_8bit_linear,
@@ -118,7 +119,6 @@ if TYPE_CHECKING:
         is_codecarbon_available,
         is_comet_available,
         is_dagshub_available,
-        is_fairscale_available,
         is_flyte_deck_standard_available,
         is_flytekit_available,
         is_mlflow_available,

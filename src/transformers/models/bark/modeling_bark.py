@@ -21,7 +21,11 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from ...generation.logits_process import AlternatingCodebooksLogitsProcessor, SuppressTokensLogitsProcessor
+from ...generation.logits_process import (
+    AlternatingCodebooksLogitsProcessor,
+    BarkEosPrioritizerLogitsProcessor,
+    SuppressTokensLogitsProcessor,
+)
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel, get_parameter_device
 from ...utils import (
@@ -313,10 +317,6 @@ class BarkPreTrainedModel(PreTrainedModel):
 
         return get_parameter_device(self)
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BarkCausalModel) or isinstance(module, BarkFineModel) or isinstance(module, BarkModel):
-            module.gradient_checkpointing = value
-
 
 BARK_MODEL_START_DOCSTRING = """
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -483,9 +483,18 @@ class BarkCausalModel(BarkPreTrainedModel):
         position_ids = kwargs.get("position_ids", None)
 
         if past_key_values is not None:
-            # only last token for inputs_ids if past is defined in kwargs
+            # Omit tokens covered by past_key_values
             seq_len = input_ids.shape[1]
-            input_ids = input_ids[:, [-1]]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
 
             # input_embeds have already been used and is not required anymore
             input_embeds = None
@@ -507,7 +516,7 @@ class BarkCausalModel(BarkPreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
+                position_ids = position_ids[:, -input_ids.shape[1] :]
         else:
             position_ids = None
 
@@ -628,20 +637,14 @@ class BarkCausalModel(BarkPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, use_cache, output_attentions)
-
-                    return custom_forward
-
-                outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
+                outputs = self._gradient_checkpointing_func(
+                    block.__call__,
                     hidden_states,
                     None,
                     attention_mask,
                     head_mask[i],
+                    use_cache,
+                    output_attentions,
                 )
             else:
                 outputs = block(
@@ -794,12 +797,17 @@ class BarkSemanticModel(BarkCausalModel):
 
         suppress_tokens_logits_processor = SuppressTokensLogitsProcessor(tokens_to_suppress)
 
+        min_eos_p = kwargs.get("min_eos_p", semantic_generation_config.min_eos_p)
+        early_stopping_logits_processor = BarkEosPrioritizerLogitsProcessor(
+            eos_token_id=semantic_generation_config.eos_token_id, min_eos_p=min_eos_p
+        )
+
         # pass input_ids in order to stay consistent with the transformers generate method even though it is not used
         # (except to get the input seq_len - that's why we keep the first 257 tokens)
         semantic_output = super().generate(
             torch.ones((batch_size, max_input_semantic_length + 1), dtype=torch.int).to(self.device),
             input_embeds=input_embeds,
-            logits_processor=[suppress_tokens_logits_processor],
+            logits_processor=[suppress_tokens_logits_processor, early_stopping_logits_processor],
             generation_config=semantic_generation_config,
             **kwargs,
         )  # size: 10048
@@ -1555,7 +1563,8 @@ class BarkModel(BarkPreTrainedModel):
 
         kwargs_semantic = {
             # if "attention_mask" is set, it should not be passed to CoarseModel and FineModel
-            "attention_mask": kwargs.pop("attention_mask", None)
+            "attention_mask": kwargs.pop("attention_mask", None),
+            "min_eos_p": kwargs.pop("min_eos_p", None),
         }
         kwargs_coarse = {}
         kwargs_fine = {}
