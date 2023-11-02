@@ -320,12 +320,12 @@ class ModelTesterMixin:
 
                 # Test we can load the state dict in the model, necessary for the checkpointing API in Trainer.
                 load_result = model.load_state_dict(state_dict_saved, strict=False)
-                keys = set(model._keys_to_ignore_on_save)
+                keys_to_ignore = set(model._keys_to_ignore_on_save)
 
                 if hasattr(model, "_tied_weights_keys"):
-                    keys.update(set(model._tied_weights_keys))
+                    keys_to_ignore.update(set(model._tied_weights_keys))
 
-                self.assertTrue(len(load_result.missing_keys) == 0 or set(load_result.missing_keys) == keys)
+                self.assertTrue(len(load_result.missing_keys) == 0 or set(load_result.missing_keys) == keys_to_ignore)
                 self.assertTrue(len(load_result.unexpected_keys) == 0)
 
     def test_gradient_checkpointing_backward_compatibility(self):
