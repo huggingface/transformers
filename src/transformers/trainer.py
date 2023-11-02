@@ -113,6 +113,7 @@ from .trainer_utils import (
     find_executable_batch_size,
     get_last_checkpoint,
     has_length,
+    neftune_post_forward_hook,
     number_of_arguments,
     seed_worker,
     set_seed,
@@ -143,6 +144,7 @@ from .utils import (
     is_sagemaker_mp_enabled,
     is_torch_compile_available,
     is_torch_neuroncore_available,
+    is_torch_npu_available,
     is_torch_tpu_available,
     logging,
     strtobool,
@@ -486,6 +488,8 @@ class Trainer:
         self.model_wrapped = model
         self.model = model
 
+        self.neftune_noise_alpha = args.neftune_noise_alpha
+
         self.compute_metrics = compute_metrics
         self.preprocess_logits_for_metrics = preprocess_logits_for_metrics
         self.optimizer, self.lr_scheduler = optimizers
@@ -633,6 +637,42 @@ class Trainer:
         # torch.compile
         if args.torch_compile and not is_torch_compile_available():
             raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
+
+    def _activate_neftune(self, model):
+        r"""
+        Activates the neftune as presented in this code: https://github.com/neelsjain/NEFTune and paper:
+        https://arxiv.org/abs/2310.05914
+        """
+        unwrapped_model = unwrap_model(model)
+
+        if is_peft_available() and isinstance(unwrapped_model, PeftModel):
+            embeddings = unwrapped_model.base_model.get_input_embeddings()
+        else:
+            embeddings = unwrapped_model.get_input_embeddings()
+
+        del unwrapped_model
+
+        embeddings.neftune_noise_alpha = self.neftune_noise_alpha
+        hook_handle = embeddings.register_forward_hook(neftune_post_forward_hook)
+        self.neftune_hook_handle = hook_handle
+        return model
+
+    def _deactivate_neftune(self, model):
+        """
+        Deactivates the neftune method. Make sure to call `_activate_neftune` first.
+        """
+        if not hasattr(self, "neftune_hook_handle"):
+            raise ValueError("Neftune is not activated make sure to call `trainer._activate_neftune()` first")
+
+        unwrapped_model = unwrap_model(model)
+
+        if is_peft_available() and isinstance(unwrapped_model, PeftModel):
+            embeddings = unwrapped_model.base_model.get_input_embeddings()
+        else:
+            embeddings = unwrapped_model.get_input_embeddings()
+
+        self.neftune_hook_handle.remove()
+        del embeddings.neftune_noise_alpha, unwrapped_model
 
     def add_callback(self, callback):
         """
@@ -1444,6 +1484,10 @@ class Trainer:
 
         self.is_in_train = True
 
+        # Attach NEFTune hooks if necessary
+        if self.neftune_noise_alpha is not None:
+            self.model = self._activate_neftune(self.model)
+
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
         if (args.fp16_full_eval or args.bf16_full_eval) and not args.do_train:
@@ -1956,6 +2000,11 @@ class Trainer:
         # Wait for the checkpoint to be uploaded.
         self._finish_current_push()
 
+        # After training we make sure to retrieve back the original forward pass method
+        # for the embedding layer by removing the forward post hook.
+        if self.neftune_noise_alpha is not None:
+            self._deactivate_neftune(self.model)
+
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
     def _get_output_dir(self, trial):
@@ -2273,6 +2322,17 @@ class Trainer:
                     )
         if is_torch_tpu_available():
             xm.set_rng_state(checkpoint_rng_state["xla"])
+        if is_torch_npu_available():
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+                torch.npu.random.set_rng_state_all(checkpoint_rng_state["npu"])
+            else:
+                try:
+                    torch.npu.random.set_rng_state(checkpoint_rng_state["npu"])
+                except Exception as e:
+                    logger.info(
+                        f"Didn't manage to set back the RNG states of the NPU because of the following error:\n {e}"
+                        "\nThis won't yield the same results as if the training had not been interrupted."
+                    )
 
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
@@ -2374,6 +2434,12 @@ class Trainer:
 
         if is_torch_tpu_available():
             rng_states["xla"] = xm.get_rng_state()
+
+        if is_torch_npu_available():
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+                rng_states["npu"] = torch.npu.random.get_rng_state_all()
+            else:
+                rng_states["npu"] = torch.npu.random.get_rng_state()
 
         # A process can arrive here before the process 0 has a chance to save the model, in which case output_dir may
         # not yet exist.
@@ -3858,6 +3924,7 @@ class Trainer:
         # create accelerator object
         self.accelerator = Accelerator(
             dispatch_batches=self.args.dispatch_batches,
+            split_batches=self.args.split_batches,
             deepspeed_plugin=self.args.deepspeed_plugin,
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )

@@ -27,36 +27,8 @@ env:
   RUN_PT_TF_CROSS_TESTS: 1
 
 jobs:
-  check_runner_status:
-    name: Check Runner Status
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout transformers
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 2
-
-      - name: Check Runner Status
-        run: python utils/check_self_hosted_runner.py --target_runners single-gpu-ci-runner-docker,multi-gpu-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-
-  check_runners:
-    name: Check Runners
-    needs: check_runner_status
-    strategy:
-      matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, push-ci]
-    container:
-      image: huggingface/transformers-all-latest-gpu-push-ci
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    steps:
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
   setup:
     name: Setup
-    needs: check_runners
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
@@ -521,8 +493,6 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     needs: [
-        check_runner_status,
-        check_runners,
         setup,
         run_tests_single_gpu,
         run_tests_multi_gpu,
@@ -534,9 +504,7 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
-          echo "Runner availability: ${{ needs.check_runner_status.result }}"
           echo "Setup status: ${{ needs.setup.result }}"
-          echo "Runner status: ${{ needs.check_runners.result }}"
 
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
@@ -589,8 +557,6 @@ jobs:
           CI_TITLE_PUSH: ${{ github.event.head_commit.message }}
           CI_TITLE_WORKFLOW_RUN: ${{ github.event.workflow_run.head_commit.message }}
           CI_SHA: ${{ env.CI_SHA }}
-          RUNNER_STATUS: ${{ needs.check_runner_status.result }}
-          RUNNER_ENV_STATUS: ${{ needs.check_runners.result }}
           SETUP_STATUS: ${{ needs.setup.result }}
 
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
