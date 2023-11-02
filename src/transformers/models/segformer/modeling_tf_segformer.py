@@ -62,11 +62,11 @@ class TFSegformerDropPath(tf.keras.layers.Layer):
         (1) github.com:rwightman/pytorch-image-models
     """
 
-    def __init__(self, drop_path, **kwargs):
+    def __init__(self, drop_path: float, **kwargs):
         super().__init__(**kwargs)
         self.drop_path = drop_path
 
-    def call(self, x, training=None):
+    def call(self, x: tf.Tensor, training=None):
         if training:
             keep_prob = 1 - self.drop_path
             shape = (tf.shape(x)[0],) + (1,) * (len(tf.shape(x)) - 1)
