@@ -283,7 +283,6 @@ class RegNetPreTrainedModel(PreTrainedModel):
     config_class = RegNetConfig
     base_model_prefix = "regnet"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
     # Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -292,10 +291,6 @@ class RegNetPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
             nn.init.constant_(module.weight, 1)
             nn.init.constant_(module.bias, 0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, RegNetModel):
-            module.gradient_checkpointing = value
 
 
 REGNET_START_DOCSTRING = r"""

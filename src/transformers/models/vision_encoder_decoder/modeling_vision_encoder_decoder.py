@@ -225,11 +225,6 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        # call both encoder and decoder function on gradient checkpointing
-        self.encoder._set_gradient_checkpointing(module, value=value)
-        self.decoder._set_gradient_checkpointing(module, value=value)
-
     def get_encoder(self):
         return self.encoder
 
@@ -347,8 +342,8 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 model.config = config
 
                 if hasattr(model, "enc_to_dec_proj"):
-                    model.enc_to_dec_proj.weight.data = enc_to_dec_proj_weight
-                    model.enc_to_dec_proj.bias.data = enc_to_dec_proj_bias
+                    model.enc_to_dec_proj.weight.data = enc_to_dec_proj_weight.contiguous()
+                    model.enc_to_dec_proj.bias.data = enc_to_dec_proj_bias.contiguous()
 
                 return model
 
