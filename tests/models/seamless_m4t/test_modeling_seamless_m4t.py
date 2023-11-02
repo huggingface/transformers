@@ -881,7 +881,6 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
             right_tensor = state_dict.get(name)
             self.assertEqual(tensor.tolist(), right_tensor.tolist(), f"Tensor {name}")
 
-
         output_speech = self.factory_generation_speech_test(model, input_speech)
 
         # test same text output from input text
@@ -890,8 +889,14 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
 
         # test same speech output from input text
         # assertTrue because super long list makes this hang in case of failure
-        self.assertTrue(output_original_speech[0].ravel().tolist() == output_speech[0].ravel().tolist(), "Speech generated was different")
-        self.assertTrue(output_original_speech[1].ravel().tolist() == output_speech[1].ravel().tolist(), "Speech generated was different")
+        self.assertTrue(
+            output_original_speech[0].ravel().tolist() == output_speech[0].ravel().tolist(),
+            "Speech generated was different",
+        )
+        self.assertTrue(
+            output_original_speech[1].ravel().tolist() == output_speech[1].ravel().tolist(),
+            "Speech generated was different",
+        )
 
     def test_text_generation(self):
         config, input_speech, input_text = self.prepare_speech_and_text_input()
@@ -913,7 +918,7 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
         input_speech.pop("generate_speech")
         input_text.pop("generate_speech")
 
-        # state_dict = model.state_dict()
+        state_dict = model.state_dict()
 
         text_model = SeamlessM4TForTextToText.from_pretrained(self.tmpdirname)
         self.update_generation(text_model)
