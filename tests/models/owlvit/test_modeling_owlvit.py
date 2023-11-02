@@ -191,6 +191,12 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
+        pass
+
     @unittest.skip(reason="OWL-ViT does not support training yet")
     def test_training_gradient_checkpointing(self):
         pass
@@ -331,6 +337,12 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="OWL-ViT does not support training yet")
     def test_training(self):
+        pass
+
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
         pass
 
     @unittest.skip(reason="OWL-ViT does not support training yet")
@@ -678,6 +690,12 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="OWL-ViT does not support training yet")
     def test_training(self):
+        pass
+
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
         pass
 
     @unittest.skip(reason="OWL-ViT does not support training yet")

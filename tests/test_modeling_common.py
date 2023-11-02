@@ -25,6 +25,7 @@ import re
 import tempfile
 import warnings
 from collections import defaultdict
+from contextlib import nullcontext
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -578,9 +579,16 @@ class ModelTesterMixin:
                 if v.requires_grad:
                     self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
 
-    def test_training(self):
+    def check_training(self, half_precision_training=False, mixed_precision_training=False):
         if not self.model_tester.is_training:
             return
+
+        mixed_precision_dtype = torch.float16 if torch_device == "cuda" else torch.bfloat16
+        training_context = (
+            torch.amp.autocast(device_type=torch_device, dtype=mixed_precision_dtype)
+            if mixed_precision_training
+            else nullcontext
+        )
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -593,11 +601,44 @@ class ModelTesterMixin:
                 continue
 
             model = model_class(config)
+
+            # In case we want to perform pure bf16 training, simply convert the model beforehand
+            if half_precision_training:
+                # target_dtype = torch.float16 if torch_device == "cuda" else torch.bfloat16
+                target_dtype = torch.bfloat16
+                model = model.to(target_dtype)
+
+            optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+
             model.to(torch_device)
             model.train()
+
+            # unfreeze additional layers
+            for p in model.parameters():
+                p.requires_grad_(True)
+
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
+
+            # In case we want to perform mixed precision training, we need to wrap the loss computation
+            #  inside the autocast context manager
+            with training_context:
+                loss = model(**inputs).loss
+
             loss.backward()
+            optimizer.step()
+
+            for k, v in model.named_parameters():
+                if v.requires_grad:
+                    self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+
+    def test_training(self):
+        self.check_training()
+
+    def test_training_half_precision(self):
+        self.check_training(half_precision_training=True)
+
+    def test_training_mixed_precision(self):
+        self.check_training(mixed_precision_training=True)
 
     def test_training_gradient_checkpointing(self):
         # Scenario - 1 default behaviour

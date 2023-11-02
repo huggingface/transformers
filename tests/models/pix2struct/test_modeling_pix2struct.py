@@ -195,6 +195,12 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
+        pass
+
     @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
     def test_training_gradient_checkpointing(self):
         pass
@@ -342,6 +348,12 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
     def test_training(self):
+        pass
+
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
         pass
 
     @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")

@@ -203,6 +203,12 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_training(self):
         pass
 
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
+        pass
+
     @unittest.skip(reason="Swin2SR does not support training yet")
     def test_training_gradient_checkpointing(self):
         pass

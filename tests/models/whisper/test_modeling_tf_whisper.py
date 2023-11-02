@@ -346,6 +346,12 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_training(self):
         pass
 
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
+        pass
+
     def test_generate_with_head_masking(self):
         pass
 

@@ -699,6 +699,12 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
+        pass
+
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -994,6 +1000,12 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
     # training is not supported yet
     def test_training(self):
+        pass
+
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
         pass
 
     def test_training_gradient_checkpointing(self):
@@ -1440,6 +1452,12 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
     # training is not supported yet
     def test_training(self):
+        pass
+
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
         pass
 
     def test_training_gradient_checkpointing(self):

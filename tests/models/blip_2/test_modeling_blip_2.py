@@ -191,6 +191,12 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
+        pass
+
     def test_training_gradient_checkpointing(self):
         pass
 

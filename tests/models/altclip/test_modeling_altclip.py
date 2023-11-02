@@ -183,6 +183,12 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
+        pass
+
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -327,6 +333,12 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_training(self):
+        pass
+
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
         pass
 
     def test_training_gradient_checkpointing(self):

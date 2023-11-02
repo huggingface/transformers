@@ -193,6 +193,12 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
+        pass
+
     @unittest.skip(reason="OwlV2 does not support training yet")
     def test_training_gradient_checkpointing(self):
         pass
@@ -335,6 +341,12 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="OwlV2 does not support training yet")
     def test_training(self):
+        pass
+
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
         pass
 
     @unittest.skip(reason="OwlV2 does not support training yet")
@@ -685,6 +697,12 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="OwlV2 does not support training yet")
     def test_training(self):
+        pass
+
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
         pass
 
     @unittest.skip(reason="OwlV2 does not support training yet")

@@ -249,6 +249,12 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
+        pass
+
     @unittest.skip(reason="ClapAudioModel does not output any loss term in the forward pass")
     def test_training_gradient_checkpointing(self):
         pass
@@ -412,6 +418,12 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="ClapTextModel does not output any loss term in the forward pass")
     def test_training(self):
+        pass
+
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
         pass
 
     @unittest.skip(reason="ClapTextModel does not output any loss term in the forward pass")

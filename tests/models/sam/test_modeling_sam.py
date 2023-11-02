@@ -417,6 +417,12 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
+    def test_training_half_precision(self):
+        pass
+
+    def test_training_mixed_precision(self):
+        pass
+
     @unittest.skip(reason="SamModel does not support training")
     def test_training_gradient_checkpointing(self):
         pass
