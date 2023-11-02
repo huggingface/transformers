@@ -361,7 +361,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         size_divisor (`int`, *optional*, defaults to 32):
             Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
             Swin Transformer.
-        resample (`int`, *optional*, defaults to `Resampling.BILINEAR`)::
+        resample (`int`, *optional*, defaults to `Resampling.BILINEAR`):
             An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
             `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
             `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
