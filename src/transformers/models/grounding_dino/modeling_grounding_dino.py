@@ -318,11 +318,11 @@ class GroundingDINOObjectDetectionOutput(ModelOutput):
             Stacked intermediate reference points (reference points of each layer of the decoder).
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
             Initial reference points sent through the Transformer decoder.
-        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
             region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
             background).
-        enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
     """
 
