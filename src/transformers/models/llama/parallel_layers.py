@@ -9,7 +9,7 @@ import math
 class AllReduce(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x) -> torch.Tensor:
-        if torch.onnx.is_in_onnx_export():
+        if torch.onnx.is_in_onnx_export() or get_world_size(None) == 1:
             return x
         dist.all_reduce(x, op=dist.ReduceOp.SUM)
         return x
@@ -150,7 +150,9 @@ class TensorParallelRowLinear(nn.Module):
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         out = F.linear(input, weight=self.weight, bias=self.bias)
-        out = AllReduce.apply(out)
+
+        if self.tp_world_size > 1:
+            out = AllReduce.apply(out)
 
         return out
 
@@ -214,5 +216,8 @@ class TensorParallelEmbedding(nn.Embedding):
         input_mask = input_mask.view(*input_mask.shape, 1)  # add a new dim
         input_mask = input_mask.expand(out.shape)
         out[input_mask] = 0.0
-        out = AllReduce.apply(out)
+
+        if self.tp_world_size > 1:
+            out = AllReduce.apply(out)
+
         return out
