@@ -29,7 +29,6 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 from pytest import mark
-from safetensors.torch import load_file as safe_load_file
 
 import transformers
 from transformers import (
@@ -92,6 +91,7 @@ if is_accelerate_available():
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
     from torch import nn
 
