@@ -4,7 +4,7 @@ import unittest
 import requests
 
 from transformers import FuyuConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_modeling_common import ids_tensor, random_attention_mask
 
@@ -257,7 +257,7 @@ class FuyuModelTester:
 
 
 @require_torch
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
     """
@@ -276,7 +276,6 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
         self.bus_image_pil = Image.open(io.BytesIO(requests.get(self.bus_image_url).content))
 
     @slow
-    @require_torch_gpu
     def test_model_8b_chat_greedy_generation_bus_captioning(self):
         EXPECTED_TEXT_COMPLETION = """A blue bus parked on the side of a road.|ENDOFTEXT|"""
         text_prompt_coco_captioning = "Generate a coco-style caption.\n"
@@ -294,7 +293,7 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
 
 """
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_model_8b_chat_greedy_generation_bus_color(self):
         EXPECTED_TEXT_COMPLETION = "The bus is blue.\n|ENDOFTEXT|"
         text_prompt_bus_color = "What color is the bus?\n"
@@ -311,7 +310,7 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, clean_sequence)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_model_8b_chat_greedy_generation_chart_vqa(self):
         # fmt: off
         EXPECTED_TEXT_TOKENS = ["The","life expectancy","at","birth","of male","s in","","20","18","is","","80",".","7",".","\n","|ENDOFTEXT|",]
@@ -337,7 +336,7 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
         self.assertEqual(expected_text_completion, clean_sequence)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_model_8b_chat_greedy_generation_bounding_box(self):
         EXPECTED_TEXT_COMPLETION = "\x00194213202244\x01|ENDOFTEXT|"
         text_prompt_bbox = "When presented with a box, perform OCR to extract text contained within it. If provided with text, generate the corresponding bounding box.\\nWilliams"  # noqa: E231

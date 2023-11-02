@@ -25,9 +25,10 @@ from transformers import (
 from transformers.testing_utils import (
     is_pipeline_test,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torch_or_tf,
     slow,
+    torch_device,
 )
 
 from .test_pipelines_common import ANY
@@ -115,9 +116,9 @@ class TextToAudioPipelineTests(unittest.TestCase):
         self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_conversion_additional_tensor(self):
-        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt", device=0)
+        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt", device=torch_device)
         processor = AutoProcessor.from_pretrained("suno/bark-small")
 
         forward_params = {

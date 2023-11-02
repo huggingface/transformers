@@ -22,7 +22,7 @@ The Fuyu model was created by [ADEPT](https://www.adept.ai/blog/fuyu-8b), and au
 
 The authors introduced Fuyu-8B, a decoder-only multimodal model based on the classic transformers architecture, with query and key normalization. A linear encoder is added to create multimodal embeddings from image inputs. 
 
-By treating image tokens like text tokens and using a special image-newline character, the model knows when an image line ends. Image positional embeddings are removed. This avoids the need for different training phases for various image resolutions. With 8 billion parameters and licensed under Apache, Fuyu-8B is notable for its ability to handle both text and images, its impressive context size of 16K, and its overall performance.
+By treating image tokens like text tokens and using a special image-newline character, the model knows when an image line ends. Image positional embeddings are removed. This avoids the need for different training phases for various image resolutions. With 8 billion parameters and licensed under CC-BY-NC, Fuyu-8B is notable for its ability to handle both text and images, its impressive context size of 16K, and its overall performance.
 
 <Tip warning={true}>
 

@@ -53,6 +53,7 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/README_ja.md">日本語</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_hd.md">हिन्दी</a> |
         <b>Русский</b>
+        <a href="https://github.com/huggingface/transformers//blob/main/README_te.md">తెలుగు</a> |
     <p>
 </h4>
 
@@ -66,11 +67,11 @@ limitations under the License.
 
 🤗 Transformers предоставляет тысячи предварительно обученных моделей для выполнения различных задач, таких как текст, зрение и аудио.
 
-Эти модели могут быть применены на:
+Эти модели могут быть применены к:
 
-* 📝 Текст, для таких задач, как классификация текстов, извлечение информации, ответы на вопросы, обобщение, перевод, генерация текстов, на более чем 100 языках.
-* 🖼️ Изображения - для задач классификации изображений, обнаружения объектов и сегментации.
-* 🗣️ Аудио - для задач распознавания речи и классификации аудио.
+* 📝 Тексту для таких задач, как классификация текстов, извлечение информации, ответы на вопросы, обобщение, перевод, генерация текстов на более чем 100 языках.
+* 🖼️ Изображениям для задач классификации изображений, обнаружения объектов и сегментации.
+* 🗣️ Аудио для задач распознавания речи и классификации аудио.
 
 Модели transformers также могут выполнять несколько задач, такие как ответы на табличные вопросы, распознавание оптических символов, извлечение информации из отсканированных документов, классификация видео и ответы на визуальные вопросы.
 
@@ -428,7 +429,7 @@ conda install -c huggingface transformers
 1. **[NLLB-MOE](https://huggingface.co/docs/transformers/model_doc/nllb-moe)** (from Meta) released with the paper [No Language Left Behind: Scaling Human-Centered Machine Translation](https://arxiv.org/abs/2207.04672) by the NLLB team.
 1. **[Nyströmformer](https://huggingface.co/docs/transformers/model_doc/nystromformer)** (from the University of Wisconsin - Madison) released with the paper [Nyströmformer: A Nyström-Based Algorithm for Approximating Self-Attention](https://arxiv.org/abs/2102.03902) by Yunyang Xiong, Zhanpeng Zeng, Rudrasis Chakraborty, Mingxing Tan, Glenn Fung, Yin Li, Vikas Singh.
 1. **[OneFormer](https://huggingface.co/docs/transformers/model_doc/oneformer)** (from SHI Labs) released with the paper [OneFormer: One Transformer to Rule Universal Image Segmentation](https://arxiv.org/abs/2211.06220) by Jitesh Jain, Jiachen Li, MangTik Chiu, Ali Hassani, Nikita Orlov, Humphrey Shi.
-1. **[OpenLlama](https://huggingface.co/docs/transformers/model_doc/open-llama)** (from [s-JoL](https://huggingface.co/s-JoL)) released in [Open-Llama](https://github.com/s-JoL/Open-Llama).
+1. **[OpenLlama](https://huggingface.co/docs/transformers/model_doc/open-llama)** (from [s-JoL](https://huggingface.co/s-JoL)) released on GitHub (now removed).
 1. **[OPT](https://huggingface.co/docs/transformers/master/model_doc/opt)** (from Meta AI) released with the paper [OPT: Open Pre-trained Transformer Language Models](https://arxiv.org/abs/2205.01068) by Susan Zhang, Stephen Roller, Naman Goyal, Mikel Artetxe, Moya Chen, Shuohui Chen et al.
 1. **[OWL-ViT](https://huggingface.co/docs/transformers/model_doc/owlvit)** (from Google AI) released with the paper [Simple Open-Vocabulary Object Detection with Vision Transformers](https://arxiv.org/abs/2205.06230) by Matthias Minderer, Alexey Gritsenko, Austin Stone, Maxim Neumann, Dirk Weissenborn, Alexey Dosovitskiy, Aravindh Mahendran, Anurag Arnab, Mostafa Dehghani, Zhuoran Shen, Xiao Wang, Xiaohua Zhai, Thomas Kipf, and Neil Houlsby.
 1. **[Pegasus](https://huggingface.co/docs/transformers/model_doc/pegasus)** (from Google) released with the paper [PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization](https://arxiv.org/abs/1912.08777) by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu.
