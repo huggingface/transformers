@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -39,16 +40,22 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_available,
+    is_flash_attn_2_available,
     is_torch_fx_available,
     logging,
 )
 from .configuration_gpt_neo import GPTNeoConfig
 
 
-if is_flash_attn_available():
+if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+
+
+# This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
+# It means that the function will not be traced through and simply appear as a node in the graph.
+if is_torch_fx_available():
+    _prepare_4d_causal_attention_mask = torch.fx.wrap(_prepare_4d_causal_attention_mask)
 
 
 logger = logging.get_logger(__name__)
@@ -63,27 +70,10 @@ GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neo-1.3B"
 
 
-# TODO: @younesbelkada move that in pytorch_utils and document it
-if is_torch_fx_available():
-
-    @torch.fx.wrap
-    def check_padding_in_attention_mask(attention_mask):
-        if 0 in attention_mask:
-            return attention_mask
-        return None
-
-else:
-
-    def check_padding_in_attention_mask(attention_mask):
-        if 0 in attention_mask:
-            return attention_mask
-        return None
-
-
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(padding_mask):
-    seqlens_in_batch = padding_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(padding_mask.flatten(), as_tuple=False).flatten()
+def _get_unpad_data(attention_mask):
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
     return (
@@ -176,6 +166,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
 class GPTNeoSelfAttention(nn.Module):
     def __init__(self, config, attention_type):
         super().__init__()
+        self.config = config
 
         max_positions = config.max_position_embeddings
         bias = torch.tril(torch.ones((max_positions, max_positions), dtype=bool)).view(
@@ -193,6 +184,7 @@ class GPTNeoSelfAttention(nn.Module):
 
         self.attn_dropout = nn.Dropout(float(config.attention_dropout))
         self.resid_dropout = nn.Dropout(float(config.resid_dropout))
+        self.is_causal = True
 
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_heads
@@ -263,8 +255,13 @@ class GPTNeoSelfAttention(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-        padding_mask=None,
+        **kwargs,
     ):
+        if "padding_mask" in kwargs:
+            logger.warning_once(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
+
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
@@ -312,8 +309,16 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-        padding_mask=None,
+        **kwargs,
     ):
+        if "padding_mask" in kwargs:
+            logger.warning_once(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
+
+            # overwrite attention_mask with padding_mask
+            attention_mask = kwargs.pop("padding_mask")
+
         bsz, _, _ = hidden_states.size()
 
         query = self.q_proj(hidden_states)
@@ -344,25 +349,34 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         key = key.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
         value = value.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
 
-        attn_dropout = self.dropout if self.training else 0.0
+        attn_dropout = self.config.attention_dropout if self.training else 0.0
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 just to be sure everything works as expected.
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32. (LlamaRMSNorm handles it correctly)
+
         input_dtype = query.dtype
         if input_dtype == torch.float32:
+            # Handle the case where the model is quantized
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
             logger.warning_once(
-                "The input hidden states seems to be silently casted in float32, this might be related to"
-                " the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                " float16."
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
             )
 
-            query = query.to(torch.float16)
-            key = key.to(torch.float16)
-            value = value.to(torch.float16)
+            query = query.to(target_dtype)
+            key = key.to(target_dtype)
+            value = value.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query, key, value, padding_mask, query_length, dropout=attn_dropout, softmax_scale=1.0
+            query, key, value, attention_mask, query_length, dropout=attn_dropout, softmax_scale=1.0
         )
 
         attn_weights_reshaped = attn_output.reshape(bsz, query_length, self.num_heads * self.head_dim)
@@ -377,7 +391,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, padding_mask, query_length, dropout=0.0, softmax_scale=None
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -390,7 +404,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
                 Input key states to be passed to Flash Attention API
             value_states (`torch.Tensor`):
                 Input value states to be passed to Flash Attention API
-            padding_mask (`torch.Tensor`):
+            attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
             dropout (`int`, *optional*):
@@ -399,10 +413,10 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
         # Contains at least one padding token in the sequence
-        if padding_mask is not None:
+        if attention_mask is not None:
             batch_size = query_states.shape[0]
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, padding_mask, query_length
+                query_states, key_states, value_states, attention_mask, query_length
             )
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
@@ -418,27 +432,31 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=True,
+                causal=self.is_causal,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=self.is_causal
             )
 
         return attn_output
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
-    def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
-        batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
+        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
-        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
+        key_layer = index_first_axis(
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        value_layer = index_first_axis(
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
+                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -452,8 +470,8 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
             query_layer = query_layer.squeeze(1)
         else:
             # The -q_len: slice assumes left padding.
-            padding_mask = padding_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, padding_mask)
+            attention_mask = attention_mask[:, -query_length:]
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
 
         return (
             query_layer,
@@ -492,7 +510,6 @@ class GPTNeoAttention(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-        padding_mask=None,
     ):
         return self.attention(
             hidden_states,
@@ -501,7 +518,6 @@ class GPTNeoAttention(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            padding_mask=padding_mask,
         )
 
 
@@ -540,8 +556,13 @@ class GPTNeoBlock(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
-        padding_mask=None,
+        **kwargs,
     ):
+        if "padding_mask" in kwargs:
+            logger.warning_once(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
+
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_outputs = self.attn(
@@ -551,7 +572,7 @@ class GPTNeoBlock(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            padding_mask=padding_mask,
+            **kwargs,
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
@@ -745,10 +766,8 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
-            batch_size = input_ids.shape[0]
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size = inputs_embeds.shape[0]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -767,28 +786,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
 
-        # Attention mask.
-        padding_mask = None
-        if attention_mask is not None:
-            if batch_size <= 0:
-                raise ValueError("batch_size has to be defined and > 0")
-            padding_mask = check_padding_in_attention_mask(attention_mask)
-            attention_mask = attention_mask.view(batch_size, -1)
-            # We create a 3D attention mask from a 2D tensor mask.
-            # Sizes are [batch_size, 1, 1, to_seq_length]
-            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-            # this attention mask is more simple than the triangular masking of causal attention
-            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask[:, None, None, :]
-
-            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-            # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and the dtype's smallest value for masked positions.
-            # Since we are adding it to the raw scores before the softmax, this is
-            # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
-
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x num_heads x N x N
@@ -799,6 +796,14 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             inputs_embeds = self.wte(input_ids)
         position_embeds = self.wpe(position_ids)
         hidden_states = inputs_embeds + position_embeds
+
+        # Attention mask.
+        if getattr(self.config, "_flash_attn_2_enabled", False):
+            # 2d mask is passed through the layers
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        else:
+            # 4d mask is passed through the layers
+            attention_mask = _prepare_4d_causal_attention_mask(attention_mask, input_shape, inputs_embeds, past_length)
 
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
@@ -840,7 +845,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
-                    padding_mask=padding_mask,
                 )
 
             hidden_states = outputs[0]
