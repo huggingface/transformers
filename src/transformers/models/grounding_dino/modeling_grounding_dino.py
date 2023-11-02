@@ -917,7 +917,7 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
             text_attn_weights, min=-50000, max=50000
         )
 
-        # mask vison for language
+        # mask vision for language
         if vision_attention_mask is not None:
             vision_attention_mask = (
                 vision_attention_mask[:, None, None, :].repeat(1, self.num_heads, 1, 1).flatten(0, 1)
