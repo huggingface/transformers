@@ -15,6 +15,8 @@
     title: 预处理数据
   - local: training
     title: 微调预训练模型
+  - local: run_scripts
+    title: 通过脚本训练模型
   - local: accelerate
     title: 使用🤗Accelerate进行分布式训练
   - local: peft
