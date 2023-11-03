@@ -455,6 +455,7 @@ class GPTQConfig(QuantizationConfigMixin):
                 "The value of `use_exllama` will be overwritten by `disable_exllama` passed in `GPTQConfig` or stored in your config file."
             )
             self.use_exllama = not self.disable_exllama
+            self.disable_exllama = None
         elif self.disable_exllama is not None and self.use_exllama is not None:
             # Only happens if user explicitly passes in both arguments
             raise ValueError("Cannot specify both `disable_exllama` and `use_exllama`. Please use just `use_exllama`")
