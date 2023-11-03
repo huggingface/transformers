@@ -487,7 +487,7 @@ class MBartFlashAttention2(MBartAttention):
 
 
 MBART_ATTENTION_CLASSES = {
-    "default": MBartAttention,
+    "eager": MBartAttention,
     "flash_attention_2": MBartFlashAttention2,
 }
 
