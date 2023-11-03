@@ -454,8 +454,17 @@ def main():
             k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
             for k, t in concatenated_examples.items()
         }
-        result["labels"] = result["input_ids"].copy()
-        return result
+	
+	# Pad the sequences so that they all have the same length
+    	padded_result = {}
+	max_length_in_batch = max(len(x) for x in result["input_ids"])
+	for k, v in result.items():
+            padded_result[k] = [x + [tokenizer.pad_token_id] * (max_length_in_batch - len(x)) for x in v]
+    
+    	# Copy the 'input_ids' to 'labels' for the language modeling task
+    	padded_result["labels"] = padded_result["input_ids"].copy()
+    
+    	return padded_result
 
     # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a remainder
     # for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value might be slower
