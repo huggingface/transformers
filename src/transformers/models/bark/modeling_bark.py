@@ -933,7 +933,8 @@ class BarkCoarseModel(BarkCausalModel):
             By default:
                 torch.LongTensor: Output coarse acoustics tokens.
             If `return_output_lengths=True`:
-                `Tuple(torch.Tensor, torch.Tensor): The output coarse acoustics tokens, and the length of each sample of the batch.
+                `Tuple(torch.Tensor, torch.Tensor): The output coarse acoustics tokens, and the length of each sample
+                of the batch.
         """
 
         if semantic_generation_config is None:
@@ -961,9 +962,11 @@ class BarkCoarseModel(BarkCausalModel):
         max_semantic_history = int(np.floor(max_coarse_history / semantic_to_coarse_ratio))
 
         output_lengths = (semantic_output != coarse_generation_config.coarse_semantic_pad_token).sum(1)
-        output_lengths = torch.floor(output_lengths * semantic_to_coarse_ratio / coarse_generation_config.n_coarse_codebooks)
+        output_lengths = torch.floor(
+            output_lengths * semantic_to_coarse_ratio / coarse_generation_config.n_coarse_codebooks
+        )
         output_lengths = torch.round(output_lengths * coarse_generation_config.n_coarse_codebooks).int()
-        
+
         max_generated_len = torch.max(output_lengths).item()
 
         batch_size = semantic_output.shape[0]
@@ -1029,7 +1032,7 @@ class BarkCoarseModel(BarkCausalModel):
             del output_coarse
 
         coarse_output = x_coarse[:, len_coarse_history:]
-        
+
         if return_output_lengths:
             return coarse_output, output_lengths
 
@@ -1509,12 +1512,12 @@ class BarkModel(BarkPreTrainedModel):
         # We'll offload the last model manually.
         self.codec_model_hook = hook
 
-    def codec_decode(self, fine_output, output_lengths = None):
+    def codec_decode(self, fine_output, output_lengths=None):
         """Turn quantized audio codes into audio array using encodec."""
 
         fine_output = fine_output.transpose(0, 1)
         emb = self.codec_model.quantizer.decode(fine_output)
-        
+
         if output_lengths is not None:
             # encodec uses LSTMs which behaves differently with appended padding
             # decoding with encodec takes around 0.1% of the total generation time
@@ -1628,13 +1631,12 @@ class BarkModel(BarkPreTrainedModel):
             return_output_lengths=return_output_lengths,
             **kwargs_coarse,
         )
-        
+
         output_lengths = None
         if return_output_lengths:
             coarse_output, output_lengths = coarse_output
             # (batch_size, seq_len*coarse_codebooks) -> (batch_size, seq_len)
             output_lengths = output_lengths // coarse_generation_config.n_coarse_codebooks
-
 
         # 3. "generate" from the fine model
         output = self.fine_acoustics.generate(
@@ -1662,10 +1664,10 @@ class BarkModel(BarkPreTrainedModel):
         if getattr(self, "codec_model_hook", None) is not None:
             # Offload codec_model to CPU
             self.codec_model_hook.offload()
-            
+
         if return_output_lengths:
             output_lengths = [len(sample) for sample in audio]
-            audio = nn.utils.rnn.pad_sequence(audio, batch_first = True, padding_value=0)
+            audio = nn.utils.rnn.pad_sequence(audio, batch_first=True, padding_value=0)
             return audio, output_lengths
 
         return audio
