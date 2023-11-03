@@ -98,7 +98,7 @@ def create_rename_keys(state_dict, config):
                             f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.attention.output.dense.weight"))
             rename_keys.append((f"backbone.0.layers.{layer}.blocks.{block}.attn.proj.bias",
                             f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.attention.output.dense.bias"))
-            # intermidiate
+            # intermediate
             rename_keys.append((f"backbone.0.layers.{layer}.blocks.{block}.mlp.fc1.weight",
                             f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.intermediate.dense.weight"))
             rename_keys.append((f"backbone.0.layers.{layer}.blocks.{block}.mlp.fc1.bias",
