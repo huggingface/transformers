@@ -39,7 +39,7 @@ class CedModelIntegrationTest(unittest.TestCase):
         model = CedForAudioClassification.from_pretrained("mispeech/ced-tiny").eval()
         audio = torch.arange(1, 16000).unsqueeze(0) / 1e4
         feature = feature_extractor(audio)["input_values"]
-        outputs = model(feature)
+        outputs = model(feature).logits
 
         # verify the logits
         expected_shape = torch.Size((1, 527))

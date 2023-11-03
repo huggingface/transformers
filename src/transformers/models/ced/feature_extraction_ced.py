@@ -102,6 +102,10 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
         )
         amplitude_to_db = audio_transforms.AmplitudeToDB(top_db=120)
 
-        x = mel_spectrogram(torch.from_numpy(x).float() if isinstance(x, np.ndarray) else x.float())
+        x = torch.from_numpy(x).float() if isinstance(x, np.ndarray) else x.float()
+        if x.dim() == 1:
+            x = x.unsqueeze(0)
+
+        x = mel_spectrogram(x)
         x = amplitude_to_db(x)
         return BatchFeature({"input_values": x})

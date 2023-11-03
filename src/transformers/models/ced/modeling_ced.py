@@ -441,7 +441,7 @@ class CedModel(CedPreTrainedModel):
         else:
             x = self.forward_features(x)
 
-        return x
+        return SequenceClassifierOutput(logits=x)
 
 
 @add_start_docstrings(
@@ -498,5 +498,7 @@ class CedForAudioClassification(CedPreTrainedModel):
         Runs a forward pass of the CED model for audio classification task.
         """
         x = self.encoder(input_values)
+        x = x.logits
         x = self.forward_head(x)
-        return x
+
+        return SequenceClassifierOutput(logits=x)
