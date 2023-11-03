@@ -622,7 +622,6 @@ class LlamaSDPAAttention(LlamaAttention):
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                padding_mask=padding_mask,
             )
 
         bsz, q_len, _ = hidden_states.size()

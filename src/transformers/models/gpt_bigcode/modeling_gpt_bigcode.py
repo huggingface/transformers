@@ -546,8 +546,6 @@ class GPTBigCodeSDPAAttention(GPTBigCodeAttention):
         else:
             query_length = query_shape[-1]
 
-        dropout_p = self.attn_pdrop if self.training else 0.0
-
         if attention_mask is not None:
             is_causal = False
         elif query_length == 1:
@@ -555,13 +553,13 @@ class GPTBigCodeSDPAAttention(GPTBigCodeAttention):
             is_causal = False
         else:
             is_causal = True
-        
+
         sdpa_result = torch.nn.functional.scaled_dot_product_attention(
             query,
             key,
             value,
             attn_mask=attention_mask,
-            dropout_p=dropout_p,
+            dropout_p=self.attn_pdrop if self.training else 0.0,
             is_causal=is_causal,
             scale=scale,
         )
