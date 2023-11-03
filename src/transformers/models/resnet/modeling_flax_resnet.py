@@ -215,7 +215,6 @@ class FlaxResNetBasicLayer(nn.Module):
         self.layer = FlaxResNetBasicLayerCollection(
             out_channels=self.out_channels,
             stride=self.stride,
-            activation=self.activation,
             dtype=self.dtype,
         )
         self.activation_func = ACT2FN[self.activation]
