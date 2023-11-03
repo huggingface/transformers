@@ -1192,6 +1192,8 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
 
+        Returns:
+
         Example:
 
         ```python
