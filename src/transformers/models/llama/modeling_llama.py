@@ -29,7 +29,11 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
+from ...modeling_attn_mask_utils import (
+    AttentionMaskConverter,
+    _prepare_4d_causal_attention_mask,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -629,6 +633,7 @@ class LlamaSDPAAttention(LlamaAttention):
     `LlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
+
     # Adapted from LlamaAttention.forward
     def forward(
         self,
@@ -998,7 +1003,11 @@ class LlamaModel(LlamaPreTrainedModel):
         elif self._use_sdpa:
             # Alternatively, 4d mask or None is passed to the layers
             attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length, output_attentions=output_attentions
+                attention_mask,
+                (batch_size, seq_length),
+                inputs_embeds,
+                past_key_values_length,
+                output_attentions=output_attentions,
             )
         else:
             # 4d mask is passed through the layers

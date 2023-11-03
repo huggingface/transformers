@@ -24,7 +24,11 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa, AttentionMaskConverter
+from ...modeling_attn_mask_utils import (
+    AttentionMaskConverter,
+    _prepare_4d_causal_attention_mask,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -493,7 +497,7 @@ class FalconAttention(nn.Module):
                 # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
                 if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
                     attention_scores = attention_scores.to(torch.float32)
-                
+
                 attention_logits = attention_scores + alibi.view(batch_size, self.num_heads, 1, -1)
                 attention_logits *= self.inv_norm_factor
                 attention_probs = F.softmax(attention_logits + attention_mask, dim=-1, dtype=hidden_states.dtype)
@@ -513,7 +517,7 @@ class FalconAttention(nn.Module):
                 context_layer = self._merge_heads(context_layer)
 
                 output_tensor = self.dense(context_layer)
-            
+
             if output_attentions:
                 return output_tensor, present, attention_probs
             else:
@@ -1036,7 +1040,11 @@ class FalconModel(FalconPreTrainedModel):
         elif hasattr(F, "scaled_dot_product_attention") and not output_attentions:
             if alibi is None:
                 attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                    attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length, output_attentions=output_attentions
+                    attention_mask,
+                    (batch_size, seq_length),
+                    inputs_embeds,
+                    past_key_values_length,
+                    output_attentions=output_attentions,
                 )
             elif head_mask is None:
                 alibi = alibi.reshape(batch_size, -1, *alibi.shape[1:])
@@ -1047,12 +1055,18 @@ class FalconModel(FalconPreTrainedModel):
                     attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
                 )
 
-                attention_mask = torch.masked_fill(alibi / math.sqrt(self.config.hidden_size // self.num_heads), attention_mask < -1, torch.finfo(alibi.dtype).min)
-                
+                attention_mask = torch.masked_fill(
+                    alibi / math.sqrt(self.config.hidden_size // self.num_heads),
+                    attention_mask < -1,
+                    torch.finfo(alibi.dtype).min,
+                )
+
                 # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
                 # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
                 if seq_length > 1:
-                    attention_mask = AttentionMaskConverter._unmask_unattended(attention_mask, attention_mask_2d, unmasked_value=0.0)
+                    attention_mask = AttentionMaskConverter._unmask_unattended(
+                        attention_mask, attention_mask_2d, unmasked_value=0.0
+                    )
             else:
                 # PyTorch SDPA does not support head_mask, we fall back on the eager implementation in this case.
                 attention_mask = _prepare_4d_causal_attention_mask(

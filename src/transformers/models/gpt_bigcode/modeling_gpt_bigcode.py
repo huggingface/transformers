@@ -21,8 +21,8 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -510,10 +510,13 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
+
 class GPTBigCodeSDPAAttention(GPTBigCodeAttention):
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         if head_mask is not None:
-            raise ValueError("PyTorch SDPA does not support head_mask. Please open an issue in Transformers repository.")
+            raise ValueError(
+                "PyTorch SDPA does not support head_mask. Please open an issue in Transformers repository."
+            )
 
         scale = None
         if not self.scale_attn_weights:
@@ -523,7 +526,7 @@ class GPTBigCodeSDPAAttention(GPTBigCodeAttention):
         # MHA models: (batch_size, num_heads, query_length, head_dim)
         query_shape = query.shape
         batch_size = query_shape[0]
-        kv_seq_len = key.shape[-2]
+        key.shape[-2]
 
         if self.multi_query:
             query_length = query_shape[1]
@@ -666,7 +669,7 @@ class GPTBigCodeBlock(nn.Module):
         self.inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        
+
         if getattr(config, "_flash_attn_2_enabled", False):
             self.attn = GPTBigCodeFlashAttention2(config, layer_idx=layer_idx)
         elif is_torch_sdpa_available():
@@ -678,7 +681,7 @@ class GPTBigCodeBlock(nn.Module):
         if config.add_cross_attention:
             if config.multi_query:
                 raise NotImplementedError("Cross-attention not implemented for MQA")
-            
+
             if getattr(config, "_flash_attn_2_enabled", False):
                 self.attn = GPTBigCodeFlashAttention2(config, is_cross_attention=True, layer_idx=layer_idx)
             elif is_torch_sdpa_available():
@@ -1017,17 +1020,21 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
                     self_attention_mask = self_attention_mask.transpose(1, 2)
 
                 if query_length > 1:
-                    self_attention_mask = AttentionMaskConverter._unmask_unattended(self_attention_mask, attention_mask, unmasked_value=True)
-            
+                    self_attention_mask = AttentionMaskConverter._unmask_unattended(
+                        self_attention_mask, attention_mask, unmasked_value=True
+                    )
+
                 if head_mask is None and not output_attentions:
                     # SDPA with a custom mask is much faster in fp16/fp32 dtype rather than bool. Cast here to floating point instead of at every layer.
                     dtype = self.wte.weight.dtype
                     self_attention_mask = torch.where(
                         self_attention_mask,
                         torch.full([], 0.0, dtype=dtype, device=self_attention_mask.device),
-                        torch.full([], torch.finfo(self.wte.weight.dtype).min, dtype=dtype, device=self_attention_mask.device),
+                        torch.full(
+                            [], torch.finfo(self.wte.weight.dtype).min, dtype=dtype, device=self_attention_mask.device
+                        ),
                     )
-            
+
             attention_mask = self_attention_mask
 
             # If a 2D or 3D attention mask is provided for the cross-attention

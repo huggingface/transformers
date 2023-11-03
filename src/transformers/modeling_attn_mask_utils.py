@@ -13,8 +13,6 @@
 # limitations under the License.
 from typing import List, Optional, Tuple, Union
 
-from .utils import is_torch_sdpa_available
-
 import torch
 
 
@@ -163,14 +161,16 @@ class AttentionMaskConverter:
         return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
     @staticmethod
-    def _unmask_unattended(expanded_mask: torch.Tensor, attention_mask: torch.Tensor, unmasked_value: Union[bool, float]):
+    def _unmask_unattended(
+        expanded_mask: torch.Tensor, attention_mask: torch.Tensor, unmasked_value: Union[bool, float]
+    ):
         """
         Attend to all tokens in masked rows from the expanded attention mask, for example the relevant first rows when
-        using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path. Details:
-        https://github.com/pytorch/pytorch/issues/110213
+        using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+        Details: https://github.com/pytorch/pytorch/issues/110213
 
-        expanded_mask is [bsz, num_masks, tgt_seq_len, src_seq_len] or [bsz, tgt_seq_len, src_seq_len].
-        attention_mask is [bsz, src_seq_len].
+        expanded_mask is [bsz, num_masks, tgt_seq_len, src_seq_len] or [bsz, tgt_seq_len, src_seq_len]. attention_mask
+        is [bsz, src_seq_len].
 
         The dimension num_masks is most often 1, but it can also be the number of heads in the case of alibi.
 
@@ -225,7 +225,7 @@ class AttentionMaskConverter:
         # Avoid unmasking tokens at relevant target positions (on the row axis), by rather unmasking possibly several times the first row that should always be unmasked as we filtered out the batch above.
         range_tensor[range_tensor >= indices] = 0
 
-        # TODO: we may drop support for 3D attention mask as the refactor from Patrick maybe dropped this case  
+        # TODO: we may drop support for 3D attention mask as the refactor from Patrick maybe dropped this case
         if expanded_mask.dim() == 4:
             num_masks = expanded_mask.shape[1]
             if num_masks == 1:
@@ -233,11 +233,15 @@ class AttentionMaskConverter:
                 mask_slice = (left_masked_rows[:, None], 0, range_tensor)
             else:
                 # Broadcast [left_masked_rows, 1, 1], [1, num_masks, 1], [left_masked_rows, 1, max_len]
-                mask_slice = (left_masked_rows[:, None, None], torch.arange(num_masks)[None, :, None], range_tensor[:, None, :])
+                mask_slice = (
+                    left_masked_rows[:, None, None],
+                    torch.arange(num_masks)[None, :, None],
+                    range_tensor[:, None, :],
+                )
         else:
             # Broadcast [left_masked_rows, 1], [left_masked_rows, max_len]
             mask_slice = (left_masked_rows[:, None], range_tensor)
-        
+
         expanded_mask[mask_slice] = unmasked_value
 
         return expanded_mask
@@ -282,6 +286,7 @@ def _prepare_4d_causal_attention_mask(
 
     return attention_mask
 
+
 # Adapted from _prepare_4d_causal_attention_mask
 def _prepare_4d_causal_attention_mask_for_sdpa(
     attention_mask: Optional[torch.Tensor],
@@ -294,15 +299,17 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
     """
     Prepares the correct attn_mask argument to be used by torch.nn.functional.scaled_dot_product_attention.
 
-    We ignore the attention mask in some cases for batch_size = 1 to allow to dispatch to the flash attention
-    kernel.
+    We ignore the attention mask in some cases for batch_size = 1 to allow to dispatch to the flash attention kernel.
 
-    Note that as of PyTorch 2.1, SDPA can not dispatch to flash attention in case an attention mask is passed. A possible solution is to use nested tensors.
+    Note that as of PyTorch 2.1, SDPA can not dispatch to flash attention in case an attention mask is passed. A
+    possible solution is to use nested tensors.
     """
     if output_attentions:
         # output_attentions=True can not be supported when using SDPA, and we fall back on
         # the manual implementation that requires a 4D causal mask in all cases.
-        return _prepare_4d_causal_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length, sliding_window)
+        return _prepare_4d_causal_attention_mask(
+            attention_mask, input_shape, inputs_embeds, past_key_values_length, sliding_window
+        )
     attn_mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=sliding_window)
 
     key_value_length = input_shape[-1] + past_key_values_length
@@ -319,7 +326,7 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
                 # Unfortunately, for query_length > 1 and key_value_length != query_length, we can not generally ignore the attention mask, as SDPA causal mask generation
                 # may be wrong. We will set is_causal=False in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
                 # Reference: https://github.com/pytorch/pytorch/issues/108108
-                is_causal = False
+                pass
 
     if attention_mask is not None:
         expanded_4d_mask = attn_mask_converter.to_4d(
@@ -329,7 +336,9 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
         # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
         # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
         if query_length > 1:
-            expanded_4d_mask = AttentionMaskConverter._unmask_unattended(expanded_4d_mask, attention_mask, unmasked_value=0.0)
+            expanded_4d_mask = AttentionMaskConverter._unmask_unattended(
+                expanded_4d_mask, attention_mask, unmasked_value=0.0
+            )
 
     return expanded_4d_mask
 
