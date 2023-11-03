@@ -626,11 +626,13 @@ def dtype_byte_size(dtype):
     return bit_size // 8
 
 
-def format_weight_name(name, _prefix=None):
+def strip_model_name_and_prefix(name, _prefix=None):
+    if _prefix is not None and name.startswith(_prefix):
+        name = name[len(_prefix) :]
+        if name.startswith("/"):
+            name = name[1:]
     if "model." not in name and len(name.split("/")) > 1:
         name = "/".join(name.split("/")[1:])
-    if _prefix is not None:
-        name = _prefix + "/" + name
     return name
 
 
@@ -986,7 +988,7 @@ def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismat
     # Read the safetensors file
     with safe_open(resolved_archive_file, framework="tf") as safetensors_archive:
         mismatched_layers = []
-        weight_names = [format_weight_name(w.name, _prefix=_prefix) for w in model.weights]
+        weight_names = [strip_model_name_and_prefix(w.name, _prefix=_prefix) for w in model.weights]
         loaded_weight_names = list(safetensors_archive.keys())
         # Find the missing layers from the high level list of layers
         missing_layers = list(set(weight_names) - set(loaded_weight_names))
@@ -994,7 +996,7 @@ def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismat
         unexpected_layers = list(set(loaded_weight_names) - set(weight_names))
 
         for weight in model.weights:
-            weight_name = format_weight_name(weight.name, _prefix=_prefix)
+            weight_name = strip_model_name_and_prefix(weight.name, _prefix=_prefix)
             if weight_name in loaded_weight_names:
                 weight_value = safetensors_archive.get_tensor(weight_name)
                 # Check if the shape of the current weight and the one from the H5 file are different
@@ -1003,7 +1005,7 @@ def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismat
                     # If the two shapes are not compatible we raise an issue
                     try:
                         weight_value = tf.reshape(weight_value, K.int_shape(weight))
-                    except ValueError as e:
+                    except (ValueError, tf.errors.InvalidArgumentError) as e:
                         if ignore_mismatched_sizes:
                             mismatched_layers.append((weight_name, weight_value.shape, K.int_shape(weight)))
                             continue
@@ -2367,7 +2369,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             create_pr (`bool`, *optional*, defaults to `False`):
                 Whether or not to create a PR with the uploaded files or directly commit.
             safe_serialization (`bool`, *optional*, defaults to `False`):
-                Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
+                Whether to save the model using `safetensors` or the traditional TensorFlow way (that uses `h5`).
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
                 the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
@@ -2457,7 +2459,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if index is None:
             if safe_serialization:
-                state_dict = {format_weight_name(w.name): w.value() for w in self.weights}
+                state_dict = {strip_model_name_and_prefix(w.name): w.value() for w in self.weights}
                 safe_save_file(state_dict, output_model_file, metadata={"format": "tf"})
             else:
                 self.save_weights(output_model_file)
@@ -2718,13 +2720,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 ):
                     # Load from a safetensors checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, SAFE_WEIGHTS_NAME)
-                elif is_safetensors_available() and os.path.isfile(
-                    os.path.join(pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME)
-                ):
-                    # Load from a sharded safetensors checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME)
-                    is_sharded = True
-                    raise NotImplementedError("Support for sharded checkpoints using safetensors is coming soon!")
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
                     # Load from a TF 2.0 checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
@@ -2732,6 +2727,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     # Load from a sharded TF 2.0 checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_INDEX_NAME)
                     is_sharded = True
+                elif is_safetensors_available() and os.path.isfile(
+                    os.path.join(pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME)
+                ):
+                    # Load from a sharded safetensors checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME)
+                    is_sharded = True
+                    raise NotImplementedError("Support for sharded checkpoints using safetensors is coming soon!")
                 # At this stage we don't have a weight file so we will raise an error.
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)) or os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)
@@ -2784,21 +2786,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     # Since we set _raise_exceptions_for_missing_entries=False, we don't get an exception but a None
                     # result when internet is up, the repo and revision exist, but the file does not.
                     if resolved_archive_file is None and filename == SAFE_WEIGHTS_NAME:
-                        # Maybe the checkpoint is sharded, we try to grab the index name in this case.
+                        # Did not find the safetensors file, let's fallback to TF.
+                        # No support for sharded safetensors yet, so we'll raise an error if that's all we find.
+                        filename = TF2_WEIGHTS_NAME
                         resolved_archive_file = cached_file(
-                            pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME, **cached_file_kwargs
+                            pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **cached_file_kwargs
                         )
-                        if resolved_archive_file is not None:
-                            is_sharded = True
-                            raise NotImplementedError(
-                                "Support for sharded checkpoints using safetensors is coming soon!"
-                            )
-                        else:
-                            # This repo has no safetensors file of any kind, we switch to TensorFlow.
-                            filename = TF2_WEIGHTS_NAME
-                            resolved_archive_file = cached_file(
-                                pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **cached_file_kwargs
-                            )
                     if resolved_archive_file is None and filename == TF2_WEIGHTS_NAME:
                         # Maybe the checkpoint is sharded, we try to grab the index name in this case.
                         resolved_archive_file = cached_file(
@@ -2821,7 +2814,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                             "proxies": proxies,
                             "token": token,
                         }
-                        if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
+                        if has_file(pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME, **has_file_kwargs):
+                            is_sharded = True
+                            raise NotImplementedError(
+                                "Support for sharded checkpoints using safetensors is coming soon!"
+                            )
+                        elif has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {TF2_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to"
@@ -2928,6 +2926,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     output_loading_info=output_loading_info,
                     _prefix=load_weight_prefix,
                     ignore_mismatched_sizes=ignore_mismatched_sizes,
+                    tf_to_pt_weight_rename=tf_to_pt_weight_rename,
                 )
 
         # 'by_name' allow us to do transfer learning by skipping/adding layers

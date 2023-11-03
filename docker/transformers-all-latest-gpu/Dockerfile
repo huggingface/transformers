@@ -55,6 +55,9 @@ RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://hu
 # Add einops for additional model testing
 RUN python3 -m pip install --no-cache-dir einops
 
+# Add autoawq for quantization testing
+RUN python3 -m pip install --no-cache-dir autoawq
+
 # For bettertransformer + gptq 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 

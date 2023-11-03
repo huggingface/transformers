@@ -136,9 +136,9 @@ def get_resize_output_image_size(
     image size is computed by keeping the aspect ratio of the input image size.
 
     Args:
-        image_size (`Tuple[int, int]`):
-            The input image size.
-        size (`int`):
+        input_image (`np.ndarray`):
+            The image to resize.
+        size (`int` or `Tuple[int, int]` or `List[int]`):
             The desired output size.
         max_size (`int`, *optional*):
             The maximum allowed output size.

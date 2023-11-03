@@ -1101,12 +1101,15 @@ class SeamlessM4TAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
+        is_causal: bool = False,
+        config: Optional[SeamlessM4TConfig] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.config = config
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -1115,6 +1118,7 @@ class SeamlessM4TAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
+        self.is_causal = is_causal
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -3047,8 +3051,9 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
 
+        self.shared = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
         self.speech_encoder = SeamlessM4TSpeechEncoder(config)
-        self.text_decoder = SeamlessM4TDecoder(config)
+        self.text_decoder = SeamlessM4TDecoder(config, self.shared)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -3706,8 +3711,9 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        self.shared = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
         self.speech_encoder = SeamlessM4TSpeechEncoder(config)
-        self.text_decoder = SeamlessM4TDecoder(config)
+        self.text_decoder = SeamlessM4TDecoder(config, self.shared)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -4124,6 +4130,11 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         self.text_encoder.embed_tokens = value
         self.text_decoder.embed_tokens = value
         self.shared = value
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.text_encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
 
     @add_start_docstrings_to_model_forward(M4T_MODEL_INPUTS_DOCSTRING)
     def forward(
