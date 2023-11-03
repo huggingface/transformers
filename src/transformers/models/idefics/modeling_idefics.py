@@ -904,6 +904,11 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
                 " conditioned on."
             )
 
+        if cross_attention_gate is None:
+            raise ValueError(
+                "`cross_attention_gate` is required for Idefics cross attention module to zero-out the cross-attention hidden_states attending to no images."
+            )
+
         if past_key_value is not None:
             raise NotImplementedError("Past key value states are not implemented for Idefics cross attention module.")
 
