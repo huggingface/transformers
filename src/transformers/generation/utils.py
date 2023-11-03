@@ -4439,13 +4439,21 @@ class GenerationMixin:
             # `.generate()` call if we decide to add `past_key_values` as a possible output of generate, as we
             # need access to the assistant cache to secure strong speedups.
             candidate_input_ids = input_ids
+            assistant_model_outputs = None
             for _ in range(int(num_assistant_tokens)):
                 # 1.1. use the assistant model to obtain the next candidate logits
                 if "assistant_past_key_values" in model_kwargs:
                     prev_seq_len = model_kwargs["assistant_past_key_values"][0][assistant_kv_indexing].shape[-2]
-                    # `new_token_len` can be 1 or 2 (next token in assistant + last token picked by the larger model)
-                    new_token_len = candidate_input_ids.shape[1] - prev_seq_len
-                    assist_inputs = candidate_input_ids[:, -new_token_len:]
+
+                    # TODO for speculative decoding: investigate if this separation is needed
+                    if do_sample:
+                        # For speculative decoding just use input_ids as the input to the assistant model
+                        assist_inputs = candidate_input_ids
+                    else:
+                        # `new_token_len` can be 1 or 2 (next token in assistant + last token picked by the larger model)
+                        new_token_len = candidate_input_ids.shape[1] - prev_seq_len
+                        assist_inputs = candidate_input_ids[:, -new_token_len:]
+
                     # TODO (joao): make it compatible with models that use unconventional fwd pass logic, like blip2
                     if assistant_model.config.is_encoder_decoder:
                         assistant_model_outputs = assistant_model(
@@ -4468,6 +4476,7 @@ class GenerationMixin:
                         assistant_model_outputs = assistant_model(candidate_input_ids)
 
                 # 1.2. greedily select the next candidate token
+                # TODO for speculative decoding: implement sampling here instead of greedy selection
                 model_kwargs["assistant_past_key_values"] = assistant_model_outputs.past_key_values
                 if len(logits_processor) > 0:
                     assistant_model_outputs.logits[:, -1, :] = logits_processor(
@@ -4508,7 +4517,12 @@ class GenerationMixin:
             )
 
             # 2.3. Process the new logits
-            new_logits = outputs.logits[:, -candidate_length - 1 :]  # excludes the input prompt if present
+            # TODO for speculative decoding: investigate if input prompt is really needed
+            if do_sample:
+                new_logits = outputs.logits
+            else:
+                new_logits = outputs.logits[:, -candidate_length - 1 :]  # excludes the input prompt if present
+
             if len(logits_processor) > 0:
                 for i in range(candidate_length + 1):
                     new_logits[:, i, :] = logits_processor(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
@@ -4516,34 +4530,96 @@ class GenerationMixin:
                 for i in range(candidate_length + 1):
                     new_logits[:, i, :] = logits_warper(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
 
+            # TODO for speculative decoding: investigate if this is needed
+            # Set masked tokens to 0?
+            new_logits[new_logits == float('-inf')] = 0
+
             # 3. Obtain the next tokens from the original model logits.
             if do_sample:
-                probs = new_logits.softmax(dim=-1)
-                selected_tokens = torch.multinomial(probs[0, :, :], num_samples=1).squeeze(1)[None, :]
+                # Previous implementation below
+                #probs = new_logits.softmax(dim=-1)
+                #selected_tokens = torch.multinomial(probs[0, :, :], num_samples=1).squeeze(1)[None, :]
+
+                # Speculative sampling: comparison of probabilities
+                all_accepted = True
+                n = cur_len - 1
+                for i in range(int(num_assistant_tokens)):
+                    # TODO for speculative decoding: remove this seed
+                    torch.manual_seed(1)
+                    r = torch.rand(1, device=new_logits.device)
+                    j = candidate_input_ids[:, cur_len + i]
+
+                    # probability outputs of target model
+                    q = new_logits[:, cur_len + i -1, j]
+                    # probability outputs of draft model
+                    p = assistant_model_outputs.logits[:, cur_len + i - 1, j]
+
+                    if r < torch.min(torch.tensor([1], device=new_logits.device), q / p):
+                        # accept, and update n
+                        n += 1
+                    else:
+                        # reject
+                        # TODO for speculative decoding: implement actual sampling, rather than greedy selection
+
+                        # ### max_fn
+                        # print(f"new_logits[:, n, :]: {new_logits[:, n, :]}")
+                        # print(f"assistant_model_outputs.logits[:, n, :]: {assistant_model_outputs.logits[:, n, :]}")
+                        # tmp = new_logits[:, n, :] - assistant_model_outputs.logits[:, n, :]
+                        # print(f"tmp {tmp}")
+                        # tmp_max = torch.where(tmp > 0, tmp, torch.zeros_like(tmp))
+                        # print(f"tmp_max {tmp_max}")
+                        # tmp_max_sum = torch.sum(tmp_max, dim=1, keepdim=True)
+                        # print(f"tmp_max_sum {tmp_max_sum}")
+                        # tmp_result = tmp_max / tmp_max_sum
+                        # print(f"tmp_result {tmp_result}")
+                        #
+                        # ### sample
+                        # t = torch.multinomial(tmp_result, num_samples=1)
+
+                        else_new_token = assistant_model_outputs.logits[:, -1, :].argmax(dim=-1)
+
+                        all_accepted = False
+                        break
+
+                # Keep only the tokens that were accepted
+                candidate_input_ids = candidate_input_ids[:, :n+1]
+                n_matches = candidate_input_ids.size(1) - cur_len - 1
             else:
                 selected_tokens = new_logits.argmax(dim=-1)
 
-            # 4. Compare the argmax from the original model logits with the assistant forecasted tokens. We can keep
-            # the assistant forecasted tokens until the first mismatch, or until the max length is reached.
-            candidate_new_tokens = candidate_input_ids[:, -candidate_length:]
-            n_matches = ((~(candidate_new_tokens == selected_tokens[:, :-1])).cumsum(dim=-1) < 1).sum()
+                # 4. Compare the argmax from the original model logits with the assistant forecasted tokens. We can keep
+                # the assistant forecasted tokens until the first mismatch, or until the max length is reached.
+                candidate_new_tokens = candidate_input_ids[:, -candidate_length:]
+                n_matches = ((~(candidate_new_tokens == selected_tokens[:, :-1])).cumsum(dim=-1) < 1).sum()
+
 
             # 5. Update variables according to the number of matching assistant tokens. Remember: the token generated
             # by the model after the last candidate match is also valid, as it is generated from a correct sequence.
             # Because of this last token, assisted generation search reduces to a normal greedy search/sample if there
             # is no match.
 
-            # 5.1. Ensure we don't generate beyond max_len or an EOS token
+            # # 5.1. Ensure we don't generate beyond max_len or an EOS token
             if last_assistant_token_is_eos and n_matches == candidate_length:
                 n_matches -= 1
             n_matches = min(n_matches, max_len - cur_len - 1)
 
             # 5.2. Get the valid continuation, after the matching tokens
-            valid_tokens = selected_tokens[:, : n_matches + 1]
+            if do_sample:
+                valid_tokens = candidate_input_ids[:, : n_matches + 1]
+            else:
+                valid_tokens = selected_tokens[:, : n_matches + 1]
+
             input_ids = torch.cat((input_ids, valid_tokens), dim=-1)
             if streamer is not None:
                 streamer.put(valid_tokens.cpu())
             new_cur_len = input_ids.shape[-1]
+
+            if do_sample:
+                # TODO for sampling: implement if all_accepted -> sample else_new_token before adding
+                if all_accepted:
+                    pass
+
+                input_ids = torch.cat((input_ids, else_new_token.unsqueeze(0)), dim=-1)
 
             # 5.3. Discard past key values relative to unused assistant tokens
             new_cache_size = new_cur_len - 1
