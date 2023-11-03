@@ -36,9 +36,9 @@ rendered properly in your Markdown viewer.
 
 ## AutoTokenizer
 
-几乎所有的NLP任务都以`tokenizer`开始。`tokenizer`将你的输入转换为模型可以处理的格式。
+几乎所有的NLP任务都以`tokenizer`开始。`tokenizer`将您的输入转换为模型可以处理的格式。
 
-使用`AutoTokenizer.from_pretrained`加载`tokenizer`：
+使用[`AutoTokenizer.from_pretrained`]加载`tokenizer`：
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -71,7 +71,7 @@ rendered properly in your Markdown viewer.
 
 对于音频任务,`feature extractor`将音频信号处理成正确的输入格式。
 
-使用`AutoFeatureExtractor.from_pretrained`加载`feature extractor`：
+使用[`AutoFeatureExtractor.from_pretrained`]加载`feature extractor`：
 
 ```py
 >>> from transformers import AutoFeatureExtractor
@@ -85,7 +85,7 @@ rendered properly in your Markdown viewer.
 
 多模态任务需要一种`processor`，将两种类型的预处理工具结合起来。例如，[LayoutLMV2](model_doc/layoutlmv2)模型需要一个`image processo`来处理图像和一个`tokenizer`来处理文本；`processor`将两者结合起来。
 
-使用`AutoProcessor.from_pretrained`加载`processor`：
+使用[`AutoProcessor.from_pretrained`]加载`processor`：
 
 
 ```py
@@ -99,7 +99,7 @@ rendered properly in your Markdown viewer.
 <frameworkcontent>
 <pt>
 
-最后，`AutoModelFor`类让你可以加载给定任务的预训练模型（参见[这里](model_doc/auto)获取可用任务的完整列表）。例如，使用`AutoModelForSequenceClassification.from_pretrained`加载用于序列分类的模型：
+最后，`AutoModelFor`类让你可以加载给定任务的预训练模型（参见[这里](model_doc/auto)获取可用任务的完整列表）。例如，使用[`AutoModelForSequenceClassification.from_pretrained`]加载用于序列分类的模型：
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -128,7 +128,7 @@ TensorFlow和Flax的checkpoints不受影响，并且可以在PyTorch架构中使
 
 </pt>
 <tf>
-最后，`TFAutoModelFor`类允许您加载给定任务的预训练模型（请参阅[这里](model_doc/auto)获取可用任务的完整列表）。例如，使用`TFAutoModelForSequenceClassification.from_pretrained`加载用于序列分类的模型：
+最后，`TFAutoModelFor`类允许您加载给定任务的预训练模型（请参阅[这里](model_doc/auto)获取可用任务的完整列表）。例如，使用[`TFAutoModelForSequenceClassification.from_pretrained`]加载用于序列分类的模型：
 
 ```py
 >>> from transformers import TFAutoModelForSequenceClassification

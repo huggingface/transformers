@@ -9,6 +9,8 @@
 - sections:
   - local: pipeline_tutorial
     title: 使用pipelines进行推理
+  - local: autoclass_tutorial
+    title: 使用AutoClass编写可移植的代码
   - local: preprocessing
     title: 预处理数据
   - local: training
