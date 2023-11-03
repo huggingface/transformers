@@ -31,9 +31,9 @@ from typing import (
     NewType,
     Optional,
     Tuple,
+    TypeVar,
     Union,
     get_type_hints,
-    TypeVar,
 )
 
 import yaml
