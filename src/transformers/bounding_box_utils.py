@@ -46,7 +46,6 @@ def _xyxy_to_xywh(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
     xywh[..., 2:].sub_(xywh[..., :2])
     return xywh
 
-
 # adapted from https://github.com/pytorch/vision/blob/main/torchvision/transforms/v2/functional/_meta.py
 def _xcycwh_to_xyxy(xcycwh: torch.Tensor, inplace: bool) -> torch.Tensor:
     xcycwh = xcycwh if inplace else xcycwh.clone()
@@ -71,6 +70,24 @@ def _xyxy_to_xcycwh(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
     xyxy[..., :2].mul_(2).add_(xyxy[..., 2:]).div_(2, rounding_mode=rounding_mode)
     return xyxy
 
+def _relxywh_to_xyxy(relxywh: torch.Tensor, inplace: bool) -> torch.Tensor:
+    return relxywh  # TODO (Rafael): missing implementation
+
+def _relxyxy_to_xyxy(relxyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
+    return relxyxy  # TODO (Rafael): missing implementation
+
+def _relxcycwh_to_xyxy(relxcycwh: torch.Tensor, inplace: bool) -> torch.Tensor:
+    return relxcycwh  # TODO (Rafael): missing implementation
+
+def _xyxy_to_relxywh(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
+    return xyxy  # TODO (Rafael): missing implementation
+
+def _xyxy_to_relxyxy(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
+    return xyxy  # TODO (Rafael): missing implementation
+
+def _xyxy_to_relxcycwh(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
+    return xyxy  # TODO (Rafael): missing implementation
+
 def transform_box_format(bbox: Union[torch.Tensor, np.ndarray], dest_format: BoundingBoxFormat, orig_format: Optional[BoundingBoxFormat] = None, img_shape: Optional[Tuple[int, int]] = None, inplace: bool = False):
     if orig_format is None:
         orig_format = _infer_box_format(bbox)
@@ -85,17 +102,35 @@ def transform_box_format(bbox: Union[torch.Tensor, np.ndarray], dest_format: Bou
     if orig_format in _relative_formats and img_shape is None:
         raise ValueError(f"Image shape is required if the input format format is {dest_format}")
 
-    
+    bbox = bbox.type(torch.float)
     # convert to xyxy
     if orig_format == BoundingBoxFormat.XYWH:
         bbox = _xywh_to_xyxy(bbox, inplace)
     elif orig_format == BoundingBoxFormat.XCYCWH:
         bbox = _xcycwh_to_xyxy(bbox, inplace)
+    elif orig_format == BoundingBoxFormat.RELATIVE_XYWH:
+        # bbox = _relxywh_to_xyxy(bbox, inplace)
+        pass
+    elif orig_format == BoundingBoxFormat.RELATIVE_XYXY:
+        # bbox = _relxyxy_to_xyxy(bbox, inplace)
+        pass
+    elif orig_format == BoundingBoxFormat.RELATIVE_XCYCWH:
+        # bbox = _relxcycwh_to_xyxy(bbox, inplace)
+        pass
     # boxes are now in xyxy format
     if dest_format == BoundingBoxFormat.XYWH:
         bbox = _xyxy_to_xywh(bbox, inplace)
     elif dest_format == BoundingBoxFormat.XCYCWH:
         bbox = _xyxy_to_xcycwh(bbox, inplace)
+    elif dest_format == BoundingBoxFormat.RELATIVE_XYWH:
+        # bbox = _xyxy_to_relxywh(bbox, inplace)
+        pass
+    elif dest_format == BoundingBoxFormat.RELATIVE_XYXY:
+        # bbox = _xyxy_to_relxyxy(bbox, inplace)
+        pass
+    elif dest_format == BoundingBoxFormat.RELATIVE_XCYCWH:
+        # bbox = _xyxy_to_relxcycwh(bbox, inplace)
+        pass
 
     return bbox
 
@@ -111,29 +146,3 @@ def resize():
 
 def crop():
     pass
-
-boxes_xywh = torch.Tensor([[10, 20, 50, 60],
-            [25, 35, 40, 45],
-            [5, 5, 100, 100],
-            [15, 30, 55, 75],
-            [60, 70, 30, 20],
-            [0, 0, 50, 50],
-            [45, 10, 90, 80],
-            [100, 200, 120, 130],
-            [80, 90, 40, 60],
-            [110, 120, 70, 90]])
-
-# assert torch.equal(boxes_xywh, transform_box_format(boxes_xywh, dest_format = BoundingBoxFormat.XYWH, orig_format = BoundingBoxFormat.XYWH))
-
-# res = transform_box_format(boxes_xywh, dest_format = BoundingBoxFormat.XYXY, orig_format = BoundingBoxFormat.XYWH)
-# xywh = torch.Tensor([[10, 20, 60, 80],
-#         [25, 35, 65, 80],
-#         [5, 5, 105, 105],
-#         [15, 30, 70, 105],
-#         [60, 70, 90, 90],
-#         [0, 0, 50, 50],
-#         [45, 10, 135, 90],
-#         [100, 200, 220, 330],
-#         [80, 90, 120, 150],
-#         [110, 120, 180, 210]])
-# assert torch.equal(res, xywh)
