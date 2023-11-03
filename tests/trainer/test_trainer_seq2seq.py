@@ -148,7 +148,7 @@ class Seq2seqTrainerTester(TestCasePlus):
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
         data_collator = DataCollatorForSeq2Seq(tokenizer, model=model, return_tensors="pt", padding="longest")
         gen_config = GenerationConfig.from_pretrained(
-            "t5-small", max_length=None, min_lenght=None, max_new_tokens=256, min_new_tokens=1, num_beams=5
+            "t5-small", max_length=None, min_length=None, max_new_tokens=256, min_new_tokens=1, num_beams=5
         )
 
         training_args = Seq2SeqTrainingArguments(".", predict_with_generate=True)
