@@ -4488,11 +4488,6 @@ class GenerationMixin:
         else:
             num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
 
-        # check if assistant model accepts encoder_outputs
-        assistant_accepts_encoder_outputs = "encoder_outputs" in set(
-            inspect.signature(assistant_model.forward).parameters.keys()
-        )
-
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
@@ -4568,7 +4563,7 @@ class GenerationMixin:
                     past_key_values=model_kwargs.get("assistant_past_key_values", None),
                 )
                 if assistant_inputs.get("past_key_values", None) is not None:
-                    if self.config.is_encoder_decoder:
+                    if assistant_model.config.is_encoder_decoder:
                         input_ids_len = assistant_inputs["decoder_input_ids"].shape[-1]
                     else:
                         input_ids_len = assistant_inputs["input_ids"].shape[-1]
@@ -4587,7 +4582,7 @@ class GenerationMixin:
 
                 new_token = assistant_model_outputs.logits[:, -1, :].argmax(dim=-1)
                 candidate_input_ids = torch.cat((candidate_input_ids, new_token[:, None]), dim=-1)
-                if self.config.is_encoder_decoder and assistant_decoder_attention_mask is not None:
+                if assistant_model.config.is_encoder_decoder and assistant_decoder_attention_mask is not None:
                     assistant_decoder_attention_mask = torch.cat(
                         (
                             assistant_decoder_attention_mask,
@@ -4595,7 +4590,7 @@ class GenerationMixin:
                         ),
                         dim=-1,
                     )
-                elif not self.config.is_encoder_decoder and assistant_attention_mask is not None:
+                elif not assistant_model.config.is_encoder_decoder and assistant_attention_mask is not None:
                     assistant_attention_mask = torch.cat(
                         (assistant_attention_mask, torch.ones([1, 1], dtype=assistant_attention_mask.dtype)), dim=-1
                     )
