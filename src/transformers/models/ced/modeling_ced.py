@@ -493,12 +493,18 @@ class CedForAudioClassification(CedPreTrainedModel):
         expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
         expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
-    def forward(self, input_values: torch.Tensor):
+    def forward(self, input_values: torch.Tensor, labels: Optional[torch.Tensor] = None):
         r"""
         Runs a forward pass of the CED model for audio classification task.
         """
-        x = self.encoder(input_values)
-        x = x.logits
-        x = self.forward_head(x)
+        x = self.encoder(input_values).logits
+        logits = self.forward_head(x)
 
-        return SequenceClassifierOutput(logits=x)
+        if labels is not None:
+            loss_fct = nn.BCEWithLogitsLoss()
+            labels = nn.functional.one_hot(labels, num_classes=self.config.outputdim).float()
+            loss = loss_fct(logits, labels)
+        else:
+            loss = None
+
+        return SequenceClassifierOutput(logits=logits, loss=loss)

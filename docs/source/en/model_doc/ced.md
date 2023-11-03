@@ -57,14 +57,12 @@ The original code can be found [here](https://github.com/RicherMans/CED).
 >>> predicted_class_ids = torch.argmax(logits, dim=-1).item()
 >>> predicted_label = model.config.id2label[predicted_class_ids]
 >>> predicted_label
-{expected_output}
+"Speech"
 
->>> # compute loss - target_label is e.g. "down"
+>>> # compute loss - target_label is e.g. "Speech"
 >>> target_label = model.config.id2label[0]
 >>> inputs["labels"] = torch.tensor([model.config.label2id[target_label]])
 >>> loss = model(**inputs).loss
->>> round(loss.item(), 2)
-{expected_loss}
 ```
 
 ## CedConfig
