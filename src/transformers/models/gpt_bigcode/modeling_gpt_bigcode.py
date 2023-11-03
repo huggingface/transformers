@@ -1011,29 +1011,30 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             # MHA models: (batch_size, n_heads, query_length, key_length)
             self_attention_mask = self_attention_mask.unsqueeze(2 if self.multi_query else 1)
 
-            # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
-            # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
-            if self._use_sdpa:
+            if self._use_sdpa and head_mask is None and not output_attentions:
+                # output_attentions=True can not be supported when using SDPA, and we fall back on
+                # the manual implementation that requires a 4D causal mask in all cases.
                 if self.multi_query:
                     # gpt_bigcode using MQA has the bad taste to use a causal mask with shape
                     # [batch_size, target_length, 1, source_length], not compatible with SDPA, hence this transpose.
                     self_attention_mask = self_attention_mask.transpose(1, 2)
 
                 if query_length > 1:
+                    # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
+                    # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
                     self_attention_mask = AttentionMaskConverter._unmask_unattended(
                         self_attention_mask, attention_mask, unmasked_value=True
                     )
 
-                if head_mask is None and not output_attentions:
-                    # SDPA with a custom mask is much faster in fp16/fp32 dtype rather than bool. Cast here to floating point instead of at every layer.
-                    dtype = self.wte.weight.dtype
-                    self_attention_mask = torch.where(
-                        self_attention_mask,
-                        torch.full([], 0.0, dtype=dtype, device=self_attention_mask.device),
-                        torch.full(
-                            [], torch.finfo(self.wte.weight.dtype).min, dtype=dtype, device=self_attention_mask.device
-                        ),
-                    )
+                # SDPA with a custom mask is much faster in fp16/fp32 dtype rather than bool. Cast here to floating point instead of at every layer.
+                dtype = self.wte.weight.dtype
+                self_attention_mask = torch.where(
+                    self_attention_mask,
+                    torch.full([], 0.0, dtype=dtype, device=self_attention_mask.device),
+                    torch.full(
+                        [], torch.finfo(self.wte.weight.dtype).min, dtype=dtype, device=self_attention_mask.device
+                    ),
+                )
 
             attention_mask = self_attention_mask
 

@@ -16,8 +16,9 @@
 import copy
 import math
 import warnings
-from typing import List, Optional, Tuple, Union
 from enum import Enum
+from typing import List, Optional, Tuple, Union
+
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -25,7 +26,12 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask, _prepare_4d_attention_mask_for_sdpa, _prepare_4d_causal_attention_mask_for_sdpa
+from ...modeling_attn_mask_utils import (
+    _prepare_4d_attention_mask,
+    _prepare_4d_attention_mask_for_sdpa,
+    _prepare_4d_causal_attention_mask,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -42,9 +48,9 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_torch_sdpa_available,
     logging,
     replace_return_docstrings,
-    is_torch_sdpa_available,
 )
 from .configuration_bart import BartConfig
 
@@ -489,6 +495,7 @@ class BartFlashAttention2(BartAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
+
 class BartSDPAAttention(BartAttention):
     def forward(
         self,
@@ -502,7 +509,15 @@ class BartSDPAAttention(BartAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
         if output_attentions or layer_head_mask is not None:
-            return super().forward(hidden_states, key_value_states=key_value_states, past_key_value=past_key_value, attention_mask=attention_mask, layer_head_mask=layer_head_mask, output_attentions=output_attentions, **kwargs)
+            return super().forward(
+                hidden_states,
+                key_value_states=key_value_states,
+                past_key_value=past_key_value,
+                attention_mask=attention_mask,
+                layer_head_mask=layer_head_mask,
+                output_attentions=output_attentions,
+                **kwargs,
+            )
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -516,7 +531,11 @@ class BartSDPAAttention(BartAttention):
         # `past_key_value[0].shape[2] == key_value_states.shape[1]`
         # is checking that the `sequence_length` of the `past_key_value` is the same as
         # the provided `key_value_states` to support prefix tuning
-        if is_cross_attention and past_key_value is not None and past_key_value[0].shape[2] == key_value_states.shape[1]:
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
@@ -574,16 +593,19 @@ class BartSDPAAttention(BartAttention):
 
         return attn_output, None, past_key_value
 
+
 BART_ATTENTION_CLASSES = {
     "eager": BartAttention,
     "sdpa": BartSDPAAttention,
     "flash_attention_2": BartFlashAttention2,
 }
 
+
 class BartAttentionType(str, Enum):
     eager = "eager"
     sdpa = "sdpa"
     flash_attention_2 = "flash_attention_2"
+
 
 class BartEncoderLayer(nn.Module):
     def __init__(self, config: BartConfig):
@@ -596,8 +618,6 @@ class BartEncoderLayer(nn.Module):
             self._attn_type = BartAttentionType.sdpa
         else:
             self._attn_type = BartAttentionType.eager
-
-        print("attn_type", self._attn_type)
 
         self.self_attn = BART_ATTENTION_CLASSES[self._attn_type](
             embed_dim=self.embed_dim,
@@ -675,7 +695,7 @@ class BartDecoderLayer(nn.Module):
             self._attn_type = BartAttentionType.sdpa
         else:
             self._attn_type = BartAttentionType.eager
-        
+
         self.self_attn = BART_ATTENTION_CLASSES[self._attn_type](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
@@ -1139,9 +1159,11 @@ class BartEncoder(BartPreTrainedModel):
         if attention_mask is not None:
             if self._attn_type == BartAttentionType.flash_attention_2:
                 attention_mask = attention_mask if 0 in attention_mask else None
-            elif self._attn_type == BartAttentionType.sdpa:
+            elif self._attn_type == BartAttentionType.sdpa and head_mask is None and not output_attentions:
+                # output_attentions=True & head_mask can not be supported when using SDPA, and we fall back on
+                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype, output_attentions=output_attentions)
+                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
             else:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
@@ -1350,13 +1372,14 @@ class BartDecoder(BartPreTrainedModel):
         if self._attn_type == BartAttentionType.flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self._attn_type == BartAttentionType.sdpa:
+        elif self._attn_type == BartAttentionType.sdpa and not output_attentions and cross_attn_head_mask is None:
+            # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
+            # the manual implementation that requires a 4D causal mask in all cases.
             attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
                 attention_mask,
                 input_shape,
                 inputs_embeds,
                 past_key_values_length,
-                output_attentions=output_attentions,
             )
         else:
             # 4d mask is passed through the layers
@@ -1368,10 +1391,14 @@ class BartDecoder(BartPreTrainedModel):
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             if self._attn_type == BartAttentionType.flash_attention_2:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
-            elif self._attn_type == BartAttentionType.sdpa:
+            elif self._attn_type == BartAttentionType.sdpa and cross_attn_head_mask is None and not output_attentions:
+                # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
+                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1], output_attentions=output_attentions
+                    encoder_attention_mask,
+                    inputs_embeds.dtype,
+                    tgt_len=input_shape[-1],
                 )
             else:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
