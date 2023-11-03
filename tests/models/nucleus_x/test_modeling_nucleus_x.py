@@ -362,8 +362,8 @@ class NucleusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         logit_success = torch.allclose(parallel_logits, rnn_logits, atol=1e-5)
         cache_success = False
         for pkv1, pkv2 in zip(parallel_cache, rnn_cache):
-            kv_success = torch.allclose(pkv1["prev_key_value"], pkv2["prev_key_value"], atol=1e-5)
-            scale_success = torch.allclose(pkv1["scale"], pkv2["scale"], atol=1e-9)
+            kv_success = torch.allclose(pkv1[0], pkv2[0], atol=1e-5)
+            scale_success = torch.allclose(pkv1[1], pkv2[1], atol=1e-9)
             cache_success = kv_success and scale_success
             if not cache_success:
                 break

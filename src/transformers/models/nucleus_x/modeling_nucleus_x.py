@@ -31,7 +31,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -314,16 +314,16 @@ class NucleusXMultiScaleRetention(nn.Module):
         intra_decay = intra_decay[:, :, :, None, None]  # [b, h, t, 1, 1]
         current_kv = (current_kv * intra_decay).sum(2)  # [b, h, v_dim, qk_dim]
 
-        cache = {"prev_key_value": current_kv, "scale": scale, "seqlen": torch.tensor(q.size(2), dtype=torch.long)}
+        cache = (current_kv, scale, torch.tensor(q.size(2), dtype=torch.long))
         return output, cache, retention
 
     def recurrent_retention(self, q, k, v, decay, past_key_value=None, retention_mask=None):
         """Args:
         - q, k, v: [bsz * num_head * 1 * qkv_dim]
-        - past_key_value: Dict[str, torch.Tensor]
-            - "prev_key_value": [bsz * num_head * v_dim * qk_dim]
-            - "scale": [(1 or bsz) * num_head * 1 * 1]
-            - "seqlen": int, sequence length of processed tokens, including padding tokens
+        - past_key_value: Tuple[torch.Tensor] containing:
+            - prev_key_value: [bsz * num_head * v_dim * qk_dim]
+            - scale: [(1 or bsz) * num_head * 1 * 1]
+            - seqlen: torch.long, sequence length of processed tokens, including padding tokens
         - decay: [(1 or bsz) * num_head * 1 * 1]
         - retention_mask: [bsz * 1]
         """
@@ -334,10 +334,8 @@ class NucleusXMultiScaleRetention(nn.Module):
         # (b, h, v_dim, qk_dim)
         current_kv = k * v.transpose(-1, -2) * retention_mask
 
-        if past_key_value is not None and "prev_key_value" in past_key_value:
-            prev_kv = past_key_value["prev_key_value"]
-            prev_scale = past_key_value["scale"]
-            prev_seqlen = past_key_value["seqlen"]
+        if past_key_value is not None:
+            prev_kv, prev_scale, prev_seqlen = past_key_value
             scale = torch.where(retention_mask == 0, prev_scale, prev_scale * decay + 1)
             # connect prev_kv and current_kv
             # how much to decay prev_kv
@@ -359,20 +357,16 @@ class NucleusXMultiScaleRetention(nn.Module):
 
         output = torch.sum(q * current_kv, dim=3).unsqueeze(1)  # (b, 1, h, d_v)
 
-        cache = {
-            "prev_key_value": current_kv,
-            "scale": scale,
-            "seqlen": torch.tensor(prev_seqlen + 1, dtype=torch.long),
-        }
+        cache = (current_kv, scale, torch.tensor(prev_seqlen + 1, dtype=torch.long))
         return output, cache
 
     def chunkwise_retention(self, q, k, v, decay_mask):
         """Args:
         - q, k, v: [bsz * num_head * seqlen * qkv_dim]
-        - past_key_value: Dict[str, torch.Tensor]
-            - "prev_key_value": [bsz * num_head * v_dim * qk_dim]
-            - "scale": [(1 or bsz) * num_head * 1 * 1]
-            - "seqlen": int, sequence length of processed tokens, including padding tokens
+        - past_key_value: Tuple[torch.Tensor] containing:
+            - prev_key_value: [bsz * num_head * v_dim * qk_dim]
+            - scale: [(1 or bsz) * num_head * 1 * 1]
+            - seqlen: torch.long, sequence length of processed tokens, including padding tokens
         - decay_mask: [1 * num_head * chunk_size * chunk_size]
         - cross_decay: [1 * num_head * 1 * 1]
         - inner_decay: [1 * num_head * chunk_size * 1]
@@ -425,11 +419,7 @@ class NucleusXMultiScaleRetention(nn.Module):
         output = inner_output / align_inner_scale + cross_output / align_cross_scale
         output = output.transpose(2, 3)  # [b, n_c, t_c, h, v_dim]
 
-        cache = {
-            "prev_key_value": kv_state.transpose(-2, -1),
-            "scale": decay_scale,
-            "seqlen": torch.tensor(tgt_len, dtype=torch.long),
-        }
+        cache = (kv_state.transpose(-2, -1), decay_scale, torch.tensor(tgt_len, dtype=torch.long))
         return output, cache
 
     def forward(
@@ -726,10 +716,10 @@ class NucleusXOutputWithPast(ModelOutput):
 
             If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             decoder_embed_dim)` is output.
-        past_key_values (`Tuple(Dict(str, torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            - "prev_key_value": shape=(bsz * num_head * v_dim * qk_dim)
-            - "scale": shape=((1 or bsz) * num_head * 1 * 1)
-            - "seqlen": int, sequence length of processed tokens, including padding tokens
+        past_key_values (`Tuple(Tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            - prev_key_value: shape=(bsz * num_head * v_dim * qk_dim)
+            - scale: shape=((1 or bsz) * num_head * 1 * 1)
+            - seqlen: shape=(,) torch.long, sequence length of processed tokens, including padding tokens
 
             Contains pre-computed hidden-states (key and values in the multi-scale retention blocks) that can be used
             (see `past_key_values` input) to speed up sequential decoding.
@@ -748,7 +738,7 @@ class NucleusXOutputWithPast(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Dict[str, torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     retentions: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -764,10 +754,10 @@ class NucleusXCausalLMOutputWithPast(ModelOutput):
             Language modeling loss (for next-token prediction).
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`Tuple(Dict(str, torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`Tuple(Tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             - "prev_key_value": shape=(bsz * num_head * v_dim * qk_dim)
             - "scale": shape=((1 or bsz) * num_head * 1 * 1)
-            - "seqlen": int, sequence length of processed tokens, including padding tokens
+            - "seqlen": shape=(,) torch.long, sequence length of processed tokens, including padding tokens
 
             Contains pre-computed hidden-states (key and values in the multi-scale retention blocks) that can be used
             (see `past_key_values` input) to speed up sequential decoding.
@@ -787,7 +777,7 @@ class NucleusXCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Dict[str, torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     retentions: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -803,10 +793,10 @@ class NucleusXClassifierOutputWithPast(ModelOutput):
             Language modeling loss (for next-token prediction).
         logits (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`Tuple(Dict(str, torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`Tuple(Tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             - "prev_key_value": shape=(bsz * num_head * v_dim * qk_dim)
             - "scale": shape=((1 or bsz) * num_head * 1 * 1)
-            - "seqlen": int, sequence length of processed tokens, including padding tokens
+            - "seqlen": shape=(,) torch.long, sequence length of processed tokens, including padding tokens
 
             Contains pre-computed hidden-states (key and values in the multi-scale retention blocks) that can be used
             (see `past_key_values` input) to speed up sequential decoding.
@@ -826,7 +816,7 @@ class NucleusXClassifierOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Dict[str, torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     retentions: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -962,7 +952,7 @@ class NucleusXModel(NucleusXPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[Dict[str, torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -973,10 +963,10 @@ class NucleusXModel(NucleusXPreTrainedModel):
         retention_rel_pos: Optional[Tuple[torch.Tensor]] = None,
     ) -> Union[Tuple, NucleusXOutputWithPast]:
         r"""
-        past_key_values (`Tuple(Dict(str, torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`Tuple(Tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             - "prev_key_value": shape=(bsz * num_head * v_dim * qk_dim)
             - "scale": shape=((1 or bsz) * num_head * 1 * 1)
-            - "seqlen": int, sequence length of processed tokens, including padding tokens
+            - "seqlen": shape=(,) torch.long, sequence length of processed tokens, including padding tokens
 
             Contains pre-computed hidden-states (key and values in the multi-scale retention blocks) that can be used
             (see `past_key_values` input) to speed up sequential decoding.
@@ -1010,7 +1000,7 @@ class NucleusXModel(NucleusXPreTrainedModel):
 
         if past_key_values is not None:
             if forward_mode == "recurrent":
-                prev_seqlen = past_key_values[0]["seqlen"]
+                prev_seqlen = past_key_values[0][2]
                 seq_length = prev_seqlen + 1
             else:
                 logger.warning_once(
@@ -1164,7 +1154,7 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1176,10 +1166,10 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
         retention_rel_pos: Optional[Tuple[torch.Tensor]] = None,
     ) -> Union[Tuple, NucleusXCausalLMOutputWithPast]:
         r"""
-        past_key_values (`Tuple(Dict(str, torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`Tuple(Tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             - "prev_key_value": shape=(bsz * num_head * v_dim * qk_dim)
             - "scale": shape=((1 or bsz) * num_head * 1 * 1)
-            - "seqlen": int, sequence length of processed tokens, including padding tokens
+            - "seqlen": shape=(,) torch.long, sequence length of processed tokens, including padding tokens
 
             Contains pre-computed hidden-states (key and values in the multi-scale retention blocks) that can be used
             (see `past_key_values` input) to speed up sequential decoding.
@@ -1301,25 +1291,24 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
         return model_inputs
 
     def _reorder_cache(self, past_key_values, beam_idx):
+        """
+        Args:
+            - past_key_values: Tuple(Tuple(torch.FloatTensor)))
+                - prev_key_value: shape=(bsz * num_head * v_dim / num_heads * qk_dim)
+                - scale: shape=((1 or bsz) * num_head * 1 * 1)
+                - seqlen: shape=(,) torch.long, sequence length of processed tokens, including padding tokens
+        """
         reordered_past = ()
-        for layer_past in past_key_values:  # dict
-            layer_past_kv = layer_past["prev_key_value"]  # [b, h, v_dim / h, qk_dim]
-            layer_past_scale = layer_past["scale"]  # [b, h, 1, 1]
-            layer_past_seqlen = layer_past["seqlen"]  # int
+        for layer_past in past_key_values:  # tuple
+            layer_past_kv, layer_past_scale, layer_past_seqlen = layer_past
             if layer_past_scale.size(0) > 1:
                 # this means that retention_mask is not None, so the scale for
                 # each batch is different. We need to select the correct scale then.
                 # NOTE: during huggingface generate, it will generate attention_mask
-                # if it is None, so this linke will always be true. Still, having
+                # if it is None, so this line will always be true. Still, having
                 # this line here for safety.
                 layer_past_scale = layer_past_scale.index_select(0, beam_idx)
-            reordered_past += (
-                {
-                    "prev_key_value": layer_past_kv.index_select(0, beam_idx),
-                    "scale": layer_past_scale,
-                    "seqlen": layer_past_seqlen,
-                },
-            )
+            reordered_past += ((layer_past_kv.index_select(0, beam_idx), layer_past_scale, layer_past_seqlen),)
         return reordered_past
 
 
@@ -1354,7 +1343,7 @@ class NucleusXForSequenceClassification(NucleusXPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
