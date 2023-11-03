@@ -562,7 +562,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        if torch_device == "cuda":
+        if torch_device != "cpu":
+            # currently this expect value is only for `cuda`
             EXPECTED_OUTPUT_STR = (
                 "Today is a nice day and I've already been enjoying it. I walked to work with my wife"
             )

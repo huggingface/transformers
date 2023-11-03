@@ -88,6 +88,11 @@ The original code can be found [here](https://github.com/openai/whisper).
     - forward
     - generate
 
+## WhisperForCausalLM
+
+[[autodoc]] WhisperForCausalLM
+    - forward
+
 ## WhisperForAudioClassification
 
 [[autodoc]] WhisperForAudioClassification
