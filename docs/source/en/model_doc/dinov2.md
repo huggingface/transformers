@@ -25,11 +25,6 @@ The abstract from the paper is the following:
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/facebookresearch/dinov2).
 
-<Tip>
-
-Use [`AutoImageProcessor`] class to prepare images for the model.
-</Tip>
-
 ## Dinov2Config
 
 [[autodoc]] Dinov2Config

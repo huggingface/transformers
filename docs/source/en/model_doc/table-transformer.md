@@ -52,11 +52,6 @@ found [here](https://github.com/microsoft/table-transformer).
 - A demo notebook for the Table Transformer can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Table%20Transformer).
 - It turns out padding of images is quite important for detection. An interesting Github thread with replies from the authors can be found [here](https://github.com/microsoft/table-transformer/issues/68).
 
-<Tip>
-
-Use the [`AutoImageProcessor`] API to prepare images and optional targets for the model. This will load a [`DetrImageProcessor`] behind the scenes.
-</Tip>
-
 ## TableTransformerConfig
 
 [[autodoc]] TableTransformerConfig

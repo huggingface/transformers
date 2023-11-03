@@ -29,11 +29,6 @@ The abstract from the paper is the following:
 This model was contributed by [shehan97](https://huggingface.co/shehan97).
 The original code can be found [here](https://github.com/Amshaker/SwiftFormer).
 
-<Tip>
-
-Use the [`ViTImageProcessor`] API to prepare images for the model.
-</Tip>
-
 ## SwiftFormerConfig
 
 [[autodoc]] SwiftFormerConfig

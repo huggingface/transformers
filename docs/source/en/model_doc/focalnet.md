@@ -30,11 +30,6 @@ content, and (iii) element-wise modulation or affine transformation to inject th
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/microsoft/FocalNet).
 
-<Tip>
-
-Use the [`AutoImageProcessor`] class to prepare images for the model.
-</Tip>
-
 ## FocalNetConfig
 
 [[autodoc]] FocalNetConfig

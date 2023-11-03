@@ -34,7 +34,6 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 
 ## Usage tips
 
-- Use [`DeformableDetrImageProcessor`] to prepare images (and optional targets) for the model.
 - Training Deformable DETR is equivalent to training the original [DETR](detr) model. See the [resources](#resources) section below for demo notebooks.
 
 ## Resources

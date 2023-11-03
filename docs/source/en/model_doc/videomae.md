@@ -45,11 +45,6 @@ to fine-tune a VideoMAE model on a custom dataset.
 - [Video classification task guide](../tasks/video_classification)
 - [A 🤗 Space](https://huggingface.co/spaces/sayakpaul/video-classification-ucf101-subset) showing how to perform inference with a video classification model.
 
-<Tip>
-
-Use [`VideoMAEImageProcessor`] to prepare videos for the model. It will resize + normalize all frames of a video for you.
-</Tip>
-
 ## VideoMAEConfig
 
 [[autodoc]] VideoMAEConfig

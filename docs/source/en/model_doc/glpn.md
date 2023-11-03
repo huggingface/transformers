@@ -47,11 +47,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - Demo notebooks for [`GLPNForDepthEstimation`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/GLPN).
 - [Monocular depth estimation task guide](../tasks/monocular_depth_estimation)
 
-<Tip>
-
-Use [`GLPNImageProcessor`] to prepare images for the model.
-</Tip>
-
 ## GLPNConfig
 
 [[autodoc]] GLPNConfig

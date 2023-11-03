@@ -38,7 +38,6 @@ The original code can be found [here](https://github.com/microsoft/GenerativeIma
 ## Usage tips
 
 - GIT is implemented in a very similar way to GPT-2, the only difference being that the model is also conditioned on `pixel_values`.
-- One can use [`GitProcessor`] to prepare images for the model, and the `generate` method for autoregressive generation.
 
 ## Resources
 
