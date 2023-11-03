@@ -1,0 +1,231 @@
+version: 2.1
+setup: true
+orbs:
+    continuation: circleci/continuation@0.1.0
+
+parameters:
+    nightly:
+        type: boolean
+        default: false
+
+jobs:
+    # Ensure running with CircleCI/huggingface
+    check_circleci_user:
+        docker:
+            - image: cimg/python:3.8.12
+        parallelism: 1
+        steps:
+            - run: echo $CIRCLE_PROJECT_USERNAME
+            - run: |
+                if [ "$CIRCLE_PROJECT_USERNAME" = "huggingface" ]; then
+                    exit 0
+                else
+                    echo "The CI is running under $CIRCLE_PROJECT_USERNAME personal account. Please follow https://support.circleci.com/hc/en-us/articles/360008097173-Troubleshooting-why-pull-requests-are-not-triggering-jobs-on-my-organization- to fix it."; exit -1
+                fi
+    # Fetch the tests to run
+    fetch_tests:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.8.12
+        parallelism: 1
+        steps:
+            - checkout
+            - run: pip install --upgrade --upgrade-strategy eager pip
+            - run: pip install -U --upgrade-strategy eager GitPython
+            - run: pip install -U --upgrade-strategy eager .
+            - run: mkdir -p test_preparation
+            - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
+            - store_artifacts:
+                  path: ~/transformers/tests_fetched_summary.txt
+            - run: |
+                if [ -f test_list.txt ]; then
+                    cp test_list.txt test_preparation/test_list.txt
+                else
+                    touch test_preparation/test_list.txt
+                fi
+            - run: |
+                  if [ -f examples_test_list.txt ]; then
+                      mv examples_test_list.txt test_preparation/examples_test_list.txt
+                  else
+                      touch test_preparation/examples_test_list.txt
+                  fi
+            - run: |
+                  if [ -f filtered_test_list_cross_tests.txt ]; then
+                      mv filtered_test_list_cross_tests.txt test_preparation/filtered_test_list_cross_tests.txt
+                  else
+                      touch test_preparation/filtered_test_list_cross_tests.txt
+                  fi
+            - run: |
+                if [ -f doctest_list.txt ]; then
+                    cp doctest_list.txt test_preparation/doctest_list.txt
+                else
+                    touch test_preparation/doctest_list.txt
+                fi
+            - run: |
+                if [ -f test_repo_utils.txt ]; then
+                    mv test_repo_utils.txt test_preparation/test_repo_utils.txt
+                else
+                    touch test_preparation/test_repo_utils.txt
+                fi
+            - run: python utils/tests_fetcher.py --filter_tests
+            - run: |
+                if [ -f test_list.txt ]; then
+                    mv test_list.txt test_preparation/filtered_test_list.txt
+                else
+                    touch test_preparation/filtered_test_list.txt
+                fi
+            - store_artifacts:
+                  path: test_preparation/test_list.txt
+            - store_artifacts:
+                  path: test_preparation/doctest_list.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation/filtered_test_list.txt
+            - store_artifacts:
+                  path: test_preparation/examples_test_list.txt
+            - run: python .circleci/create_circleci_config.py --fetcher_folder test_preparation
+            - run: |
+                  if [ ! -s test_preparation/generated_config.yml ]; then
+                      echo "No tests to run, exiting early!"
+                      circleci-agent step halt
+                  fi
+            - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
+            - store_artifacts:
+                  path: test_preparation/generated_config.txt
+            - store_artifacts:
+                  path: test_preparation/filtered_test_list_cross_tests.txt
+            - continuation/continue:
+                  configuration_path: test_preparation/generated_config.yml
+
+    # To run all tests for the nightly build
+    fetch_all_tests:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.8.12
+        parallelism: 1
+        steps:
+            - checkout
+            - run: pip install --upgrade --upgrade-strategy eager pip
+            - run: pip install -U --upgrade-strategy eager GitPython
+            - run: pip install -U --upgrade-strategy eager .
+            - run: |
+                  mkdir test_preparation
+                  echo -n "tests" > test_preparation/test_list.txt
+                  echo -n "all" > test_preparation/examples_test_list.txt
+                  echo -n "tests/repo_utils" > test_preparation/test_repo_utils.txt
+            - run: |
+                  echo -n "tests" > test_list.txt
+                  python utils/tests_fetcher.py --filter_tests
+                  mv test_list.txt test_preparation/filtered_test_list.txt
+            - run: python .circleci/create_circleci_config.py --fetcher_folder test_preparation
+            - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
+            - store_artifacts:
+                  path: test_preparation/generated_config.txt
+            - continuation/continue:
+                  configuration_path: test_preparation/generated_config.yml
+
+    check_code_quality:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.8.12
+        resource_class: large
+        environment:
+            TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.7-code_quality-pip-{{ checksum "setup.py" }}
+                      - v0.7-code-quality-pip
+            - restore_cache:
+                  keys:
+                      - v0.7-code_quality-site-packages-{{ checksum "setup.py" }}
+                      - v0.7-code-quality-site-packages
+            - run: pip install --upgrade --upgrade-strategy eager pip
+            - run: pip install -U --upgrade-strategy eager .[all,quality]
+            - save_cache:
+                  key: v0.7-code_quality-pip-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - save_cache:
+                  key: v0.7-code_quality-site-packages-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.pyenv/versions/'
+            - run:
+                name: Show installed libraries and their versions
+                command: pip freeze | tee installed.txt
+            - store_artifacts:
+                  path: ~/transformers/installed.txt
+            - run: black --check examples tests src utils
+            - run: ruff examples tests src utils
+            - run: python utils/custom_init_isort.py --check_only
+            - run: python utils/sort_auto_mappings.py --check_only
+            - run: doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
+            - run: python utils/check_doc_toc.py
+
+    check_repository_consistency:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.8.12
+        resource_class: large
+        environment:
+            TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.7-repository_consistency-pip-{{ checksum "setup.py" }}
+                      - v0.7-repository_consistency-pip
+            - restore_cache:
+                  keys:
+                      - v0.7-repository_consistency-site-packages-{{ checksum "setup.py" }}
+                      - v0.7-repository_consistency-site-packages
+            - run: pip install --upgrade --upgrade-strategy eager pip
+            - run: pip install -U --upgrade-strategy eager .[all,quality]
+            - save_cache:
+                  key: v0.7-repository_consistency-pip-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - save_cache:
+                  key: v0.7-repository_consistency-site-packages-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.pyenv/versions/'
+            - run:
+                name: Show installed libraries and their versions
+                command: pip freeze | tee installed.txt
+            - store_artifacts:
+                  path: ~/transformers/installed.txt
+            - run: python utils/check_copies.py
+            - run: python utils/check_table.py
+            - run: python utils/check_dummies.py
+            - run: python utils/check_repo.py
+            - run: python utils/check_inits.py
+            - run: python utils/check_config_docstrings.py
+            - run: python utils/check_config_attributes.py
+            - run: python utils/check_doctest_list.py
+            - run: make deps_table_check_updated
+            - run: python utils/update_metadata.py --check-only
+            - run: python utils/check_task_guides.py
+            - run: python utils/check_docstrings.py
+
+workflows:
+    version: 2
+    setup_and_quality:
+        when:
+            not: <<pipeline.parameters.nightly>>
+        jobs:
+            - check_circleci_user
+            - check_code_quality
+            - check_repository_consistency
+            - fetch_tests
+
+    nightly:
+        when: <<pipeline.parameters.nightly>>
+        jobs:
+            - check_circleci_user
+            - check_code_quality
+            - check_repository_consistency
+            - fetch_all_tests

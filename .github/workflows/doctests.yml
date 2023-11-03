@@ -1,0 +1,83 @@
+name: Doctests
+
+on:
+  push:
+    branches:
+      - doctest*
+  repository_dispatch:
+  schedule:
+    - cron: "17 2 * * *"
+
+
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  RUN_SLOW: yes
+  OMP_NUM_THREADS: 16
+  MKL_NUM_THREADS: 16
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
+
+jobs:
+  run_doctests:
+    runs-on: [single-gpu, nvidia-gpu, t4, doctest-ci]
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: uninstall transformers (installed during docker image build)
+        run: python3 -m pip uninstall -y transformers
+
+      - uses: actions/checkout@v3
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Install transformers in edit mode
+        run: python3 -m pip install -e .[flax]
+
+      - name: GPU visibility
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        run: pip freeze
+
+      - name: Get doctest files
+        run: |
+          $(python3 -c 'from utils.tests_fetcher import get_all_doctest_files; to_test = get_all_doctest_files(); to_test = " ".join(to_test); fp = open("doc_tests.txt", "w"); fp.write(to_test); fp.close()')
+
+      - name: Run doctests
+        run: |
+          python3 -m pytest -v --make-reports doc_tests_gpu --doctest-modules $(cat doc_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.md"
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat reports/doc_tests_gpu/failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: doc_tests_gpu_test_reports
+          path: reports/doc_tests_gpu
+
+
+  send_results:
+    name: Send results to webhook
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [run_doctests]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+      - name: Send message to Slack
+        env:
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+          CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY_DOCS }}
+          CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY_DOCS }}
+          CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
+        run: |
+          pip install slack_sdk
+          python utils/notification_service_doc_tests.py

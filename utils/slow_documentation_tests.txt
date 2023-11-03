@@ -1,0 +1,7 @@
+docs/source/en/generation_strategies.md
+docs/source/en/model_doc/ctrl.md
+docs/source/en/model_doc/seamless_m4t.md
+docs/source/en/task_summary.md
+docs/source/en/tasks/prompting.md
+src/transformers/models/blip_2/modeling_blip_2.py
+src/transformers/models/ctrl/modeling_ctrl.py

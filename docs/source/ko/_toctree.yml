@@ -1,0 +1,692 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: 둘러보기
+  - local: installation
+    title: 설치방법
+  title: 시작하기
+- sections:
+  - local: pipeline_tutorial
+    title: Pipeline으로 추론하기
+  - local: autoclass_tutorial
+    title: AutoClass로 사전 학습된 인스턴스 로드하기
+  - local: preprocessing
+    title: 데이터 전처리하기
+  - local: training
+    title: 사전 학습된 모델 미세 조정하기
+  - local: run_scripts
+    title: 스크립트로 학습하기
+  - local: accelerate
+    title: 🤗 Accelerate로 분산 학습 구성하기
+  - local: peft
+    title: 🤗 PEFT로 어댑터 로드 및 학습하기
+  - local: model_sharing
+    title: 만든 모델 공유하기
+  - local: transformers_agents
+    title: 에이전트
+  - local: llm_tutorial
+    title: 대규모 언어 모델로 생성하기
+  title: 튜토리얼
+- sections:
+  - sections:
+      - local: tasks/sequence_classification
+        title: 텍스트 분류
+      - local: tasks/token_classification
+        title: 토큰 분류
+      - local: tasks/question_answering
+        title: 질의 응답(Question Answering)
+      - local: tasks/language_modeling
+        title: 인과적 언어 모델링(Causal language modeling)
+      - local: tasks/masked_language_modeling
+        title: 마스킹된 언어 모델링(Masked language modeling)
+      - local: tasks/translation
+        title: 번역
+      - local: tasks/summarization
+        title: 요약
+      - local: tasks/multiple_choice
+        title: 객관식 문제(Multiple Choice)
+    title: 자연어처리
+    isExpanded: false
+  - sections:
+      - local: tasks/audio_classification
+        title: 오디오 분류
+      - local: tasks/asr
+        title: 자동 음성 인식
+    title: 오디오
+    isExpanded: false
+  - sections:
+      - local: tasks/image_classification
+        title: 이미지 분류
+      - local: tasks/semantic_segmentation
+        title: 의미적 분할(Semantic segmentation)
+      - local: tasks/video_classification
+        title: 영상 분류
+      - local: tasks/object_detection
+        title: 객체 탐지
+      - local: tasks/zero_shot_object_detection
+        title: 제로샷(zero-shot) 객체 탐지
+      - local: tasks/zero_shot_image_classification
+        title: 제로샷(zero-shot) 이미지 분류
+      - local: tasks/monocular_depth_estimation
+        title: 단일 영상 기반 깊이 추정
+    title: 컴퓨터 비전
+    isExpanded: false
+  - sections:
+      - local: tasks/image_captioning
+        title: 이미지 캡셔닝
+      - local: tasks/document_question_answering
+        title: 문서 질의 응답(Document Question Answering)
+      - local: tasks/visual_question_answering
+        title: 시각적 질의응답 (Visual Question Answering)
+    title: 멀티모달
+    isExpanded: false
+  title: 태스크 가이드
+- sections:
+    - local: fast_tokenizers
+      title: 🤗 Tokenizers 라이브러리에서 토크나이저 사용하기
+    - local: multilingual
+      title: 다국어 모델 추론하기
+    - local: in_translation
+      title: (번역중) Customize text generation strategy
+    - local: create_a_model
+      title: 모델별 API 사용하기
+    - local: custom_models
+      title: 사용자 정의 모델 공유하기
+    - local: sagemaker
+      title: Amazon SageMaker에서 학습 실행하기
+    - local: serialization
+      title: ONNX로 내보내기
+    - local: tflite
+      title: TFLite로 내보내기
+    - local: torchscript
+      title: TorchScript로 내보내기
+    - local: in_translation
+      title: (번역중) Benchmarks
+    - local: in_translation
+      title: (번역중) Notebooks with examples
+    - local: community
+      title: 커뮤니티 리소스
+    - local: custom_tools
+      title: 사용자 정의 도구와 프롬프트
+    - local: troubleshooting
+      title: 문제 해결
+  title: (번역중) 개발자 가이드
+- sections:
+    - local: performance
+      title: 성능 및 확장성
+    - local: in_translation
+      title: (번역중) Training on one GPU
+    - local: perf_train_gpu_many
+      title: 다중 GPU에서 훈련 진행하기
+    - local: perf_train_cpu
+      title: CPU에서 훈련
+    - local: perf_train_cpu_many
+      title: 다중 CPU에서 훈련하기
+    - local: in_translation
+      title: (번역중) Training on TPUs
+    - local: perf_train_tpu_tf
+      title: TensorFlow로 TPU에서 훈련하기
+    - local: in_translation
+      title: (번역중) Training on Specialized Hardware
+    - local: perf_infer_cpu
+      title: CPU로 추론하기
+    - local: perf_infer_gpu_one
+      title: 하나의 GPU를 활용한 추론
+    - local: perf_infer_gpu_many
+      title: 다중 GPU에서 추론
+    - local: in_translation
+      title: (번역중) Inference on Specialized Hardware
+    - local: perf_hardware
+      title: 훈련용 사용자 맞춤형 하드웨어
+    - local: big_models
+      title: 대형 모델을 인스턴스화
+    - local: debugging
+      title: 디버깅
+    - local: hpo_train
+      title: Trainer API를 사용한 하이퍼파라미터 탐색
+    - local: tf_xla
+      title: TensorFlow 모델을 위한 XLA 통합
+  title: (번역중) 성능 및 확장성
+- sections:
+    - local: contributing
+      title: 🤗 Transformers에 기여하는 방법
+    - local: add_new_model
+      title: 🤗 Transformers에 새로운 모델을 추가하는 방법
+    - local: add_tensorflow_model
+      title: 어떻게 🤗 Transformers 모델을 TensorFlow로 변환하나요?
+    - local: add_new_pipeline
+      title: 어떻게 🤗 Transformers에 파이프라인을 추가하나요?
+    - local: testing
+      title: 테스트
+    - local: pr_checks
+      title: Pull Request에 대한 검사
+  title: (번역중) 기여하기
+
+- sections:
+  - local: philosophy
+    title: 이념과 목표
+  - local: in_translation
+    title: (번역중) Glossary
+  - local: task_summary
+    title: 🤗 Transformers로 할 수 있는 작업
+  - local: tasks_explained
+    title: 🤗 Transformers로 작업을 해결하는 방법
+  - local: model_summary
+    title: Transformer 모델군
+  - local: tokenizer_summary
+    title: 토크나이저 요약
+  - local: attention
+    title: 어텐션 매커니즘
+  - local: pad_truncation
+    title: 패딩과 잘라내기
+  - local: bertology
+    title: BERTology
+  - local: perplexity
+    title: 고정 길이 모델의 펄플렉서티(Perplexity)
+  - local: pipeline_webserver
+    title: 추론 웹 서버를 위한 파이프라인
+  - local: model_memory_anatomy
+    title: 모델 학습 해부하기
+  title: (번역중) 개념 가이드
+- sections:
+  - sections:
+    - local: in_translation
+      title: (번역중) Auto Classes
+    - local: in_translation
+      title: (번역중) Callbacks
+    - local: in_translation
+      title: (번역중) Configuration
+    - local: in_translation
+      title: (번역중) Data Collator
+    - local: in_translation
+      title: (번역중) Keras callbacks
+    - local: in_translation
+      title: (번역중) Logging
+    - local: in_translation
+      title: (번역중) Models
+    - local: in_translation
+      title: (번역중) Text Generation
+    - local: in_translation
+      title: (번역중) ONNX
+    - local: in_translation
+      title: (번역중) Optimization
+    - local: in_translation
+      title: (번역중) Model outputs
+    - local: in_translation
+      title: (번역중) Pipelines
+    - local: in_translation
+      title: (번역중) Processors
+    - local: in_translation
+      title: (번역중) Quantization
+    - local: in_translation
+      title: (번역중) Tokenizer
+    - local: in_translation
+      title: (번역중) Trainer
+    - local: in_translation
+      title: (번역중) DeepSpeed Integration
+    - local: in_translation
+      title: (번역중) Feature Extractor
+    - local: in_translation
+      title: (번역중) Image Processor
+    title: (번역중) 메인 클래스
+  - sections:
+    - isExpanded: false
+      sections:
+      - local: in_translation
+        title: (번역중) ALBERT
+      - local: in_translation
+        title: (번역중) BART
+      - local: in_translation
+        title: (번역중) BARThez
+      - local: in_translation
+        title: (번역중) BARTpho
+      - local: in_translation
+        title: (번역중) BERT
+      - local: in_translation
+        title: (번역중) BertGeneration
+      - local: in_translation
+        title: (번역중) BertJapanese
+      - local: in_translation
+        title: (번역중) Bertweet
+      - local: in_translation
+        title: (번역중) BigBird
+      - local: in_translation
+        title: (번역중) BigBirdPegasus
+      - local: in_translation
+        title: (번역중) BioGpt
+      - local: in_translation
+        title: (번역중) Blenderbot
+      - local: in_translation
+        title: (번역중) Blenderbot Small
+      - local: in_translation
+        title: (번역중) BLOOM
+      - local: in_translation
+        title: (번역중) BORT
+      - local: in_translation
+        title: (번역중) ByT5
+      - local: in_translation
+        title: (번역중) CamemBERT
+      - local: in_translation
+        title: (번역중) CANINE
+      - local: in_translation
+        title: (번역중) CodeGen
+      - local: in_translation
+        title: (번역중) ConvBERT
+      - local: in_translation
+        title: (번역중) CPM
+      - local: in_translation
+        title: (번역중) CPMANT
+      - local: in_translation
+        title: (번역중) CTRL
+      - local: in_translation
+        title: (번역중) DeBERTa
+      - local: in_translation
+        title: (번역중) DeBERTa-v2
+      - local: in_translation
+        title: (번역중) DialoGPT
+      - local: in_translation
+        title: (번역중) DistilBERT
+      - local: in_translation
+        title: (번역중) DPR
+      - local: in_translation
+        title: (번역중) ELECTRA
+      - local: in_translation
+        title: (번역중) Encoder Decoder Models
+      - local: in_translation
+        title: (번역중) ERNIE
+      - local: in_translation
+        title: (번역중) ErnieM
+      - local: in_translation
+        title: (번역중) ESM
+      - local: in_translation
+        title: (번역중) FLAN-T5
+      - local: in_translation
+        title: (번역중) FLAN-UL2
+      - local: in_translation
+        title: (번역중) FlauBERT
+      - local: in_translation
+        title: (번역중) FNet
+      - local: in_translation
+        title: (번역중) FSMT
+      - local: in_translation
+        title: (번역중) Funnel Transformer
+      - local: in_translation
+        title: (번역중) GPT
+      - local: in_translation
+        title: (번역중) GPT Neo
+      - local: in_translation
+        title: (번역중) GPT NeoX
+      - local: in_translation
+        title: (번역중) GPT NeoX Japanese
+      - local: in_translation
+        title: (번역중) GPT-J
+      - local: in_translation
+        title: (번역중) GPT2
+      - local: in_translation
+        title: (번역중) GPTBigCode
+      - local: in_translation
+        title: (번역중) GPTSAN Japanese
+      - local: in_translation
+        title: (번역중) GPTSw3
+      - local: in_translation
+        title: (번역중) HerBERT
+      - local: in_translation
+        title: (번역중) I-BERT
+      - local: in_translation
+        title: (번역중) Jukebox
+      - local: in_translation
+        title: (번역중) LED
+      - local: model_doc/llama
+        title: LLaMA
+      - local: model_doc/llama2
+        title: LLaMA2
+      - local: in_translation
+        title: (번역중) Longformer
+      - local: in_translation
+        title: (번역중) LongT5
+      - local: in_translation
+        title: (번역중) LUKE
+      - local: in_translation
+        title: (번역중) M2M100
+      - local: in_translation
+        title: (번역중) MarianMT
+      - local: in_translation
+        title: (번역중) MarkupLM
+      - local: in_translation
+        title: (번역중) MBart and MBart-50
+      - local: in_translation
+        title: (번역중) MEGA
+      - local: in_translation
+        title: (번역중) MegatronBERT
+      - local: in_translation
+        title: (번역중) MegatronGPT2
+      - local: in_translation
+        title: (번역중) mLUKE
+      - local: in_translation
+        title: (번역중) MobileBERT
+      - local: in_translation
+        title: (번역중) MPNet
+      - local: in_translation
+        title: (번역중) MT5
+      - local: in_translation
+        title: (번역중) MVP
+      - local: in_translation
+        title: (번역중) NEZHA
+      - local: in_translation
+        title: (번역중) NLLB
+      - local: in_translation
+        title: (번역중) NLLB-MoE
+      - local: in_translation
+        title: (번역중) Nyströmformer
+      - local: in_translation
+        title: (번역중) Open-Llama
+      - local: in_translation
+        title: (번역중) OPT
+      - local: in_translation
+        title: (번역중) Pegasus
+      - local: in_translation
+        title: (번역중) PEGASUS-X
+      - local: in_translation
+        title: (번역중) PhoBERT
+      - local: in_translation
+        title: (번역중) PLBart
+      - local: in_translation
+        title: (번역중) ProphetNet
+      - local: in_translation
+        title: (번역중) QDQBert
+      - local: in_translation
+        title: (번역중) RAG
+      - local: in_translation
+        title: (번역중) REALM
+      - local: in_translation
+        title: (번역중) Reformer
+      - local: in_translation
+        title: (번역중) RemBERT
+      - local: in_translation
+        title: (번역중) RetriBERT
+      - local: in_translation
+        title: (번역중) RoBERTa
+      - local: in_translation
+        title: (번역중) RoBERTa-PreLayerNorm
+      - local: in_translation
+        title: (번역중) RoCBert
+      - local: in_translation
+        title: (번역중) RoFormer
+      - local: in_translation
+        title: (번역중) Splinter
+      - local: in_translation
+        title: (번역중) SqueezeBERT
+      - local: in_translation
+        title: (번역중) SwitchTransformers
+      - local: in_translation
+        title: (번역중) T5
+      - local: in_translation
+        title: (번역중) T5v1.1
+      - local: in_translation
+        title: (번역중) TAPEX
+      - local: in_translation
+        title: (번역중) Transformer XL
+      - local: in_translation
+        title: (번역중) UL2
+      - local: in_translation
+        title: (번역중) X-MOD
+      - local: in_translation
+        title: (번역중) XGLM
+      - local: in_translation
+        title: (번역중) XLM
+      - local: in_translation
+        title: (번역중) XLM-ProphetNet
+      - local: in_translation
+        title: (번역중) XLM-RoBERTa
+      - local: in_translation
+        title: (번역중) XLM-RoBERTa-XL
+      - local: in_translation
+        title: (번역중) XLM-V
+      - local: in_translation
+        title: (번역중) XLNet
+      - local: in_translation
+        title: (번역중) YOSO
+      title: (번역중) 텍스트 모델
+    - isExpanded: false
+      sections:
+      - local: in_translation
+        title: (번역중) BEiT
+      - local: in_translation
+        title: (번역중) BiT
+      - local: in_translation
+        title: (번역중) Conditional DETR
+      - local: in_translation
+        title: (번역중) ConvNeXT
+      - local: in_translation
+        title: (번역중) ConvNeXTV2
+      - local: in_translation
+        title: (번역중) CvT
+      - local: in_translation
+        title: (번역중) Deformable DETR
+      - local: in_translation
+        title: (번역중) DeiT
+      - local: in_translation
+        title: (번역중) DETA
+      - local: in_translation
+        title: (번역중) DETR
+      - local: in_translation
+        title: (번역중) DiNAT
+      - local: in_translation
+        title: (번역중) DiT
+      - local: in_translation
+        title: (번역중) DPT
+      - local: in_translation
+        title: (번역중) EfficientFormer
+      - local: in_translation
+        title: (번역중) EfficientNet
+      - local: in_translation
+        title: (번역중) FocalNet
+      - local: in_translation
+        title: (번역중) GLPN
+      - local: in_translation
+        title: (번역중) ImageGPT
+      - local: in_translation
+        title: (번역중) LeViT
+      - local: in_translation
+        title: (번역중) Mask2Former
+      - local: in_translation
+        title: (번역중) MaskFormer
+      - local: in_translation
+        title: (번역중) MobileNetV1
+      - local: in_translation
+        title: (번역중) MobileNetV2
+      - local: in_translation
+        title: (번역중) MobileViT
+      - local: in_translation
+        title: (번역중) NAT
+      - local: in_translation
+        title: (번역중) PoolFormer
+      - local: in_translation
+        title: (번역중) RegNet
+      - local: in_translation
+        title: (번역중) ResNet
+      - local: in_translation
+        title: (번역중) SegFormer
+      - local: in_translation
+        title: (번역중) Swin Transformer
+      - local: in_translation
+        title: (번역중) Swin Transformer V2
+      - local: in_translation
+        title: (번역중) Swin2SR
+      - local: in_translation
+        title: (번역중) Table Transformer
+      - local: in_translation
+        title: (번역중) TimeSformer
+      - local: in_translation
+        title: (번역중) UperNet
+      - local: in_translation
+        title: (번역중) VAN
+      - local: in_translation
+        title: (번역중) VideoMAE
+      - local: in_translation
+        title: (번역중) Vision Transformer (ViT)
+      - local: in_translation
+        title: (번역중) ViT Hybrid
+      - local: in_translation
+        title: (번역중) ViTMAE
+      - local: in_translation
+        title: (번역중) ViTMSN
+      - local: in_translation
+        title: (번역중) YOLOS
+      title: (번역중) 비전 모델
+    - isExpanded: false
+      sections:
+      - local: in_translation
+        title: (번역중) Audio Spectrogram Transformer
+      - local: in_translation
+        title: (번역중) CLAP
+      - local: in_translation
+        title: (번역중) Hubert
+      - local: in_translation
+        title: (번역중) MCTCT
+      - local: in_translation
+        title: (번역중) SEW
+      - local: in_translation
+        title: (번역중) SEW-D
+      - local: in_translation
+        title: (번역중) Speech2Text
+      - local: in_translation
+        title: (번역중) Speech2Text2
+      - local: in_translation
+        title: (번역중) SpeechT5
+      - local: in_translation
+        title: (번역중) UniSpeech
+      - local: in_translation
+        title: (번역중) UniSpeech-SAT
+      - local: in_translation
+        title: (번역중) Wav2Vec2
+      - local: in_translation
+        title: (번역중) Wav2Vec2-Conformer
+      - local: in_translation
+        title: (번역중) Wav2Vec2Phoneme
+      - local: in_translation
+        title: (번역중) WavLM
+      - local: model_doc/whisper
+        title: Whisper
+      - local: in_translation
+        title: (번역중) XLS-R
+      - local: in_translation
+        title: (번역중) XLSR-Wav2Vec2
+      title: (번역중) 오디오 모델
+    - isExpanded: false
+      sections:
+      - local: in_translation
+        title: (번역중) ALIGN
+      - local: in_translation
+        title: (번역중) AltCLIP
+      - local: in_translation
+        title: (번역중) BLIP
+      - local: in_translation
+        title: (번역중) BLIP-2
+      - local: in_translation
+        title: (번역중) BridgeTower
+      - local: in_translation
+        title: (번역중) Chinese-CLIP
+      - local: in_translation
+        title: (번역중) CLIP
+      - local: in_translation
+        title: (번역중) CLIPSeg
+      - local: in_translation
+        title: (번역중) Data2Vec
+      - local: in_translation
+        title: (번역중) DePlot
+      - local: in_translation
+        title: (번역중) Donut
+      - local: in_translation
+        title: (번역중) FLAVA
+      - local: in_translation
+        title: (번역중) GIT
+      - local: in_translation
+        title: (번역중) GroupViT
+      - local: in_translation
+        title: (번역중) LayoutLM
+      - local: in_translation
+        title: (번역중) LayoutLMV2
+      - local: in_translation
+        title: (번역중) LayoutLMV3
+      - local: in_translation
+        title: (번역중) LayoutXLM
+      - local: in_translation
+        title: (번역중) LiLT
+      - local: in_translation
+        title: (번역중) LXMERT
+      - local: in_translation
+        title: (번역중) MatCha
+      - local: in_translation
+        title: (번역중) MGP-STR
+      - local: in_translation
+        title: (번역중) OneFormer
+      - local: in_translation
+        title: (번역중) OWL-ViT
+      - local: in_translation
+        title: (번역중) Perceiver
+      - local: in_translation
+        title: (번역중) Pix2Struct
+      - local: in_translation
+        title: (번역중) Segment Anything
+      - local: in_translation
+        title: (번역중) Speech Encoder Decoder Models
+      - local: in_translation
+        title: (번역중) TAPAS
+      - local: in_translation
+        title: (번역중) TrOCR
+      - local: in_translation
+        title: (번역중) TVLT
+      - local: in_translation
+        title: (번역중) ViLT
+      - local: in_translation
+        title: (번역중) Vision Encoder Decoder Models
+      - local: in_translation
+        title: (번역중) Vision Text Dual Encoder
+      - local: in_translation
+        title: (번역중) VisualBERT
+      - local: in_translation
+        title: (번역중) X-CLIP
+      title: (번역중) 멀티모달 모델
+    - isExpanded: false
+      sections:
+      - local: in_translation
+        title: (번역중) Decision Transformer
+      - local: in_translation
+        title: (번역중) Trajectory Transformer
+      title: (번역중) 강화학습 모델
+    - isExpanded: false
+      sections:
+      - local: in_translation
+        title: (번역중) Informer
+      - local: in_translation
+        title: (번역중) Time Series Transformer
+      title: (번역중) 시계열 모델
+    - isExpanded: false
+      sections:
+      - local: in_translation
+        title: (번역중) Graphormer
+      title: (번역중) Graph models
+    title: (번역중) 모델
+  - sections:
+    - local: in_translation
+      title: (번역중) Custom Layers and Utilities
+    - local: in_translation
+      title: (번역중) Utilities for pipelines
+    - local: in_translation
+      title: (번역중) Utilities for Tokenizers
+    - local: in_translation
+      title: (번역중) Utilities for Trainer
+    - local: in_translation
+      title: (번역중) Utilities for Generation
+    - local: in_translation
+      title: (번역중) Utilities for Image Processors
+    - local: in_translation
+      title: (번역중) Utilities for Audio processing
+    - local: in_translation
+      title: (번역중) General Utilities
+    - local: in_translation
+      title: (번역중) Utilities for Time Series
+    title: (번역중) Internal Helpers
+  title: (번역중) API

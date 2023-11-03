@@ -1,0 +1,25 @@
+tensorboard
+scikit-learn
+seqeval
+psutil
+sacrebleu >= 1.4.12
+git+https://github.com/huggingface/accelerate@main#egg=accelerate
+rouge-score
+tensorflow_datasets
+matplotlib
+git-python==1.0.3
+faiss-cpu
+streamlit
+elasticsearch
+nltk
+pandas
+datasets >= 1.13.3
+fire
+pytest
+conllu
+sentencepiece != 0.1.92
+protobuf
+torchvision
+jiwer
+librosa
+evaluate >= 0.2.0

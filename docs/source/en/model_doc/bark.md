@@ -1,0 +1,201 @@
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Bark
+
+## Overview
+
+Bark is a transformer-based text-to-speech model proposed by Suno AI in [suno-ai/bark](https://github.com/suno-ai/bark). 
+
+
+Bark is made of 4 main models:
+
+- [`BarkSemanticModel`] (also referred to as the 'text' model): a causal auto-regressive transformer model that takes as input tokenized text, and predicts semantic text tokens that capture the meaning of the text.
+- [`BarkCoarseModel`] (also referred to as the 'coarse acoustics' model): a causal autoregressive transformer, that takes as input the results of the [`BarkSemanticModel`] model. It aims at predicting the first two audio codebooks necessary for EnCodec.
+- [`BarkFineModel`] (the 'fine acoustics' model), this time a non-causal autoencoder transformer, which iteratively predicts the last codebooks based on the sum of the previous codebooks embeddings.
+- having predicted all the codebook channels from the [`EncodecModel`], Bark uses it to decode the output audio array.
+
+It should be noted that each of the first three modules can support conditional speaker embeddings to condition the output sound according to specific predefined voice.
+
+### Optimizing Bark
+
+Bark can be optimized with just a few extra lines of code, which **significantly reduces its memory footprint** and **accelerates inference**.
+
+#### Using half-precision
+
+You can speed up inference and reduce memory footprint by 50% simply by loading the model in half-precision.
+
+```python
+from transformers import BarkModel
+import torch
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16).to(device)
+```
+
+#### Using 🤗 Better Transformer
+
+Better Transformer is an 🤗 Optimum feature that performs kernel fusion under the hood. You can gain 20% to 30% in speed with zero performance degradation. It only requires one line of code to export the model to 🤗 Better Transformer:
+
+```python
+model =  model.to_bettertransformer()
+```
+
+Note that 🤗 Optimum must be installed before using this feature. [Here's how to install it.](https://huggingface.co/docs/optimum/installation)
+
+#### Using CPU offload
+
+As mentioned above, Bark is made up of 4 sub-models, which are called up sequentially during audio generation. In other words, while one sub-model is in use, the other sub-models are idle.
+
+If you're using a CUDA device, a simple solution to benefit from an 80% reduction in memory footprint is to offload the GPU's submodels when they're idle. This operation is called CPU offloading. You can use it with one line of code.
+
+```python
+model.enable_cpu_offload()
+```
+
+Note that 🤗 Accelerate must be installed before using this feature. [Here's how to install it.](https://huggingface.co/docs/accelerate/basic_tutorials/install)
+
+#### Combining optimization techniques
+
+You can combine optimization techniques, and use CPU offload, half-precision and 🤗 Better Transformer all at once.
+
+```python
+from transformers import BarkModel
+import torch
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# load in fp16
+model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16).to(device)
+
+# convert to bettertransformer
+model = BetterTransformer.transform(model, keep_original_model=False)
+
+# enable CPU offload
+model.enable_cpu_offload()
+```
+
+Find out more on inference optimization techniques [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one).
+
+### Tips
+
+Suno offers a library of voice presets in a number of languages [here](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc67cff786b04b50b3ceb756fd05f68c).
+These presets are also uploaded in the hub [here](https://huggingface.co/suno/bark-small/tree/main/speaker_embeddings) or [here](https://huggingface.co/suno/bark/tree/main/speaker_embeddings).
+
+```python
+>>> from transformers import AutoProcessor, BarkModel
+
+>>> processor = AutoProcessor.from_pretrained("suno/bark")
+>>> model = BarkModel.from_pretrained("suno/bark")
+
+>>> voice_preset = "v2/en_speaker_6"
+
+>>> inputs = processor("Hello, my dog is cute", voice_preset=voice_preset)
+
+>>> audio_array = model.generate(**inputs)
+>>> audio_array = audio_array.cpu().numpy().squeeze()
+```
+
+Bark can generate highly realistic, **multilingual** speech as well as other audio - including music, background noise and simple sound effects. 
+
+```python
+>>> # Multilingual speech - simplified Chinese
+>>> inputs = processor("惊人的！我会说中文")
+
+>>> # Multilingual speech - French - let's use a voice_preset as well
+>>> inputs = processor("Incroyable! Je peux générer du son.", voice_preset="fr_speaker_5")
+
+>>> # Bark can also generate music. You can help it out by adding music notes around your lyrics.
+>>> inputs = processor("♪ Hello, my dog is cute ♪")
+
+>>> audio_array = model.generate(**inputs)
+>>> audio_array = audio_array.cpu().numpy().squeeze()
+```
+
+The model can also produce **nonverbal communications** like laughing, sighing and crying.
+
+
+```python
+>>> # Adding non-speech cues to the input text
+>>> inputs = processor("Hello uh ... [clears throat], my dog is cute [laughter]")
+
+>>> audio_array = model.generate(**inputs)
+>>> audio_array = audio_array.cpu().numpy().squeeze()
+```
+
+To save the audio, simply take the sample rate from the model config and some scipy utility:
+
+```python
+>>> from scipy.io.wavfile import write as write_wav
+
+>>> # save audio to disk, but first take the sample rate from the model config
+>>> sample_rate = model.generation_config.sample_rate
+>>> write_wav("bark_generation.wav", sample_rate, audio_array)
+```
+
+
+This model was contributed by [Yoach Lacombe (ylacombe)](https://huggingface.co/ylacombe) and [Sanchit Gandhi (sanchit-gandhi)](https://github.com/sanchit-gandhi).
+The original code can be found [here](https://github.com/suno-ai/bark).
+
+
+## BarkConfig
+
+[[autodoc]] BarkConfig
+    - all
+
+## BarkProcessor
+
+[[autodoc]] BarkProcessor
+    - all
+    - __call__
+
+## BarkModel
+
+[[autodoc]] BarkModel
+    - generate
+    - enable_cpu_offload
+
+## BarkSemanticModel
+
+[[autodoc]] BarkSemanticModel
+    - forward
+
+## BarkCoarseModel
+
+[[autodoc]] BarkCoarseModel
+    - forward
+
+## BarkFineModel
+
+[[autodoc]] BarkFineModel
+    - forward
+
+## BarkCausalModel
+
+[[autodoc]] BarkCausalModel
+    - forward
+
+## BarkCoarseConfig
+
+[[autodoc]] BarkCoarseConfig
+    - all
+
+## BarkFineConfig
+
+[[autodoc]] BarkFineConfig
+    - all
+
+## BarkSemanticConfig
+
+[[autodoc]] BarkSemanticConfig
+    - all
+

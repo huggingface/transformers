@@ -1,0 +1,26 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers 简介
+  - local: quicktour
+    title: 快速上手
+  - local: installation
+    title: 安装
+  title: 开始使用
+- sections:
+  - local: accelerate
+    title: 加速分布式训练
+  - local: preprocessing
+    title: 预处理
+  - local: pipeline_tutorial
+    title: pipeline教程
+  title: 教程
+- sections:
+  - local: fast_tokenizers
+    title: 使用 🤗 Tokenizers 中的分词器
+  - local: multilingual
+    title: 使用多语言模型进行推理
+  - local: create_a_model
+    title: 使用特定于模型的 API
+  - local: custom_models
+    title: 共享自定义模型
+  title: 开发者指南
