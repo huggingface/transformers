@@ -21,13 +21,15 @@ from copy import copy
 from enum import Enum
 from inspect import isclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Literal, NewType, Optional, Tuple, Union, get_type_hints
+from typing import Any, Callable, Dict, Iterable, List, Literal, NewType, Optional, Tuple, Union, get_type_hints, TypeVar
 
 import yaml
 
 
 DataClass = NewType("DataClass", Any)
 DataClassType = NewType("DataClassType", Any)
+T = TypeVar("T")
+
 
 
 # From https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
@@ -269,7 +271,7 @@ class HfArgumentParser(ArgumentParser):
         look_for_args_file=True,
         args_filename=None,
         args_file_flag=None,
-    ) -> Tuple[DataClass, ...]:
+    ) -> Tuple[T, ...]:
         """
         Parse command-line args into instances of the specified dataclass types.
 
