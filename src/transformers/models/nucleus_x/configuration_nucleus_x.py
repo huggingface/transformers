@@ -51,11 +51,11 @@ class NucleusXConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the NucleusX model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`~NucleusXModel`]
-        initializer_factor (`float`, *optional*, defaults to 2**-2.5):
+        initializer_factor (`float`, *optional*, defaults to `2**-2.5`):
             The gain for initializing linear projection weights using xavier uniform.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        lm_head_initializer_range (`float`, *optional*, defaults to decoder_embed_dim ** -0.5):
+        lm_head_initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing the lm_head weights.
         is_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as decoder or not (in which case it's used as an encoder).
@@ -72,11 +72,11 @@ class NucleusXConfig(PretrainedConfig):
             The three modes of Retentive Network: `"parallel"`, `"recurrent"`, or `"chunkwise"`.
         activation_fn (`str` or `function`, *optional*, defaults to `"swish"`):
             The non-linear activation function (function or string) in the decoder.
-        dropout (`float`, *optional*, defaults to `0.0`):
+        dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability
-        activation_dropout (`float`, *optional*, defaults to `0.0`):
+        activation_dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability after activation in FFN.
-        drop_path_rate (`float`, *optional*, defaults to `0.0`):
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
             Drop Path (or Stochastic Depth, https://arxiv.org/abs/1603.09382) rate. Uses timm implementation (see
             https://github.com/huggingface/pytorch-image-models).
         decoder_embed_dim (`int`, *optional*, defaults to 4096):
@@ -91,16 +91,16 @@ class NucleusXConfig(PretrainedConfig):
             Number of decoder retention heads.
         decoder_normalize_before (`bool`, *optional*, defaults to `True`):
             Apply rms_norm before each decoder block
-        rms_norm_embedding (`bool`, *optional*, defaults to `False`):
+        rms_norm_embedding (`bool`, *optional*, defaults to `True`):
             Add rms_norm to embedding
-        no_scale_embedding (`bool`, *optional*, defaults to `True`):
+        no_scale_embedding (`bool`, *optional*, defaults to `False`):
             If True, dont scale embeddings
         recurrent_chunk_size (`int`, *optional*, defaults to 512):
             The chunk size for `"chunkwise"` mode.
         use_lm_decay (`bool`, *optional*, defaults to `False`):
             Whether to use language model decay. (Found in https://arxiv.org/pdf/2307.08621.pdf, Page 7, Section 3.1,
             Paragraph **Parameter Allocation**, last sentence)
-        z_loss_coeff (`float`, *optional*, defaults to `0.0`):
+        z_loss_coeff (`float`, *optional*, defaults to 0.0):
             coefficient for z-loss (Used in PaLM, https://arxiv.org/pdf/2204.02311.pdf)
         deepnorm (`bool`, *optional*, defaults to `False`):
             DeepNorm (https://arxiv.org/abs/2203.00555). Disables `decoder_normalize_before` and `subln`.
@@ -113,7 +113,6 @@ class NucleusXConfig(PretrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
 
-        Example:
 
     ```python
     >>> from transformers import NucleusXModel, NucleusXConfig

@@ -208,6 +208,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [NLLB](model_doc/nllb)                          |       ✅        |         ❌         |      ❌      |
 |                      [NLLB-MOE](model_doc/nllb-moe)                      |       ✅        |         ❌         |      ❌      |
 |                        [Nougat](model_doc/nougat)                        |       ✅        |         ✅         |      ✅      |
+|                     [NucleusX](model_doc/nucleus_x)                      |       ✅        |         ❌         |      ❌      |
 |                 [Nyströmformer](model_doc/nystromformer)                 |       ✅        |         ❌         |      ❌      |
 |                     [OneFormer](model_doc/oneformer)                     |       ✅        |         ❌         |      ❌      |
 |                    [OpenAI GPT](model_doc/openai-gpt)                    |       ✅        |         ✅         |      ❌      |

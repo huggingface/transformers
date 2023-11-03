@@ -5908,6 +5908,37 @@ class NllbMoeTop2Router(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+NUCLEUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class NucleusXForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class NucleusXForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class NucleusXModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class NucleusXPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
