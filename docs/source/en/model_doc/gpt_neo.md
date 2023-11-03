@@ -27,7 +27,7 @@ The architecture is similar to GPT2 except that GPT Neo uses local attention in 
 
 This model was contributed by [valhalla](https://huggingface.co/valhalla).
 
-### Generation
+## Usage example
 
 The `generate()` method can be used to generate text using GPT Neo model.
 
@@ -53,7 +53,6 @@ The `generate()` method can be used to generate text using GPT Neo model.
 ... )
 >>> gen_text = tokenizer.batch_decode(gen_tokens)[0]
 ```
-
 
 ## Combining GPT-Neo and Flash Attention 2
 
@@ -95,7 +94,7 @@ Note that for GPT-Neo it is not possible to train / run on very long context as 
 </div>
 
 
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Causal language modeling task guide](../tasks/language_modeling)
@@ -103,6 +102,10 @@ Note that for GPT-Neo it is not possible to train / run on very long context as 
 ## GPTNeoConfig
 
 [[autodoc]] GPTNeoConfig
+
+
+<frameworkcontent>
+<pt>
 
 ## GPTNeoModel
 
@@ -129,6 +132,9 @@ Note that for GPT-Neo it is not possible to train / run on very long context as 
 [[autodoc]] GPTNeoForTokenClassification
     - forward
 
+</pt>
+<jax>
+
 ## FlaxGPTNeoModel
 
 [[autodoc]] FlaxGPTNeoModel
@@ -138,3 +144,8 @@ Note that for GPT-Neo it is not possible to train / run on very long context as 
 
 [[autodoc]] FlaxGPTNeoForCausalLM
     - __call__
+
+</jax>
+</frameworkcontent>
+
+

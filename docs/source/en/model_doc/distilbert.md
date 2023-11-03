@@ -51,7 +51,10 @@ distillation and cosine-distance losses. Our smaller, faster and lighter model i
 demonstrate its capabilities for on-device computations in a proof-of-concept experiment and a comparative on-device
 study.*
 
-Tips:
+This model was contributed by [victorsanh](https://huggingface.co/victorsanh). This model jax version was
+contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/huggingface/transformers/tree/main/examples/research_projects/distillation).
+
+## Usage tips
 
 - DistilBERT doesn't have `token_type_ids`, you don't need to indicate which token belongs to which segment. Just
   separate your segments with the separation token `tokenizer.sep_token` (or `[SEP]`).
@@ -63,8 +66,6 @@ Tips:
     * predicting the masked tokens correctly (but no next-sentence objective)
     * a cosine similarity between the hidden states of the student and the teacher model
 
-This model was contributed by [victorsanh](https://huggingface.co/victorsanh). This model jax version was
-contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/huggingface/transformers/tree/main/examples/research_projects/distillation).
 
 ## Resources
 
@@ -144,6 +145,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] DistilBertTokenizerFast
 
+<frameworkcontent>
+<pt>
+
 ## DistilBertModel
 
 [[autodoc]] DistilBertModel
@@ -173,6 +177,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] DistilBertForQuestionAnswering
     - forward
+
+</pt>
+<tf>
 
 ## TFDistilBertModel
 
@@ -204,6 +211,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] TFDistilBertForQuestionAnswering
     - call
 
+</tf>
+<jax>
+
 ## FlaxDistilBertModel
 
 [[autodoc]] FlaxDistilBertModel
@@ -233,3 +243,10 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] FlaxDistilBertForQuestionAnswering
     - __call__
+
+</jax>
+</frameworkcontent>
+
+
+
+
