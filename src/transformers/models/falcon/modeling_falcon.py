@@ -451,7 +451,12 @@ class FalconAttention(nn.Module):
                 )
 
                 attn_output = F.scaled_dot_product_attention(
-                    query_layer, key_layer, value_layer, attention_mask, 0.0, is_causal=False
+                    query_layer,
+                    key_layer,
+                    value_layer,
+                    attention_mask,
+                    0.0,
+                    is_causal=self.is_causal and attention_mask is None,
                 )
                 attention_scores = None
             else:
@@ -481,6 +486,7 @@ class FalconAttention(nn.Module):
                     value_layer,
                     attn_mask=attention_mask,
                     dropout_p=self.attention_dropout.p if self.training else 0.0,
+                    is_causal=self.is_causal and attention_mask is None,
                 )
                 context_layer = context_layer.transpose(1, 2)
                 context_layer = context_layer.reshape(batch_size, query_length, self.num_heads * self.head_dim)
@@ -905,6 +911,7 @@ class FalconPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["FalconDecoderLayer"]
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -1056,18 +1063,22 @@ class FalconModel(FalconPreTrainedModel):
                     attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
                 )
 
-                attention_mask = torch.masked_fill(
-                    alibi / math.sqrt(self.config.hidden_size // self.num_heads),
-                    attention_mask < -1,
-                    torch.finfo(alibi.dtype).min,
-                )
-
-                # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
-                # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
-                if seq_length > 1:
-                    attention_mask = AttentionMaskConverter._unmask_unattended(
-                        attention_mask, attention_mask_2d, unmasked_value=0.0
+                # We take care to integrate alibi bias in the attention_mask here.
+                if attention_mask is None:
+                    attention_mask = alibi / math.sqrt(self.config.hidden_size // self.num_heads)
+                else:
+                    attention_mask = torch.masked_fill(
+                        alibi / math.sqrt(self.config.hidden_size // self.num_heads),
+                        attention_mask < -1,
+                        torch.finfo(alibi.dtype).min,
                     )
+
+                    # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
+                    # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
+                    if seq_length > 1:
+                        attention_mask = AttentionMaskConverter._unmask_unattended(
+                            attention_mask, attention_mask_2d, unmasked_value=0.0
+                        )
             else:
                 # PyTorch SDPA does not support head_mask, we fall back on the eager implementation in this case.
                 attention_mask = _prepare_4d_causal_attention_mask(

@@ -79,6 +79,7 @@ from .utils import (
     is_peft_available,
     is_remote_url,
     is_safetensors_available,
+    is_torch_sdpa_available,
     is_torch_tpu_available,
     logging,
     replace_return_docstrings,
@@ -1321,6 +1322,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "initialise the model on a GPU by passing a device_map that contains only GPU devices as keys."
             )
         config._flash_attn_2_enabled = True
+        return config
+
+    @classmethod
+    def _check_and_enable_sdpa(cls, config) -> PretrainedConfig:
+        """
+        Enables the use of SDPA natively in Transformers if supported by the model, and if BetterTransformer is not
+        being used.
+        """
+        if not cls._supports_sdpa:
+            return config
+
+        _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
+        if _is_bettertransformer:
+            return config
+
+        config._sdpa_enabled = True
         return config
 
     def enable_input_require_grads(self):
@@ -3231,6 +3248,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if use_flash_attention_2:
             config = cls._check_and_enable_flash_attn_2(config, torch_dtype=torch_dtype, device_map=device_map)
+        elif is_torch_sdpa_available():
+            # use_flash_attention_2 takes priority.
+            config = cls._check_and_enable_sdpa(config)
 
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)

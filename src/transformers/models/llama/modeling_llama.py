@@ -705,14 +705,6 @@ class LlamaSDPAAttention(LlamaAttention):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         if attention_mask is not None:
-            is_causal = False
-        elif q_len == 1:
-            # causal attention and bi-directional attention are the same.
-            is_causal = False
-        else:
-            is_causal = True
-
-        if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
@@ -721,7 +713,12 @@ class LlamaSDPAAttention(LlamaAttention):
         # Note that Llama does not use dropout in the attention, hence the hard-coded
         # dropout_p=0.0 independent of self.training.
         attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states, key_states, value_states, attn_mask=attention_mask, dropout_p=0.0, is_causal=is_causal
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            dropout_p=0.0,
+            is_causal=self.is_causal and attention_mask is None,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -744,7 +741,7 @@ class LlamaDecoderLayer(nn.Module):
 
         if getattr(config, "_flash_attn_2_enabled", False):
             self.self_attn = LlamaFlashAttention2(config=config)
-        elif is_torch_sdpa_available():
+        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
             self.self_attn = LlamaSDPAAttention(config=config)
         else:
             self.self_attn = LlamaAttention(config=config)
@@ -843,6 +840,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range

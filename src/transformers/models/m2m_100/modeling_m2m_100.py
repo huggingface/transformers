@@ -16,6 +16,7 @@
 
 
 import math
+from enum import Enum
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -37,6 +38,7 @@ from ...utils import (
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torch_sdpa_available,
     logging,
     replace_return_docstrings,
 )
@@ -325,9 +327,15 @@ class M2M100EncoderLayer(nn.Module):
     def __init__(self, config: M2M100Config):
         super().__init__()
         self.embed_dim = config.d_model
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
 
-        self.self_attn = M2M100_ATTENTION_CLASSES[attn_type](
+        if getattr(config, "_flash_attn_2_enabled", False):
+            self._attn_type = M2M100AttentionType.flash_attention_2
+        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
+            self._attn_type = M2M100AttentionType.sdpa
+        else:
+            self._attn_type = M2M100AttentionType.eager
+
+        self.self_attn = M2M100_ATTENTION_CLASSES[self._attn_type](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -392,7 +400,14 @@ class M2M100EncoderLayer(nn.Module):
         return outputs
 
 
-M2M100_ATTENTION_CLASSES = {"default": M2M100Attention}
+M2M100_ATTENTION_CLASSES = {"eager": M2M100Attention}
+
+
+# Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->M2M100
+class M2M100AttentionType(str, Enum):
+    eager = "eager"
+    sdpa = "sdpa"
+    flash_attention_2 = "flash_attention_2"
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->M2M100, MBART->M2M100
@@ -400,9 +415,14 @@ class M2M100DecoderLayer(nn.Module):
     def __init__(self, config: M2M100Config):
         super().__init__()
         self.embed_dim = config.d_model
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
+        if getattr(config, "_flash_attn_2_enabled", False):
+            self._attn_type = M2M100AttentionType.flash_attention_2
+        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
+            self._attn_type = M2M100AttentionType.sdpa
+        else:
+            self._attn_type = M2M100AttentionType.eager
 
-        self.self_attn = M2M100_ATTENTION_CLASSES[attn_type](
+        self.self_attn = M2M100_ATTENTION_CLASSES[self._attn_type](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -415,7 +435,7 @@ class M2M100DecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = M2M100_ATTENTION_CLASSES[attn_type](
+        self.encoder_attn = M2M100_ATTENTION_CLASSES[self._attn_type](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,

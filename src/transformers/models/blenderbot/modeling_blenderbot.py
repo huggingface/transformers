@@ -19,6 +19,7 @@ import copy
 import math
 import os
 import warnings
+from enum import Enum
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -40,6 +41,7 @@ from ...utils import (
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torch_sdpa_available,
     logging,
     replace_return_docstrings,
 )
@@ -252,7 +254,14 @@ class BlenderbotAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-BLENDERBOT_ATTENTION_CLASSES = {"default": BlenderbotAttention}
+BLENDERBOT_ATTENTION_CLASSES = {"eager": BlenderbotAttention}
+
+
+# Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->Blenderbot
+class BlenderbotAttentionType(str, Enum):
+    eager = "eager"
+    sdpa = "sdpa"
+    flash_attention_2 = "flash_attention_2"
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Blenderbot, MBART->BLENDERBOT
@@ -260,9 +269,15 @@ class BlenderbotEncoderLayer(nn.Module):
     def __init__(self, config: BlenderbotConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
 
-        self.self_attn = BLENDERBOT_ATTENTION_CLASSES[attn_type](
+        if getattr(config, "_flash_attn_2_enabled", False):
+            self._attn_type = BlenderbotAttentionType.flash_attention_2
+        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
+            self._attn_type = BlenderbotAttentionType.sdpa
+        else:
+            self._attn_type = BlenderbotAttentionType.eager
+
+        self.self_attn = BLENDERBOT_ATTENTION_CLASSES[self._attn_type](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -332,9 +347,14 @@ class BlenderbotDecoderLayer(nn.Module):
     def __init__(self, config: BlenderbotConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
+        if getattr(config, "_flash_attn_2_enabled", False):
+            self._attn_type = BlenderbotAttentionType.flash_attention_2
+        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
+            self._attn_type = BlenderbotAttentionType.sdpa
+        else:
+            self._attn_type = BlenderbotAttentionType.eager
 
-        self.self_attn = BLENDERBOT_ATTENTION_CLASSES[attn_type](
+        self.self_attn = BLENDERBOT_ATTENTION_CLASSES[self._attn_type](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -347,7 +367,7 @@ class BlenderbotDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = BLENDERBOT_ATTENTION_CLASSES[attn_type](
+        self.encoder_attn = BLENDERBOT_ATTENTION_CLASSES[self._attn_type](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,

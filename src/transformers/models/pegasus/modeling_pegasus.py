@@ -16,6 +16,7 @@
 
 import copy
 import math
+from enum import Enum
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -38,6 +39,7 @@ from ...utils import (
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torch_sdpa_available,
     logging,
     replace_return_docstrings,
 )
@@ -267,7 +269,14 @@ class PegasusAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-PEGASUS_ATTENTION_CLASSES = {"default": PegasusAttention}
+PEGASUS_ATTENTION_CLASSES = {"eager": PegasusAttention}
+
+
+# Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->Pegasus
+class PegasusAttentionType(str, Enum):
+    eager = "eager"
+    sdpa = "sdpa"
+    flash_attention_2 = "flash_attention_2"
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Pegasus, MBART->PEGASUS
@@ -275,9 +284,15 @@ class PegasusEncoderLayer(nn.Module):
     def __init__(self, config: PegasusConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
 
-        self.self_attn = PEGASUS_ATTENTION_CLASSES[attn_type](
+        if getattr(config, "_flash_attn_2_enabled", False):
+            self._attn_type = PegasusAttentionType.flash_attention_2
+        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
+            self._attn_type = PegasusAttentionType.sdpa
+        else:
+            self._attn_type = PegasusAttentionType.eager
+
+        self.self_attn = PEGASUS_ATTENTION_CLASSES[self._attn_type](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -347,9 +362,14 @@ class PegasusDecoderLayer(nn.Module):
     def __init__(self, config: PegasusConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
+        if getattr(config, "_flash_attn_2_enabled", False):
+            self._attn_type = PegasusAttentionType.flash_attention_2
+        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
+            self._attn_type = PegasusAttentionType.sdpa
+        else:
+            self._attn_type = PegasusAttentionType.eager
 
-        self.self_attn = PEGASUS_ATTENTION_CLASSES[attn_type](
+        self.self_attn = PEGASUS_ATTENTION_CLASSES[self._attn_type](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -362,7 +382,7 @@ class PegasusDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = PEGASUS_ATTENTION_CLASSES[attn_type](
+        self.encoder_attn = PEGASUS_ATTENTION_CLASSES[self._attn_type](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,

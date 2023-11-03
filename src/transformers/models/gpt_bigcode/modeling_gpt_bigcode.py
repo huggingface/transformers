@@ -549,21 +549,13 @@ class GPTBigCodeSDPAAttention(GPTBigCodeAttention):
         else:
             query_length = query_shape[-1]
 
-        if attention_mask is not None:
-            is_causal = False
-        elif query_length == 1:
-            # causal attention and bi-directional attention are the same.
-            is_causal = False
-        else:
-            is_causal = True
-
         sdpa_result = torch.nn.functional.scaled_dot_product_attention(
             query,
             key,
             value,
             attn_mask=attention_mask,
             dropout_p=self.attn_pdrop if self.training else 0.0,
-            is_causal=is_causal,
+            is_causal=self.is_causal and attention_mask is None,
             scale=scale,
         )
 
@@ -672,7 +664,7 @@ class GPTBigCodeBlock(nn.Module):
 
         if getattr(config, "_flash_attn_2_enabled", False):
             self.attn = GPTBigCodeFlashAttention2(config, layer_idx=layer_idx)
-        elif is_torch_sdpa_available():
+        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
             self.attn = GPTBigCodeSDPAAttention(config, layer_idx=layer_idx)
         else:
             self.attn = GPTBigCodeAttention(config, layer_idx=layer_idx)
@@ -769,6 +761,7 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GPTBigCodeBlock"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
