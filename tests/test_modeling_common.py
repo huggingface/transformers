@@ -610,13 +610,14 @@ class ModelTesterMixin:
             model = model_class(config)
             # TODO: is there a better way to do this?
             elementary_modules = [
-                module
-                for module in model.modules()
+                (name, module)
+                for name, module in model.named_modules()
                 if isinstance(module, (nn.Linear, nn.Conv2d, nn.Embedding, nn.Conv1d, nn.LayerNorm))
             ]
 
-            for submodule in elementary_modules:
-                submodule.register_forward_hook(set_forward_fired)
+            hooks_handle = []
+            for _, submodule in elementary_modules:
+                hooks_handle.append(submodule.register_forward_hook(set_forward_fired))
 
             # In case we want to perform pure bf16 training, simply convert the model beforehand
             if half_precision_training:
@@ -637,7 +638,7 @@ class ModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
             for k, v in inputs.items():
-                if torch.is_floating_point(v):
+                if isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                     v = v.to(target_dtype)
 
             # In case we want to perform mixed precision training, we need to wrap the loss computation
@@ -648,11 +649,15 @@ class ModelTesterMixin:
             loss.backward()
             optimizer.step()
 
-            for submodule in model.modules():
+
+            for hook_handle in hooks_handle:
+                hook_handle.remove()
+
+            for module_name, submodule in elementary_modules:
                 if getattr(submodule, "_hf_test_forward_fired", False):
                     for k, v in submodule.named_parameters():
                         if v.requires_grad:
-                            self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+                            self.assertTrue(v.grad is not None, f"{module_name}.{k} in {model_class.__name__} has no gradient!")
 
     def test_training(self):
         self.check_training()
