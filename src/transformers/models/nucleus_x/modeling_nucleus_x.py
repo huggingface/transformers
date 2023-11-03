@@ -105,6 +105,10 @@ class NucleusXRMSNorm(nn.Module):
         else:
             self.register_parameter("weight", None)
 
+    def reset_parameters(self):
+        if self.elementwise_affine:
+            nn.init.ones_(self.weight)
+
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
