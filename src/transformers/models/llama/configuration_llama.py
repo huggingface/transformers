@@ -96,7 +96,8 @@ class LlamaConfig(PretrainedConfig):
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         rope_dim (`int`, *optional*, defaults to `None`):
-            Dimension of heads to apply Rotary Position Embedding. If `None`, defaults to `hidden_size // num_attention_heads`.
+            Dimension of heads to apply Rotary Position Embedding. If `None`, defaults to `hidden_size //
+            num_attention_heads`.
 
 
     ```python
