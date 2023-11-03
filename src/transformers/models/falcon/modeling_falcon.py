@@ -472,9 +472,9 @@ class FalconAttention(nn.Module):
         else:
             if hasattr(F, "scaled_dot_product_attention") and not output_attentions and head_mask is None:
                 context_layer = torch.nn.functional.scaled_dot_product_attention(
-                    query_layer_,
-                    key_layer_,
-                    value_layer_,
+                    query_layer,
+                    key_layer,
+                    value_layer,
                     attn_mask=attention_mask,
                     dropout_p=self.attention_dropout.p if self.training else 0.0,
                 )
@@ -483,7 +483,7 @@ class FalconAttention(nn.Module):
 
                 output_tensor = self.dense(context_layer)
             else:
-                matmul_result = query_layer_ @ key_layer_.transpose(-1, -2)
+                matmul_result = query_layer @ key_layer.transpose(-1, -2)
 
                 # change view to [batch_size, num_heads, q_length, kv_length]
                 attention_scores = matmul_result.view(batch_size, self.num_heads, query_length, kv_length)
@@ -493,7 +493,7 @@ class FalconAttention(nn.Module):
                 # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
                 if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
                     attention_scores = attention_scores.to(torch.float32)
-
+                
                 attention_logits = attention_scores + alibi.view(batch_size, self.num_heads, 1, -1)
                 attention_logits *= self.inv_norm_factor
                 attention_probs = F.softmax(attention_logits + attention_mask, dim=-1, dtype=hidden_states.dtype)
@@ -507,13 +507,13 @@ class FalconAttention(nn.Module):
                 attention_probs_reshaped = attention_probs.view(batch_size, self.num_heads, query_length, kv_length)
 
                 # matmul: [batch_size * num_heads, q_length, head_dim]
-                context_layer = (attention_probs_reshaped @ value_layer_).flatten(0, 1)
+                context_layer = (attention_probs_reshaped @ value_layer).flatten(0, 1)
 
                 # change view [batch_size, q_length, num_heads * head_dim]
                 context_layer = self._merge_heads(context_layer)
 
                 output_tensor = self.dense(context_layer)
-
+            
             if output_attentions:
                 return output_tensor, present, attention_probs
             else:

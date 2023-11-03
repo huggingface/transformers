@@ -701,7 +701,7 @@ class LlamaSDPAAttention(LlamaAttention):
 
         if attention_mask is not None:
             is_causal = False
-        elif query_length == 1:
+        elif q_len == 1:
             # causal attention and bi-directional attention are the same.
             is_causal = False
         else:
