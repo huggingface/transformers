@@ -169,8 +169,10 @@ class AttentionMaskConverter:
         using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path. Details:
         https://github.com/pytorch/pytorch/issues/110213
 
-        expanded_mask is [bsz, 1, tgt_seq_len, src_seq_len] or [bsz, tgt_seq_len, src_seq_len].
+        expanded_mask is [bsz, num_masks, tgt_seq_len, src_seq_len] or [bsz, tgt_seq_len, src_seq_len].
         attention_mask is [bsz, src_seq_len].
+
+        The dimension num_masks is most often 1, but it can also be the number of heads in the case of alibi.
 
         If attention_mask is
         ```
@@ -223,14 +225,19 @@ class AttentionMaskConverter:
         # Avoid unmasking tokens at relevant target positions (on the row axis), by rather unmasking possibly several times the first row that should always be unmasked as we filtered out the batch above.
         range_tensor[range_tensor >= indices] = 0
 
-        mask_slice = (left_masked_rows.unsqueeze(1),)
-
         # TODO: we may drop support for 3D attention mask as the refactor from Patrick maybe dropped this case  
         if expanded_mask.dim() == 4:
-            mask_slice += (0, range_tensor)
+            num_masks = expanded_mask.shape[1]
+            if num_masks == 1:
+                # Broadcast [left_masked_rows, 1], [left_masked_rows, max_len]
+                mask_slice = (left_masked_rows[:, None], 0, range_tensor)
+            else:
+                # Broadcast [left_masked_rows, 1, 1], [1, num_masks, 1], [left_masked_rows, 1, max_len]
+                mask_slice = (left_masked_rows[:, None, None], torch.arange(num_masks)[None, :, None], range_tensor[:, None, :])
         else:
-            mask_slice += (range_tensor,)
-
+            # Broadcast [left_masked_rows, 1], [left_masked_rows, max_len]
+            mask_slice = (left_masked_rows[:, None], range_tensor)
+        
         expanded_mask[mask_slice] = unmasked_value
 
         return expanded_mask

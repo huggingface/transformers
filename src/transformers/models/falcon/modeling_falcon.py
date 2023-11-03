@@ -24,7 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa, AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -459,13 +459,6 @@ class FalconAttention(nn.Module):
 
         if alibi is None:
             if hasattr(F, "scaled_dot_product_attention") and not output_attentions:
-                # TODO: deprecate this once we add FA2 support in Falcon
-                logger.warning_once(
-                    "The current implementation of Falcon calls `torch.scaled_dot_product_attention` directly, this will be deprecated in the"
-                    " future in favor of the `BetterTransformer` API. Please install the latest optimum library with `pip install -U optimum` and call "
-                    "`model.to_bettertransformer()` to benefit from `torch.scaled_dot_product_attention` and future performance optimizations."
-                )
-
                 attn_output = F.scaled_dot_product_attention(
                     query_layer_, key_layer_, value_layer_, attention_mask, 0.0, is_causal=False
                 )
@@ -475,6 +468,7 @@ class FalconAttention(nn.Module):
                 attention_scores /= math.sqrt(self.head_dim)
 
                 attention_scores = F.softmax(attention_scores + attention_mask, dim=-1, dtype=hidden_states.dtype)
+                # It is unclear why neither dropout nor head_mask is applied here (while it is with alibi).
                 attn_output = attention_scores @ value_layer_
 
             attn_output = attn_output.view(batch_size, self.num_heads, query_length, self.head_dim)
@@ -487,41 +481,50 @@ class FalconAttention(nn.Module):
                 return output_tensor, present, attention_scores
             else:
                 return output_tensor, present
-
         else:
-            matmul_result = query_layer_ @ key_layer_.transpose(-1, -2)
+            if hasattr(F, "scaled_dot_product_attention") and not output_attentions and head_mask is None:
+                context_layer = torch.nn.functional.scaled_dot_product_attention(
+                    query_layer_,
+                    key_layer_,
+                    value_layer_,
+                    attn_mask=attention_mask,
+                    dropout_p=self.attention_dropout.p if self.training else 0.0,
+                )
+                context_layer = context_layer.transpose(1, 2)
+                context_layer = context_layer.reshape(batch_size, query_length, self.num_heads * self.head_dim)
 
-            # change view to [batch_size, num_heads, q_length, kv_length]
-            attention_scores = matmul_result.view(batch_size, self.num_heads, query_length, kv_length)
+                output_tensor = self.dense(context_layer)
+            else:
+                matmul_result = query_layer_ @ key_layer_.transpose(-1, -2)
 
-            # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype - [batch_size, num_heads, q_length, kv_length]
-            input_dtype = attention_scores.dtype
-            # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
-            if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
-                attention_scores = attention_scores.to(torch.float32)
-            # Matt (HF) note: We could possibly use F.scaled_dot_product_attention here too, by
-            # adding (alibi * self.inv_norm_factor) to attention_mask. I think this would be mathematically
-            # equivalent and more performant, but there might be a numerical difference. If you're reading this
-            # and you'd like to experiment and maybe file a PR, feel free!
-            attention_logits = attention_scores + alibi.view(batch_size, self.num_heads, 1, -1)
-            attention_logits *= self.inv_norm_factor
-            attention_probs = F.softmax(attention_logits + attention_mask, dim=-1, dtype=hidden_states.dtype)
-            # [batch_size, num_heads, q_length, kv_length]
-            attention_probs = self.attention_dropout(attention_probs)
+                # change view to [batch_size, num_heads, q_length, kv_length]
+                attention_scores = matmul_result.view(batch_size, self.num_heads, query_length, kv_length)
 
-            if head_mask is not None:
-                attention_probs = attention_probs * head_mask
+                # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype - [batch_size, num_heads, q_length, kv_length]
+                input_dtype = attention_scores.dtype
+                # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
+                if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
+                    attention_scores = attention_scores.to(torch.float32)
 
-            # change view [batch_size, num_heads, q_length, kv_length]
-            attention_probs_reshaped = attention_probs.view(batch_size, self.num_heads, query_length, kv_length)
+                attention_logits = attention_scores + alibi.view(batch_size, self.num_heads, 1, -1)
+                attention_logits *= self.inv_norm_factor
+                attention_probs = F.softmax(attention_logits + attention_mask, dim=-1, dtype=hidden_states.dtype)
+                # [batch_size, num_heads, q_length, kv_length]
+                attention_probs = self.attention_dropout(attention_probs)
 
-            # matmul: [batch_size * num_heads, q_length, head_dim]
-            context_layer = (attention_probs_reshaped @ value_layer_).flatten(0, 1)
+                if head_mask is not None:
+                    attention_probs = attention_probs * head_mask
 
-            # change view [batch_size, q_length, num_heads * head_dim]
-            context_layer = self._merge_heads(context_layer)
+                # change view [batch_size, num_heads, q_length, kv_length]
+                attention_probs_reshaped = attention_probs.view(batch_size, self.num_heads, query_length, kv_length)
 
-            output_tensor = self.dense(context_layer)
+                # matmul: [batch_size * num_heads, q_length, head_dim]
+                context_layer = (attention_probs_reshaped @ value_layer_).flatten(0, 1)
+
+                # change view [batch_size, q_length, num_heads * head_dim]
+                context_layer = self._merge_heads(context_layer)
+
+                output_tensor = self.dense(context_layer)
 
             if output_attentions:
                 return output_tensor, present, attention_probs
@@ -1049,12 +1052,6 @@ class FalconModel(FalconPreTrainedModel):
         else:
             past_key_values = self._convert_to_rw_cache(past_key_values)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape batch_size x num_heads x N x N
-        # head_mask has shape n_layer x batch x num_heads x N x N
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
@@ -1096,11 +1093,42 @@ class FalconModel(FalconPreTrainedModel):
         if getattr(self.config, "_flash_attn_2_enabled", False):
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        elif hasattr(F, "scaled_dot_product_attention") and not output_attentions:
+            if alibi is None:
+                attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                    attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length, output_attentions=output_attentions
+                )
+            elif head_mask is None:
+                alibi = alibi.reshape(batch_size, -1, *alibi.shape[1:])
+
+                attention_mask_2d = attention_mask
+                # We don't call _prepare_4d_causal_attention_mask_for_sdpa as we need to mask alibi using the 4D attention_mask untouched.
+                attention_mask = _prepare_4d_causal_attention_mask(
+                    attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+                )
+
+                attention_mask = torch.masked_fill(alibi / math.sqrt(self.config.hidden_size // self.num_heads), attention_mask < -1, torch.finfo(alibi.dtype).min)
+                
+                # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
+                # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
+                if seq_length > 1:
+                    attention_mask = AttentionMaskConverter._unmask_unattended(attention_mask, attention_mask_2d, unmasked_value=0.0)
+            else:
+                # PyTorch SDPA does not support head_mask, we fall back on the eager implementation in this case.
+                attention_mask = _prepare_4d_causal_attention_mask(
+                    attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+                )
         else:
             # 4d mask is passed through the layers
             attention_mask = _prepare_4d_causal_attention_mask(
                 attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
             )
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape batch_size x num_heads x N x N
+        # head_mask has shape n_layer x batch x num_heads x N x N
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
             if output_hidden_states:
