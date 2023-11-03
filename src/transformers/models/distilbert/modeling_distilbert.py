@@ -328,7 +328,9 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        attn_weights = self._flash_attention_forward(query_states, key_states, value_states, mask, q_length, dropout=attn_dropout)
+        attn_weights = self._flash_attention_forward(
+            query_states, key_states, value_states, mask, q_length, dropout=attn_dropout
+        )
 
         attn_weights_reshaped = attn_weights.reshape(batch_size, q_length, self.n_heads * dim_per_head)
         attn_output = self.out_lin(attn_weights_reshaped)
