@@ -339,6 +339,8 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
             expanded_4d_mask = AttentionMaskConverter._unmask_unattended(
                 expanded_4d_mask, attention_mask, unmasked_value=0.0
             )
+    else:
+        expanded_4d_mask = None
 
     return expanded_4d_mask
 
@@ -358,6 +360,39 @@ def _prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: 
     """
     return AttentionMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
 
+def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None, output_attentions: bool = False):
+    """
+    Creates a non-causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
+    `(batch_size, key_value_length)`
+
+    Args:
+        mask (`torch.Tensor` or `None`):
+            A 2D attention mask of shape `(batch_size, key_value_length)`
+        dtype (`torch.dtype`):
+            The torch dtype the created mask shall have.
+        tgt_len (`int`):
+            The target length or query length the created mask shall have.
+    """
+    if output_attentions:
+        # output_attentions=True can not be supported when using SDPA, and we fall back on
+        # the manual implementation that requires a 4D causal mask in all cases.
+        return AttentionMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
+
+    batch_size, key_value_length = mask.shape
+    tgt_len = tgt_len if tgt_len is not None else key_value_length
+    if batch_size == 1 and torch.all(mask == 1):
+        if query_length == 1:
+            # For query_length == 1, causal attention and bi-directional attention are the same.
+            return None
+        elif key_value_length == tgt_len:
+            return None
+        else:
+            # Unfortunately, for query_length > 1 and key_value_length != query_length, we can not generally ignore the attention mask, as SDPA causal mask generation
+            # may be wrong. We will set is_causal=False in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
+            # Reference: https://github.com/pytorch/pytorch/issues/108108
+            return AttentionMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
+    else:
+        return AttentionMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
 
 def _create_4d_causal_attention_mask(
     input_shape: Union[torch.Size, Tuple, List],

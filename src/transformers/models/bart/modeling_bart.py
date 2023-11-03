@@ -17,7 +17,7 @@ import copy
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
-
+from enum import Enum
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -25,7 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask, _prepare_4d_attention_mask_for_sdpa, _prepare_4d_causal_attention_mask_for_sdpa
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -44,6 +44,7 @@ from ...utils import (
     is_flash_attn_2_available,
     logging,
     replace_return_docstrings,
+    is_torch_sdpa_available,
 )
 from .configuration_bart import BartConfig
 
@@ -488,20 +489,117 @@ class BartFlashAttention2(BartAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
+class BartSDPAAttention(BartAttention):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        key_value_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+        if output_attentions or layer_head_mask is not None:
+            return super().forward(hidden_states, key_value_states=key_value_states, past_key_value=past_key_value, attention_mask=attention_mask, layer_head_mask=layer_head_mask, output_attentions=output_attentions, **kwargs)
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+
+        bsz, tgt_len, _ = hidden_states.size()
+
+        # get query proj
+        query_states = self.q_proj(hidden_states)
+        # get key, value proj
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if is_cross_attention and past_key_value is not None and past_key_value[0].shape[2] == key_value_states.shape[1]:
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0]
+            value_states = past_key_value[1]
+        elif is_cross_attention:
+            # cross_attentions
+            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        else:
+            # self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
+
+        query_states = self._shape(query_states, tgt_len, bsz)
+        key_states = key_states
+        value_states = value_states
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=self.is_causal and attention_mask is not None,
+        )
+
+        if attn_output.size() != (bsz, self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+
+        attn_output = attn_output.transpose(1, 2)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned across GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
+
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, None, past_key_value
 
 BART_ATTENTION_CLASSES = {
-    "default": BartAttention,
+    "eager": BartAttention,
+    "sdpa": BartSDPAAttention,
     "flash_attention_2": BartFlashAttention2,
 }
 
+class BartAttentionType(str, Enum):
+    eager = "eager"
+    sdpa = "sdpa"
+    flash_attention_2 = "flash_attention_2"
 
 class BartEncoderLayer(nn.Module):
     def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
 
-        self.self_attn = BART_ATTENTION_CLASSES[attn_type](
+        if getattr(config, "_flash_attn_2_enabled", False):
+            self._attn_type = BartAttentionType.flash_attention_2
+        elif is_torch_sdpa_available():
+            self._attn_type = BartAttentionType.sdpa
+        else:
+            self._attn_type = BartAttentionType.eager
+
+        print("attn_type", self._attn_type)
+
+        self.self_attn = BART_ATTENTION_CLASSES[self._attn_type](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -571,8 +669,14 @@ class BartDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
-        self.self_attn = BART_ATTENTION_CLASSES[attn_type](
+        if getattr(config, "_flash_attn_2_enabled", False):
+            self._attn_type = BartAttentionType.flash_attention_2
+        elif is_torch_sdpa_available():
+            self._attn_type = BartAttentionType.sdpa
+        else:
+            self._attn_type = BartAttentionType.eager
+        
+        self.self_attn = BART_ATTENTION_CLASSES[self._attn_type](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -585,7 +689,7 @@ class BartDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = BART_ATTENTION_CLASSES[attn_type](
+        self.encoder_attn = BART_ATTENTION_CLASSES[self._attn_type](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -945,6 +1049,7 @@ class BartEncoder(BartPreTrainedModel):
             embed_dim,
         )
         self.layers = nn.ModuleList([BartEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self._attn_type = self.layers[0]._attn_type
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
         self.gradient_checkpointing = False
@@ -1032,8 +1137,11 @@ class BartEncoder(BartPreTrainedModel):
 
         # expand attention_mask
         if attention_mask is not None:
-            if getattr(self.config, "_flash_attn_2_enabled", False):
+            if self._attn_type == BartAttentionType.flash_attention_2:
                 attention_mask = attention_mask if 0 in attention_mask else None
+            elif self._attn_type == BartAttentionType.sdpa:
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype, output_attentions=output_attentions)
             else:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
@@ -1120,6 +1228,7 @@ class BartDecoder(BartPreTrainedModel):
             config.d_model,
         )
         self.layers = nn.ModuleList([BartDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self._attn_type = self.layers[0]._attn_type
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
@@ -1238,9 +1347,17 @@ class BartDecoder(BartPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input) * self.embed_scale
 
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._attn_type == BartAttentionType.flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        elif self._attn_type == BartAttentionType.sdpa:
+            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask,
+                input_shape,
+                inputs_embeds,
+                past_key_values_length,
+                output_attentions=output_attentions,
+            )
         else:
             # 4d mask is passed through the layers
             attention_mask = _prepare_4d_causal_attention_mask(
@@ -1249,8 +1366,13 @@ class BartDecoder(BartPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if getattr(self.config, "_flash_attn_2_enabled", False):
+            if self._attn_type == BartAttentionType.flash_attention_2:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
+            elif self._attn_type == BartAttentionType.sdpa:
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1], output_attentions=output_attentions
+                )
             else:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 encoder_attention_mask = _prepare_4d_attention_mask(
