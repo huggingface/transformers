@@ -3,8 +3,8 @@ import unittest
 
 import requests
 
-from transformers import AutoTokenizer, FuyuConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers import FuyuConfig, is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_modeling_common import ids_tensor, random_attention_mask
 
@@ -14,7 +14,7 @@ if is_vision_available():
 
 
 if is_torch_available() and is_vision_available():
-    from transformers import FuyuImageProcessor, FuyuProcessor
+    from transformers import FuyuProcessor
 
 
 if is_torch_available():
@@ -257,7 +257,7 @@ class FuyuModelTester:
 
 
 @require_torch
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
     """
@@ -267,11 +267,8 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
     all_model_classes = ("FuyuForCausalLM") if is_torch_available() else ()
 
     def setUp(self):
-        self.pretrained_model_name = "huggingface/new_model_release_weights"
-        tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name)
-        image_processor = FuyuImageProcessor()
-
-        self.processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        self.pretrained_model_name = "adept/fuyu-8b"
+        self.processor = FuyuProcessor.from_pretrained(self.pretrained_model_name)
         self.model = FuyuForCausalLM.from_pretrained(self.pretrained_model_name)
         self.bus_image_url = (
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
@@ -279,11 +276,9 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
         self.bus_image_pil = Image.open(io.BytesIO(requests.get(self.bus_image_url).content))
 
     @slow
-    @require_torch_gpu
     def test_model_8b_chat_greedy_generation_bus_captioning(self):
-        EXPECTED_TEXT_COMPLETION = """A bus parked on the side of a road.|ENDOFTEXT|"""
+        EXPECTED_TEXT_COMPLETION = """A blue bus parked on the side of a road.|ENDOFTEXT|"""
         text_prompt_coco_captioning = "Generate a coco-style caption.\n"
-
         model_inputs_bus_captioning = self.processor(text=text_prompt_coco_captioning, images=self.bus_image_pil)
         generated_tokens = self.model.generate(**model_inputs_bus_captioning, max_new_tokens=10)
         text = self.processor.tokenizer.batch_decode(generated_tokens)
@@ -298,7 +293,7 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
 
 """
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_model_8b_chat_greedy_generation_bus_color(self):
         EXPECTED_TEXT_COMPLETION = "The bus is blue.\n|ENDOFTEXT|"
         text_prompt_bus_color = "What color is the bus?\n"
@@ -315,7 +310,7 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, clean_sequence)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_model_8b_chat_greedy_generation_chart_vqa(self):
         # fmt: off
         EXPECTED_TEXT_TOKENS = ["The","life expectancy","at","birth","of male","s in","","20","18","is","","80",".","7",".","\n","|ENDOFTEXT|",]
@@ -341,7 +336,7 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
         self.assertEqual(expected_text_completion, clean_sequence)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_model_8b_chat_greedy_generation_bounding_box(self):
         EXPECTED_TEXT_COMPLETION = "\x00194213202244\x01|ENDOFTEXT|"
         text_prompt_bbox = "When presented with a box, perform OCR to extract text contained within it. If provided with text, generate the corresponding bounding box.\\nWilliams"  # noqa: E231

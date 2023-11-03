@@ -155,13 +155,9 @@
     title: Efficient training techniques
   - sections:
     - local: perf_infer_cpu
-      title: Inference on CPU
+      title: CPU inference
     - local: perf_infer_gpu_one
-      title: Inference on one GPU
-    - local: perf_infer_gpu_many
-      title: Inference on many GPUs
-    - local: perf_infer_special
-      title: Inference on Specialized Hardware
+      title: GPU inference
     title: Optimizing inference
   - local: big_models
     title: Instantiating a big model
@@ -683,6 +679,8 @@
         title: IDEFICS
       - local: model_doc/instructblip
         title: InstructBLIP
+      - local: model_doc/kosmos-2
+        title: KOSMOS-2
       - local: model_doc/layoutlm
         title: LayoutLM
       - local: model_doc/layoutlmv2

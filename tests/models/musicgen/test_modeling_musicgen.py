@@ -28,7 +28,13 @@ from transformers import (
     PretrainedConfig,
     T5Config,
 )
-from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    is_torch_available,
+    require_torch,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -1082,13 +1088,13 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             output_ids_generate = model.generate(do_sample=False, max_length=max_length, remove_invalid_values=True)
             self.assertIsNotNone(output_ids_generate)
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
 
         for model_class in self.greedy_sample_model_classes:
             model = model_class(config).eval().to(torch_device)
-            if torch_device == "cuda":
-                model.half()
+            model.half()
             # greedy
             model.generate(input_dict["input_ids"], attention_mask=input_dict["attention_mask"], max_new_tokens=10)
             # sampling

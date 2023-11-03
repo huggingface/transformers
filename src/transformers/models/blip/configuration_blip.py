@@ -55,7 +55,7 @@ class BlipTextConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
+        vocab_size (`int`, *optional*, defaults to 30524):
             Vocabulary size of the `Blip` text model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`BlipModel`].
         hidden_size (`int`, *optional*, defaults to 768):
@@ -68,7 +68,7 @@ class BlipTextConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 77):
+        max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -90,7 +90,7 @@ class BlipTextConfig(PretrainedConfig):
             The id of the `padding` token.
         sep_token_id (`int`, *optional*, defaults to 102):
             The id of the `separator` token.
-        is_decoder (`bool`, *optional*, defaults to `False`):
+        is_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as a decoder.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
@@ -197,9 +197,9 @@ class BlipVisionConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        image_size (`int`, *optional*, defaults to 224):
+        image_size (`int`, *optional*, defaults to 384):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
+        patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -208,7 +208,7 @@ class BlipVisionConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 1e-10):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
