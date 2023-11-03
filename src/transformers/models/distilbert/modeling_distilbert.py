@@ -289,19 +289,19 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
             weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        bs, q_length, dim = query.size()
+        batch_size, q_length, dim = query.size()
 
         dim_per_head = self.dim // self.n_heads
 
-        def shape(x: torch.Tensor) -> torch.Tensor:
+        def reshape(x: torch.Tensor) -> torch.Tensor:
             """separate heads"""
-            return x.view(bs, -1, self.n_heads, dim_per_head)
+            return x.view(batch_size, -1, self.n_heads, dim_per_head)
 
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
-        q = shape(self.q_lin(query))
-        k = shape(self.k_lin(key))
-        v = shape(self.v_lin(value))
+        query_states = reshape(self.q_lin(query))
+        key_states = reshape(self.k_lin(key))
+        value_states = reshape(self.v_lin(value))
 
         attn_dropout = self.config.attention_dropout if self.training else 0.0
 
@@ -311,8 +311,7 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32. (LlamaRMSNorm handles it correctly)
 
-        input_dtype = q.dtype
-        if input_dtype == torch.float32:
+        if query_states.dtype == torch.float32:
             # Handle the case where the model is quantized
             if hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
@@ -325,13 +324,13 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
                 f" {target_dtype}."
             )
 
-            q = q.to(target_dtype)
-            k = k.to(target_dtype)
-            v = v.to(target_dtype)
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
 
-        attn_weights = self._flash_attention_forward(q, k, v, mask, q_length, dropout=attn_dropout)
+        attn_weights = self._flash_attention_forward(query_states, key_states, value_states, mask, q_length, dropout=attn_dropout)
 
-        attn_weights_reshaped = attn_weights.reshape(bs, q_length, self.n_heads * dim_per_head)
+        attn_weights_reshaped = attn_weights.reshape(batch_size, q_length, self.n_heads * dim_per_head)
         attn_output = self.out_lin(attn_weights_reshaped)
 
         if output_attentions:
