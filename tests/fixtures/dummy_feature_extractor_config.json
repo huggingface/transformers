@@ -1,4 +1,0 @@
-{
-  "feature_extractor_type": "Wav2Vec2FeatureExtractor",
-  "processor_class": "Wav2Vec2Processor"
-}

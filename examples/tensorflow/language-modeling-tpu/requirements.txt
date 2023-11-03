@@ -1,3 +1,0 @@
-transformers==4.26.1
-datasets==2.9.0
-tokenizers==0.13.2
