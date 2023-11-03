@@ -37,19 +37,35 @@ The original code can be found [here](https://github.com/RicherMans/CED).
 ### Example
 
 ```python
+>>> from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
+>>> from datasets import load_dataset
 >>> import torch
->>> from transformers import AutoModelForAudioClassification, AutoFeatureExtractor
 
->>> model_path = "mispeech/ced-tiny"
->>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_path)
->>> model = AutoModelForAudioClassification.from_pretrained(model_path)
+>>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+>>> dataset = dataset.sort("id")
+>>> sampling_rate = dataset.features["audio"].sampling_rate
 
->>> audio = torch.arange(1, 16000).unsqueeze(0) / 1e4
->>> output = model(feature_extractor(audio)['input_values']).squeeze(0)
+>>> feature_extractor = AutoFeatureExtractor.from_pretrained("mispeech/ced-tiny")
+>>> model = AutoModelForAudioClassification.from_pretrained("mispeech/ced-tiny")
+
+>>> # audio file is decoded on the fly
+>>> inputs = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+
+>>> with torch.no_grad():
+...     logits = model(**inputs).logits
+
+>>> predicted_class_ids = torch.argmax(logits, dim=-1).item()
+>>> predicted_label = model.config.id2label[predicted_class_ids]
+>>> predicted_label
+{expected_output}
+
+>>> # compute loss - target_label is e.g. "down"
+>>> target_label = model.config.id2label[0]
+>>> inputs["labels"] = torch.tensor([model.config.label2id[target_label]])
+>>> loss = model(**inputs).loss
+>>> round(loss.item(), 2)
+{expected_loss}
 ```
-
-The `output` would be a 527-dimensional vector, where each element is the logit for one of the 527 classes in Audioset (http://storage.googleapis.com/us_audioset/youtube_corpus/v1/csv/class_labels_indices.csv).
-
 
 ## CedConfig
 

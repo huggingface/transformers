@@ -17,6 +17,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.hub import cached_file
 
 
 logger = logging.get_logger(__name__)
@@ -121,3 +122,14 @@ class CedConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.target_length = target_length
         self.win_size = kwargs.get("win_size", 512)
+
+        if self.outputdim == 527:
+            with open(cached_file("topel/ConvNeXt-Tiny-AT", "class_labels_indices.csv"), "r") as f:
+                self.id2label = {
+                    int(line.split(",", maxsplit=3)[0]): line.split(",", maxsplit=3)[2].replace('"', "").strip("\n")
+                    for line in f.readlines()[1:]
+                }
+            self.label2id = {v: k for k, v in self.id2label.items()}
+        else:
+            self.id2label = None
+            self.label2id = None
