@@ -88,7 +88,7 @@ pip install -r requirements.txt
 <frameworkcontent>
 <pt>
 
-示例脚本从huggingface的[Datasets](https://huggingface.co/docs/datasets/)库下载并预处理数据集。然后，脚本通过[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer)使用支持摘要任务的架构对数据集进行微调。以下示例展示了如何在[CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail)数据集上微调[T5-small](https://huggingface.co/t5-small)。由于T5模型的训练方式，它需要一个额外的`source_prefix`参数。这个提示让T5知道这是一个摘要任务。
+示例脚本从🤗 [Datasets](https://huggingface.co/docs/datasets/)库下载并预处理数据集。然后，脚本通过[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer)使用支持摘要任务的架构对数据集进行微调。以下示例展示了如何在[CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail)数据集上微调[T5-small](https://huggingface.co/t5-small)。由于T5模型的训练方式，它需要一个额外的`source_prefix`参数。这个提示让T5知道这是一个摘要任务。
 
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
