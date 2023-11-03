@@ -41,7 +41,8 @@ class NucleusXConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~NucleusXModel`]. It is used to instantiate an
     NucleusX model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a configuration of size 7B parameters.
+    with the defaults will yield a similar configuration to that of the NucleusX-7B
+    [NucleusAI/NucleusX-7B](https://huggingface.co/NucleusAI/NucleusX-7B) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -57,8 +58,6 @@ class NucleusXConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         lm_head_initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing the lm_head weights.
-        is_decoder (`bool`, *optional*, defaults to `True`):
-            Whether the model is used as decoder or not (in which case it's used as an encoder).
         pad_token_id (`int`, *optional*):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 1):
@@ -141,7 +140,6 @@ class NucleusXConfig(PretrainedConfig):
         initializer_factor: float = 2**-2.5,
         initializer_range: float = 0.02,
         lm_head_initializer_range: float = 4096**-0.5,
-        is_decoder: bool = True,
         pad_token_id: int = None,
         bos_token_id: int = 1,
         eos_token_id: int = 2,
@@ -205,7 +203,6 @@ class NucleusXConfig(PretrainedConfig):
             self.deepnorm = False
 
         super().__init__(
-            is_decoder=is_decoder,
             bos_token_id=bos_token_id,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,

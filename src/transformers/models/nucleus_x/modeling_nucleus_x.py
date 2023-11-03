@@ -837,6 +837,8 @@ NUCLEUS_X_START_DOCSTRING = r"""
         config ([`~NucleusXConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+        embed_tokens ([`torch.nn.Embedding`], *optional*): An embedding module for the input tokens. If not provided,
+            a new embedding will be initialized.
 """
 
 NUCLEUS_X_INPUTS_DOCSTRING = r"""
@@ -1195,13 +1197,12 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import NucleusXTokenizer, NucleusXForCausalLM, NucleusXConfig
+        >>> from transformers import AutoTokenizer, NucleusXForCausalLM, NucleusXConfig
         >>> import torch
 
-        >>> tokenizer = NucleusXTokenizer.from_pretrained("nucleus_x")
-        >>> config = NucleusXConfig.from_pretrained("nucleus_x")
-        >>> config.is_decoder = True
-        >>> model = NucleusXForCausalLM.from_pretrained("nucleus_x", config=config)
+        >>> tokenizer = AutoTokenizer.from_pretrained("NucleusAI/NucleusX-7B")
+        >>> config = NucleusXConfig.from_pretrained("NucleusAI/NucleusX-7B")
+        >>> model = NucleusXForCausalLM.from_pretrained("NucleusAI/NucleusX-7B", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1324,10 +1325,10 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
     NUCLEUS_X_START_DOCSTRING,
 )
 class NucleusXForSequenceClassification(NucleusXPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, embed_tokens: nn.Embedding = None):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = NucleusXModel(config)
+        self.model = NucleusXModel(config, embed_tokens=embed_tokens)
         self.score = nn.Linear(config.decoder_embed_dim, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
