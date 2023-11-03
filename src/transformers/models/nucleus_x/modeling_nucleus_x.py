@@ -691,10 +691,6 @@ class NucleusXPreTrainedModel(PreTrainedModel):
                 if "out_proj" in name or "v_proj" in name:
                     p.data.div_(init_scale)
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, NucleusXModel):
-            module.gradient_checkpointing = value
-
 
 @dataclass
 class NucleusXOutputWithPast(ModelOutput):
