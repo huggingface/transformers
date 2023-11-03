@@ -288,11 +288,13 @@ class NucleusXMultiScaleRetention(nn.Module):
         nn.init.xavier_uniform_(self.out_proj.weight, gain=gain)
 
     def parallel_retention(self, q, k, v, decay_mask, use_cache=False):
-        """Args:
-        - q: [bsz * num_head * len * qk_dim]
-        - k: [bsz * num_head * len * qk_dim]
-        - v: [bsz * num_head * len * v_dim]
-        - decay_mask: [(1 or bsz) * num_head * len * len]
+        """Parallel retention for NucleusX.
+
+        Args:
+            q: [bsz * num_head * len * qk_dim]
+            k: [bsz * num_head * len * qk_dim]
+            v: [bsz * num_head * len * v_dim]
+            decay_mask: [(1 or bsz) * num_head * len * len]
         """
         decay_mask, intra_decay, scale = decay_mask
 
@@ -318,14 +320,16 @@ class NucleusXMultiScaleRetention(nn.Module):
         return output, cache, retention
 
     def recurrent_retention(self, q, k, v, decay, past_key_value=None, retention_mask=None):
-        """Args:
-        - q, k, v: [bsz * num_head * 1 * qkv_dim]
-        - past_key_value: Tuple[torch.Tensor] containing:
-            - prev_key_value: [bsz * num_head * v_dim * qk_dim]
-            - scale: [(1 or bsz) * num_head * 1 * 1]
-            - seqlen: torch.long, sequence length of processed tokens, including padding tokens
-        - decay: [(1 or bsz) * num_head * 1 * 1]
-        - retention_mask: [bsz * 1]
+        """Recurrent mode of retention for NucleusX.
+
+        Args:
+            q, k, v: [bsz * num_head * 1 * qkv_dim]
+            past_key_value: Tuple[torch.Tensor] containing:
+                - prev_key_value: [bsz * num_head * v_dim * qk_dim]
+                - scale: [(1 or bsz) * num_head * 1 * 1]
+                - seqlen: torch.long, sequence length of processed tokens, including padding tokens
+            decay: [(1 or bsz) * num_head * 1 * 1]
+            retention_mask: [bsz * 1]
         """
         if retention_mask is not None:
             retention_mask = retention_mask.float().view(-1, 1, 1, 1).to(decay)
@@ -361,15 +365,17 @@ class NucleusXMultiScaleRetention(nn.Module):
         return output, cache
 
     def chunkwise_retention(self, q, k, v, decay_mask):
-        """Args:
-        - q, k, v: [bsz * num_head * seqlen * qkv_dim]
-        - past_key_value: Tuple[torch.Tensor] containing:
-            - prev_key_value: [bsz * num_head * v_dim * qk_dim]
-            - scale: [(1 or bsz) * num_head * 1 * 1]
-            - seqlen: torch.long, sequence length of processed tokens, including padding tokens
-        - decay_mask: [1 * num_head * chunk_size * chunk_size]
-        - cross_decay: [1 * num_head * 1 * 1]
-        - inner_decay: [1 * num_head * chunk_size * 1]
+        """Chunkwise mode of retention for NucleusX.
+
+        Args:
+            q, k, v: [bsz * num_head * seqlen * qkv_dim]
+            past_key_value: Tuple[torch.Tensor] containing:
+                - prev_key_value: [bsz * num_head * v_dim * qk_dim]
+                - scale: [(1 or bsz) * num_head * 1 * 1]
+                - seqlen: torch.long, sequence length of processed tokens, including padding tokens
+            decay_mask: [1 * num_head * chunk_size * chunk_size]
+            cross_decay: [1 * num_head * 1 * 1]
+            inner_decay: [1 * num_head * chunk_size * 1]
         """
         decay_mask, cross_decay, query_inner_decay, value_inner_decay, decay_scale = decay_mask
         bsz, _, tgt_len, _ = v.size()
@@ -1186,8 +1192,6 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
 
-        Returns:
-
         Example:
 
         ```python
@@ -1293,7 +1297,7 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
     def _reorder_cache(self, past_key_values, beam_idx):
         """
         Args:
-            - past_key_values: Tuple(Tuple(torch.FloatTensor)))
+            past_key_values: Tuple(Tuple(torch.FloatTensor)))
                 - prev_key_value: shape=(bsz * num_head * v_dim / num_heads * qk_dim)
                 - scale: shape=((1 or bsz) * num_head * 1 * 1)
                 - seqlen: shape=(,) torch.long, sequence length of processed tokens, including padding tokens

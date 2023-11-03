@@ -719,6 +719,8 @@
         title: MGP-STR
       - local: model_doc/nougat
         title: Nougat
+      - local: model_doc/nucleus_x
+        title: NucleusX
       - local: model_doc/oneformer
         title: OneFormer
       - local: model_doc/owlvit
