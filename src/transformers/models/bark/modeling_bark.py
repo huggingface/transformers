@@ -1646,8 +1646,6 @@ class BarkModel(BarkPreTrainedModel):
             coarse_generation_config=coarse_generation_config,
             fine_generation_config=fine_generation_config,
             codebook_size=self.generation_config.codebook_size,
-            return_output_lengths=return_output_lengths,
-            output_lengths=output_lengths,
             **kwargs_fine,
         )
 
