@@ -1832,18 +1832,15 @@ class GenerationTesterMixin:
     def test_generate_continue_from_past_key_values(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
-            # won't fix: old models with unique inputs/caches/others
             if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt"]):
-                return
-            # may fix in the future: needs modeling or test input preparation fixes for compatibility
+                self.skipTest("Won't fix: old model with unique inputs/caches/other")
             if any(model_name in model_class.__name__.lower() for model_name in ["umt5"]):
-                return
+                self.skipTest("TODO: needs modeling or test input preparation fixes for compatibility")
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
-            # If it doesn't support cache, pass the test
             if not hasattr(config, "use_cache"):
-                return
+                self.skipTest("This model doesn't support caching")
 
             # Let's make it always:
             # 1. use cache (for obvious reasons)
@@ -1862,10 +1859,10 @@ class GenerationTesterMixin:
             model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
             model.generation_config.forced_eos_token_id = None
 
-            # If "past_key_values" is not returned, pass the test (e.g. RWKV uses a different cache name and format)
+            # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs)
             if "past_key_values" not in outputs:
-                return
+                self.skipTest("This model doesn't return `past_key_values`")
 
             # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
             outputs = model.generate(**inputs, do_sample=False, max_new_tokens=4, return_dict_in_generate=True)
