@@ -2086,7 +2086,7 @@ class Trainer:
                         logger.warning(
                             "Enabling FP16 and loading from smp < 1.10 checkpoint together is not suppported."
                         )
-                    state_dict = torch.load(weights_file, map_location="cpu")
+                    state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
                     # Required for smp to not auto-translate state_dict from hf to smp (is already smp).
                     state_dict["_smp_is_partial"] = False
                     load_result = model.load_state_dict(state_dict, strict=True)
@@ -2099,7 +2099,7 @@ class Trainer:
                 if self.args.save_safetensors and os.path.isfile(safe_weights_file):
                     state_dict = safetensors.torch.load_file(safe_weights_file, device="cpu")
                 else:
-                    state_dict = torch.load(weights_file, map_location="cpu")
+                    state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
 
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                 # which takes *args instead of **kwargs
@@ -2167,7 +2167,7 @@ class Trainer:
                     if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
                         state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
                     else:
-                        state_dict = torch.load(best_model_path, map_location="cpu")
+                        state_dict = torch.load(best_model_path, map_location="cpu", weights_only=True)
 
                     state_dict["_smp_is_partial"] = False
                     load_result = model.load_state_dict(state_dict, strict=True)
@@ -2196,7 +2196,7 @@ class Trainer:
                     if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
                         state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
                     else:
-                        state_dict = torch.load(best_model_path, map_location="cpu")
+                        state_dict = torch.load(best_model_path, map_location="cpu", weights_only=True)
 
                     # If the model is on the GPU, it still works!
                     # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
@@ -2300,7 +2300,7 @@ class Trainer:
                 )
                 return
 
-        checkpoint_rng_state = torch.load(rng_file)
+        checkpoint_rng_state = torch.load(rng_file, weights_only=True)
         random.setstate(checkpoint_rng_state["python"])
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
@@ -2479,7 +2479,7 @@ class Trainer:
             # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
             if not isinstance(self.lr_scheduler, DeepSpeedSchedulerWrapper):
                 with warnings.catch_warnings(record=True) as caught_warnings:
-                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
+                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME), weights_only=True))
                 reissue_pt_warnings(caught_warnings)
             return
 
@@ -2503,9 +2503,9 @@ class Trainer:
             # Load in optimizer and scheduler states
             if is_torch_tpu_available():
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
-                optimizer_state = torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location="cpu")
+                optimizer_state = torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location="cpu", weights_only=True)
                 with warnings.catch_warnings(record=True) as caught_warnings:
-                    lr_scheduler_state = torch.load(os.path.join(checkpoint, SCHEDULER_NAME), map_location="cpu")
+                    lr_scheduler_state = torch.load(os.path.join(checkpoint, SCHEDULER_NAME), map_location="cpu", weights_only=True)
                 reissue_pt_warnings(caught_warnings)
 
                 xm.send_cpu_data_to_device(optimizer_state, self.args.device)
@@ -2546,10 +2546,10 @@ class Trainer:
                         )
                     else:
                         self.optimizer.load_state_dict(
-                            torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
+                            torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location, weights_only=True)
                         )
                 with warnings.catch_warnings(record=True) as caught_warnings:
-                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
+                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME), weights_only=True))
                 reissue_pt_warnings(caught_warnings)
 
     def hyperparameter_search(
