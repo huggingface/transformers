@@ -315,18 +315,11 @@ class FuyuModelIntegrationTest(unittest.TestCase):
         text_prompt_coco_captioning = "Generate a coco-style caption.\n"
 
         inputs = processor(text=text_prompt_coco_captioning, images=image, return_tensors="pt")
-        generated_tokens = model.generate(**inputs, max_new_tokens=10)
+        generated_ids = model.generate(**inputs, max_new_tokens=10)
 
-        text = processor.batch_decode(generated_tokens)
-        end_sequence = text[0].split("\x04")[1]
-        clean_sequence = (
-            end_sequence[: end_sequence.find("|ENDOFTEXT|") + len("|ENDOFTEXT|")]
-            if "|ENDOFTEXT|" in end_sequence
-            else end_sequence
-        )
-
-        EXPECTED_TEXT_COMPLETION = "A blue bus parked on the side of a road.|ENDOFTEXT|"
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, clean_sequence[1:])
+        generated_text = processor.batch_decode(generated_ids[:, -8:], skip_special_tokens=True)[0]
+        EXPECTED_TEXT_COMPLETION = "A blue bus parked on the side of a road."
+        self.assertEqual(generated_text, EXPECTED_TEXT_COMPLETION)
 
 
 """

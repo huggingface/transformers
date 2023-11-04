@@ -101,11 +101,11 @@ FUYU_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels )`, *optional*):
+        image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
             Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
             hidden size of the model.
-        image_patches_indices (`torch.LongTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels )`, *optional*):
-            To do
+        image_patches_indices (`torch.LongTensor` of shape `(batch_size, num_total_patches + number_of_newline_tokens + number_of_text_tokens, patch_size_ x patch_size x num_channels )`, *optional*):
+            Indices indicating at which position the image_patches have to be inserted in input_embeds.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`.
