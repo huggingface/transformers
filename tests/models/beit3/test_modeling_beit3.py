@@ -437,13 +437,13 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
         image = self.default_image
-        text = "This is photo of a cat"
 
-        inputs = processor(text=[text], images=image, return_attention_mask=False)
-        another_input_ids = processor(text=["This is photo of a dog"], images=image, return_attention_mask=False)
+        inputs = processor(
+            text=["This is photo of a cat", "This is photo of a dog"], images=[image, image], return_tensors="pt"
+        )
         outputs = model(
-            input_ids=torch.tensor([inputs["input_ids"][0], another_input_ids["input_ids"][0]]),
-            pixel_values=torch.tensor([inputs["pixel_values"][0], inputs["pixel_values"][0]]),
+            input_ids=inputs["input_ids"],
+            pixel_values=inputs["pixel_values"],
             return_loss=True,
         )
 

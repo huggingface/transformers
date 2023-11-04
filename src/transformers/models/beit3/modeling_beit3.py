@@ -83,8 +83,6 @@ BEIT3_MODEL = r"""
         past_key_value (`Dict`):
             A Dictionary containing the incremental states layerwise.This can be used to when generating next token in
             case of image captioning.
-        text_end_positions (`int`):
-            Position of where text representations end and image representation start.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         output_hidden_states (`bool`, *optional*):
@@ -764,7 +762,6 @@ class Beit3Model(Beit3PreTrainedModel):
         image_text_mask=None,
         vision_masked_position=None,
         past_key_value=None,
-        text_end_positions=None,
         output_hidden_states=None,
         output_attentions=None,
         return_dict=None,
@@ -801,7 +798,7 @@ class Beit3Model(Beit3PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        text_end_positions = None
         if input_ids is None and pixel_values is None:
             raise ValueError("You have to specify at least input_ids or pixel_values")
 
@@ -1172,14 +1169,9 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
                     past_key_value[idx] = {}
 
         # for incremental decoding
-        text_end_positions = None
         if pixel_values is None:
             image_text_mask = image_text_mask[-2:]
             attention_mask = None
-            # start position (2 (fairseq starts at 2) + cur_position) is equal to text_len
-            text_end_positions = (
-                torch.arange(text_len, input_ids.size(1) + text_len, device=input_ids.device).long().unsqueeze(0)
-            )
 
         outputs = self.beit3(
             input_ids=input_ids,
@@ -1187,7 +1179,6 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
             attention_mask=attention_mask,
             image_text_mask=image_text_mask,
             past_key_value=past_key_value,
-            text_end_positions=text_end_positions,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
@@ -1381,12 +1372,13 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> text = "This is photo of a cat"
 
-        >>> inputs = processor(text=text, images=image)
-        >>> another_input_ids = processor(text=["This is photo of a dog"], images=image, return_attention_mask=False)
-        >>> # forward pass
+        >>> inputs = processor(
+        ...     text=["This is photo of a cat", "This is photo of a dog"], images=[image, image], return_tensors="pt"
+        ... )
+
         >>> outputs = model(
-        ...     input_ids=torch.tensor([inputs["input_ids"][0], another_input_ids["input_ids"][0]]),
-        ...     pixel_values=torch.tensor([inputs["pixel_values"][0], inputs["pixel_values"][0]]),
+        ...     input_ids=inputs["input_ids"],
+        ...     pixel_values=inputs["pixel_values"],
         ...     return_loss=True,
         ... )
 
