@@ -293,12 +293,20 @@ class FuyuModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-@require_torch
 @slow
+@require_torch_gpu
 class FuyuModelIntegrationTest(unittest.TestCase):
-    def test_inference(self):
-        processor = FuyuProcessor.from_pretrained("adept/fuyu-8b")
-        model = FuyuForCausalLM.from_pretrained("adept/fuyu-8b")
+    @cached_property
+    def default_processor(self):
+        return FuyuProcessor.from_pretrained("adept/fuyu-8b")
+
+    @cached_property
+    def default_model(self):
+        return FuyuForCausalLM.from_pretrained("adept/fuyu-8b")
+
+    def test_greedy_generation(self):
+        processor = self.default_processor
+        model = self.default_model
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
         image = Image.open(io.BytesIO(requests.get(url).content))
