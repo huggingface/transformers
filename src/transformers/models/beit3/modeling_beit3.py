@@ -846,7 +846,10 @@ class Beit3Model(Beit3PreTrainedModel):
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            output = (sequence_output,)
+            output = output + (pooled_output,) if self.pooler else output
+            output = output + encoder_outputs[1:]
+            return output
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -1068,7 +1071,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
 
         if not return_dict:
             output = (logits,)
-            output = (output + (outputs[1:],)) if output_hidden_states else output
+            output = (output + outputs[1:],) if output_hidden_states else output
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutput(
@@ -1306,7 +1309,7 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
             loss = loss_fct(logits, labels.contiguous())
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
