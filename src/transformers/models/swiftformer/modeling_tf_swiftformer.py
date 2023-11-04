@@ -58,7 +58,7 @@ TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all SwiftFormer models at https://huggingface.co/models?filter=swiftformer
 ]
 
-class TFSwiftFormerPatchEmbeddingsSequential(tf.keras.layers.Layer):
+class TFSwiftFormerPatchEmbeddingSequential(tf.keras.layers.Layer):
     """
     The sequential component of the patch embedding layer.
 
@@ -75,9 +75,9 @@ class TFSwiftFormerPatchEmbeddingsSequential(tf.keras.layers.Layer):
         self.batch_norm1 = tf.keras.layers.BatchNormalization(
             epsilon=config.batch_norm_eps, momentum=0.9, name="1"
         ) # FIXME: is this the equivalent momentum?
-        self.conv2 = tf.keras.layers.Conv2D(out_chs, kernel_size=3, strides=2, name="2")
+        self.conv2 = tf.keras.layers.Conv2D(out_chs, kernel_size=3, strides=2, name="3")
         self.batch_norm2 = tf.keras.layers.BatchNormalization(
-            epsilon=config.batch_norm_eps, momentum=0.9, name="3"
+            epsilon=config.batch_norm_eps, momentum=0.9, name="4"
         ) # FIXME: is this the equivalent momentum?
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -102,7 +102,7 @@ class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
     """
     def __init__(self, config: SwiftFormerConfig, **kwargs):
         super().__init__(**kwargs)
-        self.patch_embedding = TFSwiftFormerPatchEmbeddingsSequential(config, name="patch_embeddings")
+        self.patch_embedding = TFSwiftFormerPatchEmbeddingSequential(config, name="patch_embedding")
 
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -432,9 +432,9 @@ class TFSwiftFormerStage(tf.keras.layers.Layer):
 
             if depth - block_idx <= 1:
                 # FIXME: no names?
-                self.blocks.append(TFSwiftFormerEncoderBlock(config, dim=dim, drop_path=block_dpr))
+                self.blocks.append(TFSwiftFormerEncoderBlock(config, dim=dim, drop_path=block_dpr, name=f"blocks_._{block_idx}"))
             else:
-                self.blocks.append(TFSwiftFormerConvEncoder(config, dim=dim))
+                self.blocks.append(TFSwiftFormerConvEncoder(config, dim=dim, name=f"blocks_._{block_idx}"))
 
     def call(self, input: tf.Tensor, training: bool = False) -> tf.Tensor:
         for i, block in enumerate(self.blocks):
@@ -455,14 +455,17 @@ class TFSwiftFormerEncoder(tf.keras.layers.Layer):
 
         # Transformer model
         self.network = []
+        name_i = 0
         for i in range(len(layer_depths)):
-            stage = TFSwiftFormerStage(config, index=i)
+            stage = TFSwiftFormerStage(config, index=i, name=f"network_._{name_i}")
             self.network.append(stage)
+            name_i += 1
             if i >= len(layer_depths) - 1:
                 break
             if downsamples[i] or embed_dims[i] != embed_dims[i + 1]:
                 # downsampling between two stages
-                self.network.append(TFSwiftFormerEmbeddings(config, index=i))
+                self.network.append(TFSwiftFormerEmbeddings(config, index=i, name=f"network_._{name_i}"))
+                name_i += 1
 
         self.gradient_checkpointing = False
 
