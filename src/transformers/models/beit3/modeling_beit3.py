@@ -803,6 +803,9 @@ class Beit3Model(Beit3PreTrainedModel):
         >>> # forward pass
         >>> outputs = model(**inputs)
 
+        >>> # last hidden states have a sequence length equal to
+        >>> # the number of text tokens + number of image patches + 1 (for the CLS token)
+        >>> # which in this case equals 8 + (224//16) + 1 = 205
         >>> last_hidden_state = outputs.last_hidden_state
         >>> print(last_hidden_state.shape)
         torch.Size([1, 205, 768])
