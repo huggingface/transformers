@@ -37,6 +37,7 @@ from transformers import (
 )
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
+
 model_type_to_class_mapping = {
     "image_classification": Beit3ForImageClassification,
     "vqa": Beit3ForQuestionAnswering,
@@ -209,9 +210,13 @@ def rename_keys(model_state_dict, beit3_model_type):
                 new_state_dict[current_key.replace(rename_key, rename_key_mappings[rename_key])] = val
                 current_key = current_key.replace(rename_key, rename_key_mappings[rename_key])
 
-    if beit3_model_type == 'vqa':
-        keys_to_be_renamed_for_vqa = ["pooler.norm.weight", "pooler.norm.bias", "pooler.dense.weight",
-                                      "pooler.dense.bias"]
+    if beit3_model_type == "vqa":
+        keys_to_be_renamed_for_vqa = [
+            "pooler.norm.weight",
+            "pooler.norm.bias",
+            "pooler.dense.weight",
+            "pooler.dense.bias",
+        ]
         for key in keys_to_be_renamed_for_vqa:
             new_state_dict[f"beit3.{key}"] = new_state_dict[key]
             del new_state_dict[key]
@@ -365,7 +370,7 @@ if __name__ == "__main__":
         default=None,
         type=str,
         help="Beit3 model type, it has to be one of image_classification, vqa, visual_reasoning,"
-             "image_captioning,image_text_retrieval",
+        "image_captioning,image_text_retrieval",
     )
     parser.add_argument(
         "--validate_logits",

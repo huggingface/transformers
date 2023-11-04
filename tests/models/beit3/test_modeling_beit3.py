@@ -51,32 +51,32 @@ if is_vision_available():
 
 class Beit3ModelTester:
     def __init__(
-            self,
-            hidden_size=37,
-            num_attention_heads=1,
-            intermediate_size=2,
-            num_hidden_layers=1,
-            normalize_before=True,
-            activation_fn="gelu",
-            dropout=0.0,
-            drop_path_rate=0.0,
-            attention_dropout=0.0,
-            activation_dropout=0.0,
-            deepnorm=False,
-            subln=True,
-            bert_init=False,
-            multiway=True,
-            max_source_positions=16,
-            layernorm_eps=1e-5,
-            vocab_size=50,
-            image_size=16,
-            patch_size=2,
-            num_channels=3,
-            num_labels=2,
-            batch_size=1,
-            seq_length=7,
-            use_labels=True,
-            is_training=True,
+        self,
+        hidden_size=37,
+        num_attention_heads=1,
+        intermediate_size=2,
+        num_hidden_layers=1,
+        normalize_before=True,
+        activation_fn="gelu",
+        dropout=0.0,
+        drop_path_rate=0.0,
+        attention_dropout=0.0,
+        activation_dropout=0.0,
+        deepnorm=False,
+        subln=True,
+        bert_init=False,
+        multiway=True,
+        max_source_positions=16,
+        layernorm_eps=1e-5,
+        vocab_size=50,
+        image_size=16,
+        patch_size=2,
+        num_channels=3,
+        num_labels=2,
+        batch_size=1,
+        seq_length=7,
+        use_labels=True,
+        is_training=True,
     ):
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
@@ -109,7 +109,7 @@ class Beit3ModelTester:
 
         self.encoder_seq_length = ((self.image_size // self.patch_size) ** 2) + self.seq_length + 1
         self.key_length = ((self.image_size // self.patch_size) ** 2) + self.seq_length + 1
-        
+
     def get_config(self):
         return Beit3Config(
             hidden_size=self.hidden_size,
@@ -345,7 +345,6 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @require_torch
 @require_vision
 class BeitModelIntegrationTest(unittest.TestCase):
-
     @cached_property
     def default_image(self):
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -393,13 +392,14 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         pixel_values = torch.cat(
             (torch.tensor(inputs["pixel_values"]).unsqueeze(1), torch.tensor(inputs["pixel_values"]).unsqueeze(1)),
-            dim=1
+            dim=1,
         )
         # forward pass
-        output = model(input_ids=torch.tensor(inputs["input_ids"]),
-                       pixel_values=pixel_values,
-                       attention_mask=torch.ones(inputs["input_ids"].shape),
-                       )
+        output = model(
+            input_ids=torch.tensor(inputs["input_ids"]),
+            pixel_values=pixel_values,
+            attention_mask=torch.ones(inputs["input_ids"].shape),
+        )
         assert output.logits.shape == torch.Size([1, 2])
         torch.testing.assert_allclose(output.logits.detach(), torch.tensor([[6.593818, -6.582055]]))
 
@@ -444,7 +444,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         outputs = model(
             input_ids=torch.tensor([inputs["input_ids"][0], another_input_ids["input_ids"][0]]),
             pixel_values=torch.tensor([inputs["pixel_values"][0], inputs["pixel_values"][0]]),
-            return_loss=True
+            return_loss=True,
         )
 
         self.assertEqual(round(float(outputs.loss.detach().numpy()), 4), 1.8435)
