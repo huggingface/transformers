@@ -4538,13 +4538,13 @@ class GenerationMixin:
 
             # TODO for speculative decoding: investigate if this is needed
             # Set masked tokens to 0?
-            new_logits[new_logits == float('-inf')] = 0
+            new_logits[new_logits == float("-inf")] = 0
 
             # 3. Obtain the next tokens from the original model logits.
             if do_sample:
                 # Previous implementation below
-                #probs = new_logits.softmax(dim=-1)
-                #selected_tokens = torch.multinomial(probs[0, :, :], num_samples=1).squeeze(1)[None, :]
+                # probs = new_logits.softmax(dim=-1)
+                # selected_tokens = torch.multinomial(probs[0, :, :], num_samples=1).squeeze(1)[None, :]
 
                 # Speculative sampling: comparison of probabilities
                 all_accepted = True
@@ -4556,7 +4556,7 @@ class GenerationMixin:
                     j = candidate_input_ids[:, cur_len + i]
 
                     # probability outputs of target model
-                    q = new_logits[:, cur_len + i -1, j]
+                    q = new_logits[:, cur_len + i - 1, j]
                     # probability outputs of draft model
                     p = assistant_model_outputs.logits[:, cur_len + i - 1, j]
 
@@ -4584,7 +4584,7 @@ class GenerationMixin:
                         break
 
                 # Keep only the tokens that were accepted
-                candidate_input_ids = candidate_input_ids[:, :n+1]
+                candidate_input_ids = candidate_input_ids[:, : n + 1]
                 n_matches = candidate_input_ids.size(1) - cur_len - 1
             else:
                 selected_tokens = new_logits.argmax(dim=-1)
@@ -4593,7 +4593,6 @@ class GenerationMixin:
                 # the assistant forecasted tokens until the first mismatch, or until the max length is reached.
                 candidate_new_tokens = candidate_input_ids[:, -candidate_length:]
                 n_matches = ((~(candidate_new_tokens == selected_tokens[:, :-1])).cumsum(dim=-1) < 1).sum()
-
 
             # 5. Update variables according to the number of matching assistant tokens. Remember: the token generated
             # by the model after the last candidate match is also valid, as it is generated from a correct sequence.
