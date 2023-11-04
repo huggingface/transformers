@@ -19,7 +19,7 @@ import unittest
 
 import numpy as np
 
-from transformers import Beit3Config, Beit3Processor, BeitImageProcessor, XLMRobertaTokenizer
+from transformers import Beit3Config, Beit3Processor
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_BACKBONE_MAPPING_NAMES,
@@ -487,14 +487,6 @@ class Beit3ForVisualReasoningModelTest(Beit3ModelTest, unittest.TestCase):
         self.model_tester = Beit3ModelTester(self, add_multiple_images=True, num_images=2)
         self.config_tester = ConfigTester(self, config_class=Beit3Config, hidden_size=37)
 
-    @unittest.skip("We only test the model that takes in multiple images")
-    def test_model(self):
-        pass
-
-    @unittest.skip("We only test the model that takes in multiple images")
-    def test_for_token_classification(self):
-        pass
-
 
 @require_torch
 @require_vision
@@ -560,24 +552,19 @@ class BeitModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_beit3_for_image_captioning(self):
         model = Beit3ForCaptioning.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning").to(torch_device)
+        processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
 
-        tokenizer = XLMRobertaTokenizer.from_pretrained("/Users/eaxxkra/Downloads/beit3.spm")
-        image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
-        processor = Beit3Processor(image_processor, tokenizer)
-
-        # processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
         image = self.default_image
-        text = "This is photo of a cat"
-        inputs = processor(text=text, images=image, return_tensors="pt")
+        inputs = processor(text=["This is photo of a dog"], images=image, return_tensors="pt")
 
-        language_masked_pos = torch.zeros((inputs["input_ids"].shape[0], inputs["input_ids"].shape[1]))
-        language_masked_pos[0, 5] = 1
-        input_tokens = list(inputs["input_ids"][0])
-        input_tokens[5] = 64001
+        language_masked_pos = torch.zeros_like(inputs.input_ids)
+        language_masked_pos[:, 6] = 1
+        inputs.input_ids[:, 6] = 64001
+
         output = model(
-            input_ids=torch.tensor([input_tokens]),
-            pixel_values=torch.tensor(inputs["pixel_values"]),
-            attention_mask=torch.zeros(language_masked_pos.shape),
+            input_ids=inputs.input_ids,
+            pixel_values=inputs.pixel_values,
+            attention_mask=torch.zeros_like(language_masked_pos),
             language_masked_pos=language_masked_pos,
         )
         assert output.logits.shape == torch.Size([1, 64010])
