@@ -72,8 +72,8 @@ def convert_ced_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model.push_to_hub(f"xiaomi/{model_name}")
-        feature_extractor.push_to_hub(f"xiaomi/{model_name}")
+        model.push_to_hub(f"mispeech/{model_name}")
+        feature_extractor.push_to_hub(f"mispeech/{model_name}")
 
 
 if __name__ == "__main__":
