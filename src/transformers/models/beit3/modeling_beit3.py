@@ -39,6 +39,21 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Beit3Config"
 
+
+BEIT3_MODEL_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`Beit3Config`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+        add_pooling_layer (`bool`, *optional*, defaults to `False`):
+            Whether or not to add a pooling layer on top of the encoder.
+"""
+
+
 BEIT3_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
@@ -729,7 +744,7 @@ class Beit3Encoder(nn.Module):
         utilizes [Multiway transformers] (https://arxiv.org/abs/2208.10442) for deep fusion and modality-specific
         encoding, and unifies masked modeling on images, texts, and image-text pairs, achieving top performance on
         multiple benchmarks.""",
-    BEIT3_START_DOCSTRING,
+    BEIT3_MODEL_START_DOCSTRING,
 )
 class Beit3Model(Beit3PreTrainedModel):
     def __init__(self, config, add_pooling_layer=False):
