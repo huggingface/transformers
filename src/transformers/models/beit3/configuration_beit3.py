@@ -71,9 +71,6 @@ class Beit3Config(PretrainedConfig):
             The number of input channels.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        label_smoothing (`float`, *optional*, defaults to 0.1):
-            Only relevant if `return_loss` is set to `True`. Controls the `epsilon` parameter value for label smoothing
-            in the loss calculation. If set to 0, no label smoothing is performed.
         logit_scale_init_value (`float`, *optional*, defaults to 2.66):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLIP implementation.
 
@@ -113,7 +110,6 @@ class Beit3Config(PretrainedConfig):
         patch_size=16,
         num_channels=3,
         initializer_range=0.02,
-        label_smoothing=0.1,
         logit_scale_init_value=2.65926,
         **kwargs,
     ):
@@ -139,7 +135,6 @@ class Beit3Config(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
 
-        self.label_smoothing = label_smoothing
         self.logit_scale_init_value = logit_scale_init_value
         self.layer_norm_eps = layer_norm_eps
         if self.sub_layernorm:

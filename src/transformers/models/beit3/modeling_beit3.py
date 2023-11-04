@@ -960,7 +960,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
             loss = loss_fct(logits, labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(

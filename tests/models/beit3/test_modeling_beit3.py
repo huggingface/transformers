@@ -52,6 +52,7 @@ if is_vision_available():
 class Beit3ModelTester:
     def __init__(
         self,
+        parent,
         hidden_size=37,
         num_attention_heads=1,
         intermediate_size=2,
@@ -77,7 +78,10 @@ class Beit3ModelTester:
         seq_length=7,
         use_labels=True,
         is_training=True,
+        add_multiple_images=False,
+        num_images=1,
     ):
+        self.parent = parent
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -106,6 +110,8 @@ class Beit3ModelTester:
         self.use_labels = use_labels
         self.is_training = is_training
 
+        self.add_multiple_images = add_multiple_images
+        self.num_images = num_images
         self.encoder_seq_length = ((self.image_size // self.patch_size) ** 2) + self.seq_length + 1
         self.encoder_seq_length_image_only = ((self.image_size // self.patch_size) ** 2) + 1
 
@@ -136,8 +142,14 @@ class Beit3ModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        if self.add_multiple_images:
+            pixel_values = floats_tensor(
+                [self.batch_size, self.num_images, self.num_channels, self.image_size, self.image_size]
+            )
+        else:
+            pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         attention_mask = torch.zeros_like(input_ids)
+
         return self.get_config(), {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
@@ -224,7 +236,6 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             Beit3Model,
-            # Beit3ForVisualReasoning,
             Beit3ForImageTextRetrieval,
             Beit3ForQuestionAnswering,
             Beit3ForImageClassification,
@@ -272,7 +283,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = Beit3ModelTester()
+        self.model_tester = Beit3ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Beit3Config, hidden_size=37)
 
     def test_training(self):
@@ -387,7 +398,11 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 else:
                     self.assertListEqual(
                         list(attentions[0].shape[-3:]),
-                        [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
+                        [
+                            self.model_tester.num_attention_heads * self.model_tester.num_images,
+                            encoder_seq_length,
+                            encoder_seq_length,
+                        ],
                     )
                 out_len = len(outputs)
 
@@ -417,7 +432,11 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 else:
                     self.assertListEqual(
                         list(self_attentions[0].shape[-3:]),
-                        [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
+                        [
+                            self.model_tester.num_attention_heads * self.model_tester.num_images,
+                            encoder_seq_length,
+                            encoder_seq_length,
+                        ],
                     )
 
     # overwrite since Beit3ForImageClassification has a different expected seq length
@@ -458,6 +477,23 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 config.output_hidden_states = True
 
                 check_hidden_states_output(inputs_dict, config, model_class)
+
+
+@require_torch
+class Beit3ForVisualReasoningModelTest(Beit3ModelTest, unittest.TestCase):
+    all_model_classes = (Beit3ForVisualReasoning,) if is_torch_available() else ()
+
+    def setUp(self):
+        self.model_tester = Beit3ModelTester(self, add_multiple_images=True, num_images=2)
+        self.config_tester = ConfigTester(self, config_class=Beit3Config, hidden_size=37)
+
+    @unittest.skip("We only test the model that takes in multiple images")
+    def test_model(self):
+        pass
+
+    @unittest.skip("We only test the model that takes in multiple images")
+    def test_for_token_classification(self):
+        pass
 
 
 @require_torch
