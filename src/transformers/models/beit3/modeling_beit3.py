@@ -1124,16 +1124,15 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         >>> model = Beit3ForCaptioning.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
 
         >>> processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
-        >>> input = processor(text=["This is photo of a dog"], images=image)
+        >>> inputs = processor(text=["This is photo of a dog"], images=image, return_tensors="pt")
 
-        >>> language_masked_pos = torch.zeros((input["input_ids"].shape[0], input["input_ids"].shape[1]))
-        >>> language_masked_pos[0, 6] = 1
-        >>> input_tokens = list(input["input_ids"][0])
-        >>> input_tokens[6] = 64001
+        >>> language_masked_pos = torch.zeros_like(inputs.input_ids)
+        >>> language_masked_pos[:, 6] = 1
+        >>> inputs.input_ids[:, 6] = 64001
         >>> output = model(
-        ...     input_ids=torch.tensor([input_tokens]),
-        ...     pixel_values=torch.tensor(input["pixel_values"]),
-        ...     attention_mask=torch.zeros(language_masked_pos.shape),
+        ...     input_ids=inputs.input_ids,
+        ...     pixel_values=inputs.pixel_values,
+        ...     attention_mask=torch.zeros_like(language_masked_pos),
         ...     language_masked_pos=language_masked_pos,
         ... )
         >>> processor.tokenizer.decode([np.argmax(output.logits.cpu().detach().numpy())])

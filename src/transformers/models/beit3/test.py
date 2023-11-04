@@ -1,32 +1,28 @@
+import numpy as np
+import requests
 import torch
+from PIL import Image
 
-from transformers import Beit3Config, Beit3Model
+from transformers import Beit3ForCaptioning, Beit3Processor
 
 
-config = Beit3Config()
-model = Beit3Model(config)
+url = "https://datasets-server.huggingface.co/assets/HuggingFaceM4/VQAv2/--/default/train/8/image/image.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-pixel_values = torch.randn(1, 3, 224, 224)
-input_ids = torch.randint(0, 8192, (1, 224))
+model = Beit3ForCaptioning.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
 
-dict_outputs = model(pixel_values=pixel_values, input_ids=input_ids, output_attentions=True, output_hidden_states=True)
+processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
+inputs = processor(text=["This is photo of a dog"], images=image, return_tensors="pt")
 
-print(dict_outputs.keys())
+language_masked_pos = torch.zeros_like(inputs.input_ids)
+language_masked_pos[:, 6] = 1
+inputs.input_ids[:, 6] = 64001
 
-tuple_outputs = model(
-    pixel_values=pixel_values,
-    input_ids=input_ids,
-    output_attentions=True,
-    output_hidden_states=True,
-    return_dict=False,
+output = model(
+    input_ids=inputs.input_ids,
+    pixel_values=inputs.pixel_values,
+    attention_mask=torch.zeros_like(language_masked_pos),
+    language_masked_pos=language_masked_pos,
 )
 
-print(len(tuple_outputs))
-
-for i in tuple_outputs:
-    if isinstance(i, torch.Tensor):
-        print(i.shape)
-    elif i is not None:
-        print(len(i))
-    else:
-        print(i)
+print(processor.tokenizer.decode([np.argmax(output.logits.cpu().detach().numpy())]))
