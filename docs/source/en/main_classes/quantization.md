@@ -16,6 +16,97 @@ rendered properly in your Markdown viewer.
 
 # Quantize 🤗 Transformers models
 
+## AWQ integration
+
+AWQ method has been introduced in the [*AWQ: Activation-aware Weight Quantization for LLM Compression and Acceleration* paper](https://arxiv.org/abs/2306.00978). With AWQ you can run models in 4-bit precision, while preserving its original quality (i.e. no performance degradation) with a superior throughput that other quantization methods presented below - reaching similar throughput as pure `float16` inference.
+
+We now support inference with any AWQ model, meaning anyone can load and use AWQ weights that are pushed on the Hub or saved locally. Note that using AWQ requires to have access to a NVIDIA GPU. CPU inference is not supported yet. 
+
+### Quantizing a model
+
+We advise users to look at different existing tools in the ecosystem to quantize their models with AWQ algorithm, such as:
+
+- [`llm-awq`](https://github.com/mit-han-lab/llm-awq) from MIT Han Lab
+- [`autoawq`](https://github.com/casper-hansen/AutoAWQ) from [`casper-hansen`](https://github.com/casper-hansen)
+- Intel neural compressor from Intel - through [`optimum-intel`](https://huggingface.co/docs/optimum/main/en/intel/optimization_inc)
+
+Many other tools might exist in the ecosystem, please feel free to open a PR to add them to the list.
+Currently the integration with 🤗 Transformers is only available for models that have been quantized using `autoawq` library and `llm-awq`. Most of the models quantized with `auto-awq` can be found under [`TheBloke`](https://huggingface.co/TheBloke) namespace of 🤗 Hub, and to quantize models with `llm-awq` please refer to the [`convert_to_hf.py`](https://github.com/mit-han-lab/llm-awq/blob/main/examples/convert_to_hf.py) script in the examples folder of [`llm-awq`](https://github.com/mit-han-lab/llm-awq/).
+
+### Load a quantized model
+
+You can load a quantized model from the Hub using the `from_pretrained` method. Make sure that the pushed weights are quantized, by checking that the attribute `quantization_config` is present in the model's configuration file (`configuration.json`). You can confirm that the model is quantized in the AWQ format by checking the field `quantization_config.quant_method` which should be set to `"awq"`. Note that loading the model will set other weights in `float16` by default for performance reasons. If you want to change that behavior, you can pass `torch_dtype` argument to `torch.float32` or `torch.bfloat16`. You can find in the sections below some example snippets and notebook.
+
+## Example usage
+
+First, you need to install [`autoawq`](https://github.com/casper-hansen/AutoAWQ) library
+
+```bash
+pip install autoawq
+```
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_id = "TheBloke/zephyr-7B-alpha-AWQ"
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda:0")
+```
+
+In case you first load your model on CPU, make sure to move it to your GPU device before using 
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_id = "TheBloke/zephyr-7B-alpha-AWQ"
+model = AutoModelForCausalLM.from_pretrained(model_id).to("cuda:0")
+```
+
+### Combining AWQ and Flash Attention
+
+You can combine AWQ quantization with Flash Attention to get a model that is both quantized and faster. Simply load the model using `from_pretrained` and pass `use_flash_attention_2=True` argument.
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("TheBloke/zephyr-7B-alpha-AWQ", use_flash_attention_2=True, device_map="cuda:0")
+```
+
+### Benchmarks
+
+We performed some speed, throughput and latency benchmarks using [`optimum-benchmark`](https://github.com/huggingface/optimum-benchmark) library. 
+
+Note at that time of writing this documentation section, the available quantization methods were: `awq`, `gptq` and `bitsandbytes`.
+
+The benchmark was run on a NVIDIA-A100 instance and the model used was [`TheBloke/Mistral-7B-v0.1-AWQ`](https://huggingface.co/TheBloke/Mistral-7B-v0.1-AWQ) for the AWQ model, [`TheBloke/Mistral-7B-v0.1-GPTQ`](https://huggingface.co/TheBloke/Mistral-7B-v0.1-GPTQ) for the GPTQ model. We also benchmarked it against `bitsandbytes` quantization methods and native `float16` model. Some results are shown below:
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/forward_memory_plot.png">
+</div>
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/generate_memory_plot.png">
+</div>
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/generate_throughput_plot.png">
+</div>
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/forward_latency_plot.png">
+</div>
+
+You can find the full results together with packages versions in [this link](https://github.com/huggingface/optimum-benchmark/tree/main/examples/running-mistral).
+
+From the results it appears that AWQ quantization method is the fastest quantization method for inference, text generation and among the lowest peak memory for text generation. However, AWQ seems to have the largest forward latency per batch size. 
+
+### Google colab demo
+
+Check out how to use this integration throughout this [Google Colab demo](https://colab.research.google.com/drive/1HzZH89yAXJaZgwJDhQj9LqSBux932BvY)!
+
+### AwqConfig
+
+[[autodoc]] AwqConfig
+
 ## `AutoGPTQ` Integration
 
 🤗 Transformers has integrated `optimum` API to perform GPTQ quantization on language models. You can load and quantize your model in 8, 4, 3 or even 2 bits without a big drop of performance and faster inference speed! This is supported by most GPU hardwares.
@@ -48,6 +139,7 @@ Note that GPTQ integration supports for now only text models and you may encount
 GPTQ is a quantization method that requires weights calibration before using the quantized models. If you want to quantize transformers model from scratch, it might take some time before producing the quantized model (~5 min on a Google colab for `facebook/opt-350m` model). 
 
 Hence, there are two different scenarios where you want to use GPTQ-quantized models. The first use case would be to load models that has been already quantized by other users that are available on the Hub, the second use case would be to quantize your model from scratch and save it or push it on the Hub so that other users can also use it.
+
 #### GPTQ Configuration
 
 In order to load and quantize a model, you need to create a [`GPTQConfig`]. You need to pass the number of `bits`, a `dataset` in order to calibrate the quantization and the `tokenizer` of the model in order prepare the dataset.
@@ -59,6 +151,7 @@ gptq_config = GPTQConfig(bits=4, dataset = "c4", tokenizer=tokenizer)
 ```
 
 Note that you can pass your own dataset as a list of string. However, it is highly recommended to use the dataset from the GPTQ paper. 
+
 ```python
 dataset = ["auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."]
 quantization = GPTQConfig(bits=4, dataset = dataset, tokenizer=tokenizer)
@@ -71,14 +164,17 @@ You can quantize a model by using `from_pretrained` and setting the `quantizatio
 ```python
 from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=gptq_config)
+
 ```
 Note that you will need a GPU to quantize a model. We will put the model in the cpu and move the modules back and forth to the gpu in order to quantize them.
 
 If you want to maximize your gpus usage while using cpu offload, you can set `device_map = "auto"`.
+
 ```python
 from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=gptq_config)
 ```
+
 Note that disk offload is not supported. Furthermore, if you are out of memory because of the dataset, you may have to pass `max_memory` in `from_pretained`. Checkout this [guide](https://huggingface.co/docs/accelerate/usage_guides/big_modeling#designing-a-device-map) to learn more about `device_map` and `max_memory`.
 
 <Tip warning={true}>
@@ -95,12 +191,14 @@ tokenizer.push_to_hub("opt-125m-gptq")
 ```
 
 If you want to save your quantized model on your local machine, you can also do it with `save_pretrained`: 
+
 ```python
 quantized_model.save_pretrained("opt-125m-gptq")
 tokenizer.save_pretrained("opt-125m-gptq")
 ```
 
-Note that if you have quantized your model with a `device_map`, make sure to move the entire model to one of your gpus or the `cpu` before saving it. 
+Note that if you have quantized your model with a `device_map`, make sure to move the entire model to one of your gpus or the `cpu` before saving it.
+
 ```python
 quantized_model.to("cpu")
 quantized_model.save_pretrained("opt-125m-gptq")
@@ -117,6 +215,7 @@ model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq")
 ```
 
 If you want to load a model faster and without allocating more memory than needed, the `device_map` argument also works with quantized model. Make sure that you have `accelerate` library installed.
+
 ```python
 from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto")
@@ -124,16 +223,25 @@ model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", de
 
 ### Exllama kernels for faster inference
 
-For 4-bit model, you can use the exllama kernels in order to a faster inference speed. It is activated by default. You can change that behavior by passing `disable_exllama` in [`GPTQConfig`]. This will overwrite the quantization config stored in the config. Note that you will only be able to overwrite the attributes related to the kernels. Furthermore, you need to have the entire model on gpus if you want to use exllama kernels. 
+For 4-bit model, you can use the exllama kernels in order to a faster inference speed. It is activated by default. You can change that behavior by passing `use_exllama` in [`GPTQConfig`]. This will overwrite the quantization config stored in the config. Note that you will only be able to overwrite the attributes related to the kernels. Furthermore, you need to have the entire model on gpus if you want to use exllama kernels. Also, you can perform CPU inference using Auto-GPTQ for Auto-GPTQ version > 0.4.2 by passing `device_map` = "cpu". For CPU inference, you have to pass `use_exllama = False` in the `GPTQConfig.`
 
 ```py
 import torch
-gptq_config = GPTQConfig(bits=4, disable_exllama=False)
+gptq_config = GPTQConfig(bits=4)
+model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config=gptq_config)
+```
+
+With the release of the exllamav2 kernels, you can get faster inference speed compared to the exllama kernels. You just need to pass `exllama_config={"version": 2}` in [`GPTQConfig`]:
+
+```py
+import torch
+gptq_config = GPTQConfig(bits=4, exllama_config={"version":2})
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config = gptq_config)
 ```
 
 Note that only 4-bit models are supported for now. Furthermore, it is recommended to deactivate the exllama kernels if you are finetuning a quantized model with peft. 
 
+You can find the benchmark of these kernels [here](https://github.com/huggingface/optimum/tree/main/tests/benchmark#gptq-benchmark)
 #### Fine-tune a quantized model 
 
 With the official support of adapters in the Hugging Face ecosystem, you can fine-tune models that have been quantized with GPTQ. 
@@ -336,6 +444,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model = AutoModelForCausalLM.from_pretrained("{your_username}/bloom-560m-8bit", device_map="auto")
 ```
+
 Note that in this case, you don't need to specify the arguments `load_in_8bit=True`, but you need to make sure that `bitsandbytes` and `accelerate` are installed.
 Note also that `device_map` is optional but setting `device_map = 'auto'` is prefered for inference as it will dispatch efficiently the model on the available ressources.
 
@@ -356,6 +465,7 @@ quantization_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
 ```
 
 Let's say you want to load `bigscience/bloom-1b7` model, and you have just enough GPU RAM to fit the entire model except the `lm_head`. Therefore write a custom device_map as follows:
+
 ```python
 device_map = {
     "transformer.word_embeddings": 0,

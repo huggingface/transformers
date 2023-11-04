@@ -36,17 +36,29 @@ new zero-shot vision tasks such as image classification or retrieval.
 
 [[autodoc]] VisionTextDualEncoderProcessor
 
+<frameworkcontent>
+<pt>
+
 ## VisionTextDualEncoderModel
 
 [[autodoc]] VisionTextDualEncoderModel
     - forward
+
+</pt>
+<tf>
 
 ## FlaxVisionTextDualEncoderModel
 
 [[autodoc]] FlaxVisionTextDualEncoderModel
     - __call__
 
+</tf>
+<jax>
+
 ## TFVisionTextDualEncoderModel
 
 [[autodoc]] TFVisionTextDualEncoderModel
     - call
+
+</jax>
+</frameworkcontent>
