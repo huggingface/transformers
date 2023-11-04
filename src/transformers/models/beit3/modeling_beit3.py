@@ -798,6 +798,8 @@ class Beit3Model(Beit3PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # TODO remove this
         text_end_positions = None
         if input_ids is None and pixel_values is None:
             raise ValueError("You have to specify at least input_ids or pixel_values")
@@ -846,10 +848,8 @@ class Beit3Model(Beit3PreTrainedModel):
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            output = (sequence_output,)
-            output = output + (pooled_output,) if self.pooler else output
-            output = output + encoder_outputs[1:]
-            return output
+            output = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
+            return output + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -939,9 +939,6 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         else:
             last_hidden_state = outputs[0]
 
-        if output_hidden_states:
-            outputs.hidden_states if return_dict else outputs[1]
-
         if input_ids is None:
             multiway_split_position = -1
         elif pixel_values is None:
@@ -963,7 +960,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
             loss = loss_fct(logits, labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[1:] if output_hidden_states else (logits,)
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
@@ -997,7 +994,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = True,
+        output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1038,13 +1035,9 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
             return_dict=return_dict,
         )
 
-        if return_dict:
-            last_hidden_state = outputs.last_hidden_state
-        else:
-            last_hidden_state = outputs[0]
-
-        last_hidden_state = last_hidden_state
-        logits = self.classifier(self.fc_norm(last_hidden_state[:, 1:, :].mean(1)))
+        last_hidden_state = outputs.last_hidden_state if return_dict else outputs[0]
+        patch_tokens = last_hidden_state[:, 1:, :]
+        logits = self.classifier(self.fc_norm(patch_tokens.mean(1)))
 
         loss = None
         if labels is not None:
@@ -1070,8 +1063,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (logits,)
-            output = (output + outputs[1:],) if output_hidden_states else output
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutput(
@@ -1199,14 +1191,14 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
             raise NotImplementedError("Training is not yet supported for Beit3ForCaptioning.")
 
         if not return_dict:
-            output = (logits,)
-            output = output + (outputs.hidden_states,) if output_hidden_states else output
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
-            loss=loss if loss is not None else None,
+            loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
