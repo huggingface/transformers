@@ -422,6 +422,8 @@
         title: NLLB
       - local: model_doc/nllb-moe
         title: NLLB-MoE
+      - local: model_doc/nucleus_x
+        title: NucleusX
       - local: model_doc/nystromformer
         title: Nyströmformer
       - local: model_doc/open-llama
@@ -719,8 +721,6 @@
         title: MGP-STR
       - local: model_doc/nougat
         title: Nougat
-      - local: model_doc/nucleus_x
-        title: NucleusX
       - local: model_doc/oneformer
         title: OneFormer
       - local: model_doc/owlvit
