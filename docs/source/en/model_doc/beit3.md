@@ -42,12 +42,12 @@ The original code can be found [here](https://github.com/microsoft/unilm/tree/ma
     Here is a sample usage:
     
     ```python
-    >>> from transformers import Beit3ForVisualReasoning, Beit3Processor
+    >>> from transformers import Beit3ForImagesAndTextClassification, Beit3Processor
     >>> from PIL import Image
     >>> import requests
     >>> import torch
 
-    >>> model = Beit3ForVisualReasoning.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
+    >>> model = Beit3ForImagesAndTextClassification.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
 
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -101,7 +101,7 @@ The original code can be found [here](https://github.com/microsoft/unilm/tree/ma
 [[autodoc]] Beit3ForQuestionAnswering
 - forward
 
-## Beit3ForVisualReasoning
+## Beit3ForImagesAndTextClassification
 
-[[autodoc]] Beit3ForVisualReasoning
+[[autodoc]] Beit3ForImagesAndTextClassification
 - forward

@@ -189,7 +189,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Beit3Model",
     "Beit3ForCaptioning",
     "Beit3ForImageTextRetrieval",
-    "Beit3ForVisualReasoning",
+    "Beit3ForImagesAndTextClassification",
     "TFBlipForConditionalGeneration",
     "TFBlipForImageTextRetrieval",
     "TFBlipForQuestionAnswering",

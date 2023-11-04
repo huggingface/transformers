@@ -30,7 +30,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_beit3"] = [
         "Beit3Model",
-        "Beit3ForVisualReasoning",
+        "Beit3ForImagesAndTextClassification",
         "Beit3ForImageClassification",
         "Beit3ForCaptioning",
         "Beit3ForQuestionAnswering",
@@ -52,9 +52,9 @@ if TYPE_CHECKING:
         from .modeling_beit3 import (
             Beit3ForCaptioning,
             Beit3ForImageClassification,
+            Beit3ForImagesAndTextClassification,
             Beit3ForImageTextRetrieval,
             Beit3ForQuestionAnswering,
-            Beit3ForVisualReasoning,
             Beit3Model,
             Beit3PreTrainedModel,
         )

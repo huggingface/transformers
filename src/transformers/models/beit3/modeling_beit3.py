@@ -541,7 +541,7 @@ class Beit3PreTrainedModel(PreTrainedModel):
         elif isinstance(
             module,
             (
-                Beit3ForVisualReasoning,
+                Beit3ForImagesAndTextClassification,
                 Beit3ForImageTextRetrieval,
                 Beit3ForQuestionAnswering,
                 Beit3ForImageClassification,
@@ -875,14 +875,13 @@ class Beit3Model(Beit3PreTrainedModel):
 
 
 @add_start_docstrings(
-    """Beit3ForVisualReasoning has a MLP head on top of Beit3Model. Beit3 is a multimodal foundation model. The key idea
-     in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers architecture which uses a
-     shared self-attention module.""",
+    """Beit3ForImagesAndTextClassification with a MLP head on top of Beit3Model, for images and text classification tasks
+    such as NLVR2""",
     BEIT3_START_DOCSTRING,
 )
-class Beit3ForVisualReasoning(Beit3PreTrainedModel):
+class Beit3ForImagesAndTextClassification(Beit3PreTrainedModel):
     def __init__(self, config):
-        super(Beit3ForVisualReasoning, self).__init__(config)
+        super(Beit3ForImagesAndTextClassification, self).__init__(config)
         self.beit3 = Beit3Model(config)
         self.classifier = Beit3MLP(config)
         self.post_init()
@@ -905,12 +904,12 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import Beit3Processor, Beit3ForVisualReasoning
+        >>> from transformers import Beit3Processor, Beit3ForImagesAndTextClassification
         >>> from PIL import Image
         >>> import requests
         >>> import torch
 
-        >>> model = Beit3ForVisualReasoning.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
+        >>> model = Beit3ForImagesAndTextClassification.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
 
         >>> right_image_url = "https://i.ytimg.com/vi/DtTND8frecg/hqdefault.jpg"
         >>> right_image = Image.open(requests.get(right_image_url, stream=True).raw)

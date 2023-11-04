@@ -40,9 +40,9 @@ if is_torch_available():
     from transformers import (
         Beit3ForCaptioning,
         Beit3ForImageClassification,
+        Beit3ForImagesAndTextClassification,
         Beit3ForImageTextRetrieval,
         Beit3ForQuestionAnswering,
-        Beit3ForVisualReasoning,
         Beit3Model,
     )
 
@@ -225,7 +225,7 @@ class Beit3ModelTester:
         model(**input_dict)
 
     def create_and_check_for_visual_reasoning(self, config, input_dict):
-        model = Beit3ForVisualReasoning(config=config)
+        model = Beit3ForImagesAndTextClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(**input_dict)
@@ -259,7 +259,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_inputs_embeds = False
     test_head_masking = False
 
-    # special cases for Beit3ForImageClassification, Beit3ForQuestionAnswering, Beit3ForVisualReasoning, Beit3ForCaptioning
+    # special cases for Beit3ForImageClassification, Beit3ForQuestionAnswering, Beit3ForImagesAndTextClassification, Beit3ForCaptioning
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
@@ -272,7 +272,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, self.model_tester.num_labels, device=torch_device
                 )
-            elif model_class.__name__ == "Beit3ForVisualReasoning":
+            elif model_class.__name__ == "Beit3ForImagesAndTextClassification":
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
@@ -560,8 +560,8 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class Beit3ForVisualReasoningModelTest(Beit3ModelTest, unittest.TestCase):
-    all_model_classes = (Beit3ForVisualReasoning,) if is_torch_available() else ()
+class Beit3ForImagesAndTextClassificationModelTest(Beit3ModelTest, unittest.TestCase):
+    all_model_classes = (Beit3ForImagesAndTextClassification,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = Beit3ModelTester(self, add_multiple_images=True, num_images=2)
@@ -609,7 +609,9 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_beit3_visual_reasoning(self):
-        model = Beit3ForVisualReasoning.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2").to(torch_device)
+        model = Beit3ForImagesAndTextClassification.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2").to(
+            torch_device
+        )
 
         processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
         image = self.default_image

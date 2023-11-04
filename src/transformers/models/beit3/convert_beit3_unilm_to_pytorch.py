@@ -28,9 +28,9 @@ from transformers import (
     Beit3Config,
     Beit3ForCaptioning,
     Beit3ForImageClassification,
+    Beit3ForImagesAndTextClassification,
     Beit3ForImageTextRetrieval,
     Beit3ForQuestionAnswering,
-    Beit3ForVisualReasoning,
     Beit3Processor,
     BeitImageProcessor,
     XLMRobertaTokenizer,
@@ -41,7 +41,7 @@ from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 model_type_to_class_mapping = {
     "image_classification": Beit3ForImageClassification,
     "vqa": Beit3ForQuestionAnswering,
-    "visual_reasoning": Beit3ForVisualReasoning,
+    "visual_reasoning": Beit3ForImagesAndTextClassification,
     "image_captioning": Beit3ForCaptioning,
     "image_text_retrieval": Beit3ForImageTextRetrieval,
 }

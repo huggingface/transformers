@@ -1574,9 +1574,9 @@ else:
         [
             "Beit3ForCaptioning",
             "Beit3ForImageClassification",
+            "Beit3ForImagesAndTextClassification",
             "Beit3ForImageTextRetrieval",
             "Beit3ForQuestionAnswering",
-            "Beit3ForVisualReasoning",
             "Beit3Model",
             "Beit3PreTrainedModel",
         ]
@@ -6307,9 +6307,9 @@ if TYPE_CHECKING:
         from .models.beit3 import (
             Beit3ForCaptioning,
             Beit3ForImageClassification,
+            Beit3ForImagesAndTextClassification,
             Beit3ForImageTextRetrieval,
             Beit3ForQuestionAnswering,
-            Beit3ForVisualReasoning,
             Beit3Model,
             Beit3PreTrainedModel,
         )

@@ -1134,6 +1134,13 @@ class Beit3ForImageClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Beit3ForImagesAndTextClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Beit3ForImageTextRetrieval(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -1142,13 +1149,6 @@ class Beit3ForImageTextRetrieval(metaclass=DummyObject):
 
 
 class Beit3ForQuestionAnswering(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class Beit3ForVisualReasoning(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
