@@ -1377,18 +1377,18 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         embedding_output, (patch_height, patch_width) = self.embeddings(pixel_values)
 
         outputs = self.encoder(
-            embedding_output, output_hidden_states=True, output_attentions=output_attentions, return_dict=True
+            embedding_output, output_hidden_states=True, output_attentions=output_attentions, return_dict=return_dict
         )
 
-        hidden_states = outputs.hidden_states
+        hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 if self.config.reshape_hidden_states:
-                    hidden_state = (
-                        hidden_state[:, 1:, :].permute(0, 2, 1).reshape(batch_size, -1, patch_height, patch_width)
-                    )
+                    hidden_state = hidden_state[:, 1:, :]
+                    hidden_state = hidden_state.permute(0, 2, 1)
+                    hidden_state = hidden_state.reshape(batch_size, -1, patch_height, patch_width)
 
                 feature_maps += (hidden_state,)
 
@@ -1402,9 +1402,10 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
             feature_maps = tuple(feature_maps)
 
         if not return_dict:
-            output = (feature_maps,)
             if output_hidden_states:
-                output += (outputs.hidden_states,)
+                output = (feature_maps,) + outputs[1:]
+            else:
+                output = (feature_maps,) + outputs[2:]
             return output
 
         return BackboneOutput(

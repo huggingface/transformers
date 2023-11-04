@@ -107,8 +107,6 @@ class BeitConfig(BackboneConfigMixin, PretrainedConfig):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage.
-
-            Can also indicate the indices of the feature maps to use for semantic segmentation.
         add_fpn (`bool`, *optional*, defaults to `False`):
             Whether to add a FPN as part of the backbone. Only relevant for [`BeitBackbone`].
         reshape_hidden_states (`bool`, *optional*, defaults to `True`):
@@ -208,10 +206,6 @@ class BeitConfig(BackboneConfigMixin, PretrainedConfig):
                 FutureWarning,
             )
             out_indices = kwargs.pop("segmentation_indices")
-        elif out_indices == [3, 5, 7, 11]:
-            out_features = ["stage4", "stage6", "stage8", "stage12"]
-        elif out_indices == [7, 11, 15, 23]:
-            out_features = ["stage8", "stage12", "stage16", "stage24"]
 
         # backbone attributes
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
