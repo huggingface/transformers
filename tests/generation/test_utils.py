@@ -1018,11 +1018,7 @@ class GenerationTesterMixin:
 
             for output in (output_beam, output_generate):
                 self._check_outputs(
-                    output,
-                    input_ids,
-                    model.config,
-                    use_cache=True,
-                    num_return_sequences=beam_scorer.num_beams,
+                    output, input_ids, model.config, use_cache=True, num_return_sequences=beam_scorer.num_beams
                 )
 
     @require_accelerate
