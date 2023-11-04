@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-LLMs，即大型语言模型，是文本生成背后的关键组成部分。简单来说，它们包含经过大规模预训练的transformer模型，用于根据给定的输入文本预测下一个词（或更准确地说，下一个`token`）。由于它们一次只预测一个`token`，因此除了调用模型之外，您需要执行更复杂的操作来生成新的句子——您需要进行自回归生成。
+LLMs，即大语言模型，是文本生成背后的关键组成部分。简单来说，它们包含经过大规模预训练的transformer模型，用于根据给定的输入文本预测下一个词（或更准确地说，下一个`token`）。由于它们一次只预测一个`token`，因此除了调用模型之外，您需要执行更复杂的操作来生成新的句子——您需要进行自回归生成。
 
 自回归生成是在给定一些初始输入，通过迭代调用模型及其自身的生成输出来生成文本的推理过程，。在🤗 Transformers中，这由[`~generation.GenerationMixin.generate`]方法处理，所有具有生成能力的模型都可以使用该方法。
 
@@ -27,7 +27,7 @@ LLMs，即大型语言模型，是文本生成背后的关键组成部分。简�
 
 * 使用LLM生成文本
 * 避免常见的陷阱
-* 下一步帮助您充分利用LLM
+* 帮助您充分利用LLM下一步指导
 
 在开始之前，请确保已安装所有必要的库：
 
@@ -49,10 +49,10 @@ pip install transformers bitsandbytes>=0.39.0 -q
         autoplay loop muted playsinline
         src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/assisted-generation/gif_1_1080p.mov"
     ></video>
-    <figcaption>"Forward pass of an LLM"</figcaption>
+    <figcaption>"LLM的前向传递"</figcaption>
 </figure>
 
-使用LLM进行自回归生成的一个关键方面是如何从这个概率分布中选择下一个`token`。在这个步骤中，只要最终得到下一个迭代的`token`，就可以随意进行。这意味着可以从概率分布中选择最可能的`token`，也可以在从结果分布中进行采样之前应用多种变换，这取决于你的需求。
+使用LLM进行自回归生成的一个关键方面是如何从这个概率分布中选择下一个`token`。这个步骤可以随意进行，只要最终得到下一个迭代的`token`。这意味着可以简单的从概率分布中选择最可能的`token`，也可以复杂的在对结果分布进行采样之前应用多种变换，这取决于你的需求。
 
 <!-- [GIF 2 -- TEXT GENERATION] -->
 <figure class="image table text-center m-0 w-full">
@@ -66,13 +66,13 @@ pip install transformers bitsandbytes>=0.39.0 -q
 
 上述过程是迭代重复的，直到达到某个停止条件。理想情况下，停止条件由模型决定，该模型应学会在何时输出一个结束序列（`EOS`）标记。如果不是这种情况，生成将在达到某个预定义的最大长度时停止。
 
-正确设置`token`选择步骤和停止条件对于让你的模型按照预期的方式执行任务至关重要。这就是为什么我们为每个模型都有一个[~generation.GenerationConfig]文件，它包含一个良好的默认生成参数化，并与你模型一起加载。
+正确设置`token`选择步骤和停止条件对于让你的模型按照预期的方式执行任务至关重要。这就是为什么我们为每个模型都有一个[~generation.GenerationConfig]文件，它包含一个效果不错的默认生成参数配置，并与您模型一起加载。
 
 让我们谈谈代码！
 
 <Tip>
 
-如果您对基本的LLM使用感兴趣，我们高级的[`Pipeline`](pipeline_tutorial)接口是一个很好的起点。然而，LLMs通常需要像`quantization`和`token选择步骤的精细控制`等高级功能，这最好通过[`~generation.GenerationMixin.generate`]来完成。使用LLM进行自回归生成也是资源密集型的，应该在GPU上执行以获得足够的吞吐量。
+如果您对基本的LLM使用感兴趣，我们高级的[`Pipeline`](pipeline_tutorial)接口是一个很好的起点。然而，LLMs通常需要像`quantization`和`token选择步骤的精细控制`等高级功能，这最好通过[`~generation.GenerationMixin.generate`]来完成。使用LLM进行自回归生成也是资源密集型的操作，应该在GPU上执行以获得足够的吞吐量。
 
 </Tip>
 
@@ -112,7 +112,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 'A list of colors: red, blue, green, yellow, orange, purple, pink,'
 ```
 
-最后，您不需要一次处理一个序列！您可以批量输入，这将在小延迟和内存成本下显著提高吞吐量。您只需要确保正确地填充您的输入（详见下文）。
+最后，您不需要一次处理一个序列！您可以批量输入，这将在小延迟和低内存成本下显著提高吞吐量。您只需要确保正确地填充您的输入（详见下文）。
 
 ```py
 >>> tokenizer.pad_token = tokenizer.eos_token  # Most LLMs don't have a pad token by default
@@ -142,7 +142,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 ... )
 ```
 
-### 生成输出太短/太长
+### 生成的输出太短/太长
 
 如果在[`~generation.GenerationConfig`]文件中没有指定，`generate`默认返回20个tokens。我们强烈建议在您的`generate`调用中手动设置`max_new_tokens`以控制它可以返回的最大新tokens数量。请注意，LLMs（更准确地说，仅[解码器模型]）也将输入提示作为输出的一部分返回。
 
@@ -162,7 +162,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 
 ### 错误的生成模式
 
-默认情况下，除非在[`~generation.GenerationConfig`]文件中指定，否则`generate`会在每个迭代中选择最可能的token（贪婪解码）。根据您的任务，这可能是不理想的；像聊天机器人或写作文章这样的创造性任务受益于采样。另一方面，像音频转录或翻译这样的基于输入的任务受益于贪婪解码。通过将`do_sample=True`启用采样，您可以在这篇[博客文章](https://huggingface.co/blog/how-to-generate)中了解更多关于这个话题的信息。
+默认情况下，除非在[`~generation.GenerationConfig`]文件中指定，否则`generate`会在每个迭代中选择最可能的token（贪婪解码）。对于您的任务，这可能是不理想的；像聊天机器人或写作文章这样的创造性任务受益于采样。另一方面，像音频转录或翻译这样的基于输入的任务受益于贪婪解码。通过将`do_sample=True`启用采样，您可以在这篇[博客文章](https://huggingface.co/blog/how-to-generate)中了解更多关于这个话题的信息。
 
 ```py
 >>> # Set seed or reproducibility -- you don't need this unless you want full reproducibility
@@ -209,7 +209,7 @@ LLMs是[仅解码器](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)�
 
 ### 错误的提示
 
-一些模型和任务期望某种输入提示格式才能正常工作。当未应用此格式时，您将获得悄然的性能下降：模型能工作，但不如按照预期提示那样好。有关提示的更多信息，包括哪些模型和任务需要小心，可在[指南](tasks/prompting)中找到。让我们看一个使用[聊天模板](chat_templating)的聊天LLM示例：
+一些模型和任务期望某种输入提示格式才能正常工作。当未应用此格式时，您将获得悄然的性能下降：模型能工作，但不如预期提示那样好。有关提示的更多信息，包括哪些模型和任务需要小心，可在[指南](tasks/prompting)中找到。让我们看一个使用[聊天模板](chat_templating)的聊天LLM示例：
 
 ```python
 >>> tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-alpha")
@@ -244,11 +244,9 @@ LLMs是[仅解码器](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)�
 
 ## 更多资源
 
-虽然自回归生成过程相对简单，但要充分利用LLM可能是一个具有挑战性的任务，因为有很多移动部件。以下是帮助您深入了解LLM使用和理解的下一步：
-
+虽然自回归生成过程相对简单，但要充分利用LLM可能是一个具有挑战性的任务，因为有很多复杂部件。以下是帮助您深入了解LLM使用和理解的下一步：
 
 ### 高级生成用法
-
 
 1. [指南](generation_strategies)，介绍如何控制不同的生成方法、如何设置生成配置文件以及如何进行输出流式传输；
 2. [指南](chat_templating)，介绍聊天LLMs的提示模板；
@@ -263,7 +261,7 @@ LLMs是[仅解码器](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)�
 ### 延迟、吞吐量和内存利用率
 
 1. [指南](llm_tutorial_optimization),如何优化LLMs以提高速度和内存利用；
-2. [指南](main_classes/quantization), 关于`quantization`，如bitsandbytes和autogptq的指南，教你如何大幅降低内存需求。
+2. [指南](main_classes/quantization), 关于`quantization`，如bitsandbytes和autogptq的指南，教您如何大幅降低内存需求。
 
 ### 相关库
 

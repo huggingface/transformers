@@ -16,9 +16,9 @@ rendered properly in your Markdown viewer.
 
 # 分享模型
 
-最后两个教程展示了如何使用PyTorch、Keras和 🤗 Accelerate进行分布式设置来微调模型。下一步是将您的模型与社区分享！在Hugging Face，我们相信公开分享知识和资源，以实现人工智能的普及化，让每个人都能受益。我们鼓励您将您的模型与社区分享，以帮助他人节省时间和精力。
+最后两个教程展示了如何使用PyTorch、Keras和 🤗 Accelerate进行分布式设置来微调模型。下一步是将您的模型与社区分享！在Hugging Face，我们相信公开分享知识和资源，能实现人工智能的普及化，让每个人都能受益。我们鼓励您将您的模型与社区分享，以帮助他人节省时间和精力。
 
-在本教程中，您将学习两种在[Model Hub](https://huggingface.co/models)上共享训练或微调模型的方法：
+在本教程中，您将学习两种在[Model Hub](https://huggingface.co/models)上共享训练好的或微调的模型的方法：
 
 - 通过编程将文件推送到Hub。
 - 使用Web界面将文件拖放到Hub。
@@ -98,7 +98,6 @@ pip install huggingface_hub
 ```
 
 然后，您可以使用新的checkpoint保存您的新TensorFlow模型：
-
 
 ```py
 >>> tf_model.save_pretrained("path/to/awesome-name-you-picked")
@@ -230,13 +229,6 @@ pip install huggingface_hub
 ![upload_file](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/upload_file.png)
 
 ## 添加模型卡片
-
-To make sure users understand your model's capabilities, limitations, potential biases and ethical considerations, please add a model card to your repository. The model card is defined in the `README.md` file. You can add a model card by:
-
-* Manually creating and uploading a `README.md` file.
-* Clicking on the **Edit model card** button in your model repository.
-
-Take a look at the DistilBert [model card](https://huggingface.co/distilbert-base-uncased) for a good example of the type of information a model card should include. For more details about other options you can control in the `README.md` file such as a model's carbon footprint or widget examples, refer to the documentation [here](https://huggingface.co/docs/hub/models-cards).
 
 为了确保用户了解您的模型的能力、限制、潜在偏差和伦理考虑，请在仓库中添加一个模型卡片。模型卡片在`README.md`文件中定义。你可以通过以下方式添加模型卡片：
 
