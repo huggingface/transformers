@@ -90,5 +90,5 @@ New NucleusXModels can be instantiated as follows:
 
 ## NucleusXForSequenceClassification
 
-[[autodoc]] transformers.NucleusXForSequenceClassification
+[[autodoc]] NucleusXForSequenceClassification
     - forward

@@ -116,10 +116,10 @@ class NucleusXConfig(PretrainedConfig):
     ```python
     >>> from transformers import NucleusXModel, NucleusXConfig
 
-    >>> # Initializing a NucleusX-7b style configuration
+    >>> # Initializing a NucleusX-7B style configuration
     >>> configuration = NucleusXConfig()
 
-    >>> # Initializing a model from the NucleusX-7b style configuration
+    >>> # Initializing a model from the NucleusX-7B style configuration
     >>> model = NucleusXModel(configuration)
 
     >>> # Accessing the model configuration
