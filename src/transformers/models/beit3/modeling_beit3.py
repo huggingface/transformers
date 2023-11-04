@@ -894,25 +894,24 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
 
         >>> model = Beit3ForVisualReasoning.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> text = "This is photo of a cat"
+        >>> right_image_url = "https://i.ytimg.com/vi/DtTND8frecg/hqdefault.jpg"
+        >>> right_image = Image.open(requests.get(right_image_url, stream=True).raw)
+        >>> left_image_url = "https://upload.wikimedia.org/wikipedia/commons/3/3d/Indian_Railways_WAP-4_class_electric_locomotive..JPG"
+        >>> left_image = Image.open(requests.get(left_image_url, stream=True).raw)
+
+        >>> text = "Power lines can be seen above the train in the image on the right."
 
         >>> processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
-        >>> inputs = processor(text=text, images=image, return_tensors="pt")
-
-        >>> pixel_values = torch.cat(
-        ...     (torch.tensor(inputs["pixel_values"]).unsqueeze(1), torch.tensor(inputs["pixel_values"]).unsqueeze(1)),
-        ...     dim=1,
-        ... )
-
-        >>> output = model(
-        ...     input_ids=torch.tensor(inputs["input_ids"]),
-        ...     pixel_values=pixel_values,
+        >>> inputs = processor(text=text, images=[left_image, right_image], return_tensors="pt")
+        >>> outputs = model(
+        ...     input_ids=inputs["input_ids"],
+        ...     pixel_values=inputs["pixel_values"].unsqueeze(0),
         ...     attention_mask=torch.ones(inputs["input_ids"].shape),
         ... )
-        >>> list(output.logits.shape)
-        [1, 2]
+        >>> predicted_class_idx = outputs.logits.argmax(-1).item()
+        >>> predicted_class = model.config.id2label[predicted_class_idx]
+        >>> print("Predicted class:", predicted_class)
+        Predicted class: False
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1383,8 +1382,8 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         ... )
 
         >>> loss = outputs.loss.detach().numpy()
-        >>> print(loss)
-        1.8435166
+        >>> print(round(float(outputs.loss.detach().numpy()), 4))
+        1.8435
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
