@@ -2794,7 +2794,6 @@ class GenerationMixin:
                 continue  # don't waste resources running the code we don't need
 
             next_token_logits = outputs.logits[:, -1, :]
-
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
             next_token_scores = logits_warper(input_ids, next_token_scores)
@@ -4476,13 +4475,20 @@ class GenerationMixin:
                         assistant_model_outputs = assistant_model(candidate_input_ids)
 
                 # 1.2. greedily select the next candidate token
-                # TODO for speculative decoding: implement sampling here instead of greedy selection
                 model_kwargs["assistant_past_key_values"] = assistant_model_outputs.past_key_values
+
                 if len(logits_processor) > 0:
                     assistant_model_outputs.logits[:, -1, :] = logits_processor(
                         candidate_input_ids, assistant_model_outputs.logits[:, -1, :]
                     )
-                new_token = assistant_model_outputs.logits[:, -1, :].argmax(dim=-1)
+
+                if do_sample:
+                    # Simple sampling for now
+                    probs = nn.functional.softmax(assistant_model_outputs.logits[:, -1, :], dim=-1)
+                    new_token = torch.multinomial(probs, num_samples=1).squeeze(1)
+                else:
+                    new_token = assistant_model_outputs.logits[:, -1, :].argmax(dim=-1)
+
                 candidate_input_ids = torch.cat((candidate_input_ids, new_token[:, None]), dim=-1)
 
                 # 1.3. stop assistant generation on EOS
@@ -4559,24 +4565,20 @@ class GenerationMixin:
                         n += 1
                     else:
                         # reject
-                        # TODO for speculative decoding: implement actual sampling, rather than greedy selection
+                        ### max_fn
+                        tmp = new_logits[:, n, :] - assistant_model_outputs.logits[:, n, :]
+                        tmp_max = torch.where(tmp > 0, tmp, torch.zeros_like(tmp))
+                        tmp_max_sum = torch.sum(tmp_max, dim=1, keepdim=True)
 
-                        # ### max_fn
-                        # print(f"new_logits[:, n, :]: {new_logits[:, n, :]}")
-                        # print(f"assistant_model_outputs.logits[:, n, :]: {assistant_model_outputs.logits[:, n, :]}")
-                        # tmp = new_logits[:, n, :] - assistant_model_outputs.logits[:, n, :]
-                        # print(f"tmp {tmp}")
-                        # tmp_max = torch.where(tmp > 0, tmp, torch.zeros_like(tmp))
-                        # print(f"tmp_max {tmp_max}")
-                        # tmp_max_sum = torch.sum(tmp_max, dim=1, keepdim=True)
-                        # print(f"tmp_max_sum {tmp_max_sum}")
-                        # tmp_result = tmp_max / tmp_max_sum
-                        # print(f"tmp_result {tmp_result}")
-                        #
-                        # ### sample
-                        # t = torch.multinomial(tmp_result, num_samples=1)
+                        # TODO: investigate, because it should not be needed (only else case should exist)
+                        if torch.all(tmp_max_sum == 0):
+                            tmp_result = tmp_max
+                        else:
+                            tmp_result = tmp_max / tmp_max_sum
 
-                        else_new_token = assistant_model_outputs.logits[:, -1, :].argmax(dim=-1)
+                        # Simple sampling for now
+                        probs = nn.functional.softmax(tmp_result, dim=-1)
+                        else_new_token = torch.multinomial(probs, num_samples=1).squeeze(1)
 
                         all_accepted = False
                         break
