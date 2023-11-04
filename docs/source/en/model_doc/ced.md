@@ -34,37 +34,6 @@ This model was contributed by [Junbo Zhang](https://huggingface.co/jimbozhang).
 The original code can be found [here](https://github.com/RicherMans/CED).
 
 
-### Example
-
-```python
->>> from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
->>> from datasets import load_dataset
->>> import torch
-
->>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
->>> dataset = dataset.sort("id")
->>> sampling_rate = dataset.features["audio"].sampling_rate
-
->>> feature_extractor = AutoFeatureExtractor.from_pretrained("mispeech/ced-tiny")
->>> model = AutoModelForAudioClassification.from_pretrained("mispeech/ced-tiny")
-
->>> # audio file is decoded on the fly
->>> inputs = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
-
->>> with torch.no_grad():
-...     logits = model(**inputs).logits
-
->>> predicted_class_ids = torch.argmax(logits, dim=-1).item()
->>> predicted_label = model.config.id2label[predicted_class_ids]
->>> predicted_label
-"Speech"
-
->>> # compute loss - target_label is e.g. "Speech"
->>> target_label = model.config.id2label[0]
->>> inputs["labels"] = torch.tensor([model.config.label2id[target_label]])
->>> loss = model(**inputs).loss
-```
-
 ## CedConfig
 
 [[autodoc]] CedConfig

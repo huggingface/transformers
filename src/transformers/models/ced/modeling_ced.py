@@ -37,8 +37,8 @@ from .configuration_ced import CedConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "CedConfig"
-_SEQ_CLASS_EXPECTED_OUTPUT = 0
-_SEQ_CLASS_EXPECTED_LOSS = 0.01
+_SEQ_CLASS_EXPECTED_OUTPUT = "'Speech synthesizer'"
+_SEQ_CLASS_EXPECTED_LOSS = 0.69
 
 # Audio classification docstring
 _SEQ_CLASS_CHECKPOINT = "mispeech/ced-tiny"
@@ -396,15 +396,6 @@ class CedModel(CedPreTrainedModel):
         x = self.norm(x)
         return x
 
-    @add_start_docstrings_to_model_forward(CED_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
-    )
     def forward(self, input_values: torch.Tensor):
         r"""
         Runs a forward pass of the CED model as an audio encoder.
@@ -490,15 +481,41 @@ class CedForAudioClassification(CedPreTrainedModel):
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        model_cls="CedForAudioClassification",
         expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
         expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(self, input_values: torch.Tensor, labels: Optional[torch.Tensor] = None):
-        r"""
-        Runs a forward pass of the CED model for audio classification task.
         """
-        x = self.encoder(input_values).logits
-        logits = self.forward_head(x)
+        Runs a forward pass of the CED model for audio classification task.
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+        >>> dataset = dataset.sort("id")
+        >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("mispeech/ced-tiny")
+        >>> model = AutoModelForAudioClassification.from_pretrained("mispeech/ced-tiny")
+
+        >>> inputs = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> predicted_class_ids = torch.argmax(logits, dim=-1).item()
+        >>> predicted_label = model.config.id2label[predicted_class_ids]
+        >>> predicted_label
+        'Speech synthesizer'
+        ```
+        """
+        last_hidden_states = self.encoder(input_values).logits
+        logits = self.forward_head(last_hidden_states)
 
         if labels is not None:
             loss_fct = nn.BCEWithLogitsLoss()
@@ -507,4 +524,4 @@ class CedForAudioClassification(CedPreTrainedModel):
         else:
             loss = None
 
-        return SequenceClassifierOutput(logits=logits, loss=loss)
+        return SequenceClassifierOutput(logits=logits, loss=loss, hidden_states=last_hidden_states)
