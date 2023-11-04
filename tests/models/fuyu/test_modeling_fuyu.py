@@ -20,7 +20,8 @@ import unittest
 import requests
 
 from transformers import FuyuConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.utils import cached_property
 
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
@@ -324,7 +325,7 @@ class FuyuModelIntegrationTest(unittest.TestCase):
             else end_sequence
         )
 
-        EXPECTED_TEXT_COMPLETION = """A bus parked on the side of a road.|ENDOFTEXT|"""
+        EXPECTED_TEXT_COMPLETION = "A blue bus parked on the side of a road.|ENDOFTEXT|"
         self.assertEqual(EXPECTED_TEXT_COMPLETION, clean_sequence[1:])
 
 

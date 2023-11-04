@@ -1,6 +1,8 @@
-from transformers import FuyuProcessor, FuyuForCausalLM
-from PIL import Image
 import requests
+from PIL import Image
+
+from transformers import FuyuForCausalLM, FuyuProcessor
+
 
 # load model and processor
 model_id = "adept/fuyu-8b"
