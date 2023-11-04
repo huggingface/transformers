@@ -24,8 +24,6 @@ from transformers import Beit3Config, Beit3Processor, BeitImageProcessor, XLMRob
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_BACKBONE_MAPPING_NAMES,
-    MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
-    MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -103,16 +101,14 @@ class Beit3ModelTester:
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
-
+        self.seq_length = seq_length
         self.num_labels = num_labels
         self.batch_size = batch_size
-        self.seq_length = seq_length
         self.use_labels = use_labels
         self.is_training = is_training
 
         self.encoder_seq_length = ((self.image_size // self.patch_size) ** 2) + self.seq_length + 1
         self.encoder_seq_length_image_only = ((self.image_size // self.patch_size) ** 2) + 1
-        self.key_length = ((self.image_size // self.patch_size) ** 2) + self.seq_length + 1
 
     def get_config(self):
         return Beit3Config(
@@ -353,13 +349,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         seq_len = getattr(self.model_tester, "seq_length", None)
-        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-        chunk_length = getattr(self.model_tester, "chunk_length", None)
-        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
-            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
         for model_class in self.all_model_classes:
             if model_class.__name__ not in ["Beit3ForImageTextRetrieval", "Beit3ForCaptioning"]:
@@ -371,7 +361,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 model.eval()
                 with torch.no_grad():
                     outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-                attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+                attentions = outputs.attentions
                 self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
                 # check that output_attentions also work using config
@@ -382,69 +372,24 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 model.eval()
                 with torch.no_grad():
                     outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-                attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+                attentions = outputs.attentions
                 self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-                if chunk_length is not None:
+                if model_class.__name__ == "Beit3ForImageClassification":
                     self.assertListEqual(
-                        list(attentions[0].shape[-4:]),
-                        [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                    )
-                else:
-                    if model_class.__name__ == "Beit3ForImageClassification":
-                        self.assertListEqual(
-                            list(attentions[0].shape[-3:]),
-                            [
-                                self.model_tester.num_attention_heads,
-                                self.model_tester.encoder_seq_length_image_only,
-                                self.model_tester.encoder_seq_length_image_only,
-                            ],
-                        )
-                    else:
-                        self.assertListEqual(
-                            list(attentions[0].shape[-3:]),
-                            [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                        )
-                out_len = len(outputs)
-
-                if self.is_encoder_decoder:
-                    correct_outlen = 5
-
-                    # loss is at first position
-                    if "labels" in inputs_dict:
-                        correct_outlen += 1  # loss is added to beginning
-                    # Question Answering model returns start_logits and end_logits
-                    if model_class.__name__ in [
-                        *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES),
-                        *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES),
-                    ]:
-                        correct_outlen += 1  # start_logits and end_logits instead of only 1 output
-                    if "past_key_values" in outputs:
-                        correct_outlen += 1  # past_key_values have been returned
-
-                    self.assertEqual(out_len, correct_outlen)
-
-                    # decoder attentions
-                    decoder_attentions = outputs.decoder_attentions
-                    self.assertIsInstance(decoder_attentions, (list, tuple))
-                    self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-                    self.assertListEqual(
-                        list(decoder_attentions[0].shape[-3:]),
-                        [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
-                    )
-
-                    # cross attentions
-                    cross_attentions = outputs.cross_attentions
-                    self.assertIsInstance(cross_attentions, (list, tuple))
-                    self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
-                    self.assertListEqual(
-                        list(cross_attentions[0].shape[-3:]),
+                        list(attentions[0].shape[-3:]),
                         [
                             self.model_tester.num_attention_heads,
-                            decoder_seq_length,
-                            encoder_key_length,
+                            self.model_tester.encoder_seq_length_image_only,
+                            self.model_tester.encoder_seq_length_image_only,
                         ],
                     )
+                else:
+                    self.assertListEqual(
+                        list(attentions[0].shape[-3:]),
+                        [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
+                    )
+                out_len = len(outputs)
 
                 # Check attention is always last and order is fine
                 inputs_dict["output_attentions"] = True
@@ -455,37 +400,25 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 with torch.no_grad():
                     outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-                if hasattr(self.model_tester, "num_hidden_states_types"):
-                    added_hidden_states = self.model_tester.num_hidden_states_types
-                elif self.is_encoder_decoder:
-                    added_hidden_states = 2
-                else:
-                    added_hidden_states = 1
-                self.assertEqual(out_len + added_hidden_states, len(outputs))
+                self.assertEqual(out_len + 1, len(outputs))
 
-                self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+                self_attentions = outputs.attentions
 
                 self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-                if chunk_length is not None:
+                if model_class.__name__ == "Beit3ForImageClassification":
                     self.assertListEqual(
-                        list(self_attentions[0].shape[-4:]),
-                        [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                        list(attentions[0].shape[-3:]),
+                        [
+                            self.model_tester.num_attention_heads,
+                            self.model_tester.encoder_seq_length_image_only,
+                            self.model_tester.encoder_seq_length_image_only,
+                        ],
                     )
                 else:
-                    if model_class.__name__ == "Beit3ForImageClassification":
-                        self.assertListEqual(
-                            list(attentions[0].shape[-3:]),
-                            [
-                                self.model_tester.num_attention_heads,
-                                self.model_tester.encoder_seq_length_image_only,
-                                self.model_tester.encoder_seq_length_image_only,
-                            ],
-                        )
-                    else:
-                        self.assertListEqual(
-                            list(self_attentions[0].shape[-3:]),
-                            [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                        )
+                    self.assertListEqual(
+                        list(self_attentions[0].shape[-3:]),
+                        [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
+                    )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -496,45 +429,27 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = outputs.hidden_states
 
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
+            expected_num_layers = self.model_tester.num_hidden_layers + 1
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            if hasattr(self.model_tester, "encoder_seq_length"):
-                seq_length = self.model_tester.encoder_seq_length
-                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
-                    seq_length = seq_length * self.model_tester.chunk_length
-            else:
-                seq_length = self.model_tester.seq_length
-
-            if model_class.__name__ == "Beit3ForImageClassification":
-                seq_length = self.model_tester.encoder_seq_length_image_only
+            seq_length = (
+                self.model_tester.encoder_seq_length_image_only
+                if model_class.__name__ == "Beit3ForImageClassification"
+                else self.model_tester.encoder_seq_length
+            )
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [seq_length, self.model_tester.hidden_size],
             )
 
-            if config.is_encoder_decoder:
-                hidden_states = outputs.decoder_hidden_states
-
-                self.assertIsInstance(hidden_states, (list, tuple))
-                self.assertEqual(len(hidden_states), expected_num_layers)
-                seq_len = getattr(self.model_tester, "seq_length", None)
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
-
-                self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [decoder_seq_length, self.model_tester.hidden_size],
-                )
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             if model_class.__name__ != "Beit3ForImageTextRetrieval":
+                print("Model class:", model_class)
                 inputs_dict["output_hidden_states"] = True
                 check_hidden_states_output(inputs_dict, config, model_class)
 
