@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Fast
+# FAST
 
 ## Overview
 
@@ -34,9 +34,9 @@ than most networks that are searched for image classification
 
 [[autodoc]] FastImageProcessor
 
-## FASTForImageCaptioning
+## FastForSceneTextRecognition
 
-[[autodoc]] FASTForImageCaptioning
+[[autodoc]] FastForSceneTextRecognition
 - forward
 
 ## FASTForImageCaptioningOutput

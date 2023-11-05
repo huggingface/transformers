@@ -22,7 +22,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import FastConfig, FASTForImageCaptioning
+from transformers import FastConfig, FastForSceneTextRecognition
 from transformers.models.fast.image_processing_fast import FastImageProcessor
 
 
@@ -210,7 +210,7 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_
         if "short_size" in data_config["train"]:
             size = data_config["train"]["short_size"]
 
-    model = FASTForImageCaptioning(config)
+    model = FastForSceneTextRecognition(config)
     fast_image_processor = FastImageProcessor(
         size={"height": size, "width": size},
         min_score=config.min_score,

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Falcon model. """
+""" Testing suite for the PyTorch FAST model. """
 import inspect
 import unittest
 
@@ -40,7 +40,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        FASTForImageCaptioning,
+        FastForSceneTextRecognition,
     )
 
 
@@ -269,7 +269,7 @@ class FastModelTester:
         )
 
     def create_and_check_model(self, config, input):
-        model = FASTForImageCaptioning(config=config)
+        model = FastForSceneTextRecognition(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values=input["pixel_values"])
@@ -283,7 +283,7 @@ class FastModelTester:
 
 @require_torch
 class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (FASTForImageCaptioning,) if is_torch_available() else ()
+    all_model_classes = (FastForSceneTextRecognition,) if is_torch_available() else ()
 
     pipeline_model_mapping = {}
     test_headmasking = False
@@ -389,7 +389,7 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 class FastModelIntegrationTest(unittest.TestCase):
     # @slow
     def test_inference_fast_tiny_ic17mlt_model(self):
-        model = FASTForImageCaptioning.from_pretrained("Raghavan/ic17mlt_Fast_T")
+        model = FastForSceneTextRecognition.from_pretrained("Raghavan/ic17mlt_Fast_T")
 
         image_processor = FastImageProcessor.from_pretrained("Raghavan/ic17mlt_Fast_T")
 
@@ -410,7 +410,7 @@ class FastModelIntegrationTest(unittest.TestCase):
 
     # @slow
     def test_inference_fast_base_800_total_text_ic17mlt_model(self):
-        model = FASTForImageCaptioning.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
+        model = FastForSceneTextRecognition.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
 
         image_processor = FastImageProcessor.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
 

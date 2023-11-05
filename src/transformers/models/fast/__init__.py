@@ -32,7 +32,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_fast"] = ["FASTForImageCaptioning", "FastPreTrainedModel"]
+    _import_structure["modeling_fast"] = ["FastForSceneTextRecognition", "FastPreTrainedModel"]
 
 if TYPE_CHECKING:
     from .configuration_fast import FAST_PRETRAINED_CONFIG_ARCHIVE_MAP, FastConfig
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_fast import FASTForImageCaptioning, FastPreTrainedModel
+        from .modeling_fast import FastForSceneTextRecognition, FastPreTrainedModel
 
 
 else:

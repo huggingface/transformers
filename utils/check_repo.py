@@ -223,7 +223,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TFCLIPVisionModel",
     "TFGroupViTTextModel",
     "TFGroupViTVisionModel",
-    "FASTForImageCaptioning",
+    "FastForSceneTextRecognition",
     "FlaxCLIPTextModel",
     "FlaxCLIPTextModelWithProjection",
     "FlaxCLIPVisionModel",
