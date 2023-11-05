@@ -34,12 +34,23 @@ python run_cvlm.py \
     --dataset_name facebook/winoground \
     --text_column_name caption_0 \
     --image_column_name image_0 \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 8 \
+    --per_device_train_batch_size 1 \
+    --per_device_eval_batch_size 1 \
     --do_train \
     --low_cpu_mem_usage \
     --output_dir /tmp/test-cvlm
 ```
+
+python run_fuyu.py \
+    --model_name_or_path adept/fuyu-8b \
+    --dataset_name facebook/winoground \
+    --text_column_name caption_0 \
+    --image_column_name image_0 \
+    --per_device_train_batch_size 1 \
+    --per_device_eval_batch_size 1 \
+    --do_train \
+    --low_cpu_mem_usage \
+    --output_dir /tmp/test-cvlm
 
 This takes about half an hour to train on a single K80 GPU and about one minute for the evaluation to run. It reaches
 a score of ~20 perplexity once fine-tuned on the dataset.
@@ -61,13 +72,15 @@ python run_cvlm.py \
 This uses the built in HuggingFace `Trainer` for training. If you want to use a custom training loop, you can utilize or adapt the `run_cvlm_no_trainer.py` script. Take a look at the script for a list of supported arguments. An example is shown below:
 
 ```bash
-python run_cvlm_no_trainer.py \
-    --dataset_name wikitext \
-    --dataset_config_name wikitext-2-raw-v1 \
-    --model_name_or_path gpt2 \
-    --output_dir /tmp/test-cvlm
+accelerate launch run_fuyu_no_trainer.py \
+    --dataset_name facebook/winoground \
+    --model_name_or_path adept/fuyu-8b \
+    --per_device_train_batch_size 1 \
+    --per_device_eval_batch_size 1 \
+    --block_size 128 \
+    --output_dir /tmp/test-fuyu
 ```
-
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 ## Streaming
 
 To use the streaming dataset mode which can be very useful for large datasets, add `--streaming` to the command line. This is currently supported by `run_cvlm.py`.
