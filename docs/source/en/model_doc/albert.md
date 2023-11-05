@@ -78,36 +78,39 @@ The resources provided in the following sections consist of a list of official H
 
 <PipelineTag pipeline="text-classification"/>
 
-- A blog post on how to train AlBERT with Blurr for sequence classification can be done by adapting this [example](https://huggingface.co/blog/fastai).
-- A blog post on how to use [Ray to tune hyperparameters](https://huggingface.co/blog/ray-tune) can be adapted for AlBERT.
-- A notebook on how to [Fine-tune ALBERT for sentence-pair classification](https://github.com/NadirEM/nlp-notebooks/blob/master/Fine_tune_ALBERT_sentence_pair_classification.ipynb). 🌎
-- A notebook on how to [Fine Tuning Transformer for MultiLabel Text Classification](https://github.com/abhimishra91/transformers-tutorials/blob/master/transformers_multi_label_classification.ipynb)
 
-- Adapt this blog post on [Getting Started with Sentiment Analysis using Python](https://huggingface.co/blog/sentiment-analysis-python) for AlBERT.
+- [`AlbertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification).
 
-- [`AlBertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification).
-- [`TFAlBertForSequenceClassification`] can be done by adapting this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification).
-- [`FlaxAlBertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb).
+
+- [`TFAlbertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification).
+
+- [`FlaxAlbertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb).
 - Check the [Text classification task guide](../tasks/sequence_classification) on how to use the model.
 
 
 <PipelineTag pipeline="token-classification"/>
 
-- [`AlBertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification) and can be implemented by adapting the example in this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb).
-- [`TFAlBertForTokenClassification`] is supported by adapting this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
-- [`AlBertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification) and by adapting the [ example in this notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb).
-- [`TFAlBertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
-- [`FlaxAlBertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification).
+
+- [`AlbertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification).
+
+
+- [`TFAlbertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
+
+
+- [`AlbertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification).
+
+- [`TFAlbertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
+- [`FlaxAlbertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification).
 - [Token classification](https://huggingface.co/course/chapter7/2?fw=pt) chapter of the 🤗 Hugging Face Course.
 - Check the [Token classification task guide](../tasks/token_classification) on how to use the model.
 
 <PipelineTag pipeline="fill-mask"/>
 
-- [`AlBertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [`TFAlBertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
-- [`FlaxAlBertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb).
+- [`AlbertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
+- [`TFAlbertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
+- [`FlaxAlbertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb).
 - [Masked language modeling](https://huggingface.co/course/chapter7/3?fw=pt) chapter of the 🤗 Hugging Face Course.
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
+- Check the [Masked language modeling task guide](../tasks/masked_language_modeling) on how to use the model.
 
 <PipelineTag pipeline="question-answering"/>
 
@@ -124,27 +127,6 @@ The resources provided in the following sections consist of a list of official H
 
 - Check the  [Multiple choice task guide](../tasks/multiple_choice) on how to use the model.
 
-⚗️ Optimization
-
-- Blog posts on methods and tools [ for efficient training on a single GPU
-](https://huggingface.co/docs/transformers/perf_train_gpu_one), [efficient Inference on a Single GPU](https://huggingface.co/docs/transformers/perf_infer_gpu_one) and [efficient Inference on CPU
-](https://huggingface.co/docs/transformers/perf_infer_cpu) are also available.
-- A blog post on how [Optimizing Transformers for GPUs with 🤗 Optimum](https://www.philschmid.de/optimizing-transformers-with-optimum-gpu) can be modified for ALBERT.
-- A blog post on [Optimizing Transformers with Hugging Face Optimum](https://huggingface.co/blog/optimum-inference) and [an example can be found here](https://www.philschmid.de/optimizing-transformers-with-optimum).
-
-
-⚡️ Inference
-
-- A blog post on how to [Accelerate BERT inference with Hugging Face Transformers and AWS Inferentia](https://huggingface.co/blog/bert-inferentia-sagemaker) can be adapted for AlBERT.
-- A blog post on [Serverless Inference with Hugging Face's Transformers, DistilBERT and Amazon SageMaker](https://www.philschmid.de/sagemaker-serverless-huggingface-distilbert) can be adapted for AlBERT.
-
-
-
-🚀 Deploy
-
-- A blog post on how to [train ALBERT for natural language processing with TensorFlow on Amazon SageMaker](https://aws.amazon.com/blogs/machine-learning/train-albert-for-natural-language-processing-with-tensorflow-on-amazon-sagemaker/).
-- A post on how to [achieve 35% faster training with Hugging Face Deep Learning Containers on Amazon SageMaker](https://dataintegration.info/achieve-35-faster-training-with-hugging-face-deep-learning-containers-on-amazon-sagemaker).
-- Adapt the guide on this blog post on how to [Deploy BERT with Hugging Face Transformers, Amazon SageMaker and Terraform module](https://www.philschmid.de/terraform-huggingface-amazon-sagemaker) for ALBERT.
 
 ## AlbertConfig
 
