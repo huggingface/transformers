@@ -31,18 +31,9 @@ small_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fa
 base_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_base.config"
 
 rename_key_mappings = {
-    "head": "classifier",
-    "text_embed": "text_embedding",
-    "vision_embed": "vision_embedding",
-    "k_proj": "key_proj",
-    "q_proj": "query_proj",
-    "v_proj": "value_proj",
-    "A": "text",
-    "B": "image",
-    "layer_norm": "fc_norm",
-    "self_attn_fc_norm": "self_attn_layer_norm",
-    "final_fc_norm": "final_layer_norm",
-    "first": "first",
+    "bn": "batch_norm",
+    "hor": "horizontal",
+    "ver": "vertical",
 }
 
 
@@ -222,7 +213,11 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_
     state_dict_changed = copy.deepcopy(state_dict)
     for key in state_dict:
         val = state_dict_changed.pop(key)
-        state_dict_changed[key.replace("module.", "")] = val
+        new_key = key.replace("module.", "")
+        for search, replacement in rename_key_mappings.items():
+            if search in new_key:
+                new_key = new_key.replace(search, replacement)
+        state_dict_changed[new_key] = val
     model.load_state_dict(state_dict_changed)
 
     model.save_pretrained(pytorch_dump_folder_path)

@@ -49,9 +49,6 @@ FAST_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
-            classification loss is computed (Cross-Entropy) against these labels.
 """
 
 
@@ -89,7 +86,7 @@ class FASTConvLayer(nn.Module):
         groups=1,
         bias=False,
         has_shuffle=False,
-        use_bn=True,
+        use_batch_norm=True,
         act_func="relu",
         dropout_rate=0,
         use_act=True,
@@ -121,9 +118,9 @@ class FASTConvLayer(nn.Module):
             groups=groups,
             bias=bias,
         )
-        self.bn = nn.Identity()
-        if use_bn:
-            self.bn = nn.BatchNorm2d(out_channels)
+        self.batch_norm = nn.Identity()
+        if use_batch_norm:
+            self.batch_norm = nn.BatchNorm2d(out_channels)
 
         self.activation = nn.Identity()
         if use_act:
@@ -131,22 +128,22 @@ class FASTConvLayer(nn.Module):
             if act is not None:
                 self.activation = act
 
-    def forward(self, x):
+    def forward(self, hidden_states):
         if self.training:
             if hasattr(self, "fused_conv"):
                 delattr(self, "fused_conv")
-            x = self.conv(x)
-            x = self.bn(x)
-            return self.activation(x)
+            hidden_states = self.conv(hidden_states)
+            hidden_states = self.batch_norm(hidden_states)
+            return self.activation(hidden_states)
         else:
             if not hasattr(self, "fused_conv"):
-                setattr(self, "fused_conv", self.fuse_conv_bn(self.conv, self.bn))
-            x = self.fused_conv(x)
+                setattr(self, "fused_conv", self.fuse_conv_batch_norm(self.conv, self.batch_norm))
+            hidden_states = self.fused_conv(hidden_states)
             if self.activation is not None:
-                x = self.activation(x)
-            return x
+                hidden_states = self.activation(hidden_states)
+            return hidden_states
 
-    def fuse_conv_bn(self, conv, batch_norm):
+    def fuse_conv_batch_norm(self, conv, batch_norm):
         """During inference, the functionary of batch norm layers is turned off but
         only the mean and var alone channels are used, which exposes the chance to fuse it with the preceding conv
         layers to save computations and simplify network structures."""
@@ -186,13 +183,13 @@ class FASTRepConvLayer(nn.Module):
             groups=groups,
             bias=False,
         )
-        self.main_bn = nn.BatchNorm2d(num_features=out_channels)
+        self.main_batch_norm = nn.BatchNorm2d(num_features=out_channels)
 
         ver_pad = (int(((kernel_size[0] - 1) * dilation) / 2), 0)
         hor_pad = (0, int(((kernel_size[1] - 1) * dilation) / 2))
 
         if kernel_size[1] != 1:
-            self.ver_conv = nn.Conv2d(
+            self.vertical_conv = nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 kernel_size=(kernel_size[0], 1),
@@ -202,12 +199,12 @@ class FASTRepConvLayer(nn.Module):
                 groups=groups,
                 bias=False,
             )
-            self.ver_bn = nn.BatchNorm2d(num_features=out_channels)
+            self.vertical_batch_norm = nn.BatchNorm2d(num_features=out_channels)
         else:
-            self.ver_conv, self.ver_bn = None, None
+            self.vertical_conv, self.vertical_batch_norm = None, None
 
         if kernel_size[0] != 1:  # 卷积核的高大于1 -> 有水平卷积
-            self.hor_conv = nn.Conv2d(
+            self.horizontal_conv = nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 kernel_size=(1, kernel_size[1]),
@@ -217,9 +214,9 @@ class FASTRepConvLayer(nn.Module):
                 groups=groups,
                 bias=False,
             )
-            self.hor_bn = nn.BatchNorm2d(num_features=out_channels)
+            self.horizontal_batch_norm = nn.BatchNorm2d(num_features=out_channels)
         else:
-            self.hor_conv, self.hor_bn = None, None
+            self.horizontal_conv, self.horizontal_batch_norm = None, None
 
         self.rbr_identity = (
             nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
@@ -231,16 +228,16 @@ class FASTRepConvLayer(nn.Module):
                 self.__delattr__("fused_conv")
 
             main_outputs = self.main_conv(hidden_states)
-            main_outputs = self.main_bn(main_outputs)
-            if self.ver_conv is not None:
-                vertical_outputs = self.ver_conv(hidden_states)
-                vertical_outputs = self.ver_bn(vertical_outputs)
+            main_outputs = self.main_batch_norm(main_outputs)
+            if self.vertical_conv is not None:
+                vertical_outputs = self.vertical_conv(hidden_states)
+                vertical_outputs = self.vertical_batch_norm(vertical_outputs)
             else:
                 vertical_outputs = 0
 
-            if self.hor_conv is not None:
-                horizontal_outputs = self.hor_conv(hidden_states)
-                horizontal_outputs = self.hor_bn(horizontal_outputs)
+            if self.horizontal_conv is not None:
+                horizontal_outputs = self.horizontal_conv(hidden_states)
+                horizontal_outputs = self.horizontal_batch_norm(horizontal_outputs)
             else:
                 horizontal_outputs = 0
 
@@ -258,7 +255,6 @@ class FASTRepConvLayer(nn.Module):
     def _identity_to_conv(self, identity):
         if identity is None:
             return 0, 0
-        assert isinstance(identity, nn.BatchNorm2d)
         if not hasattr(self, "id_tensor"):
             input_dim = self.in_channels // self.groups
             kernel_value = np.zeros((self.in_channels, input_dim, 1, 1), dtype=np.float32)
@@ -276,26 +272,26 @@ class FASTRepConvLayer(nn.Module):
         t = (gamma / std).reshape(-1, 1, 1, 1)
         return kernel * t, beta - running_mean * gamma / std
 
-    def _fuse_bn_tensor(self, conv, bn):
+    def _fuse_batch_norm_tensor(self, conv, batch_norm):
         kernel = conv.weight
         kernel = self._pad_to_mxn_tensor(kernel)
-        running_mean = bn.running_mean
-        running_var = bn.running_var
-        gamma = bn.weight
-        beta = bn.bias
-        eps = bn.eps
+        running_mean = batch_norm.running_mean
+        running_var = batch_norm.running_var
+        gamma = batch_norm.weight
+        beta = batch_norm.bias
+        eps = batch_norm.eps
         std = (running_var + eps).sqrt()
         t = (gamma / std).reshape(-1, 1, 1, 1)
         return kernel * t, beta - running_mean * gamma / std
 
     def get_equivalent_kernel_bias(self):
-        kernel_mxn, bias_mxn = self._fuse_bn_tensor(self.main_conv, self.main_bn)
-        if self.ver_conv is not None:
-            kernel_mx1, bias_mx1 = self._fuse_bn_tensor(self.ver_conv, self.ver_bn)
+        kernel_mxn, bias_mxn = self._fuse_batch_norm_tensor(self.main_conv, self.main_batch_norm)
+        if self.vertical_conv is not None:
+            kernel_mx1, bias_mx1 = self._fuse_batch_norm_tensor(self.vertical_conv, self.vertical_batch_norm)
         else:
             kernel_mx1, bias_mx1 = 0, 0
-        if self.hor_conv is not None:
-            kernel_1xn, bias_1xn = self._fuse_bn_tensor(self.hor_conv, self.hor_bn)
+        if self.horizontal_conv is not None:
+            kernel_1xn, bias_1xn = self._fuse_batch_norm_tensor(self.horizontal_conv, self.horizontal_batch_norm)
         else:
             kernel_1xn, bias_1xn = 0, 0
         kernel_id, bias_id = self._identity_to_conv(self.rbr_identity)
@@ -746,10 +742,12 @@ class FastForSceneTextRecognitionOutput(ModelOutput):
 
 
 @add_start_docstrings(
-    """BEiT-3 is a general-purpose multimodal foundation model that excels in both vision and vision-language tasks. It
-        utilizes [Multiway transformers] (https://arxiv.org/abs/2208.10442) for deep fusion and modality-specific
-        encoding, and unifies masked modeling on images, texts, and image-text pairs, achieving top performance on
-        multiple benchmarks.""",
+    """FAST (faster arbitararily-shaped text detector) proposes an accurate and efficient scene text detection
+    framework, termed FAST (i.e., faster arbitrarily-shaped text detector).FAST has two new designs. (1) They design a
+    minimalist kernel representation (only has 1-channel output) to model text with arbitrary shape, as well as a
+    GPU-parallel post-processing to efficiently assemble text lines with a negligible time overhead. (2) We search the
+    network architecture tailored for text detection, leading to more powerful features than most networks that are
+    searched for image classification.""",
     FAST_START_DOCSTRING,
 )
 class FastForSceneTextRecognition(FastPreTrainedModel):
@@ -810,9 +808,8 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         labels: Dict = None,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+        labels (`Dict[str, torch.Tensor]`, *optional*):
+            Should contain 3 keys: gt_texts,gt_kernels,gt_instances
 
         Returns:
 

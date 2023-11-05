@@ -24,7 +24,7 @@ arbitrarily-shaped text detector).
 FAST has two new designs. (1) We design a minimalist kernel representation (only has 1-channel output) to model text 
 with arbitrary shape, as well as a GPU-parallel post-processing to efficiently assemble text lines with a negligible 
 time overhead. (2) We search the network architecture tailored for text detection, leading to more powerful features 
-than most networks that are searched for image classification
+than most networks that are searched for image classification.
 
 ## FastConfig
 
