@@ -84,7 +84,7 @@ if TYPE_CHECKING:
         from .processing_idefics import IdeficsProcessor
 
     try:
-    if not is_tf_available():
+        if not is_tf_available():
         raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass

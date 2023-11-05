@@ -443,7 +443,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     @slow
     def test_model_from_pretrained(self):
         for model_name in IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFIdeficsModel.from_pretrained(model_name)
+            model = TFIdeficsModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
 
