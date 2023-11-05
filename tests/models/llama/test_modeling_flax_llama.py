@@ -103,14 +103,12 @@ class FlaxLlamaModelTester:
 
         return (config, input_ids, input_mask)
 
-    # Copied from tests.models.gpt_neo.FlaxGPTNeoModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, attention_mask = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
-    # Copied from tests.models.gpt_neo.FlaxGPTNeoModelTester.check_use_cache_forward
     def check_use_cache_forward(self, model_class_name, config, input_ids, attention_mask):
         max_decoder_length = 20
         model = model_class_name(config)
@@ -141,7 +139,6 @@ class FlaxLlamaModelTester:
         diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
-    # Copied from tests.models.gpt_neo.FlaxGPTNeoModelTester.check_use_cache_forward_with_attn_mask
     def check_use_cache_forward_with_attn_mask(self, model_class_name, config, input_ids, attention_mask):
         max_decoder_length = 20
         model = model_class_name(config)
