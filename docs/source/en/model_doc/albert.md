@@ -59,19 +59,14 @@ This model was contributed by [lysandre](https://huggingface.co/lysandre). This 
 - Layers are split in groups that share parameters (to save memory).
 Next sentence prediction is replaced by a sentence ordering prediction: in the inputs, we have two sentences A and B (that are consecutive) and we either feed A followed by B or B followed by A. The model must predict if they have been swapped or not.
 
-<<<<<<< HEAD
-## Resources
-=======
+
 
 This model was contributed by [lysandre](https://huggingface.co/lysandre). This model jax version was contributed by
 [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/google-research/ALBERT).
 
-<<<<<<< HEAD
-## Documentation Resources
->>>>>>> b66685ec6 (Updated albert.md doc for ALBERT model)
-=======
+
 ## Resources
->>>>>>> 428b241d6 (Update docs/source/en/model_doc/albert.md)
+
 
 The resources provided in the following sections consist of a list of official Hugging Face and community (indicated by 🌎) resources to help you get started with AlBERT. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
