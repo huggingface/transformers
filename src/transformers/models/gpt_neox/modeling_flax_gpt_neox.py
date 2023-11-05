@@ -37,7 +37,7 @@ _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neox-20b"
 _CONFIG_FOR_DOC = "GPTNeoXConfig"
 
 
-GPTNeoX_START_DOCSTRING = r"""
+GPT_NEOX_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -71,7 +71,7 @@ GPTNeoX_START_DOCSTRING = r"""
             [`~FlaxPreTrainedModel.to_bf16`].
 """
 
-GPTNeoX_INPUTS_DOCSTRING = r"""
+GPT_NEOX_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`numpy.ndarray` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length`. Indices of input sequence tokens in the vocabulary.
@@ -500,7 +500,7 @@ class FlaxGPTNeoXPreTrainedModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    @add_start_docstrings_to_model_forward(GPTNeoX_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids,
@@ -679,7 +679,7 @@ class FlaxGPTNeoXModule(nn.Module):
 
 @add_start_docstrings(
     "The bare GPTNeoX Model transformer outputting raw hidden-states without any specific head on top.",
-    GPTNeoX_START_DOCSTRING,
+    GPT_NEOX_START_DOCSTRING,
 )
 class FlaxGPTNeoXModel(FlaxGPTNeoXPreTrainedModel):
     module_class = FlaxGPTNeoXModule
@@ -742,7 +742,7 @@ class FlaxGPTNeoXForCausalLMModule(nn.Module):
     """
     The GPTNeoX Model transformer with a language modeling head on top.
     """,
-    GPTNeoX_START_DOCSTRING,
+    GPT_NEOX_START_DOCSTRING,
 )
 # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoForCausalLM with GPTNeo->GPTNeoX
 class FlaxGPTNeoXForCausalLM(FlaxGPTNeoXPreTrainedModel):

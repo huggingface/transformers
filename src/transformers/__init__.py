@@ -8729,36 +8729,12 @@ if TYPE_CHECKING:
             FlaxElectraPreTrainedModel,
         )
         from .models.encoder_decoder import FlaxEncoderDecoderModel
-        from .models.gpt2 import (
-            FlaxGPT2LMHeadModel,
-            FlaxGPT2Model,
-            FlaxGPT2PreTrainedModel,
-        )
-        from .models.gpt_neo import (
-            FlaxGPTNeoForCausalLM,
-            FlaxGPTNeoModel,
-            FlaxGPTNeoPreTrainedModel,
-        )
-        from .models.gptj import (
-            FlaxGPTJForCausalLM,
-            FlaxGPTJModel,
-            FlaxGPTJPreTrainedModel,
-        )
-        from .models.llama import (
-            FlaxLlamaForCausalLM,
-            FlaxLlamaModel,
-            FlaxLlamaPreTrainedModel,
-        )
-        from .models.longt5 import (
-            FlaxLongT5ForConditionalGeneration,
-            FlaxLongT5Model,
-            FlaxLongT5PreTrainedModel,
-        )
-        from .models.marian import (
-            FlaxMarianModel,
-            FlaxMarianMTModel,
-            FlaxMarianPreTrainedModel,
-        )
+        from .models.gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model, FlaxGPT2PreTrainedModel
+        from .models.gpt_neo import FlaxGPTNeoForCausalLM, FlaxGPTNeoModel, FlaxGPTNeoPreTrainedModel
+        from .models.gpt_neox import FlaxGPTNeoXForCausalLM, FlaxGPTNeoXModel, FlaxGPTNeoXPreTrainedModel
+        from .models.gptj import FlaxGPTJForCausalLM, FlaxGPTJModel, FlaxGPTJPreTrainedModel
+        from .models.longt5 import FlaxLongT5ForConditionalGeneration, FlaxLongT5Model, FlaxLongT5PreTrainedModel
+        from .models.marian import FlaxMarianModel, FlaxMarianMTModel, FlaxMarianPreTrainedModel
         from .models.mbart import (
             FlaxMBartForConditionalGeneration,
             FlaxMBartForQuestionAnswering,

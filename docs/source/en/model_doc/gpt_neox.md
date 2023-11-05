@@ -131,3 +131,13 @@ Below is an expected speedup diagram that compares pure inference time between t
 
 [[autodoc]] GPTNeoXForTokenClassification
     - forward
+
+## FlaxGPTXNeoModel
+
+[[autodoc]] FlaxGPTNeoXModel
+    - __call__
+
+## FlaxGPTXNeoForCausalLM
+
+[[autodoc]] FlaxGPTNeoXForCausalLM
+    - __call__

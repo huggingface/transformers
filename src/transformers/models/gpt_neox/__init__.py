@@ -84,6 +84,14 @@ if TYPE_CHECKING:
             GPTNeoXPreTrainedModel,
         )
 
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_flax_gpt_neox import FlaxGPTNeoXForCausalLM, FlaxGPTNeoXModel, FlaxGPTNeoXPreTrainedModel
+
 
 else:
     import sys
