@@ -258,11 +258,6 @@ class FastImageProcessor(BaseImageProcessor):
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
         return image
 
-    def __call__(self, images, segmentation_maps=None, **kwargs):
-        # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
-        # be passed in as positional arguments.
-        return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
-
     def preprocess(
         self,
         images: ImageInput,

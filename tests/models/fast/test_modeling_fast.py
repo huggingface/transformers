@@ -27,7 +27,6 @@ from transformers.models.fast.image_processing_fast import FastImageProcessor
 from transformers.testing_utils import (
     require_torch,
     require_vision,
-    slow,
     torch_device,
 )
 
@@ -388,7 +387,7 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 @require_torch
 @require_vision
 class FastModelIntegrationTest(unittest.TestCase):
-    @slow
+    # @slow
     def test_inference_fast_tiny_ic17mlt_model(self):
         model = FASTForImageCaptioning.from_pretrained("Raghavan/ic17mlt_Fast_T")
 
@@ -400,7 +399,7 @@ class FastModelIntegrationTest(unittest.TestCase):
             return raw_image
 
         image = prepare_image()
-        input = image_processor(image, return_tensor="np")
+        input = image_processor(image, return_tensors="pt")
 
         output = model(pixel_values=torch.tensor(input["pixel_values"]))
         target_sizes = [(image.shape[1], image.shape[2]) for image in input["pixel_values"]]
@@ -421,7 +420,7 @@ class FastModelIntegrationTest(unittest.TestCase):
             return raw_image
 
         image = prepare_image()
-        input = image_processor(image, return_tensor="np")
+        input = image_processor(image, return_tensors="pt")
 
         output = model(pixel_values=torch.tensor(input["pixel_values"]))
         target_sizes = [(image.shape[1], image.shape[2]) for image in input["pixel_values"]]
