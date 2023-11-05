@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 <Tip warning={true}>
 
-This model is in maintenance mode only, so we won't accept any new PRs changing its code.
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
 
 If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0.
 You can do so by running the following command: `pip install -U transformers==4.30.0`.
@@ -49,7 +49,7 @@ on the weakly-supervised WikiSQL denotation accuracy to 89.5% (+2.3%), the WikiT
 to 74.5% (+3.5%), and the TabFact accuracy to 84.2% (+3.2%). To our knowledge, this is the first work to exploit table pre-training via synthetic executable programs
 and to achieve new state-of-the-art results on various downstream tasks.*
 
-Tips:
+## Usage tips
 
 - TAPEX is a generative (seq2seq) model. One can directly plug in the weights of TAPEX into a BART model. 
 - TAPEX has checkpoints on the hub that are either pre-trained only, or fine-tuned on WTQ, SQA, WikiSQL and TabFact.
@@ -58,7 +58,7 @@ Tips:
 - TAPEX has its own tokenizer, that allows to prepare all data for the model easily. One can pass Pandas DataFrames and strings to the tokenizer,
   and it will automatically create the `input_ids` and `attention_mask` (as shown in the usage examples below). 
 
-## Usage: inference
+### Usage: inference
 
 Below, we illustrate how to use TAPEX for table question answering. As one can see, one can directly plug in the weights of TAPEX into a BART model.
 We use the [Auto API](auto), which will automatically instantiate the appropriate tokenizer ([`TapexTokenizer`]) and model ([`BartForConditionalGeneration`]) for us,
@@ -135,6 +135,12 @@ benchmark for table fact checking (it achieves 84% accuracy). The code example b
 Refused
 ```
 
+<Tip> 
+
+TAPEX architecture is the same as BART, except for tokenization. Refer to [BART documentation](bart) for information on 
+configuration classes and their parameters. TAPEX-specific tokenizer is documented below.  
+
+</Tip>
 
 ## TapexTokenizer
 
