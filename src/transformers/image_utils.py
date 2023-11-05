@@ -15,7 +15,6 @@
 
 import base64
 import os
-import warnings
 from enum import EnumMeta
 from io import BytesIO
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
@@ -31,6 +30,7 @@ from .utils import (
     is_torch_available,
     is_torch_tensor,
     is_vision_available,
+    logging,
     requires_backends,
     to_numpy,
 )
@@ -58,6 +58,9 @@ if TYPE_CHECKING:
         import torch
 
 
+logger = logging.get_logger(__name__)
+
+
 ImageInput = Union[
     "PIL.Image.Image", np.ndarray, "torch.Tensor", List["PIL.Image.Image"], List[np.ndarray], List["torch.Tensor"]
 ]  # noqa
@@ -76,11 +79,9 @@ class AnnotationFormat(ExplicitEnum):
 class DeprecatedEnumMeta(EnumMeta):
     def __init__(cls, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        warnings.warn(
-            f"`{cls.__name__}` is deprecated and will be removed in a forthcoming version. "
-            f"Please use `transformers.image_utils.AnnotationFormat` instead.",
-            FutureWarning,
-            stacklevel=2,
+        logger.warning_once(
+            f"`{cls.__name__}` is deprecated and will be removed in v4.38. "
+            f"Please use `transformers.image_utils.AnnotationFormat` instead."
         )
 
 
