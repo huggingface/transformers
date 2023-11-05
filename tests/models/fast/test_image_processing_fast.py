@@ -152,7 +152,8 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         output = model(pixel_values=torch.tensor(inputs["pixel_values"]))
         target_sizes = [(image.shape[1], image.shape[2]) for image in inputs["pixel_values"]]
-        final_out = image_processor.post_process_text_detection(output, target_sizes)
+        threshold = 0.88
+        final_out = image_processor.post_process_text_detection(output, target_sizes, threshold)
 
         assert len(final_out[0]["bboxes"]) == 2
         assert len(final_out[0]["bboxes"][0]) == 716

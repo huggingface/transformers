@@ -501,10 +501,6 @@ class FASTHead(nn.Module):
             config.head_final_ops_order,
         )
 
-        self.min_area = config.min_area
-        self.min_score = config.min_score
-        self.bbox_type = config.bbox_type
-
         self.pooling_size = config.head_pooling_size
 
         self.pooling_1s = nn.MaxPool2d(kernel_size=self.pooling_size, stride=1, padding=(self.pooling_size - 1) // 2)
@@ -828,7 +824,8 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(pixel_values=inputs["pixel_values"])
         >>> target_sizes = [(image.shape[1], image.shape[2]) for image in inputs["pixel_values"]]
-        >>> text_locations = processor.post_process_text_detection(outputs, target_sizes)
+        >>> threshold = 0.88
+        >>> text_locations = processor.post_process_text_detection(outputs, target_sizes, threshold)
         >>> print(text_locations[0]["bboxes"][0][:10])
         [484, 175, 484, 178, 483, 179, 452, 179, 452, 182]
         ```

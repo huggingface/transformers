@@ -43,7 +43,7 @@ def prepare_img():
     return im
 
 
-def prepare_config(size_config_url, pooling_size, min_area, min_score, bbox_type, loss_bg):
+def prepare_config(size_config_url, pooling_size, min_area, bbox_type, loss_bg):
     config_dict = json.loads(requests.get(size_config_url).text)
 
     backbone_config = {}
@@ -148,7 +148,6 @@ def prepare_config(size_config_url, pooling_size, min_area, min_score, bbox_type
         head_final_dropout_rate=config_dict["head"]["final"]["dropout_rate"],
         head_final_ops_order=config_dict["head"]["final"]["ops_order"],
         min_area=min_area,
-        min_score=min_score,
         bbox_type=bbox_type,
         loss_bg=loss_bg,
     )
@@ -174,27 +173,25 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_
     test_config = namespace.get("test_cfg", None)
     data_config = namespace.get("data")
 
-    min_score = 0.88
     min_area = 250
     bbox_type = "rect"
     loss_bg = False
     if test_config is not None:
         min_area = test_config.get("min_area", min_area)
-        min_score = test_config.get("min_score", min_score)
         bbox_type = test_config.get("bbox_type", bbox_type)
         loss_bg = test_config.get("loss_emb", None) == "EmbLoss_v2"
 
     if "tiny" in model_config["backbone"]["config"]:
         config = prepare_config(
-            tiny_config_url, model_config["detection_head"]["pooling_size"], min_area, min_score, bbox_type, loss_bg
+            tiny_config_url, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
         )
     elif "small" in model_config["backbone"]["config"]:
         config = prepare_config(
-            small_config_url, model_config["detection_head"]["pooling_size"], min_area, min_score, bbox_type, loss_bg
+            small_config_url, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
         )
     else:
         config = prepare_config(
-            base_config_url, model_config["detection_head"]["pooling_size"], min_area, min_score, bbox_type, loss_bg
+            base_config_url, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
         )
     size = 640
     if "train" in data_config:
@@ -204,7 +201,6 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_
     model = FastForSceneTextRecognition(config)
     fast_image_processor = FastImageProcessor(
         size={"height": size, "width": size},
-        min_score=config.min_score,
         min_area=config.min_area,
         bbox_type=config.bbox_type,
         pooling_size=config.head_pooling_size,

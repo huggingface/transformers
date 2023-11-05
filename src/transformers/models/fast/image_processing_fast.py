@@ -92,10 +92,12 @@ class FastImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             The standard deviation to use if normalizing the image. This is a float or list of floats of length of the
             number of channels of the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        min_area (`int`, *optional*, defaults to 200): Threshold for min area for results
-        min_score (`float`, *optional*, defaults to 0.88): Threshold for min score for results
-        bbox_type (`str`, *optional*, defaults to `"rect"`): Type of bbox, rect or poly
-        pooling_size (`int`, *optional*, defaults to 9): Pooling size for text detection
+        min_area (`int`, *optional*, defaults to 200):
+            Threshold for min area for results
+        bbox_type (`str`, *optional*, defaults to `"rect"`):
+            Type of bbox, rect or poly
+        pooling_size (`int`, *optional*, defaults to 9):
+            Pooling size for text detection
     """
 
     model_input_names = ["pixel_values"]
@@ -113,7 +115,6 @@ class FastImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         min_area: int = 200,
-        min_score: float = 0.88,
         bbox_type: str = "rect",
         pooling_size: int = 9,
         **kwargs,
@@ -134,7 +135,7 @@ class FastImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.min_area = min_area
-        self.min_score = min_score
+        # self.threshold = threshold
         self.bbox_type = bbox_type
         self.pooling_size = pooling_size
 
@@ -389,7 +390,7 @@ class FastImageProcessor(BaseImageProcessor):
             )
         return x
 
-    def post_process_text_detection(self, output, target_sizes):
+    def post_process_text_detection(self, output, target_sizes, threshold):
         scale = 2
         img_size = (self.size["height"], self.size["width"])
         out = output["hidden_states"]
@@ -428,13 +429,13 @@ class FastImageProcessor(BaseImageProcessor):
             org_img_size = target_sizes[i]
             scales = (float(org_img_size[1]) / float(img_size[1]), float(org_img_size[0]) / float(img_size[0]))
 
-            bboxes, scores = self.generate_bbox(keys[i], labels[i], score_maps[i], scales)
+            bboxes, scores = self.generate_bbox(keys[i], labels[i], score_maps[i], scales, threshold)
             results.append({"bboxes": bboxes, "scores": scores})
         final_results.update({"results": results})
 
         return results
 
-    def generate_bbox(self, keys, label, score, scales):
+    def generate_bbox(self, keys, label, score, scales, threshold):
         label_num = len(keys)
         bboxes = []
         scores = []
@@ -447,7 +448,7 @@ class FastImageProcessor(BaseImageProcessor):
                 label[ind] = 0
                 continue
             score_i = score[ind].mean().item()
-            if score_i < self.min_score:
+            if score_i < threshold:
                 label[ind] = 0
                 continue
 

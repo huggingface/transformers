@@ -403,7 +403,8 @@ class FastModelIntegrationTest(unittest.TestCase):
 
         output = model(pixel_values=torch.tensor(input["pixel_values"]))
         target_sizes = [(image.shape[1], image.shape[2]) for image in input["pixel_values"]]
-        final_out = image_processor.post_process_text_detection(output, target_sizes)
+        threshold = 0.88
+        final_out = image_processor.post_process_text_detection(output, target_sizes, threshold)
 
         assert final_out[0]["bboxes"][0] == [224, 120, 246, 120, 246, 134, 224, 134]
         assert round(float(final_out[0]["scores"][0]), 5) == 0.95541
@@ -424,7 +425,8 @@ class FastModelIntegrationTest(unittest.TestCase):
 
         output = model(pixel_values=torch.tensor(input["pixel_values"]))
         target_sizes = [(image.shape[1], image.shape[2]) for image in input["pixel_values"]]
-        final_out = image_processor.post_process_text_detection(output, target_sizes)
+        threshold = 0.88
+        final_out = image_processor.post_process_text_detection(output, target_sizes, threshold)
 
         assert final_out[0]["bboxes"][0][:10] == [484, 175, 484, 178, 483, 179, 452, 179, 452, 182]
         assert round(float(final_out[0]["scores"][0]), 5) == 0.92356
