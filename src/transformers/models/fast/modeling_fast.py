@@ -446,16 +446,6 @@ class FASTNeck(nn.Module):
         for layer_ix in range(0, len(reduce_layer_configs)):
             setattr(self, f"reduce_layer{layer_ix + 1}", FASTRepConvLayer(*reduce_layer_configs[layer_ix]))
 
-        self._initialize_weights()
-
-    def _initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight)
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-
     def _upsample(self, layer_out, height, width):
         return F.upsample(layer_out, size=(height, width), mode="bilinear")
 
@@ -512,16 +502,6 @@ class FASTHead(nn.Module):
             self.dropout = nn.Dropout2d(config.head_dropout_ratio)
         else:
             self.dropout = None
-
-        self._initialize_weights()
-
-    def _initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight)
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
 
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
