@@ -204,7 +204,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
                     f"Number of continuous embeddings {continuous_embeddings[batch_idx].shape=} does not match "
                     f"number of continuous token ids {src_indices.shape=} in batch element {batch_idx}."
                 )
-            output_embeddings[batch_idx, dst_indices] = continuous_embeddings[batch_idx].to(src_indices.device)[src_indices]
+            output_embeddings[batch_idx, dst_indices] = continuous_embeddings[batch_idx].to(src_indices.device)[
+                src_indices
+            ]
         return output_embeddings
 
     @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
