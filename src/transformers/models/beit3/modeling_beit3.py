@@ -916,7 +916,7 @@ class Beit3ForImagesAndTextClassification(Beit3PreTrainedModel):
 
         >>> right_image_url = "https://i.ytimg.com/vi/DtTND8frecg/hqdefault.jpg"
         >>> right_image = Image.open(requests.get(right_image_url, stream=True).raw)
-        >>> left_image_url = "https://upload.wikimedia.org/wikipedia/commons/3/3d/Indian_Railways_WAP-4_class_electric_locomotive..JPG"
+        >>> left_image_url = "https://cevgroup.org/wp-content/uploads/2018/10/WAP-7_class_electric_locomotive_of_Indian_Railways.jpg"
         >>> left_image = Image.open(requests.get(left_image_url, stream=True).raw)
 
         >>> text = "Power lines can be seen above the train in the image on the right."
