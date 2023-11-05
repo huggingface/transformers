@@ -57,12 +57,9 @@ FAST_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
 
 def get_same_padding(kernel_size):
     if isinstance(kernel_size, tuple):
-        assert len(kernel_size) == 2, "invalid kernel size: %s" % kernel_size
         p1 = get_same_padding(kernel_size[0])
         p2 = get_same_padding(kernel_size[1])
         return p1, p2
-    assert isinstance(kernel_size, int), "kernel size should be either `int` or `tuple`"
-    assert kernel_size % 2 > 0, "kernel size should be odd number"
     return kernel_size // 2
 
 
@@ -79,103 +76,6 @@ def build_activation(act_func, inplace=True):
         return None
     else:
         raise ValueError("do not support: %s" % act_func)
-
-
-class My2DLayer(nn.Module):
-    def __init__(
-        self, in_channels, out_channels, use_bn=True, act_func="relu", dropout_rate=0, ops_order="weight_bn_act"
-    ):
-        super(My2DLayer, self).__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-
-        self.use_bn = use_bn
-        self.act_func = act_func
-        self.dropout_rate = dropout_rate
-        self.ops_order = ops_order
-
-        """ modules"""
-        modules = {}
-        # batch norm
-        if self.use_bn:
-            if self.bn_before_weight:
-                modules["bn"] = nn.BatchNorm2d(in_channels)
-            else:
-                modules["bn"] = nn.BatchNorm2d(out_channels)
-        else:
-            modules["bn"] = None
-        # activation
-        modules["act"] = build_activation(self.act_func, self.ops_list[0] != "act")
-        # dropout
-        if self.dropout_rate > 0:
-            modules["dropout"] = nn.Dropout2d(self.dropout_rate, inplace=True)
-        else:
-            modules["dropout"] = None
-        # weight
-        modules["weight"] = self.weight_op()
-
-        # add modules
-        for op in self.ops_list:
-            if modules[op] is None:
-                continue
-            elif op == "weight":
-                if modules["dropout"] is not None:
-                    self.add_module("dropout", modules["dropout"])
-                for key in modules["weight"]:
-                    self.add_module(key, modules["weight"][key])
-            else:
-                self.add_module(op, modules[op])
-
-    @property
-    def ops_list(self):
-        return self.ops_order.split("_")
-
-    @property
-    def bn_before_weight(self):
-        for op in self.ops_list:
-            if op == "bn":
-                return True
-            elif op == "weight":
-                return False
-        raise ValueError("Invalid ops_order: %s" % self.ops_order)
-
-    def weight_op(self):
-        raise NotImplementedError
-
-    """ Methods defined in MyModule"""
-
-    def forward(self, x):
-        for key, module in self._modules.items():
-            if key == "bn" and not self.training:
-                continue
-            x = module(x)
-        return x
-
-    @property
-    def module_str(self):
-        raise NotImplementedError
-
-    @property
-    def config(self):
-        return {
-            "in_channels": self.in_channels,
-            "out_channels": self.out_channels,
-            "use_bn": self.use_bn,
-            "act_func": self.act_func,
-            "dropout_rate": self.dropout_rate,
-            "ops_order": self.ops_order,
-        }
-
-    @staticmethod
-    def build_from_config(config):
-        raise NotImplementedError
-
-    def get_flops(self, x):
-        raise NotImplementedError
-
-    @staticmethod
-    def is_zero_layer():
-        return False
 
 
 class FASTConvLayer(nn.Module):
@@ -202,7 +102,7 @@ class FASTConvLayer(nn.Module):
         self.groups = groups
         self.bias = bias
         self.has_shuffle = has_shuffle
-        self.act_func = act_func
+        self.activation_function = act_func
 
         padding = get_same_padding(self.kernel_size)
         if isinstance(padding, int):
@@ -225,11 +125,11 @@ class FASTConvLayer(nn.Module):
         if use_bn:
             self.bn = nn.BatchNorm2d(out_channels)
 
-        self.act = nn.Identity()
+        self.activation = nn.Identity()
         if use_act:
-            act = build_activation(self.act_func, True)
+            act = build_activation(self.activation_function, True)
             if act is not None:
-                self.act = act
+                self.activation = act
 
     def forward(self, x):
         if self.training:
@@ -237,27 +137,27 @@ class FASTConvLayer(nn.Module):
                 delattr(self, "fused_conv")
             x = self.conv(x)
             x = self.bn(x)
-            return self.act(x)
+            return self.activation(x)
         else:
             if not hasattr(self, "fused_conv"):
                 setattr(self, "fused_conv", self.fuse_conv_bn(self.conv, self.bn))
             x = self.fused_conv(x)
-            if self.act is not None:
-                x = self.act(x)
+            if self.activation is not None:
+                x = self.activation(x)
             return x
 
-    def fuse_conv_bn(self, conv, bn):
+    def fuse_conv_bn(self, conv, batch_norm):
         """During inference, the functionary of batch norm layers is turned off but
         only the mean and var alone channels are used, which exposes the chance to fuse it with the preceding conv
         layers to save computations and simplify network structures."""
-        if isinstance(bn, nn.Identity):
+        if isinstance(batch_norm, nn.Identity):
             return conv
         conv_w = conv.weight
-        conv_b = conv.bias if conv.bias is not None else torch.zeros_like(bn.running_mean)
+        conv_b = conv.bias if conv.bias is not None else torch.zeros_like(batch_norm.running_mean)
 
-        factor = bn.weight / torch.sqrt(bn.running_var + bn.eps)
+        factor = batch_norm.weight / torch.sqrt(batch_norm.running_var + batch_norm.eps)
         conv.weight = nn.Parameter(conv_w * factor.reshape([conv.out_channels, 1, 1, 1]))
-        conv.bias = nn.Parameter((conv_b - bn.running_mean) * factor + bn.bias)
+        conv.bias = nn.Parameter((conv_b - batch_norm.running_mean) * factor + batch_norm.bias)
         return conv
 
 
