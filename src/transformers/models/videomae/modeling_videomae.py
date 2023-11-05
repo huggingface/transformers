@@ -914,7 +914,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
             labels = videos_patch[bool_masked_pos].reshape(batch_size, -1, num_channels)
 
         loss_fct = MSELoss()
-        loss = loss_fct(logits, labels)
+        loss = loss_fct(logits, labels.to(dtype=logits.dtype))
 
         if not return_dict:
             output = (logits,) + outputs[1:]
