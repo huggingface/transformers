@@ -3301,7 +3301,7 @@ class FalconPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class FASTForImageCaptioning(metaclass=DummyObject):
+class FastForSceneTextRecognition(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
