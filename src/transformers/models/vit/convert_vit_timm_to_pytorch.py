@@ -169,6 +169,10 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     ):
         raise ValueError(f"{vit_name} is not supported in transformers because it uses a layer scale in its blocks.")
 
+    # Hybrid ResNet-ViTs
+    if not isinstance(timm_model.patch_embed, timm.layers.PatchEmbed):
+        raise ValueError(f"{vit_name} is not supported in transformers because it is a hybrid ResNet-ViT.")
+
     # non-overlapping position and class token embedding (to be added)
 
     # get patch size and image size from the patch embedding submodule
