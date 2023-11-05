@@ -326,8 +326,6 @@
         title: ESM
       - local: model_doc/falcon
         title: Falcon
-      - local: model_doc/fast
-        title: Fast
       - local: model_doc/flan-t5
         title: FLAN-T5
       - local: model_doc/flan-ul2
@@ -525,6 +523,8 @@
         title: EfficientFormer
       - local: model_doc/efficientnet
         title: EfficientNet
+      - local: model_doc/fast
+        title: Fast
       - local: model_doc/focalnet
         title: FocalNet
       - local: model_doc/glpn

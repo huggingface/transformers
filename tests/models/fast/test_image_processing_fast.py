@@ -30,7 +30,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import FASTForImageCaptioning, FastImageProcessor
+    from transformers import FastForSceneTextRecognition, FastImageProcessor
 
 
 class FastImageProcessingTester(unittest.TestCase):
@@ -138,7 +138,7 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
     def test_post_process_text_detection(self):
-        model = FASTForImageCaptioning.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
+        model = FastForSceneTextRecognition.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
 
         image_processor = FastImageProcessor.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
 

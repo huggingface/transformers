@@ -1,3 +1,19 @@
+# coding=utf-8
+# Copyright 2021 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+""" PyTorch FAST model."""
+
 from dataclasses import dataclass
 from typing import Dict, Optional
 
@@ -18,7 +34,7 @@ FAST_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`Beit3Config`]): Model configuration class with all the parameters of the model.
+        config ([`FastConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -27,7 +43,7 @@ FAST_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`BeitImageProcessor.__call__`] for details.
+            [`FastImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -162,7 +178,7 @@ class My2DLayer(nn.Module):
         return False
 
 
-class ConvLayer(nn.Module):
+class FASTConvLayer(nn.Module):
     def __init__(
         self,
         in_channels,
@@ -245,9 +261,9 @@ class ConvLayer(nn.Module):
         return conv
 
 
-class RepConvLayer(nn.Module):
+class FASTRepConvLayer(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1):
-        super(RepConvLayer, self).__init__()
+        super().__init__()
 
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -256,7 +272,6 @@ class RepConvLayer(nn.Module):
         self.dilation = dilation
         self.groups = groups
 
-        assert len(kernel_size) == 2
         padding = (int(((kernel_size[0] - 1) * dilation) / 2), int(((kernel_size[1] - 1) * dilation) / 2))
 
         self.nonlinearity = nn.ReLU(inplace=True)
@@ -310,21 +325,21 @@ class RepConvLayer(nn.Module):
             nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
         )
 
-    def forward(self, input):
+    def forward(self, hidden_states):
         if self.training:
             if hasattr(self, "fused_conv"):
                 self.__delattr__("fused_conv")
 
-            main_outputs = self.main_conv(input)
+            main_outputs = self.main_conv(hidden_states)
             main_outputs = self.main_bn(main_outputs)
             if self.ver_conv is not None:
-                vertical_outputs = self.ver_conv(input)
+                vertical_outputs = self.ver_conv(hidden_states)
                 vertical_outputs = self.ver_bn(vertical_outputs)
             else:
                 vertical_outputs = 0
 
             if self.hor_conv is not None:
-                horizontal_outputs = self.hor_conv(input)
+                horizontal_outputs = self.hor_conv(hidden_states)
                 horizontal_outputs = self.hor_bn(horizontal_outputs)
             else:
                 horizontal_outputs = 0
@@ -332,13 +347,13 @@ class RepConvLayer(nn.Module):
             if self.rbr_identity is None:
                 id_out = 0
             else:
-                id_out = self.rbr_identity(input)
+                id_out = self.rbr_identity(hidden_states)
 
             return self.nonlinearity(main_outputs + vertical_outputs + horizontal_outputs + id_out)
         else:
             if not hasattr(self, "fused_conv"):
                 self.prepare_for_eval()
-            return self.nonlinearity(self.fused_conv(input))
+            return self.nonlinearity(self.fused_conv(hidden_states))
 
     def _identity_to_conv(self, identity):
         if identity is None:
@@ -433,7 +448,7 @@ class FastPreTrainedModel(PreTrainedModel):
 class FastTextNet(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.first_conv = ConvLayer(
+        self.first_conv = FASTConvLayer(
             config.backbone_in_channels,
             config.backbone_out_channels,
             config.backbone_kernel_size,
@@ -456,7 +471,7 @@ class FastTextNet(nn.Module):
             config.backbone_stage1_dilation,
             config.backbone_stage1_groups,
         ):
-            stage1.append(RepConvLayer(*stage_config))
+            stage1.append(FASTRepConvLayer(*stage_config))
         self.stage1 = nn.ModuleList(stage1)
 
         stage2 = []
@@ -468,7 +483,7 @@ class FastTextNet(nn.Module):
             config.backbone_stage2_dilation,
             config.backbone_stage2_groups,
         ):
-            stage2.append(RepConvLayer(*stage_config))
+            stage2.append(FASTRepConvLayer(*stage_config))
         self.stage2 = nn.ModuleList(stage2)
 
         stage3 = []
@@ -480,7 +495,7 @@ class FastTextNet(nn.Module):
             config.backbone_stage3_dilation,
             config.backbone_stage3_groups,
         ):
-            stage3.append(RepConvLayer(*stage_config))
+            stage3.append(FASTRepConvLayer(*stage_config))
         self.stage3 = nn.ModuleList(stage3)
 
         stage4 = []
@@ -492,7 +507,7 @@ class FastTextNet(nn.Module):
             config.backbone_stage4_dilation,
             config.backbone_stage4_groups,
         ):
-            stage4.append(RepConvLayer(*stage_config))
+            stage4.append(FASTRepConvLayer(*stage_config))
         self.stage4 = nn.ModuleList(stage4)
 
     def forward(self, hidden_states):
@@ -533,7 +548,7 @@ class FASTNeck(nn.Module):
         )
         self.num_layers = len(reduce_layer_configs)
         for layer_ix in range(0, len(reduce_layer_configs)):
-            setattr(self, f"reduce_layer{layer_ix + 1}", RepConvLayer(*reduce_layer_configs[layer_ix]))
+            setattr(self, f"reduce_layer{layer_ix + 1}", FASTRepConvLayer(*reduce_layer_configs[layer_ix]))
 
         self._initialize_weights()
 
@@ -566,7 +581,7 @@ class FASTNeck(nn.Module):
 class FASTHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.conv = RepConvLayer(
+        self.conv = FASTRepConvLayer(
             config.head_conv_in_channels,
             config.head_conv_out_channels,
             config.head_conv_kernel_size,
@@ -575,7 +590,7 @@ class FASTHead(nn.Module):
             config.head_conv_groups,
         )
 
-        self.final = ConvLayer(
+        self.final = FASTConvLayer(
             config.head_final_in_channels,
             config.head_final_out_channels,
             config.head_final_kernel_size,
@@ -813,7 +828,7 @@ def iou(a, b, mask, n_class=2, reduce=True):
 
 
 @dataclass
-class FASTForImageCaptioningOutput(ModelOutput):
+class FastForSceneTextRecognitionOutput(ModelOutput):
     """
     Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
     last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
@@ -837,7 +852,7 @@ class FASTForImageCaptioningOutput(ModelOutput):
         multiple benchmarks.""",
     FAST_START_DOCSTRING,
 )
-class FASTForImageCaptioning(FastPreTrainedModel):
+class FastForSceneTextRecognition(FastPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.backbone = FastTextNet(config=config)
@@ -886,7 +901,7 @@ class FASTForImageCaptioning(FastPreTrainedModel):
         return torch.mean(loss_text) + torch.mean(loss_kernel) + torch.mean(loss_emb)
 
     @add_start_docstrings_to_model_forward(FAST_FOR_CAPTIONING_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FASTForImageCaptioningOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=FastForSceneTextRecognitionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -904,14 +919,14 @@ class FASTForImageCaptioning(FastPreTrainedModel):
                 Examples:
 
         ```python
-        >>> from transformers import FastImageProcessor, FASTForImageCaptioning
+        >>> from transformers import FastImageProcessor, FastForSceneTextRecognition
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
         >>> processor = FastImageProcessor.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
-        >>> model = FASTForImageCaptioning.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
+        >>> model = FastForSceneTextRecognition.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
         >>> inputs = processor(image, return_tensors="pt")
         >>> # forward pass
         >>> outputs = model(pixel_values=inputs["pixel_values"])
@@ -938,4 +953,4 @@ class FASTForImageCaptioning(FastPreTrainedModel):
         if not return_dict:
             return (loss, text_detection_output) if loss is not None else (text_detection_output,)
 
-        return FASTForImageCaptioningOutput(loss, text_detection_output)
+        return FastForSceneTextRecognitionOutput(loss, text_detection_output)
