@@ -318,7 +318,7 @@ class SwitchTransformersSparseMLP(nn.Module):
         next_states = hidden_states.clone()
         for idx, expert in enumerate(self.experts.values()):
             token_indices = router_mask[:, :, idx].bool()
-            next_states[token_indices] = expert(hidden_states[token_indices])
+            next_states[token_indices] = expert(hidden_states[token_indices]).to(next_states.dtype)
 
         hidden_states = router_probs * next_states
         return hidden_states, (router_logits, expert_index)
@@ -1329,6 +1329,11 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
+
     def get_encoder(self):
         return self.encoder
 
@@ -1504,6 +1509,11 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
@@ -1806,6 +1816,10 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder

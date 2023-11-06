@@ -304,6 +304,25 @@ class Kosmos2ModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    def test_load_save_without_tied_weights(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config.tie_word_embeddings = False
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            with tempfile.TemporaryDirectory() as d:
+                model.save_pretrained(d)
+
+                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+                # Checking the state dicts are correct
+                reloaded_state = model_reloaded.state_dict()
+                for k, v in model.state_dict().items():
+                    self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
+                    torch.testing.assert_close(
+                        v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
+                    )
+                # Checking there was no complain of missing weights
+                self.assertEqual(infos["missing_keys"], [])
+
     # overwrite from common in order to use `self.model_tester.text_model_tester.num_hidden_layers`
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

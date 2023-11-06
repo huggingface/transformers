@@ -342,8 +342,8 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 model.config = config
 
                 if hasattr(model, "enc_to_dec_proj"):
-                    model.enc_to_dec_proj.weight.data = enc_to_dec_proj_weight
-                    model.enc_to_dec_proj.bias.data = enc_to_dec_proj_bias
+                    model.enc_to_dec_proj.weight.data = enc_to_dec_proj_weight.contiguous()
+                    model.enc_to_dec_proj.bias.data = enc_to_dec_proj_bias.contiguous()
 
                 return model
 
