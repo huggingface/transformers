@@ -178,12 +178,14 @@ class TvpImageProcessor(BaseImageProcessor):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
+            input_data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
         size = get_size_dict(size, default_to_square=False)
         if "shortest_edge" in size:
-            output_size = get_resize_output_image_size(image, size["shortest_edge"], default_to_square=False)
+            output_size = get_resize_output_image_size(
+                image, size["shortest_edge"], default_to_square=False, input_data_format=input_data_format
+            )
         elif "height" in size and "width" in size:
             output_size = (size["height"], size["width"])
         else:
