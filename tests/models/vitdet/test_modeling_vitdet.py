@@ -182,7 +182,11 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     # TODO: Fix me (once this model gets more usage)
     @unittest.skip("Does not work on the tiny model as we keep hitting edge cases.")
-    def test_disk_offload(self):
+    def test_disk_offload_bin(self):
+        super().test_disk_offload()
+
+    @unittest.skip("Does not work on the tiny model as we keep hitting edge cases.")
+    def test_disk_offload_safetensors(self):
         super().test_disk_offload()
 
     # TODO: Fix me (once this model gets more usage)

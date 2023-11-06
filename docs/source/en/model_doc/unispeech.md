@@ -33,17 +33,17 @@ recognition by a maximum of 13.4% and 17.8% relative phone error rate reductions
 testing languages). The transferability of UniSpeech is also demonstrated on a domain-shift speech recognition task,
 i.e., a relative word error rate reduction of 6% against the previous approach.*
 
-Tips:
+This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The Authors' code can be
+found [here](https://github.com/microsoft/UniSpeech/tree/main/UniSpeech).
+
+## Usage tips
 
 - UniSpeech is a speech model that accepts a float array corresponding to the raw waveform of the speech signal. Please
   use [`Wav2Vec2Processor`] for the feature extraction.
 - UniSpeech model can be fine-tuned using connectionist temporal classification (CTC) so the model output has to be
   decoded using [`Wav2Vec2CTCTokenizer`].
 
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The Authors' code can be
-found [here](https://github.com/microsoft/UniSpeech/tree/main/UniSpeech).
-
-## Documentation resources
+## Resources
 
 - [Audio classification task guide](../tasks/audio_classification)
 - [Automatic speech recognition task guide](../tasks/asr)

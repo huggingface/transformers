@@ -211,6 +211,8 @@ class TFAutoModelTest(unittest.TestCase):
         config = copy.deepcopy(model.config)
         config.architectures = ["FunnelBaseModel"]
         model = TFAutoModel.from_config(config)
+        model.build()
+
         self.assertIsInstance(model, TFFunnelBaseModel)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -245,7 +247,10 @@ class TFAutoModelTest(unittest.TestCase):
                     # Now that the config is registered, it can be used as any other config with the auto-API
                     tiny_config = BertModelTester(self).get_config()
                     config = NewModelConfig(**tiny_config.to_dict())
+
                     model = auto_class.from_config(config)
+                    model.build()
+
                     self.assertIsInstance(model, TFNewModel)
 
                     with tempfile.TemporaryDirectory() as tmp_dir:

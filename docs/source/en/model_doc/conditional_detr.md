@@ -31,7 +31,7 @@ alt="drawing" width="600"/>
 
 This model was contributed by [DepuMeng](https://huggingface.co/DepuMeng). The original code can be found [here](https://github.com/Atten4Vis/ConditionalDETR).
 
-## Documentation resources
+## Resources
 
 - [Object detection task guide](../tasks/object_detection)
 
