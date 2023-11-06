@@ -141,6 +141,15 @@ class ModelArguments:
             )
         },
     )
+    
+    override_vocabulary_embeddings: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "If `True`, it will resize the token embeddings based on the vocabulary size of the tokenizer. In other words, use this when you use a different tokenizer than the one that was used during pretraining."
+            )
+        },
+    )
 
 
 @dataclass
@@ -799,7 +808,8 @@ def main():
         for flow in model.flow.flows:
             torch.nn.utils.weight_norm(flow.conv_pre)
             torch.nn.utils.weight_norm(flow.conv_post)
-
+            
+        # override speaker embeddings if necessary
         if model_args.override_speaker_embeddings and data_args.speaker_id_column_name is not None:
             if new_num_speakers != num_speakers and new_num_speakers > 1:
                 speaker_embedding_size = config.speaker_embedding_size if config.speaker_embedding_size > 1 else 256
@@ -813,6 +823,11 @@ def main():
                 logger.info(
                     "Same number of speakers on the new dataset than on the model. Embeddings are not reinitialized."
                 )
+                
+        # override token embeddings if necessary
+        if model_args.override_vocabulary_embeddings:
+            new_num_tokens = len(tokenizer)
+            model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of=2) 
 
     # 9. Save configs
     # make sure all processes wait until data is saved
