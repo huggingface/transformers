@@ -947,75 +947,15 @@ class PatchTSTForPretrainingOutput(ModelOutput):
 
 
 @dataclass
-class PatchTSTForPredictionOutput(ModelOutput):
-    """
-    Output type of [`PatchTSTForPredictiontion`].
-
-    Parameters:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            MSE loss.
-        prediction_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction outputs of the time series modeling heads.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    prediction_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class PatchTSTForRegressionOutput(ModelOutput):
-    """
-    Output type of [`PatchTSTForRegression`].
-
-    Parameters:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            MSE loss.
-        prediction_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction outputs of the time series modeling heads.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    prediction_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
 class PatchTSTForForecastingOutput(ModelOutput):
     """
-    Output type of [`PatchTSTForForecasting`].
+    Output type of [`PatchTSTForForecastingtion`].
 
     Parameters:
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
             MSE loss.
-
-        forecast_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Forecasting outputs of the time series modeling heads.
-
+        forecast_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length,)`):
+            Forecast outputs of the time series modeling heads.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
@@ -1031,6 +971,66 @@ class PatchTSTForForecastingOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     forecast_outputs: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class PatchTSTForRegressionOutput(ModelOutput):
+    """
+    Output type of [`PatchTSTForRegression`].
+
+    Parameters:
+        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+            MSE loss.
+        forecast_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction outputs of the time series modeling heads.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    forecast_outputs: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class PatchTSTForPredictionOutput(ModelOutput):
+    """
+    Output type of [`PatchTSTForPrediction`].
+
+    Parameters:
+        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+            MSE loss.
+
+        prediction_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, -1)`):
+            Prediction outputs of the time series modeling heads.
+
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    prediction_outputs: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     loc: torch.FloatTensor = None
@@ -1546,7 +1546,7 @@ class PatchTSTClassificationHead(nn.Module):
         return y
 
 
-class PatchTSTPredictionHead(nn.Module):
+class PatchTSTForecastHead(nn.Module):
     def __init__(self, config: PatchTSTConfig, distribution_output=None):
         super().__init__()
 
@@ -1598,7 +1598,7 @@ class PatchTSTPredictionHead(nn.Module):
         return y
 
 
-class PatchTSTForPrediction(PatchTSTPreTrainedModel):
+class PatchTSTForForecasting(PatchTSTPreTrainedModel):
     """
     PatchTST model for prediction. The model contains PatchTST model + prediction head
     """
@@ -1621,7 +1621,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
-        self.head = PatchTSTPredictionHead(config, self.distribution_output)
+        self.head = PatchTSTForecastHead(config, self.distribution_output)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1634,7 +1634,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, PatchTSTForPredictionOutput]:
+    ) -> Union[Tuple, PatchTSTForForecastingOutput]:
         """
         Parameters:
             past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
@@ -1652,7 +1652,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
-            `PatchTSTForPredictionOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
+            `PatchTSTForForecastingOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
             `config.return_dict`=False)
 
         """
@@ -1684,9 +1684,9 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         if not return_dict:
             outputs = (loss_val, y_hat, model_output.hidden_states, model_output.attentions)
             return tuple(v for v in outputs if v is not None)
-        return PatchTSTForPredictionOutput(
+        return PatchTSTForForecastingOutput(
             loss=loss_val,
-            prediction_output=y_hat,
+            forecast_outputs=y_hat,
             hidden_states=model_output.hidden_states,
             attentions=model_output.attentions,
         )
@@ -1726,7 +1726,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         )
 
         # get distribution
-        distribution = self.distribution_output.distribution(outputs.prediction_output)
+        distribution = self.distribution_output.distribution(outputs.forecast_outputs)
         # get samples
         samples = [
             distribution.sample() for _ in range(num_parallel_samples)
@@ -1736,7 +1736,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         return SamplePatchTSTPredictionOutput(sequences=samples)
 
 
-class PatchTSTForecastHead(nn.Module):
+class PatchTSTPredictionHead(nn.Module):
     def __init__(self, config: PatchTSTConfig, distribution_output=None):
         super().__init__()
 
@@ -1817,7 +1817,7 @@ class PatchTSTForecastHead(nn.Module):
         return output
 
 
-class PatchTSTForForecasting(PatchTSTPreTrainedModel):
+class PatchTSTForPrediction(PatchTSTPreTrainedModel):
     """
     PatchTST for forecasting. The model contains PatchTST model + Forecasting head
     """
@@ -1838,7 +1838,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
-        self.head = PatchTSTForecastHead(config, self.distribution_output)
+        self.head = PatchTSTPredictionHead(config, self.distribution_output)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1851,7 +1851,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PatchTSTForForecastingOutput]:
+    ) -> Union[Tuple, PatchTSTForPredictionOutput]:
         """
         Parameters:
             past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
@@ -1869,7 +1869,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
-            `PatchTSTForForecastingOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
+            `PatchTSTForPredictionOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
             `config.return_dict`=False)
 
         """
@@ -1909,9 +1909,9 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         if not return_dict:
             outputs = (loss_val, y_hat, model_output.hidden_states, model_output.attentions, loc, scale)
             return tuple(v for v in outputs if v is not None)
-        return PatchTSTForForecastingOutput(
+        return PatchTSTForPredictionOutput(
             loss=loss_val,
-            forecast_outputs=y_hat,
+            prediction_outputs=y_hat,
             hidden_states=model_output.hidden_states,
             attentions=model_output.attentions,
             loc=loc,
@@ -1955,7 +1955,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
 
         # get distribution
         distribution = self.distribution_output.distribution(
-            outputs.forecast_outputs, loc=outputs.loc, scale=outputs.scale
+            outputs.prediction_outputs, loc=outputs.loc, scale=outputs.scale
         )
         # get samples
         samples = [
@@ -2100,7 +2100,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             return tuple(v for v in outputs if v is not None)
         return PatchTSTForRegressionOutput(
             loss=loss_val,
-            prediction_output=y_hat,
+            forecast_outputs=y_hat,
             hidden_states=model_output.hidden_states,
             attentions=model_output.attentions,
         )
@@ -2140,7 +2140,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         )
 
         # get distribution
-        distribution = self.distribution_output.distribution(outputs.prediction_output)
+        distribution = self.distribution_output.distribution(outputs.forecast_outputs)
         # get samples
         samples = [
             distribution.sample() for _ in range(num_parallel_samples)
