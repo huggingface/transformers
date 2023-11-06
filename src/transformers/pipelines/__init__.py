@@ -879,7 +879,7 @@ def pipeline(
 
     model_config = model.config
     hub_kwargs["_commit_hash"] = model.config._commit_hash
-    load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
+    load_tokenizer = task not in NO_TOKENIZER_TASKS
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
     load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
 
@@ -891,17 +891,6 @@ def pipeline(
     if load_image_processor and load_feature_extractor:
         load_feature_extractor = False
 
-    if (
-        tokenizer is None
-        and not load_tokenizer
-        and normalized_task not in NO_TOKENIZER_TASKS
-        # Using class name to avoid importing the real class.
-        and model_config.__class__.__name__ in MULTI_MODEL_CONFIGS
-    ):
-        # This is a special category of models, that are fusions of multiple models
-        # so the model_config might not define a tokenizer, but it seems to be
-        # necessary for the task, so we're force-trying to load it.
-        load_tokenizer = True
     if (
         image_processor is None
         and not load_image_processor
@@ -925,13 +914,6 @@ def pipeline(
         # so the model_config might not define a tokenizer, but it seems to be
         # necessary for the task, so we're force-trying to load it.
         load_feature_extractor = True
-
-    if task in NO_TOKENIZER_TASKS:
-        # These will never require a tokenizer.
-        # the model on the other hand might have a tokenizer, but
-        # the files could be missing from the hub, instead of failing
-        # on such repos, we just force to not load it.
-        load_tokenizer = False
 
     if task in NO_FEATURE_EXTRACTOR_TASKS:
         load_feature_extractor = False
