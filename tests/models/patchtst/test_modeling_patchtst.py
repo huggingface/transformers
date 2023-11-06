@@ -40,7 +40,6 @@ if is_torch_available():
         MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
         PatchTSTConfig,
         PatchTSTForClassification,
-        PatchTSTForForecasting,
         PatchTSTForPrediction,
         PatchTSTForPretraining,
         PatchTSTForRegression,
@@ -148,7 +147,6 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         (
             PatchTSTModel,
             PatchTSTForPrediction,
-            PatchTSTForForecasting,
             PatchTSTForPretraining,
             PatchTSTForClassification,
             PatchTSTForRegression,
@@ -157,7 +155,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else ()
     )
     all_generative_model_classes = (
-        (PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForPretraining) if is_torch_available() else ()
+        (PatchTSTForPrediction, PatchTSTForRegression, PatchTSTForPretraining) if is_torch_available() else ()
     )
     pipeline_model_mapping = {"feature-extraction": PatchTSTModel} if is_torch_available() else {}
     test_pruning = False
@@ -335,7 +333,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
 
     # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
     def test_forecast_head(self):
-        model = PatchTSTForForecasting.from_pretrained("ibm/patchtst-etth1-forecast").to(torch_device)
+        model = PatchTSTForPrediction.from_pretrained("ibm/patchtst-etth1-forecast").to(torch_device)
 
         batch = prepare_batch(file="test-batch.pt")
 
