@@ -875,9 +875,7 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning(
-                "If you want to use `RobertaPreLayerNormLMHeadModel` as a standalone, add `is_decoder=True.`"
-            )
+            logger.warning("If you want to use `RobertaPreLayerNormLMHeadModel` as a standalone, add `is_decoder=True.`")
 
         self.roberta_prelayernorm = RobertaPreLayerNormModel(config, add_pooling_layer=False)
         self.lm_head = RobertaPreLayerNormLMHead(config)
@@ -1276,9 +1274,7 @@ class RobertaPreLayerNormForMultipleChoice(RobertaPreLayerNormPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(
-        ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
-    )
+    @add_start_docstrings_to_model_forward(ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,

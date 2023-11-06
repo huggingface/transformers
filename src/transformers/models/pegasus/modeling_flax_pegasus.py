@@ -465,8 +465,7 @@ class FlaxPegasusEncoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxPegasusEncoderLayer(self.config, name=str(i), dtype=self.dtype)
-            for i in range(self.config.encoder_layers)
+            FlaxPegasusEncoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.encoder_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
 
@@ -609,8 +608,7 @@ class FlaxPegasusDecoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxPegasusDecoderLayer(self.config, name=str(i), dtype=self.dtype)
-            for i in range(self.config.decoder_layers)
+            FlaxPegasusDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.decoder_layers)
         ]
         self.layerdrop = self.config.decoder_layerdrop
 

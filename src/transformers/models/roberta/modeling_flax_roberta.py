@@ -526,8 +526,7 @@ class FlaxRobertaLayerCollection(nn.Module):
             ]
         else:
             self.layers = [
-                FlaxRobertaLayer(self.config, name=str(i), dtype=self.dtype)
-                for i in range(self.config.num_hidden_layers)
+                FlaxRobertaLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
             ]
 
     def __call__(

@@ -355,8 +355,7 @@ class UniSpeechFeatureEncoder(nn.Module):
 
         if config.feat_extract_norm == "group":
             conv_layers = [UniSpeechGroupNormConvLayer(config, layer_id=0)] + [
-                UniSpeechNoLayerNormConvLayer(config, layer_id=i + 1)
-                for i in range(config.num_feat_extract_layers - 1)
+                UniSpeechNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
             ]
         elif config.feat_extract_norm == "layer":
             conv_layers = [

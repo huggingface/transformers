@@ -533,8 +533,7 @@ class FlaxElectraLayerCollection(nn.Module):
             ]
         else:
             self.layers = [
-                FlaxElectraLayer(self.config, name=str(i), dtype=self.dtype)
-                for i in range(self.config.num_hidden_layers)
+                FlaxElectraLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
             ]
 
     def __call__(

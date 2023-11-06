@@ -337,7 +337,9 @@ class SEWFeatureEncoder(nn.Module):
                 SEWNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
             ]
         elif config.feat_extract_norm == "layer":
-            conv_layers = [SEWLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
+            conv_layers = [
+                SEWLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)
+            ]
         else:
             raise ValueError(
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"

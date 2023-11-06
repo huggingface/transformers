@@ -461,8 +461,7 @@ class FlaxBlenderbotSmallEncoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxBlenderbotSmallEncoderLayer(self.config, name=str(i), dtype=self.dtype)
-            for i in range(self.config.encoder_layers)
+            FlaxBlenderbotSmallEncoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.encoder_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
 
@@ -605,8 +604,7 @@ class FlaxBlenderbotSmallDecoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxBlenderbotSmallDecoderLayer(self.config, name=str(i), dtype=self.dtype)
-            for i in range(self.config.decoder_layers)
+            FlaxBlenderbotSmallDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.decoder_layers)
         ]
         self.layerdrop = self.config.decoder_layerdrop
 

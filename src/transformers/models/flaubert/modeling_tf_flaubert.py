@@ -1129,9 +1129,7 @@ class TFFlaubertForMultipleChoice(TFFlaubertPreTrainedModel, TFMultipleChoiceLos
             }
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(
-        FLAUBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
-    )
+    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,

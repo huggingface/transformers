@@ -267,10 +267,7 @@ class PersimmonAttention(nn.Module):
             query_states[..., : self.rotary_emb.dim],
             query_states[..., self.rotary_emb.dim :],
         )
-        key_rot, key_pass = (
-            key_states[..., : self.rotary_emb.dim],
-            key_states[..., self.rotary_emb.dim :],
-        )
+        key_rot, key_pass = (key_states[..., : self.rotary_emb.dim],key_states[..., self.rotary_emb.dim :],)
         # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
         query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
 

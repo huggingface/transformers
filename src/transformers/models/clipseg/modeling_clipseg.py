@@ -77,8 +77,7 @@ class CLIPSegOutput(ModelOutput):
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPSegTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of
-            [`CLIPSegVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPSegVisionModel`].
         text_model_output(`BaseModelOutputWithPooling`):
             The output of the [`CLIPSegTextModel`].
         vision_model_output(`BaseModelOutputWithPooling`):

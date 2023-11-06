@@ -369,8 +369,7 @@ class UniSpeechSatFeatureEncoder(nn.Module):
 
         if config.feat_extract_norm == "group":
             conv_layers = [UniSpeechSatGroupNormConvLayer(config, layer_id=0)] + [
-                UniSpeechSatNoLayerNormConvLayer(config, layer_id=i + 1)
-                for i in range(config.num_feat_extract_layers - 1)
+                UniSpeechSatNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
             ]
         elif config.feat_extract_norm == "layer":
             conv_layers = [

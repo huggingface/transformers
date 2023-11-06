@@ -526,8 +526,7 @@ class FlaxRobertaPreLayerNormLayerCollection(nn.Module):
             ]
         else:
             self.layers = [
-                FlaxRobertaPreLayerNormLayer(self.config, name=str(i), dtype=self.dtype)
-                for i in range(self.config.num_hidden_layers)
+                FlaxRobertaPreLayerNormLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
             ]
 
     def __call__(
@@ -1046,9 +1045,7 @@ class FlaxRobertaPreLayerNormForMaskedLMModule(nn.Module):
 
         hidden_states = outputs[0]
         if self.config.tie_word_embeddings:
-            shared_embedding = self.roberta_prelayernorm.variables["params"]["embeddings"]["word_embeddings"][
-                "embedding"
-            ]
+            shared_embedding = self.roberta_prelayernorm.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
         else:
             shared_embedding = None
 
@@ -1447,9 +1444,7 @@ class FlaxRobertaPreLayerNormForCausalLMModule(nn.Module):
 
         hidden_states = outputs[0]
         if self.config.tie_word_embeddings:
-            shared_embedding = self.roberta_prelayernorm.variables["params"]["embeddings"]["word_embeddings"][
-                "embedding"
-            ]
+            shared_embedding = self.roberta_prelayernorm.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
         else:
             shared_embedding = None
 

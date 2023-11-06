@@ -289,8 +289,8 @@ class Data2VecVisionSelfAttention(nn.Module):
 # Copied from transformers.models.beit.modeling_beit.BeitSelfOutput with Beit->Data2VecVision
 class Data2VecVisionSelfOutput(nn.Module):
     """
-    The residual connection is defined in Data2VecVisionLayer instead of here (as is the case with other models), due
-    to the layernorm applied before each block.
+    The residual connection is defined in Data2VecVisionLayer instead of here (as is the case with other models), due to the
+    layernorm applied before each block.
     """
 
     def __init__(self, config: Data2VecVisionConfig) -> None:
@@ -381,9 +381,7 @@ class Data2VecVisionOutput(nn.Module):
 class Data2VecVisionLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(
-        self, config: Data2VecVisionConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0
-    ) -> None:
+    def __init__(self, config: Data2VecVisionConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -897,9 +895,7 @@ class Data2VecVisionPyramidPoolingModule(nn.Module):
         self.channels = channels
         self.blocks = []
         for i, pool_scale in enumerate(pool_scales):
-            block = Data2VecVisionPyramidPoolingBlock(
-                pool_scale=pool_scale, in_channels=in_channels, channels=channels
-            )
+            block = Data2VecVisionPyramidPoolingBlock(pool_scale=pool_scale, in_channels=in_channels, channels=channels)
             self.blocks.append(block)
             self.add_module(str(i), block)
 
@@ -1017,11 +1013,7 @@ class Data2VecVisionFCNHead(nn.Module):
     """
 
     def __init__(
-        self,
-        config: Data2VecVisionConfig,
-        in_index: int = 2,
-        kernel_size: int = 3,
-        dilation: Union[int, Tuple[int, int]] = 1,
+        self, config: Data2VecVisionConfig, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, Tuple[int, int]] = 1
     ) -> None:
         super().__init__()
         self.in_channels = config.hidden_size
