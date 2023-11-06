@@ -1064,7 +1064,7 @@ class FalconModel(FalconPreTrainedModel):
                 )
 
                 # We take care to integrate alibi bias in the attention_mask here.
-                if attention_mask is None:
+                if attention_mask_2d is None:
                     attention_mask = alibi / math.sqrt(self.config.hidden_size // self.num_heads)
                 else:
                     attention_mask = torch.masked_fill(
