@@ -77,59 +77,59 @@ logger = logging.getLogger(__name__)
 
 def discriminator_loss(disc_real_outputs, disc_generated_outputs):
     loss = 0
-    r_losses = 0
-    g_losses = 0
-    for dr, dg in zip(disc_real_outputs, disc_generated_outputs):
-        dr = dr.float()
-        dg = dg.float()
-        r_loss = torch.mean((1 - dr) ** 2)
-        g_loss = torch.mean(dg**2)
-        loss += r_loss + g_loss
-        r_losses += r_loss
-        g_losses += g_loss
+    real_losses = 0
+    generated_losses = 0
+    for disc_real, disc_generated in zip(disc_real_outputs, disc_generated_outputs):
+        disc_real = disc_real.float()
+        disc_generated = disc_generated.float()
+        real_loss = torch.mean((1 - disc_real) ** 2)
+        generated_loss = torch.mean(disc_generated**2)
+        loss += real_loss + generated_loss
+        real_losses += real_loss
+        generated_losses += generated_loss
 
-    return loss, r_losses, g_losses
+    return loss, real_losses, generated_losses
 
 
-def feature_loss(fmap_r, fmap_g):
+def feature_loss(feature_maps_real, feature_maps_generated):
     loss = 0
-    for dr, dg in zip(fmap_r, fmap_g):
-        for rl, gl in zip(dr, dg):
-            rl = rl.float().detach()
-            gl = gl.float()
-            loss += torch.mean(torch.abs(rl - gl))
+    for feature_map_real, feature_map_generated in zip(feature_maps_real, feature_maps_generated):
+        for real, generated in zip(feature_map_real, feature_map_generated):
+            real = real.float().detach()
+            generated = generated.float()
+            loss += torch.mean(torch.abs(real - generated))
 
     return loss * 2
 
 
 def generator_loss(disc_outputs):
-    loss = 0
+    total_loss = 0
     gen_losses = []
-    for dg in disc_outputs:
-        dg = dg.float()
-        l = torch.mean((1 - dg) ** 2)
-        gen_losses.append(l)
-        loss += l
+    for disc_output in disc_outputs:
+        disc_output = disc_output.float()
+        loss = torch.mean((1 - disc_output) ** 2)
+        gen_losses.append(loss)
+        total_loss += loss
 
-    return loss, gen_losses
+    return total_loss, gen_losses
 
 
-def kl_loss(z_p, logs_q, m_p, logs_p, z_mask):
+def kl_loss(prior_latents, posterior_log_variance, prior_means, prior_log_variance, labels_mask):
     """
     z_p, logs_q: [b, h, t_t]
-    m_p, logs_p: [b, h, t_t]
+    prior_means, prior_log_variance: [b, h, t_t]
     """
-    z_p = z_p.float()
-    logs_q = logs_q.float()
-    m_p = m_p.float()
-    logs_p = logs_p.float()
-    z_mask = z_mask.float()
+    prior_latents = prior_latents.float()
+    posterior_log_variance = posterior_log_variance.float()
+    prior_means = prior_means.float()
+    prior_log_variance = prior_log_variance.float()
+    labels_mask = labels_mask.float()
 
-    kl = logs_p - logs_q - 0.5
-    kl += 0.5 * ((z_p - m_p) ** 2) * torch.exp(-2.0 * logs_p)
-    kl = torch.sum(kl * z_mask)
-    l = kl / torch.sum(z_mask)
-    return l
+    kl = prior_log_variance - posterior_log_variance - 0.5
+    kl += 0.5 * ((prior_latents - prior_means) ** 2) * torch.exp(-2.0 * prior_log_variance)
+    kl = torch.sum(kl * labels_mask)
+    loss = kl / torch.sum(labels_mask)
+    return loss
 
 
 @dataclass
