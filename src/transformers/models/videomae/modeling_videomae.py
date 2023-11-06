@@ -849,8 +849,8 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
                 # first, unnormalize the frames
                 device = pixel_values.device
                 dtype = pixel_values.dtype
-                mean = torch.as_tensor(IMAGENET_DEFAULT_MEAN).to(device=device,dtype=dtype)[None, None, :, None, None]
-                std = torch.as_tensor(IMAGENET_DEFAULT_STD).to(device=device,dtype=dtype)[None, None, :, None, None]
+                mean = torch.as_tensor(IMAGENET_DEFAULT_MEAN).to(device=device, dtype=dtype)[None, None, :, None, None]
+                std = torch.as_tensor(IMAGENET_DEFAULT_STD).to(device=device, dtype=dtype)[None, None, :, None, None]
                 frames = pixel_values * std + mean  # in [0, 1]
 
             batch_size, time, num_channels, height, width = frames.shape
