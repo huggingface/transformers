@@ -27,7 +27,6 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_rt_detr"] = ["RTDetrFeatureExtractor"]
     _import_structure["image_processing_rt_detr"] = ["RTDetrImageProcessor"]
 
 try:
