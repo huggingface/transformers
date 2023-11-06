@@ -97,7 +97,7 @@ Flax), PyTorch, and/or TensorFlow.
 |              [Conditional DETR](model_doc/conditional_detr)              |       ✅        |         ❌         |      ❌      |
 |                      [ConvBERT](model_doc/convbert)                      |       ✅        |         ✅         |      ❌      |
 |                      [ConvNeXT](model_doc/convnext)                      |       ✅        |         ✅         |      ❌      |
-|                    [ConvNeXTV2](model_doc/convnextv2)                    |       ✅        |         ❌         |      ❌      |
+|                    [ConvNeXTV2](model_doc/convnextv2)                    |       ✅        |         ✅         |      ❌      |
 |                           [CPM](model_doc/cpm)                           |       ✅        |         ✅         |      ✅      |
 |                       [CPM-Ant](model_doc/cpmant)                        |       ✅        |         ❌         |      ❌      |
 |                          [CTRL](model_doc/ctrl)                          |       ✅        |         ✅         |      ❌      |

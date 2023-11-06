@@ -119,12 +119,15 @@ class MarianAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
+        is_causal: bool = False,
+        config: Optional[MarianConfig] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.config = config
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -133,6 +136,7 @@ class MarianAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
+        self.is_causal = is_causal
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -263,15 +267,18 @@ class MarianAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->Marian
+# Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->Marian, BART->MARIAN
 class MarianEncoderLayer(nn.Module):
     def __init__(self, config: MarianConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = MarianAttention(
+        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
+
+        self.self_attn = MARIAN_ATTENTION_CLASSES[attn_type](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
+            config=config,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -332,28 +339,35 @@ class MarianEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->Marian
+MARIAN_ATTENTION_CLASSES = {"default": MarianAttention}
+
+
+# Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->Marian, BART->MARIAN
 class MarianDecoderLayer(nn.Module):
     def __init__(self, config: MarianConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = MarianAttention(
+        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
+        self.self_attn = MARIAN_ATTENTION_CLASSES[attn_type](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            is_causal=True,
+            config=config,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = MarianAttention(
+        self.encoder_attn = MARIAN_ATTENTION_CLASSES[attn_type](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            config=config,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)

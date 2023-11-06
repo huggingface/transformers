@@ -30,9 +30,7 @@ from logging import (
     WARN,  # NOQA
     WARNING,  # NOQA
 )
-from logging import (
-    captureWarnings as _captureWarnings,
-)
+from logging import captureWarnings as _captureWarnings
 from typing import Optional
 
 import huggingface_hub.utils as hf_hub_utils

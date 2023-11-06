@@ -403,7 +403,7 @@ if is_torch_available():
 
 
 class TrainerIntegrationCommon:
-    def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True, safe_weights=False):
+    def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True, safe_weights=True):
         weights_file = WEIGHTS_NAME if not safe_weights else SAFE_WEIGHTS_NAME
         file_list = [weights_file, "training_args.bin", "optimizer.pt", "scheduler.pt", "trainer_state.json"]
         if is_pretrained:
@@ -415,7 +415,7 @@ class TrainerIntegrationCommon:
                 self.assertTrue(os.path.isfile(os.path.join(checkpoint, filename)))
 
     def check_best_model_has_been_loaded(
-        self, output_dir, freq, total, trainer, metric, greater_is_better=False, is_pretrained=True, safe_weights=False
+        self, output_dir, freq, total, trainer, metric, greater_is_better=False, is_pretrained=True, safe_weights=True
     ):
         checkpoint = os.path.join(output_dir, f"checkpoint-{(total // freq) * freq}")
         log_history = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json")).log_history
@@ -456,7 +456,7 @@ class TrainerIntegrationCommon:
                 _ = log1.pop(key, None)
             self.assertEqual(log, log1)
 
-    def convert_to_sharded_checkpoint(self, folder, save_safe=False, load_safe=False):
+    def convert_to_sharded_checkpoint(self, folder, save_safe=True, load_safe=True):
         # Converts a checkpoint of a regression model to a sharded checkpoint.
         if load_safe:
             loader = safetensors.torch.load_file
@@ -837,6 +837,50 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, 10)
+
+    def test_neftune(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            "./test", learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, neftune_noise_alpha=0.4
+        )
+        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+        trainer.model = trainer._activate_neftune(trainer.model)
+
+        dummy_input = torch.LongTensor([[1, 0, 1]]).to(torch_device)
+
+        emb1 = trainer.model.get_input_embeddings()(dummy_input)
+        emb2 = trainer.model.get_input_embeddings()(dummy_input)
+
+        self.assertFalse(torch.allclose(emb1, emb2), "Neftune noise is not applied!")
+
+        # redefine the model
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        # Trainer without inf/nan filter
+        args = TrainingArguments(
+            "./test", learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, neftune_noise_alpha=0.4
+        )
+        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+
+        # Check that it trains without errors
+        trainer.train()
+
+        # Make sure forward pass works fine
+        _ = trainer.model(dummy_input)
+        self.assertTrue(len(trainer.model.get_input_embeddings()._forward_hooks) == 0)
+
+        trainer.model.eval()
+
+        # Check that we get identical embeddings just in case
+        emb1 = trainer.model.get_input_embeddings()(dummy_input)
+        emb2 = trainer.model.get_input_embeddings()(dummy_input)
+
+        self.assertTrue(torch.allclose(emb1, emb2), "Neftune noise is still applied!")
 
     def test_logging_inf_nan_filter(self):
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)

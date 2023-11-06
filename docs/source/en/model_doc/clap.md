@@ -30,7 +30,6 @@ The abstract from the paper is the following:
 This model was contributed by [Younes Belkada](https://huggingface.co/ybelkada) and [Arthur Zucker](https://huggingface.co/ArtZucker) .
 The original code can be found [here](https://github.com/LAION-AI/Clap).
 
-
 ## ClapConfig
 
 [[autodoc]] ClapConfig
@@ -78,4 +77,3 @@ The original code can be found [here](https://github.com/LAION-AI/Clap).
 
 [[autodoc]] ClapAudioModelWithProjection
     - forward
-

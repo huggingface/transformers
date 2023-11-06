@@ -18,7 +18,12 @@ import tempfile
 import unittest
 
 from transformers import BlenderbotSmallConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -85,7 +90,7 @@ class BlenderbotSmallModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=50,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -242,12 +247,7 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
-        if pipeline_test_casse_name == "TextGenerationPipelineTests":
-            return True
-        # TODO @Rocketnight1 to fix
-        if pipeline_test_casse_name == "ConversationalPipelineTests":
-            return True
-        return False
+        return pipeline_test_casse_name in ("TextGenerationPipelineTests", "ConversationalPipelineTests")
 
     def setUp(self):
         self.model_tester = BlenderbotSmallModelTester(self)
@@ -274,13 +274,13 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = BlenderbotSmallForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
