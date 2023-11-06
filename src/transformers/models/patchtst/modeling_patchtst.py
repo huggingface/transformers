@@ -947,35 +947,6 @@ class PatchTSTForPretrainingOutput(ModelOutput):
 
 
 @dataclass
-class PatchTSTForForecastingOutput(ModelOutput):
-    """
-    Output type of [`PatchTSTForForecastingtion`].
-
-    Parameters:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            MSE loss.
-        forecast_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length,)`):
-            Forecast outputs of the time series modeling heads.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    forecast_outputs: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
 class PatchTSTForRegressionOutput(ModelOutput):
     """
     Output type of [`PatchTSTForRegression`].
@@ -1075,21 +1046,6 @@ class SamplePatchTSTPredictionOutput(ModelOutput):
 
     Parameters:
         sequences `(batch_size, num_samples, prediction_length, num_targets)`):
-                Sampled values from the chosen distribution.
-    """
-
-    sequences: torch.FloatTensor = None
-
-
-@dataclass
-class SamplePatchTSTForecastOutput(ModelOutput):
-    """
-    Base class for time series model's predictions outputs that contains the sampled values from the chosen
-    distribution.
-
-    Parameters:
-        sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length)` or `(batch_size,
-        num_samples, prediction_length, number_channels)`):
                 Sampled values from the chosen distribution.
     """
 
@@ -1732,7 +1688,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_observed_mask: Optional[torch.Tensor] = None,
-    ) -> SamplePatchTSTForecastOutput:
+    ) -> SamplePatchTSTPredictionOutput:
         """
         Generate sequences of sample predictions from a model with a probability distribution head.
 
@@ -1748,7 +1704,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Return:
-            [`SamplePatchTSTForecastOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number
+            [`SamplePatchTSTPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number
             of samples, prediction_length, 1)` or `(batch_size, number of samples, prediction_length,
             num_input_channels)` for multivariate predictions.
         """
@@ -1773,7 +1729,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         ]  # samples: list of [bs x forecast_len x num_channels]
         # stack tensors
         samples = torch.stack(samples, dim=1)  # [bs x num_samples x forecast_len x num_channels]
-        return SamplePatchTSTForecastOutput(sequences=samples)
+        return SamplePatchTSTPredictionOutput(sequences=samples)
 
 
 class PatchTSTRegressionHead(nn.Module):
