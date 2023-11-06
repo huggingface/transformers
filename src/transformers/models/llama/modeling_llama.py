@@ -280,6 +280,7 @@ class LlamaAttention(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
+        self.attention_dropout = config.attention_dropout
         self.head_dim = self.hidden_size // self.num_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
@@ -492,7 +493,7 @@ class LlamaFlashAttention2(LlamaAttention):
         # TODO: llama does not have dropout in the config??
         # It is recommended to use dropout with FA according to the docs
         # when training.
-        dropout_rate = 0.0  # if not self.training else self.attn_dropout
+        dropout_rate = self.attention_dropout  # if not self.training else self.attn_dropout
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
