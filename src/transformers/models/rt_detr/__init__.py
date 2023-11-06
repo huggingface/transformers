@@ -52,7 +52,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_rt_detr import RTDetrFeatureExtractor
         from .image_processing_rt_detr import RTDetrImageProcessor
 
     try:
