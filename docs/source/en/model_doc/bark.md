@@ -14,8 +14,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-Bark is a transformer-based text-to-speech model proposed by Suno AI in [suno-ai/bark](https://github.com/suno-ai/bark). 
-
+Bark is a transformer-based text-to-speech model proposed by Suno AI in [suno-ai/bark](https://github.com/suno-ai/bark).
 
 Bark is made of 4 main models:
 
@@ -25,6 +24,9 @@ Bark is made of 4 main models:
 - having predicted all the codebook channels from the [`EncodecModel`], Bark uses it to decode the output audio array.
 
 It should be noted that each of the first three modules can support conditional speaker embeddings to condition the output sound according to specific predefined voice.
+
+This model was contributed by [Yoach Lacombe (ylacombe)](https://huggingface.co/ylacombe) and [Sanchit Gandhi (sanchit-gandhi)](https://github.com/sanchit-gandhi).
+The original code can be found [here](https://github.com/suno-ai/bark).
 
 ### Optimizing Bark
 
@@ -64,7 +66,7 @@ model.enable_cpu_offload()
 
 Note that 🤗 Accelerate must be installed before using this feature. [Here's how to install it.](https://huggingface.co/docs/accelerate/basic_tutorials/install)
 
-#### Combining optimizaton techniques
+#### Combining optimization techniques
 
 You can combine optimization techniques, and use CPU offload, half-precision and 🤗 Better Transformer all at once.
 
@@ -86,7 +88,7 @@ model.enable_cpu_offload()
 
 Find out more on inference optimization techniques [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one).
 
-### Tips
+### Usage tips
 
 Suno offers a library of voice presets in a number of languages [here](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc67cff786b04b50b3ceb756fd05f68c).
 These presets are also uploaded in the hub [here](https://huggingface.co/suno/bark-small/tree/main/speaker_embeddings) or [here](https://huggingface.co/suno/bark/tree/main/speaker_embeddings).
@@ -141,11 +143,6 @@ To save the audio, simply take the sample rate from the model config and some sc
 >>> sample_rate = model.generation_config.sample_rate
 >>> write_wav("bark_generation.wav", sample_rate, audio_array)
 ```
-
-
-This model was contributed by [Yoach Lacombe (ylacombe)](https://huggingface.co/ylacombe) and [Sanchit Gandhi (sanchit-gandhi)](https://github.com/sanchit-gandhi).
-The original code can be found [here](https://github.com/suno-ai/bark).
-
 
 ## BarkConfig
 

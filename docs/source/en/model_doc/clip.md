@@ -40,7 +40,9 @@ for any dataset specific training. For instance, we match the accuracy of the or
 without needing to use any of the 1.28 million training examples it was trained on. We release our code and pre-trained
 model weights at this https URL.*
 
-## Usage
+This model was contributed by [valhalla](https://huggingface.co/valhalla). The original code can be found [here](https://github.com/openai/CLIP).
+
+## Usage tips and example
 
 CLIP is a multi-modal vision and language model. It can be used for image-text similarity and for zero-shot image
 classification. CLIP uses a ViT like transformer to get visual features and a causal language model to get the text
@@ -77,15 +79,27 @@ encode the text and prepare the images. The following example shows how to get t
 >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
 ```
 
-This model was contributed by [valhalla](https://huggingface.co/valhalla). The original code can be found [here](https://github.com/openai/CLIP).
-
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with CLIP.
 
-- A blog post on [How to fine-tune CLIP on 10,000 image-text pairs](https://huggingface.co/blog/fine-tune-clip-rsicd).
-- CLIP is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/contrastive-image-text).
-- A [notebook](https://colab.research.google.com/drive/1zip3zmrbuKerAfC1d2uS1mqQS-QykXnl?usp=sharing) on how to fine-tune the CLIP model with Korean multimodal dataset. 🌎🇰🇷
+- [Fine tuning CLIP with Remote Sensing (Satellite) images and captions](https://huggingface.co/blog/fine-tune-clip-rsicd), a blog post about how to fine-tune CLIP with [RSICD dataset](https://github.com/201528014227051/RSICD_optimal) and comparison of performance changes due to data augmentation.
+- This [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/contrastive-image-text) shows how to train a CLIP-like vision-text dual encoder model using a pre-trained vision and text encoder using [COCO dataset](https://cocodataset.org/#home).
+
+<PipelineTag pipeline="image-to-text"/>
+
+- A [notebook](https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing) on how to use a pretrained CLIP for inference with beam search for image captioning. 🌎
+
+**Image retrieval**
+
+- A [notebook](https://colab.research.google.com/drive/1bLVwVKpAndpEDHqjzxVPr_9nGrSbuOQd?usp=sharing) on image retrieval using pretrained CLIP and computing MRR(Mean Reciprocal Rank) score. 🌎
+- A [notebook](https://colab.research.google.com/github/deep-diver/image_search_with_natural_language/blob/main/notebooks/Image_Search_CLIP.ipynb) on image retrieval and showing the similarity score. 🌎
+- A [notebook](https://colab.research.google.com/drive/1xO-wC_m_GNzgjIBQ4a4znvQkvDoZJvH4?usp=sharing) on how to map images and texts to the same vector space using Multilingual CLIP. 🌎 
+- A [notebook](https://colab.research.google.com/github/vivien000/clip-demo/blob/master/clip.ipynb#scrollTo=uzdFhRGqiWkR) on how to run CLIP on semantic image search using [Unsplash](https://unsplash.com) and [TMBD](https://www.themoviedb.org/) datasets. 🌎
+
+**Explainability**
+
+- A [notebook](https://colab.research.google.com/github/hila-chefer/Transformer-MM-Explainability/blob/main/CLIP_explainability.ipynb) on how to visualize similarity between input token and image segment. 🌎
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we will review it.
 The resource should ideally demonstrate something new instead of duplicating an existing resource.
@@ -128,6 +142,9 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] CLIPProcessor
 
+<frameworkcontent>
+<pt>
+
 ## CLIPModel
 
 [[autodoc]] CLIPModel
@@ -150,11 +167,13 @@ The resource should ideally demonstrate something new instead of duplicating an 
 [[autodoc]] CLIPVisionModelWithProjection
     - forward
 
-
 ## CLIPVisionModel
 
 [[autodoc]] CLIPVisionModel
     - forward
+
+</pt>
+<tf>
 
 ## TFCLIPModel
 
@@ -172,6 +191,9 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] TFCLIPVisionModel
     - call
+
+</tf>
+<jax>
 
 ## FlaxCLIPModel
 
@@ -194,3 +216,6 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] FlaxCLIPVisionModel
     - __call__
+
+</jax>
+</frameworkcontent>

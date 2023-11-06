@@ -314,7 +314,7 @@ class Message:
         return entries_changed
 
     @property
-    def model_failures(self) -> Dict:
+    def model_failures(self) -> List[Dict]:
         # Obtain per-model failures
         def per_model_sum(model_category_dict):
             return dicts_to_sum(model_category_dict["failed"].values())
@@ -769,12 +769,15 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 
 if __name__ == "__main__":
-    runner_status = os.environ.get("RUNNER_STATUS")
-    runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
+    # runner_status = os.environ.get("RUNNER_STATUS")
+    # runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
     setup_status = os.environ.get("SETUP_STATUS")
 
-    runner_not_available = True if runner_status is not None and runner_status != "success" else False
-    runner_failed = True if runner_env_status is not None and runner_env_status != "success" else False
+    # runner_not_available = True if runner_status is not None and runner_status != "success" else False
+    # runner_failed = True if runner_env_status is not None and runner_env_status != "success" else False
+    # Let's keep the lines regardig runners' status (we might be able to use them again in the future)
+    runner_not_available = False
+    runner_failed = False
     setup_failed = True if setup_status is not None and setup_status != "success" else False
 
     org = "huggingface"
@@ -897,6 +900,9 @@ if __name__ == "__main__":
         job_name_prefix = f"{framework} {version}"
     elif ci_event.startswith("Nightly CI"):
         job_name_prefix = "Nightly CI"
+    elif ci_event.startswith("Push CI (AMD) - "):
+        flavor = ci_event.replace("Push CI (AMD) - ", "")
+        job_name_prefix = f"AMD {flavor}"
 
     for model in model_results.keys():
         for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
@@ -962,7 +968,7 @@ if __name__ == "__main__":
         "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
     }
 
-    if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
+    if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI") or ci_event.startswith("Push CI (AMD)"):
         del additional_files["Examples directory"]
         del additional_files["PyTorch pipelines"]
         del additional_files["TensorFlow pipelines"]
@@ -1027,6 +1033,6 @@ if __name__ == "__main__":
     message = Message(title, ci_title, model_results, additional_results, selected_warnings=selected_warnings)
 
     # send report only if there is any failure (for push CI)
-    if message.n_failures or ci_event != "push":
+    if message.n_failures or (ci_event != "push" and not ci_event.startswith("Push CI (AMD)")):
         message.post()
         message.post_reply()

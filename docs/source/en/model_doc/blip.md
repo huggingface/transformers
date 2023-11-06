@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 The BLIP model was proposed in [BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation](https://arxiv.org/abs/2201.12086) by Junnan Li, Dongxu Li, Caiming Xiong, Steven Hoi.
 
-BLIP is a model that is able to perform various multi-modal tasks including
+BLIP is a model that is able to perform various multi-modal tasks including:
 - Visual Question Answering 
 - Image-Text retrieval (Image-text matching)
 - Image Captioning
@@ -39,7 +39,6 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 
 - [Jupyter notebook](https://github.com/huggingface/notebooks/blob/main/examples/image_captioning_blip.ipynb) on how to fine-tune BLIP for image captioning on a custom dataset
 
-
 ## BlipConfig
 
 [[autodoc]] BlipConfig
@@ -57,11 +56,13 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 
 [[autodoc]] BlipProcessor
 
-
 ## BlipImageProcessor
 
 [[autodoc]] BlipImageProcessor
     - preprocess
+
+<frameworkcontent>
+<pt>
 
 ## BlipModel
 
@@ -75,29 +76,28 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 [[autodoc]] BlipTextModel
     - forward
 
-
 ## BlipVisionModel
 
 [[autodoc]] BlipVisionModel
     - forward
-
 
 ## BlipForConditionalGeneration
 
 [[autodoc]] BlipForConditionalGeneration
     - forward
 
-
 ## BlipForImageTextRetrieval
 
 [[autodoc]] BlipForImageTextRetrieval
     - forward
 
-
 ## BlipForQuestionAnswering
 
 [[autodoc]] BlipForQuestionAnswering
     - forward
+
+</pt>
+<tf>
 
 ## TFBlipModel
 
@@ -111,26 +111,24 @@ The original code can be found [here](https://github.com/salesforce/BLIP).
 [[autodoc]] TFBlipTextModel
     - call
 
-
 ## TFBlipVisionModel
 
 [[autodoc]] TFBlipVisionModel
     - call
-
 
 ## TFBlipForConditionalGeneration
 
 [[autodoc]] TFBlipForConditionalGeneration
     - call
 
-
 ## TFBlipForImageTextRetrieval
 
 [[autodoc]] TFBlipForImageTextRetrieval
     - call
 
-
 ## TFBlipForQuestionAnswering
 
 [[autodoc]] TFBlipForQuestionAnswering
     - call
+</tf>
+</frameworkcontent>

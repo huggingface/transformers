@@ -39,7 +39,10 @@ with previous pre-training methods. For example, base-size BEiT achieves 83.2% t
 significantly outperforming from-scratch DeiT training (81.8%) with the same setup. Moreover, large-size BEiT obtains
 86.3% only using ImageNet-1K, even outperforming ViT-L with supervised pre-training on ImageNet-22K (85.2%).*
 
-Tips:
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The JAX/FLAX version of this model was
+contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/beit).
+
+## Usage tips
 
 - BEiT models are regular Vision Transformers, but pre-trained in a self-supervised way rather than supervised. They
   outperform both the [original model (ViT)](vit) as well as [Data-efficient Image Transformers (DeiT)](deit) when fine-tuned on ImageNet-1K and CIFAR-100. You can check out demo notebooks regarding inference as well as
@@ -67,9 +70,6 @@ Tips:
 alt="drawing" width="600"/>
 
 <small> BEiT pre-training. Taken from the <a href="https://arxiv.org/abs/2106.08254">original paper.</a> </small>
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The JAX/FLAX version of this model was
-contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/beit).
 
 ## Resources
 
@@ -107,6 +107,9 @@ If you're interested in submitting a resource to be included here, please feel f
     - preprocess
     - post_process_semantic_segmentation
 
+<frameworkcontent>
+<pt>
+
 ## BeitModel
 
 [[autodoc]] BeitModel
@@ -127,6 +130,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] BeitForSemanticSegmentation
     - forward
 
+</pt>
+<jax>
+
 ## FlaxBeitModel
 
 [[autodoc]] FlaxBeitModel
@@ -141,3 +147,6 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] FlaxBeitForImageClassification
     - __call__
+
+</jax>
+</frameworkcontent>

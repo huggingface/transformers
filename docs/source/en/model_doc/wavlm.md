@@ -35,7 +35,12 @@ additional overlapped utterances are created unsupervisely and incorporated duri
 the training dataset from 60k hours to 94k hours. WavLM Large achieves state-of-the-art performance on the SUPERB
 benchmark, and brings significant improvements for various speech processing tasks on their representative benchmarks.*
 
-Tips:
+Relevant checkpoints can be found under https://huggingface.co/models?other=wavlm.
+
+This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The Authors' code can be
+found [here](https://github.com/microsoft/unilm/tree/master/wavlm).
+
+## Usage tips
 
 - WavLM is a speech model that accepts a float array corresponding to the raw waveform of the speech signal. Please use
   [`Wav2Vec2Processor`] for the feature extraction.
@@ -43,12 +48,7 @@ Tips:
   using [`Wav2Vec2CTCTokenizer`].
 - WavLM performs especially well on speaker verification, speaker identification, and speaker diarization tasks.
 
-Relevant checkpoints can be found under https://huggingface.co/models?other=wavlm.
-
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The Authors' code can be
-found [here](https://github.com/microsoft/unilm/tree/master/wavlm).
-
-## Documentation resources
+## Resources
 
 - [Audio classification task guide](../tasks/audio_classification)
 - [Automatic speech recognition task guide](../tasks/asr)
