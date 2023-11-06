@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library Vits for TTS.
+Fine-tuning Vits for TTS.
 """
 
 import logging
@@ -42,7 +42,12 @@ from transformers import (
     AutoTokenizer,
     HfArgumentParser,
     TrainingArguments,
+    VitsDiscriminator,
+    VitsModelForPreTraining
 )
+
+from transformers.models.vits.feature_extraction_vits import VitsFeatureExtractor
+from transformers.models.vits.modeling_vits import slice_segments
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.optimization import get_scheduler
 from transformers.trainer_pt_utils import LengthGroupedSampler
@@ -56,19 +61,16 @@ if is_wandb_available():
     import wandb
 
 
-# TODO: change import after you add VitsModelForPreTraining to the library
 from accelerate import DistributedDataParallelKwargs
 
-from transformers.models.vits.feature_extraction_vits import VitsFeatureExtractor
-from transformers.models.vits.modeling_vits import VitsDiscriminator, VitsModelForPreTraining, slice_segments
 
 
 ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=False)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.34.0.dev0")
-# TODO: adapt
-require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
+check_min_version("4.35.0.dev0")
+# TODO: change - add accelerate
+# require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
 logger = logging.getLogger(__name__)
 
@@ -200,8 +202,10 @@ class ModelArguments:
 class VITSTrainingArguments(TrainingArguments):
     do_step_schedule_per_epoch: bool = field(
         default=True,
-        metadata={"help": ("Whether or not to perform scheduler steps per epoch or per steps.")},
+        metadata={"help": ("Whether or not to perform scheduler steps per epoch or per steps. If `True`, the scheduler will be `ExponentialLR` parametrized with `lr_decay`")},
     )
+    
+    lr_decay: float = field(default=0.999875, metadata={"help": "Learning rate decay, used with `ExponentialLR` when `do_step_schedule_per_epoch`."})
 
     weight_kl: float = field(default=1.0, metadata={"help": "KL loss weight."})
 
@@ -210,6 +214,8 @@ class VITSTrainingArguments(TrainingArguments):
     weight_disc: float = field(default=1.0, metadata={"help": "Discriminator loss weight"})
 
     weight_gen: float = field(default=1.0, metadata={"help": "Generator loss weight"})
+
+    weight_fmaps: float = field(default=1.0, metadata={"help": "Feature map loss weight"})
 
 
 @dataclass
@@ -342,7 +348,6 @@ class DataTrainingArguments:
             )
         },
     )
-
 
 @dataclass
 class DataCollatorTTSWithPadding:
@@ -534,7 +539,7 @@ def training_loop(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         log_with=args.report_to,
         project_config=accelerator_project_config,
-        kwargs_handlers=[ddp_kwargs],  # TODO: remove
+        kwargs_handlers=[ddp_kwargs],
     )
 
     per_device_train_batch_size = args.per_device_train_batch_size if args.per_device_train_batch_size else 1
@@ -640,9 +645,8 @@ def training_loop(
     )
 
     if args.do_step_schedule_per_epoch:
-        # TODO: add lr_decay to parameters
-        gen_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(gen_optimizer, gamma=0.999875, last_epoch=-1)
-        disc_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(disc_optimizer, gamma=0.999875, last_epoch=-1)
+        gen_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(gen_optimizer, gamma=args.lr_decay, last_epoch=-1)
+        disc_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(disc_optimizer, gamma=args.lr_decay, last_epoch=-1)
     else:
         gen_lr_scheduler = get_scheduler(
             args.lr_scheduler_type,
@@ -834,7 +838,7 @@ def training_loop(
                     loss_duration
                     + loss_mel * args.weight_mel
                     + loss_kl * args.weight_kl
-                    + loss_fmaps
+                    + loss_fmaps * args.weight_fmaps
                     + loss_gen * args.weight_gen
                 )
 
@@ -925,7 +929,6 @@ def training_loop(
                         accelerator.save_state(save_path)
                         logger.info(f"Saved state to {save_path}")
 
-            # TODO: enrich
             logs = {
                 "step_loss": total_generator_loss.detach().item(),
                 "lr": disc_lr_scheduler.get_last_lr()[0],
@@ -1302,7 +1305,7 @@ def main():
         token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
         language=data_args.language,
-        verbose=False,  # TODO: remove
+        verbose=False,
     )
 
     # 6. Resample speech dataset if necessary
