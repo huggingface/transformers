@@ -23,7 +23,7 @@ from ...tokenization_utils_base import BatchEncoding
 
 class TvpProcessor(ProcessorMixin):
     r"""
-    Constructs an Tvp processor which wraps a Tvp image processor and a Bert tokenizer into a single processor.
+    Constructs an TVP processor which wraps a TVP image processor and a Bert tokenizer into a single processor.
 
     [`TvpProcessor`] offers all the functionalities of [`TvpImageProcessor`] and [`BertTokenizerFast`]. See the
     [`~TvpProcessor.__call__`] and [`~TvpProcessor.decode`] for more information.
@@ -122,6 +122,12 @@ class TvpProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    def post_process_video_grounding(self, outputs, video_durations):
+        timestamp = outputs["logits"].tolist()
+        start, end = round(timestamp[0][0] * video_durations, 1), round(timestamp[0][1] * video_durations, 1)
+
+        return start, end
 
     @property
     def model_input_names(self):

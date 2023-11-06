@@ -41,60 +41,12 @@ TVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-TVP_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`TvpConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-TVP_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
-            IDs?](../glossary#input-ids)
-
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            [What are attention masks?](../glossary#attention-mask)
-
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`TvpImageProcessor`]. See [`TvpImageProcessor.__call__`]
-            for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 @dataclass
 class TvpVideoGroundingOutput(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Temporal-Distance IoU loss for video grounding.
-        loss_dict (`Dict`, *optional*):
-            A dictionary containing the individual losses. Useful for logging.
         logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
             Contains start_time/duration and end_time/duration. It is the time slot of the videos corresponding to the
             input texts.
@@ -128,7 +80,7 @@ class TvpLoss(nn.Module):
         super().__init__()
         self.losses = losses
         self.loss_map = {
-            "IoU": self.loss_IoU,
+            "iou": self.loss_iou,
             "distance": self.loss_distance,
             "duration": self.loss_duration,
         }
@@ -137,7 +89,7 @@ class TvpLoss(nn.Module):
             if loss not in self.loss_map:
                 raise ValueError(f"Loss {loss} not supported")
 
-    def loss_IoU(self, start_time, end_time, candidates_start_time, candidates_end_time, duration):
+    def loss_iou(self, start_time, end_time, candidates_start_time, candidates_end_time, duration):
         inter = torch.min(candidates_end_time, end_time) - torch.max(candidates_start_time, start_time)
         union = torch.max(candidates_end_time, end_time) - torch.min(candidates_start_time, start_time)
         iou = 1 - inter.clamp(min=0) / union
@@ -187,7 +139,7 @@ class TvpLoss(nn.Module):
 
 class TvpVisionModel(nn.Module):
     def __init__(self, config):
-        super(TvpVisionModel, self).__init__()
+        super().__init__()
         self.backbone = AutoBackbone.from_config(config.backbone_config)
         self.grid_encoder_conv = nn.Conv2d(
             config.backbone_config.hidden_sizes[-1],
@@ -198,7 +150,6 @@ class TvpVisionModel(nn.Module):
             groups=1,
             bias=False,
         )
-        self.config = config
 
     def forward(self, pixel_values):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
@@ -222,9 +173,7 @@ class TvpVisualInputEmbedding(nn.Module):
     """
 
     def __init__(self, config):
-        super(TvpVisualInputEmbedding, self).__init__()
-        self.config = config
-
+        super().__init__()
         # sequence embedding
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.row_position_embeddings = nn.Embedding(config.max_grid_row_position_embeddings, config.hidden_size)
@@ -435,7 +384,7 @@ class TvpIntermediate(nn.Module):
         return hidden_states
 
 
-class TvpOutput(nn.Module):
+class TvpOutputLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -454,7 +403,7 @@ class TvpEncodeLayer(nn.Module):
         super().__init__()
         self.attention = TvpAttention(config)
         self.intermediate = TvpIntermediate(config)
-        self.output = TvpOutput(config)
+        self.output = TvpOutputLayer(config)
 
     def forward(
         self,
@@ -506,13 +455,6 @@ class TvpEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
                 layer_outputs = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     hidden_states,
@@ -590,6 +532,52 @@ class TvpPreTrainedModel(PreTrainedModel):
                 nn.init.constant_(module.bias, 0)
 
 
+TVP_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`TvpConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+TVP_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
+
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
+
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`TvpImageProcessor`]. See [`TvpImageProcessor.__call__`]
+            for details.
+
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
 class TvpTransformer(TvpPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -631,8 +619,6 @@ class TvpTransformer(TvpPreTrainedModel):
         attention_mask: (batch_size, sequence_length) with 1 indicates valid, 0 indicates invalid position.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
-        input_shape = input_ids.size()
-        device = input_ids.device
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         text_embedding_output = self.embeddings(input_ids=input_ids)  # (batch_size, sequence_length, hidden_size)
@@ -646,7 +632,9 @@ class TvpTransformer(TvpPreTrainedModel):
         # (batch_size, sequence_length + visual_sequence_length, hidden_size)
         embedding_output = torch.cat([text_prompt, text_embedding_output, visual_embedding_output], dim=1)
 
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape).to(device)
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_ids.size()).to(
+            input_ids.device
+        )
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -675,18 +663,19 @@ class TvpTransformer(TvpPreTrainedModel):
 
 # Pad frames extracted from videos only at the bottom.
 class TvpFrameDownPadPrompter(nn.Module):
-    def __init__(self, image_size, visual_prompt_size, frame_num, max_img_size, visual_prompter_apply):
-        if visual_prompter_apply not in ("add", "replace", "remove"):
+    def __init__(self, config):
+        if config.visual_prompter_apply not in ("add", "replace", "remove"):
             raise ValueError("`visual_prompter_apply` must be in (add, replace, remove)")
 
-        super(TvpFrameDownPadPrompter, self).__init__()
-        self.visual_prompt_size = visual_prompt_size
-        self.image_size = image_size
-        self.frame_num = frame_num
-        self.max_img_size = max_img_size
-        self.visual_prompter_apply = visual_prompter_apply
+        super().__init__()
+        self.visual_prompt_size = config.visual_prompt_size
+        self.frame_num = config.frame_num
+        self.max_img_size = config.max_img_size
+        self.visual_prompter_apply = config.visual_prompter_apply
 
-        self.pad_down = nn.Parameter(torch.randn([1, frame_num, 3, visual_prompt_size, image_size]))
+        self.pad_down = nn.Parameter(
+            torch.randn([1, config.frame_num, 3, config.visual_prompt_size, config.max_img_size])
+        )
 
     def forward(self, pixel_values):
         if self.visual_prompter_apply != "add":
@@ -694,34 +683,54 @@ class TvpFrameDownPadPrompter(nn.Module):
             visual_prompt_mask[self.max_img_size - self.visual_prompt_size : self.max_img_size, :] = 0.0
             pixel_values *= visual_prompt_mask
         if self.visual_prompter_apply != "remove":
-            prompt = torch.zeros([pixel_values.shape[0], pixel_values.shape[1], 3, self.image_size, self.image_size])
-            start_point = self.image_size - self.visual_prompt_size
-            prompt[:, :, :, start_point : self.image_size, :] = self.pad_down
+            prompt = torch.zeros(
+                [pixel_values.shape[0], pixel_values.shape[1], 3, self.max_img_size, self.max_img_size]
+            )
+            start_point = self.max_img_size - self.visual_prompt_size
+            prompt[:, :, :, start_point : self.max_img_size, :] = self.pad_down
             pixel_values += prompt.to(pixel_values.dtype)
         return pixel_values
 
 
 # Pad frames extracted from videos in the surroundings.
 class TvpFramePadPrompter(nn.Module):
-    def __init__(self, image_size, prompt_size, frame_num, max_img_size, visual_prompter_apply):
-        if visual_prompter_apply not in ("add", "replace", "remove"):
+    def __init__(self, config):
+        if config.visual_prompter_apply not in ("add", "replace", "remove"):
             raise ValueError("`visual_prompter_apply` must be in (add, replace, remove)")
 
-        super(TvpFramePadPrompter, self).__init__()
-        visual_prompt_size = prompt_size
-        image_size = image_size
-        self.frame_num = frame_num
-        self.max_img_size = max_img_size
-        self.visual_prompter_apply = visual_prompter_apply
+        super().__init__()
+        self.num_frames = config.num_frames
+        self.max_img_size = config.max_img_size
+        self.visual_prompter_apply = config.visual_prompter_apply
 
-        self.base_size = image_size - visual_prompt_size * 2
-        self.pad_up = nn.Parameter(torch.randn([1, frame_num, 3, visual_prompt_size, image_size]))
-        self.pad_down = nn.Parameter(torch.randn([1, frame_num, 3, visual_prompt_size, image_size]))
+        self.base_size = config.max_img_size - config.visual_prompt_size * 2
+        self.pad_up = nn.Parameter(
+            torch.randn([1, config.num_frames, 3, config.visual_prompt_size, config.max_img_size])
+        )
+        self.pad_down = nn.Parameter(
+            torch.randn([1, config.num_frames, 3, config.visual_prompt_size, config.max_img_size])
+        )
         self.pad_left = nn.Parameter(
-            torch.randn([1, frame_num, 3, image_size - visual_prompt_size * 2, visual_prompt_size])
+            torch.randn(
+                [
+                    1,
+                    config.num_frames,
+                    3,
+                    config.max_img_size - config.visual_prompt_size * 2,
+                    config.visual_prompt_size,
+                ]
+            )
         )
         self.pad_right = nn.Parameter(
-            torch.randn([1, frame_num, 3, image_size - visual_prompt_size * 2, visual_prompt_size])
+            torch.randn(
+                [
+                    1,
+                    config.num_frames,
+                    3,
+                    config.max_img_size - config.visual_prompt_size * 2,
+                    config.visual_prompt_size,
+                ]
+            )
         )
 
     def forward(self, pixel_values):
@@ -729,7 +738,7 @@ class TvpFramePadPrompter(nn.Module):
             visual_prompt_mask = torch.ones([self.max_img_size, self.max_img_size], dtype=pixel_values.dtype)
             pixel_values *= visual_prompt_mask
         if self.visual_prompter_apply != "remove":
-            base = torch.zeros(1, self.frame_num, 3, self.base_size, self.base_size)
+            base = torch.zeros(1, self.num_frames, 3, self.base_size, self.base_size)
             prompt = torch.cat([self.pad_left, base, self.pad_right], dim=4)
             prompt = torch.cat([self.pad_up, prompt, self.pad_down], dim=3)
             prompt = torch.cat(pixel_values.size(0) * [prompt])
@@ -749,20 +758,14 @@ TVP_PROMPTER_CLASSES_MAPPING = {
 )
 class TvpModel(TvpPreTrainedModel):
     def __init__(self, config):
-        super(TvpModel, self).__init__(config)
+        super().__init__(config)
         self.config = config
         self.vision_model = TvpVisionModel(config)
         self.transformer = TvpTransformer(config)
         if config.visual_prompter_type not in TVP_PROMPTER_CLASSES_MAPPING:
             raise ValueError("`visual_prompter_type` must be in (framedownpad, framepad)")
         else:
-            self.visual_prompter = TVP_PROMPTER_CLASSES_MAPPING[config.visual_prompter_type](
-                config.max_img_size,
-                config.visual_prompt_size,
-                config.num_frames,
-                config.max_img_size,
-                config.visual_prompter_apply,
-            )
+            self.visual_prompter = TVP_PROMPTER_CLASSES_MAPPING[config.visual_prompter_type](config)
 
         self.post_init()
 
@@ -786,8 +789,7 @@ class TvpModel(TvpPreTrainedModel):
         >>> import torch
         >>> from transformers import AutoConfig, AutoTokenizer, TvpModel
 
-        >>> config = AutoConfig.from_pretrained("Jiqing/tiny-random-tvp")
-        >>> model = TvpModel(config)
+        >>> model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp")
 
         >>> tokenizer = AutoTokenizer.from_pretrained("Jiqing/tiny-random-tvp")
 
@@ -812,10 +814,10 @@ class TvpModel(TvpPreTrainedModel):
 
 
 class TvpVideoGroundingHead(nn.Module):
-    def __init__(self, hidden_size):
+    def __init__(self, config):
         super().__init__()
-        self.layer_0 = nn.Linear(hidden_size, hidden_size * 2)
-        self.layer_1 = nn.Linear(hidden_size * 2, 2)
+        self.layer_0 = nn.Linear(config.hidden_size, config.hidden_size * 2)
+        self.layer_1 = nn.Linear(config.hidden_size * 2, 2)
         self.activation_0 = nn.ReLU(True)
         self.activation_1 = nn.Sigmoid()
 
@@ -827,16 +829,16 @@ class TvpVideoGroundingHead(nn.Module):
 
 @add_start_docstrings(
     """
-    Tvp Model with a video grounding head on top computing Iou, distance, and duration loss.
+    Tvp Model with a video grounding head on top computing IoU, distance, and duration loss.
     """,
     TVP_START_DOCSTRING,
 )
 class TvpForVideoGrounding(TvpPreTrainedModel):
     def __init__(self, config):
-        super(TvpForVideoGrounding, self).__init__(config)
+        super().__init__(config)
         self.config = config
         self.model = TvpModel(config)
-        self.video_grounding_head = TvpVideoGroundingHead(config.hidden_size)
+        self.video_grounding_head = TvpVideoGroundingHead(config)
 
         self.post_init()
 
@@ -863,13 +865,12 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         >>> import torch
         >>> from transformers import AutoConfig, AutoTokenizer, TvpForVideoGrounding
 
-        >>> config = AutoConfig.from_pretrained("Jiqing/tiny-random-tvp")
-        >>> model = TvpForVideoGrounding(config)
+        >>> model = TvpForVideoGrounding.from_pretrained("Jiqing/tiny-random-tvp")
 
         >>> tokenizer = AutoTokenizer.from_pretrained("Jiqing/tiny-random-tvp")
 
         >>> pixel_values = torch.rand(1, 1, 3, 448, 448)
-        >>> text_inputs = tokenizer("This is an example inputs", return_tensors="pt")
+        >>> text_inputs = tokenizer("This is an example input", return_tensors="pt")
         >>> output = model(text_inputs.input_ids, pixel_values, text_inputs.attention_mask)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
@@ -882,23 +883,23 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        if not return_dict:
-            pooler_output = outputs[1]
-        else:
-            pooler_output = outputs.pooler_output
+        pooler_output = outputs[1]
 
         logits = self.video_grounding_head(pooler_output)
 
-        if labels is None:
-            loss = None
-        else:
-            losses = ["IoU", "distance", "duration"]
+        loss = None
+        if labels is not None:
+            losses = ["iou", "distance", "duration"]
             criterion = TvpLoss(losses)
             criterion.to(self.device)
             loss_dict = criterion(logits, labels)
-            alpha = self.config.alpha or 1.0
-            beta = self.config.beta or 0.1
-            loss = loss_dict["IoU"] + alpha * loss_dict["distance"] + beta * loss_dict["duration"]
+            distance_loss_weight = self.config.distance_loss_weight or 1.0
+            duration_loss_weight = self.config.duration_loss_weight or 0.1
+            loss = (
+                loss_dict["iou"]
+                + distance_loss_weight * loss_dict["distance"]
+                + duration_loss_weight * loss_dict["duration"]
+            )
 
         if not return_dict:
             outputs = (logits,) + outputs[2:]

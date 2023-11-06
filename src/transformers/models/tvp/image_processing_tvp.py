@@ -125,8 +125,8 @@ class TvpImageProcessor(BaseImageProcessor):
         rescale_factor: Union[int, float] = 1 / 255,
         do_pad: bool = True,
         pad_size: Dict[str, int] = None,
-        constant_values: Union[float, Iterable[float]] = None,
-        pad_mode: PaddingMode = None,
+        constant_values: Union[float, Iterable[float]] = 0,
+        pad_mode: PaddingMode = PaddingMode.CONSTANT,
         do_normalize: bool = True,
         do_flip_channel_order: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
@@ -135,13 +135,8 @@ class TvpImageProcessor(BaseImageProcessor):
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 224}
-        size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size, param_name="crop_size")
         pad_size = pad_size if pad_size is not None else {"height": 448, "width": 448}
-        pad_size = get_size_dict(pad_size, param_name="crop_size")
-        constant_values = constant_values if constant_values is not None else 0
-        pad_mode = pad_mode if pad_mode is not None else PaddingMode.CONSTANT
 
         self.do_resize = do_resize
         self.size = size
@@ -159,6 +154,7 @@ class TvpImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
+    # Copied from transformers.models.vivit.image_processing_vivit.VivitImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -229,11 +225,8 @@ class TvpImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
         height, width = get_image_size(image, channel_dim=input_data_format)
-        max_width, max_height = width, height
-        if "width" in pad_size.keys():
-            max_width = pad_size["width"]
-        if "height" in pad_size.keys():
-            max_height = pad_size["height"]
+        max_height = pad_size.get("height", height)
+        max_width = pad_size.get("width", width)
 
         pad_right, pad_bottom = max_width - width, max_height - height
         if pad_right < 0 or pad_bottom < 0:
@@ -325,7 +318,7 @@ class TvpImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        videos: ImageInput,
+        videos: Union[ImageInput, List[ImageInput], List[List[ImageInput]]],
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -350,8 +343,8 @@ class TvpImageProcessor(BaseImageProcessor):
         Preprocess an image or batch of images.
 
         Args:
-            videos (`ImageInput`):
-                A list of images to preprocess.
+            videos (`ImageInput` or `List[ImageInput]` or `List[List[ImageInput]]`):
+                Frames to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):

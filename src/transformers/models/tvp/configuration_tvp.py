@@ -43,21 +43,22 @@ class TvpConfig(PretrainedConfig):
     Args:
         backbone_config (`PretrainedConfig` or `dict`, *optional*):
             The configuration of the backbone model.
-        alpha (`float`, *optional*, defaults to 1.0):
+        distance_loss_weight  (`float`, *optional*, defaults to 1.0):
             The weight of distance loss.
-        beta (`float`, *optional*, defaults to 0.1):
+        duration_loss_weight (`float`, *optional*, defaults to 0.1):
             The weight of duration loss.
         visual_prompter_type (`str`, *optional*, defaults to `"framepad"`):
-            Visual prompt type. The type of padding. Framepad means padding on each frame.
+            Visual prompt type. The type of padding. Framepad means padding on each frame. Should be one of "framepad"
+            or "framedownpad"
         visual_prompter_apply (`str`, *optional*, defaults to `"replace"`):
             The way of applying visual prompt. Replace means use the value of prompt to change the original value in
-            visual inputs.
+            visual inputs. Should be one of "replace", or "add", or "remove".
         visual_prompt_size (`int`, *optional*, defaults to 96):
             The size of visual prompt.
         max_img_size (`int`, *optional*, defaults to 448):
-            The maximum size of image.
+            The maximum size of frame.
         num_frames (`int`, *optional*, defaults to 48):
-            There are num_frames frames extracted from a video.
+            The number of frames extracted from a video.
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the Tvp text model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`TvpModel`].
@@ -94,8 +95,8 @@ class TvpConfig(PretrainedConfig):
     def __init__(
         self,
         backbone_config=None,
-        alpha=1.0,
-        beta=0.1,
+        distance_loss_weight=1.0,
+        duration_loss_weight=0.1,
         visual_prompter_type="framepad",
         visual_prompter_apply="replace",
         visual_prompt_size=96,
@@ -127,8 +128,8 @@ class TvpConfig(PretrainedConfig):
             backbone_config = config_class.from_dict(backbone_config)
 
         self.backbone_config = backbone_config
-        self.alpha = alpha
-        self.beta = beta
+        self.distance_loss_weight = distance_loss_weight
+        self.duration_loss_weight = duration_loss_weight
         self.visual_prompter_type = visual_prompter_type
         self.visual_prompter_apply = visual_prompter_apply
         self.visual_prompt_size = visual_prompt_size
