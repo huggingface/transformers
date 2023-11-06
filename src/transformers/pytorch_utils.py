@@ -297,4 +297,5 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
     else:
         unique_id = storage_ptr(tensor)
 
-    return tensor.device, unique_id, storage_size(tensor)
+    # We need to add storage_offset here as views of a tensor may share the same storage ptr.
+    return tensor.device, unique_id, storage_size(tensor), tensor.storage_offset()
