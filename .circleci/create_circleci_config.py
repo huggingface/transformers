@@ -39,7 +39,7 @@ DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 TEST_HFH_PRELEASE = [
     "pip uninstall -y huggingface_hub",
-    "pip install huggingface_hub==0.18.0.rc0",
+    "pip install huggingface_hub==0.19.0.rc0",
 ]
 
 class EmptyJob:
