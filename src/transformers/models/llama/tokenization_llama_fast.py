@@ -98,7 +98,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             Whether or not to add an `bos_token` at the start of sequences.
         add_eos_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add an `eos_token` at the end of sequences.
-        use_default_system_prompt (`bool`, *optional*, defaults to `True`):
+        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
     """
 
@@ -118,7 +118,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         add_bos_token=True,
         add_eos_token=False,
-        use_default_system_prompt=True,
+        use_default_system_prompt=False,
         **kwargs,
     ):
         super().__init__(
@@ -128,6 +128,8 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            add_bos_token=add_bos_token,
+            add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
             **kwargs,
         )
@@ -217,10 +219,19 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
         The output should look something like:
 
-        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos> <bos>[INST] Prompt [/INST] Answer <eos>
+        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos><bos>[INST] Prompt [/INST] Answer <eos>
         <bos>[INST] Prompt [/INST]
-        """
 
+        The reference for this chat template is [this code
+        snippet](https://github.com/facebookresearch/llama/blob/556949fdfb72da27c2f4a40b7f0e4cf0b8153a28/llama/generation.py#L320-L362)
+        in the original repository.
+        """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
         template = (
             "{% if messages[0]['role'] == 'system' %}"
             "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present

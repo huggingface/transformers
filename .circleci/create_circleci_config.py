@@ -127,6 +127,8 @@ class CircleCIJob:
             },
         ]
         steps.extend([{"run": l} for l in self.install_steps])
+        steps.extend([{"run": 'pip install "fsspec>=2023.5.0,<2023.10.0"'}])
+        steps.extend([{"run": "pip install pytest-subtests"}])
         steps.append(
             {
                 "save_cache": {

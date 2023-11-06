@@ -25,7 +25,7 @@ from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -648,7 +648,7 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_inference_object_detection_head_equivalence_cpu_gpu(self):
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -663,10 +663,10 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
             cpu_outputs = model(pixel_values, pixel_mask)
 
         # 2. run model on GPU
-        model.to("cuda")
+        model.to(torch_device)
 
         with torch.no_grad():
-            gpu_outputs = model(pixel_values.to("cuda"), pixel_mask.to("cuda"))
+            gpu_outputs = model(pixel_values.to(torch_device), pixel_mask.to(torch_device))
 
         # 3. assert equivalence
         for key in cpu_outputs.keys():

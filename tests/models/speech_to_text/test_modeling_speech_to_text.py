@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_fp16,
     require_torchaudio,
     slow,
     torch_device,
@@ -324,14 +325,26 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_features = input_dict["input_features"]
         attention_mask = input_dict["attention_mask"]
         model = Speech2TextForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            input_features = input_features.half()
-            model.half()
+        input_features = input_features.half()
+        model.half()
         model.generate(input_features, attention_mask=attention_mask)
         model.generate(input_features, num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 

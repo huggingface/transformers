@@ -1,4 +1,4 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -15,4 +15,4 @@ rendered properly in your Markdown viewer.
 
 # Inference on Specialized Hardware
 
-This document will be completed soon with information on how to infer on specialized hardware. In the meantime you can check out [the guide for inference on CPUs](perf_infer_cpu).
+こちらのドキュメントは、専用のハードウェアでの推論方法についての情報がまもなく提供されます。その間に、CPUでの推論に関するガイドをご覧いただけます。[the guide for inference on CPUs](perf_infer_cpu).
