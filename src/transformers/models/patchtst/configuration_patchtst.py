@@ -123,12 +123,12 @@ class PatchTSTConfig(PretrainedConfig):
             The dropout probability for head.
         prediction_length (`int`, *optional*, defaults to 24):
             The prediction length for the encoder. In other words, the prediction horizon of the model.
-        num_output_channels (`int`, *optional*, defaults to 1):
-            Number of output channels.
-        prediction_range (`list`, *optional*):
-            The range of prediction values can be set to enforce the model to produce values within a range.
+        num_targets (`int`, *optional*, defaults to 1):
+            Number of targets for regression and classificastion tasks. For classification, it is the number of classes.
+        output_range (`list`, *optional*):
+            Output range for regression task. The range of output values can be set to enforce the model to produce values within a range.
         num_parallel_samples (`int`, *optional*, defaults to 100):
-            The number of samples to generate in parallel for probablistic forecast.
+            The number of samples to generate in parallel for probablistic prediction.
 
 
     ```python
@@ -196,8 +196,8 @@ class PatchTSTConfig(PretrainedConfig):
         pooling: str = "mean",
         head_dropout: float = 0.0,
         prediction_length: int = 24,
-        num_output_channels: int = 1,
-        prediction_range: List = None,
+        num_targets: int = 1,
+        output_range: List = None,
         # distribution head
         num_parallel_samples: int = 100,
         **kwargs,
@@ -231,7 +231,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.init_std = init_std
         self.scaling = scaling
 
-        # PatchTST
+        # PatchTST parameters
         self.patch_length = patch_length
         self.stride = stride
         self.num_patches = self._num_patches()
@@ -251,16 +251,16 @@ class PatchTSTConfig(PretrainedConfig):
         self.pooling = pooling
         self.head_dropout = head_dropout
 
-        # Forecast head
+        # For prediction head
         self.shared_projection = shared_projection
-
-        # Forcasting and prediction
         self.prediction_length = prediction_length
+
+        # For prediction and regression head
         self.num_parallel_samples = num_parallel_samples
 
         # Regression
-        self.num_output_channels = num_output_channels
-        self.prediction_range = prediction_range
+        self.num_targets = num_targets
+        self.output_range = output_range
 
         super().__init__(**kwargs)
 
