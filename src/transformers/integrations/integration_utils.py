@@ -1615,19 +1615,18 @@ class DVCLiveCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that sends the logs to [DVCLive](https://www.dvc.org/dvclive).
 
-    Use the environment variables below in `setup` to configure the integration. To
-    customize this callback beyond those environment variables, see
-    [here](https://dvc.org/doc/dvclive/ml-frameworks/huggingface).
+    Use the environment variables below in `setup` to configure the integration. To customize this callback beyond
+    those environment variables, see [here](https://dvc.org/doc/dvclive/ml-frameworks/huggingface).
 
     Args:
         live (`dvclive.Live`, *optional*, defaults to `None`):
             Optional Live instance. If None, a new instance will be created using **kwargs.
         log_model (Union[Literal["all"], bool], *optional*, defaults to `None`):
-            Whether to use `dvclive.Live.log_artifact()` to log checkpoints created by
-            [`Trainer`]. If set to `True`, the final checkpoint is logged at the end of
-            training. If set to `"all"`, the entire [`TrainingArguments`]'s `output_dir`
-            is logged at each checkpoint.
+            Whether to use `dvclive.Live.log_artifact()` to log checkpoints created by [`Trainer`]. If set to `True`,
+            the final checkpoint is logged at the end of training. If set to `"all"`, the entire
+            [`TrainingArguments`]'s `output_dir` is logged at each checkpoint.
     """
+
     def __init__(
         self,
         live: Optional[Any] = None,
@@ -1650,16 +1649,14 @@ class DVCLiveCallback(TrainerCallback):
 
     def setup(self, args, state, model):
         """
-        Setup the optional DVCLive integration. To customize this callback beyond the
-        environment variables below, see
+        Setup the optional DVCLive integration. To customize this callback beyond the environment variables below, see
         [here](https://dvc.org/doc/dvclive/ml-frameworks/huggingface).
 
         Environment:
         - **HF_DVCLIVE_LOG_MODEL** (`str`, *optional*):
-            Whether to use `dvclive.Live.log_artifact()` to log checkpoints created by
-            [`Trainer`]. If set to `True` or *1*, the final checkpoint is logged at the
-            end of training. If set to `all`, the entire [`TrainingArguments`]'s
-            `output_dir` is logged at each checkpoint.
+            Whether to use `dvclive.Live.log_artifact()` to log checkpoints created by [`Trainer`]. If set to `True` or
+            *1*, the final checkpoint is logged at the end of training. If set to `all`, the entire
+            [`TrainingArguments`]'s `output_dir` is logged at each checkpoint.
         """
         from dvclive import Live
 
@@ -1698,9 +1695,7 @@ class DVCLiveCallback(TrainerCallback):
             from transformers.trainer import Trainer
 
             if self._log_model is True:
-                fake_trainer = Trainer(
-                    args=args, model=kwargs.get("model"), tokenizer=kwargs.get("tokenizer")
-                )
+                fake_trainer = Trainer(args=args, model=kwargs.get("model"), tokenizer=kwargs.get("tokenizer"))
                 name = "best" if args.load_best_model_at_end else "last"
                 output_dir = os.path.join(args.output_dir, name)
                 fake_trainer.save_model(output_dir)
