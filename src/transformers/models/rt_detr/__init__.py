@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_rt_detr": ["RTDETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "RTDetrConfig", "RTDetrOnnxConfig"]
+    "configuration_rt_detr": ["RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "RTDetrConfig", "RTDetrOnnxConfig"]
 }
 
 try:
@@ -44,7 +44,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_rt_detr import RTDETR_PRETRAINED_CONFIG_ARCHIVE_MAP, RTDetrConfig, RTDetrOnnxConfig
+    from .configuration_rt_detr import RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, RTDetrConfig, RTDetrOnnxConfig
 
     try:
         if not is_vision_available():
