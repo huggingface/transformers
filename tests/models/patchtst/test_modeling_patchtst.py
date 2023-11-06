@@ -332,7 +332,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
 
     # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
-    def test_forecast_head(self):
+    def test_prediction_head(self):
         model = PatchTSTForPrediction.from_pretrained("ibm/patchtst-etth1-forecast").to(torch_device)
 
         batch = prepare_batch(file="test-batch.pt")
@@ -342,7 +342,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             output = model(
                 past_values=batch["past_values"].to(torch_device),
                 future_values=batch["future_values"].to(torch_device),
-            ).forecast_outputs
+            ).prediction_outputs
         expected_shape = torch.Size([64, model.config.prediction_length, model.config.num_input_channels])
         self.assertEqual(output.shape, expected_shape)
 
