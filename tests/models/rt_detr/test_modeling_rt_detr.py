@@ -49,16 +49,9 @@ class RTDetrConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
         self.parent.assertTrue(hasattr(config, "initializer_range"))
-        self.parent.assertTrue(hasattr(config, "depth"))
-        self.parent.assertTrue(hasattr(config, "variant"))
-        self.parent.assertTrue(hasattr(config, "num_stages"))
-        self.parent.assertTrue(hasattr(config, "return_idx"))
-        self.parent.assertTrue(hasattr(config, "act_presnet"))
-        self.parent.assertTrue(hasattr(config, "freeze_at"))
-        self.parent.assertTrue(hasattr(config, "freeze_norm"))
-        self.parent.assertTrue(hasattr(config, "pretrained"))
-        self.parent.assertTrue(hasattr(config, "is_encoder_decoder"))
-        self.parent.assertTrue(hasattr(config, "block_nums"))
+        self.parent.assertTrue(hasattr(config, "backbone"))
+        self.parent.assertTrue(hasattr(config, "out_indices"))
+        self.parent.assertTrue(hasattr(config, "freeze_batch_norm_2d"))
         self.parent.assertTrue(hasattr(config, "in_channels"))
         self.parent.assertTrue(hasattr(config, "feat_strides"))
         self.parent.assertTrue(hasattr(config, "hidden_dim"))
@@ -88,6 +81,19 @@ class RTDetrConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "eval_spatial_size"))
         self.parent.assertTrue(hasattr(config, "eval_idx"))
         self.parent.assertTrue(hasattr(config, "eps"))
+        self.parent.assertTrue(hasattr(config, "matcher_alpha"))
+        self.parent.assertTrue(hasattr(config, "matcher_gamma"))
+        self.parent.assertTrue(hasattr(config, "matcher_class_cost"))
+        self.parent.assertTrue(hasattr(config, "matcher_bbox_cost"))
+        self.parent.assertTrue(hasattr(config, "matcher_giou_cost"))
+        self.parent.assertTrue(hasattr(config, "use_focal_loss"))
+        self.parent.assertTrue(hasattr(config, "aux_loss"))
+        self.parent.assertTrue(hasattr(config, "focal_loss_alpha"))
+        self.parent.assertTrue(hasattr(config, "focal_loss_gamma"))
+        self.parent.assertTrue(hasattr(config, "weight_loss_vfl"))
+        self.parent.assertTrue(hasattr(config, "weight_loss_bbox"))
+        self.parent.assertTrue(hasattr(config, "weight_loss_giou"))
+        self.parent.assertTrue(hasattr(config, "eos_coefficient"))
 
 
 class RTDetrModelTester:
@@ -98,16 +104,10 @@ class RTDetrModelTester:
         image_size=640,
         num_channels=3,
         is_training=True,
-        depth=50,
-        variant="d",
-        num_stages=4,
-        return_idx=[0, 1, 2, 3],
-        act_presnet="relu",
-        freeze_at=-1,
-        freeze_norm=True,
-        pretrained=True,
-        is_encoder_decoder=True,
-        block_nums=[3, 4, 6, 3],
+        initializer_range=0.02,
+        backbone="resnet50d",
+        out_indices=[2, 3, 4],
+        freeze_batch_norm_2d=True,
         in_channels=[512, 1024, 2048],
         feat_strides=[8, 16, 32],
         hidden_dim=256,
@@ -125,7 +125,7 @@ class RTDetrModelTester:
         num_classes=80,
         num_queries=300,
         position_embed_type="sine",
-        feat_channels=[512, 1024, 2048],
+        feat_channels=[256, 256, 256],
         num_levels=3,
         num_decoder_points=4,
         num_decoder_layers=6,
@@ -134,25 +134,32 @@ class RTDetrModelTester:
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
         learnt_init_query=False,
-        eval_spatial_size=None,
+        eval_spatial_size=[640, 640],
         eval_idx=-1,
         eps=1e-2,
+        matcher_alpha=0.25,
+        matcher_gamma=2.0,
+        matcher_class_cost=2.0,
+        matcher_bbox_cost=5.0,
+        matcher_giou_cost=2.0,
+        use_focal_loss=True,
+        aux_loss=True,
+        focal_loss_alpha=0.75,
+        focal_loss_gamma=2.0,
+        weight_loss_vfl=1.0,
+        weight_loss_bbox=5.0,
+        weight_loss_giou=2.0,
+        eos_coefficient=0.1,
     ):
-        self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
         self.is_training = is_training
-        self.depth = depth
-        self.variant = variant
-        self.num_stages = num_stages
-        self.return_idx = return_idx
-        self.act_presnet = act_presnet
-        self.freeze_at = freeze_at
-        self.freeze_norm = freeze_norm
-        self.pretrained = pretrained
-        self.is_encoder_decoder = is_encoder_decoder
-        self.block_nums = block_nums
+        self.parent = parent
+        self.initializer_range = initializer_range
+        self.backbone = backbone
+        self.out_indices = out_indices
+        self.freeze_batch_norm_2d = freeze_batch_norm_2d
         self.in_channels = in_channels
         self.feat_strides = feat_strides
         self.hidden_dim = hidden_dim
@@ -182,30 +189,44 @@ class RTDetrModelTester:
         self.eval_spatial_size = eval_spatial_size
         self.eval_idx = eval_idx
         self.eps = eps
+        self.matcher_alpha = matcher_alpha
+        self.matcher_gamma = matcher_gamma
+        self.matcher_class_cost = matcher_class_cost
+        self.matcher_bbox_cost = matcher_bbox_cost
+        self.matcher_giou_cost = matcher_giou_cost
+        self.use_focal_loss = use_focal_loss
+        self.aux_loss = aux_loss
+        self.focal_loss_alpha = focal_loss_alpha
+        self.focal_loss_gamma = focal_loss_gamma
+        self.weight_loss_vfl = weight_loss_vfl
+        self.weight_loss_bbox = weight_loss_bbox
+        self.weight_loss_giou = weight_loss_giou
+        self.eos_coefficient = eos_coefficient
 
     def prepare_random_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        labels = ids_tensor([self.batch_size], self.num_classes)
-        pixel_labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_classes)
-        return pixel_values, labels, pixel_labels
+        # labels is a list of Dict (each Dict being the labels for a given example in the batch)
+        labels = []
+        # simulates number of samples per image
+        samples_labels = 3
+        for _ in range(self.batch_size):
+            target = {}
+            target["class_labels"] = ids_tensor([samples_labels], self.num_classes)
+            target["boxes"] = torch.rand(samples_labels, 4, device=torch_device)
+            labels.append(target)
+        return pixel_values, labels
 
     def prepare_config_and_inputs(self):
-        pixel_values, labels, pixel_labels = self.prepare_random_inputs()
+        pixel_values, labels = self.prepare_random_inputs()
         config = self.get_config()
-        return config, pixel_values, labels, pixel_labels
+        return config, pixel_values, labels
 
     def get_config(self):
         return RTDetrConfig(
-            depth=self.depth,
-            variant=self.variant,
-            num_stages=self.num_stages,
-            return_idx=self.return_idx,
-            act_presnet=self.act_presnet,
-            freeze_at=self.freeze_at,
-            freeze_norm=self.freeze_norm,
-            pretrained=self.pretrained,
-            is_encoder_decoder=self.is_encoder_decoder,
-            block_nums=self.block_nums,
+            initializer_range=self.initializer_range,
+            backbone=self.backbone,
+            out_indices=self.out_indices,
+            freeze_batch_norm_2d=self.freeze_batch_norm_2d,
             in_channels=self.in_channels,
             feat_strides=self.feat_strides,
             hidden_dim=self.hidden_dim,
@@ -235,9 +256,61 @@ class RTDetrModelTester:
             eval_spatial_size=self.eval_spatial_size,
             eval_idx=self.eval_idx,
             eps=self.eps,
+            matcher_alpha=self.matcher_alpha,
+            matcher_gamma=self.matcher_gamma,
+            matcher_class_cost=self.matcher_class_cost,
+            matcher_bbox_cost=self.matcher_bbox_cost,
+            matcher_giou_cost=self.matcher_giou_cost,
+            use_focal_loss=self.use_focal_loss,
+            aux_loss=self.aux_loss,
+            focal_loss_alpha=self.focal_loss_alpha,
+            focal_loss_gamma=self.focal_loss_gamma,
+            weight_loss_vfl=self.weight_loss_vfl,
+            weight_loss_bbox=self.weight_loss_bbox,
+            weight_loss_giou=self.weight_loss_giou,
+            eos_coefficient=self.eos_coefficient,
+            # depth=self.depth,
+            # variant=self.variant,
+            # num_stages=self.num_stages,
+            # return_idx=self.return_idx,
+            # act_presnet=self.act_presnet,
+            # freeze_at=self.freeze_at,
+            # freeze_norm=self.freeze_norm,
+            # pretrained=self.pretrained,
+            # is_encoder_decoder=self.is_encoder_decoder,
+            # block_nums=self.block_nums,
+            # in_channels=self.in_channels,
+            # feat_strides=self.feat_strides,
+            # hidden_dim=self.hidden_dim,
+            # num_head=self.num_head,
+            # dim_feedforward=self.dim_feedforward,
+            # dropout=self.dropout,
+            # enc_act=self.enc_act,
+            # use_encoder_idx=self.use_encoder_idx,
+            # num_encoder_layers=self.num_encoder_layers,
+            # pe_temperature=self.pe_temperature,
+            # expansion=self.expansion,
+            # depth_mult=self.depth_mult,
+            # act_encoder=self.act_encoder,
+            # eval_size=self.eval_size,
+            # num_classes=self.num_classes,
+            # num_queries=self.num_queries,
+            # position_embed_type=self.position_embed_type,
+            # feat_channels=self.feat_channels,
+            # num_levels=self.num_levels,
+            # num_decoder_points=self.num_decoder_points,
+            # num_decoder_layers=self.num_decoder_layers,
+            # act_decoder=self.act_decoder,
+            # num_denoising=self.num_denoising,
+            # label_noise_ratio=self.label_noise_ratio,
+            # box_noise_scale=self.box_noise_scale,
+            # learnt_init_query=self.learnt_init_query,
+            # eval_spatial_size=self.eval_spatial_size,
+            # eval_idx=self.eval_idx,
+            # eps=self.eps,
         )
 
-    def create_and_check_model(self, model_class, config, pixel_values, labels, pixel_labels):
+    def create_and_check_model(self, model_class, config, pixel_values, labels):
         """Create and check the shape of the logits and boxes predicted by the model, and their types."""
         config.num_classes = self.num_classes
         model = model_class(config)
@@ -257,9 +330,9 @@ class RTDetrModelTester:
         self.parent.assertEqual(result["pred_boxes"].shape, (self.batch_size, self.num_queries, 4))
 
     def prepare_config_and_inputs_for_common(self):
-        config, pixel_values, labels, pixel_labels = self.prepare_config_and_inputs()
+        config, pixel_values, _ = self.prepare_config_and_inputs()
         inputs_dict = {"pixel_values": pixel_values}
-        return config, inputs_dict, labels, pixel_labels
+        return config, inputs_dict
 
 
 @require_torch
@@ -288,20 +361,12 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="RTDetr does not use hidden states")
+    def test_hidden_states_output(self):
+        pass
+
     @unittest.skip(reason="RTDetr does not support input and output embeddings")
     def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="RTDetr does not use feedforward chunking")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="RTDetr is not trainable")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="RTDetr is not trainable")
-    def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(reason="RTDetr was not designed smaller.")
@@ -310,10 +375,6 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="RTDetr does not output any loss term in the forward pass")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="RTDetr does not output attentions")
-    def test_attention_outputs(self):
         pass
 
     def test_forward_signature(self):
@@ -327,9 +388,9 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
-        pixel_values, labels, pixel_labels = self.model_tester.prepare_random_inputs()
+        pixel_values, labels = self.model_tester.prepare_random_inputs()
         config = RTDetrConfig.from_pretrained(CHECKPOINT)
-        self.model_tester.create_and_check_model(RTDetrModel, config, pixel_values, labels, pixel_labels)
+        self.model_tester.create_and_check_model(RTDetrModel, config, pixel_values, labels)
 
     def test_model_from_pretrained(self):
         for model_name in RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST:

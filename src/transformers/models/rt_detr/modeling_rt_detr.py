@@ -76,12 +76,17 @@ class RTDetrModelOutput(ModelOutput):
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
             possible padding). You can use [`~RTDetrImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized (absolute) bounding boxes.
+        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the encoder at the output of each
+            layer plus the initial embedding outputs.
     """
 
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
     logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 RT_DETR_START_DOCSTRING = r"""
@@ -871,7 +876,7 @@ class RTDetrTransformer(nn.Module):
             nn.init.constant_(cls_.bias, bias)
             nn.init.constant_(reg_.layers[-1].weight, 0)
             nn.init.constant_(reg_.layers[-1].bias, 0)
-        # linear_init_(self.enc_output[0])
+
         nn.init.xavier_uniform_(self.enc_output[0].weight)
         if self.learnt_init_query:
             nn.init.xavier_uniform_(self.tgt_embed.weight)
@@ -1386,9 +1391,12 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
+        elif isinstance(module, (nn.LayerNorm, nn.Embedding)):
+            if hasattr(module, "bias"):
+                module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.MultiheadAttention):
+            module.in_proj_weight.data.fill_(1.0)
 
 
 class HybridEncoder(RTDetrPreTrainedModel):
@@ -1584,6 +1592,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         pixel_values: torch.FloatTensor,
         labels: Optional[List[dict]] = None,
         return_dict: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], RTDetrModelOutput]:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
@@ -1640,6 +1649,10 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # Detected remote with confidence 0.951 at location [40.11, 73.44, 175.96, 118.48]
         # Detected remote with confidence 0.924 at location [333.73, 76.58, 369.97, 186.99]
         ```"""
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         features = self.backbone(pixel_values)
@@ -1689,19 +1702,22 @@ class RTDetrModel(RTDetrPreTrainedModel):
             }
             weight_loss_scaled = {k: v * loss_dict[k] for k, v in weight_dict.items()}
             reduced_loss_unscaled = {f"{k}_unscaled": v for k, v in loss_dict.items()}
+
+            loss = sum(loss_dict.values())
             loss_dict = {
                 "loss_dict": loss_dict,
                 "weight_loss_scaled": weight_loss_scaled,
                 "reduced_loss_unscaled": reduced_loss_unscaled,
             }
 
-            loss = sum(loss_dict.values())
+        encoder_states = () if output_hidden_states else encoder_outputs
+
+        if not return_dict:
+            output = (logits, pred_boxes, encoder_states)
+            return ((loss, loss_dict) + output) if loss is not None else output
 
         return RTDetrModelOutput(
-            loss=loss,
-            loss_dict=loss_dict,
-            logits=logits,
-            pred_boxes=pred_boxes,
+            loss=loss, loss_dict=loss_dict, logits=logits, pred_boxes=pred_boxes, encoder_hidden_states=encoder_states
         )
 
 
