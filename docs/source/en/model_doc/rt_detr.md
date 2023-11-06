@@ -46,8 +46,3 @@ The original code can be found [here](https://github.com/lyuwenyu/RT-DETR/).
 
 [[autodoc]] RTDetrModel
     - forward
-
-## RTDetrForObjectDetection
-
-[[autodoc]] RTDetrForObjectDetection
-    - forward
