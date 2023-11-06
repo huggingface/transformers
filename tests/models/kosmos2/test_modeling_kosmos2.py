@@ -746,6 +746,6 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         all_entities = [x[1] for x in final_text_with_entities]
 
         # For right padding, only the non-padded sequences will give the same results as non-padding
-        self.assertEqual(processed_text[0], EXPECTED_PROCESSED_TEXT_1)
-        self.assertEqual(all_final_text[0], EXPECTED_FINAL_TEXT_1)
-        self.assertListEqual(all_entities[0], EXPECTED_ENTITIES_1)
+        self.assertEqual(processed_text[0], EXPECTED_PROCESSED_TEXT_0)
+        self.assertEqual(all_final_text[0], EXPECTED_FINAL_TEXT_0)
+        self.assertListEqual(all_entities[0], EXPECTED_ENTITIES_0)
