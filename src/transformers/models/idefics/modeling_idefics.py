@@ -1270,8 +1270,8 @@ class IdeficsModel(IdeficsPreTrainedModel):
         # If any of the elements are 0.0, then the token is attending to at least one image and the gate value is 1. Otherwise the gate value is 0.
         # cross_attention_gate has shape [bsz, seq_len, 1] with elements equal to either 0.0 or 1.0.
         cross_attention_gate = (
-            (((image_attention_mask == 0.0).any(dim=-1)).to(dtype=self.dtype)).permute(0, 2, 1).to(device)
-        )
+            (((image_attention_mask == 0.0).any(dim=-1)).to(dtype=self.dtype)).permute(0, 2, 1)
+        ).to(device)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)

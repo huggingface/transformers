@@ -394,16 +394,20 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_cross_attention_gates(self):
         config, inputs_w_same_img, inputs_w_0_img_attn = self.model_tester.prepare_config_and_inputs_gate_tests()
 
-        model = IdeficsModel(config=config)
+        model = IdeficsModel(config=config).to(torch_device)
+        model.eval()
         test_1_results = []
         for inputs in inputs_w_same_img:
+            with torch.no_grad():
+                last_hidden_states = model(**inputs).last_hidden_state
             last_hidden_states = model(**inputs).last_hidden_state
             test_1_results.append(last_hidden_states)
         self.assertNotEqual(test_1_results[0].sum().item(), test_1_results[1].sum().item())
 
         test_2_results = []
         for inputs in inputs_w_0_img_attn:
-            last_hidden_states = model(**inputs).last_hidden_state
+            with torch.no_grad():
+                last_hidden_states = model(**inputs).last_hidden_state
             test_2_results.append(last_hidden_states)
         self.assertEqual(test_2_results[0].sum().item(), test_2_results[1].sum().item())
 
