@@ -1842,9 +1842,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             elif config.distribution_output == "normal":
                 self.distribution_output = NormalOutput(dim=config.prediction_length * config.num_targets)
             elif config.distribution_output == "negative_binomial":
-                self.distribution_output = NegativeBinomialOutput(
-                    dim=config.prediction_length * config.num_targets
-                )
+                self.distribution_output = NegativeBinomialOutput(dim=config.prediction_length * config.num_targets)
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
@@ -1952,9 +1950,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         # get distribution
         distribution = self.distribution_output.distribution(outputs.forecast_outputs)
         # get samples
-        samples = [
-            distribution.sample() for _ in range(num_parallel_samples)
-        ]  # samples: list of [bs x num_targets]
+        samples = [distribution.sample() for _ in range(num_parallel_samples)]  # samples: list of [bs x num_targets]
         # stack tensors
         samples = torch.stack(samples, dim=1)  # [bs x num_samples x num_targets]
         return SamplePatchTSTRegressionOutput(sequences=samples)

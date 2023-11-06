@@ -124,9 +124,11 @@ class PatchTSTConfig(PretrainedConfig):
         prediction_length (`int`, *optional*, defaults to 24):
             The prediction length for the encoder. In other words, the prediction horizon of the model.
         num_targets (`int`, *optional*, defaults to 1):
-            Number of targets for regression and classificastion tasks. For classification, it is the number of classes.
+            Number of targets for regression and classificastion tasks. For classification, it is the number of
+            classes.
         output_range (`list`, *optional*):
-            Output range for regression task. The range of output values can be set to enforce the model to produce values within a range.
+            Output range for regression task. The range of output values can be set to enforce the model to produce
+            values within a range.
         num_parallel_samples (`int`, *optional*, defaults to 100):
             The number of samples to generate in parallel for probablistic prediction.
 
