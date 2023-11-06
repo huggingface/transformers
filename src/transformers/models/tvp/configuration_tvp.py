@@ -43,7 +43,7 @@ class TvpConfig(PretrainedConfig):
     Args:
         backbone_config (`PretrainedConfig` or `dict`, *optional*):
             The configuration of the backbone model.
-        distance_loss_weight  (`float`, *optional*, defaults to 1.0):
+        distance_loss_weight (`float`, *optional*, defaults to 1.0):
             The weight of distance loss.
         duration_loss_weight (`float`, *optional*, defaults to 0.1):
             The weight of duration loss.

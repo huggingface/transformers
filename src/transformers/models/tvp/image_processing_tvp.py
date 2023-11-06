@@ -96,7 +96,7 @@ class TvpImageProcessor(BaseImageProcessor):
             `preprocess` method.
         constant_values (`Union[float, Iterable[float]]`, *optional*, defaults to 0):
             The fill value to use when padding the image.
-        pad_mode (`PaddingMode`, *optional*, defaults to PaddingMode.CONSTANT):
+        pad_mode (`PaddingMode`, *optional*, defaults to `PaddingMode.CONSTANT`):
             Use what kind of mode in padding.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
