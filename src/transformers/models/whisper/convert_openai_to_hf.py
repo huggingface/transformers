@@ -14,6 +14,7 @@
 
 import argparse
 import hashlib
+import json
 import os
 import urllib
 import warnings
@@ -21,7 +22,7 @@ import warnings
 import torch
 from torch import nn
 from tqdm import tqdm
-import json
+
 from transformers import WhisperConfig, WhisperForConditionalGeneration, WhisperTokenizer
 from transformers.models.whisper.tokenization_whisper import LANGUAGES
 
@@ -174,14 +175,25 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
 
     model.save_pretrained(pytorch_dump_folder_path)
 
-def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int=100, time_precision = 0.02) -> WhisperTokenizer:
-    from whisper.tokenizer import get_tokenizer
-    tokenizer = get_tokenizer(multilingual=multilingual, num_languages = num_languages)
-    bpe_ranks = tokenizer.encoding._mergeable_ranks
-    start_of_transcript = ["<|endoftext|>","<|startoftranscript|>"]
-    control_tokens = ["<|translate|>","<|transcribe|>", "<|startoflm|>", "<|startofprev|>", "<|nocaptions|>", "<|notimestamps|>"]
 
-    language_tokens = [f"<|{k}|>" for k in list(LANGUAGES)[:num_languages]] # these are special tokens, not normalized
+def convert_tiktoken_to_hf(
+    multilingual: bool = True, num_languages: int = 100, time_precision=0.02
+) -> WhisperTokenizer:
+    from whisper.tokenizer import get_tokenizer
+
+    tokenizer = get_tokenizer(multilingual=multilingual, num_languages=num_languages)
+    bpe_ranks = tokenizer.encoding._mergeable_ranks
+    start_of_transcript = ["<|endoftext|>", "<|startoftranscript|>"]
+    control_tokens = [
+        "<|translate|>",
+        "<|transcribe|>",
+        "<|startoflm|>",
+        "<|startofprev|>",
+        "<|nocaptions|>",
+        "<|notimestamps|>",
+    ]
+
+    language_tokens = [f"<|{k}|>" for k in list(LANGUAGES)[:num_languages]]  # these are special tokens, not normalized
     # These are not special but normalized
     timestamp_tokens = [("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)]
 
@@ -190,10 +202,10 @@ def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int=100, time
     byte_encoder = bytes_to_unicode()
 
     def token_bytes_to_string(b):
-        return ''.join([byte_encoder[ord(char)] for char in b.decode('latin-1')])
+        return "".join([byte_encoder[ord(char)] for char in b.decode("latin-1")])
 
     # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
-    def bpe(mergeable_ranks, token: bytes, max_rank = None) -> list[bytes]:
+    def bpe(mergeable_ranks, token: bytes, max_rank=None) -> list[bytes]:
         parts = [bytes([b]) for b in token]
         while True:
             min_idx = None
@@ -206,7 +218,7 @@ def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int=100, time
             if min_rank is None or (max_rank is not None and min_rank >= max_rank):
                 break
             assert min_idx is not None
-            parts = parts[:min_idx] + [parts[min_idx] + parts[min_idx + 1]] + parts[min_idx + 2:]
+            parts = parts[:min_idx] + [parts[min_idx] + parts[min_idx + 1]] + parts[min_idx + 2 :]
         return parts
 
     def generate_vocab_and_merges(bpe_ranks):
@@ -219,9 +231,8 @@ def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int=100, time
             merged = tuple(bpe(bpe_ranks, token, max_rank=rank))
             if len(merged) != 2:
                 merged = ""
-            merges.append(' '.join(map(token_bytes_to_string, merged)))
+            merges.append(" ".join(map(token_bytes_to_string, merged)))
         return vocab, merges
-
 
     vocab, merges = generate_vocab_and_merges(bpe_ranks)
 
@@ -236,9 +247,10 @@ def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int=100, time
             writer.write(bpe_tokens + "\n")
 
     hf_tokenizer = WhisperTokenizer(vocab_file, merge_file)
-    hf_tokenizer.add_tokens(start_of_transcript + language_tokens + control_tokens,special_tokens=True)
+    hf_tokenizer.add_tokens(start_of_transcript + language_tokens + control_tokens, special_tokens=True)
     hf_tokenizer.add_tokens(timestamp_tokens, special_tokens=False)
     return hf_tokenizer
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
