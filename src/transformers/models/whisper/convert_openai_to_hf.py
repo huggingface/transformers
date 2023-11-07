@@ -21,7 +21,7 @@ import warnings
 import torch
 from torch import nn
 from tqdm import tqdm
-
+import json
 from transformers import WhisperConfig, WhisperForConditionalGeneration, WhisperTokenizer
 from transformers.models.whisper.tokenization_whisper import LANGUAGES
 
@@ -178,6 +178,7 @@ def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int =100, tim
     from whisper.tokenizer import get_tokenizer
     tokenizer = get_tokenizer(multilingual=multilingual, num_languages = num_languages)
     bpe_ranks = tokenizer.encoding._mergeable_ranks
+    bpe_ranks.pop(b"")
     start_of_transcript = ["<|endoftext|>","<|startoftranscript|>"]
     control_tokens = ["<|translate|>","<|transcribe|>", "<|startoflm|>", "<|startofprev|>", "<|nocaptions|>", "<|notimestamps|>"]
     language_tokens = list(LANGUAGES.keys()) # these are special tokens, not normalized
@@ -185,8 +186,11 @@ def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int =100, tim
     timestamp_tokens = [("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)]
 
     from transformers.models.gpt2.tokenization_gpt2 import bytes_to_unicode
+
+    byte_encoder = bytes_to_unicode()
+
     def token_bytes_to_string(b):
-        return ''.join([bytes_to_unicode[ord(char)] for char in b.decode('latin-1')])
+        return ''.join([byte_encoder[ord(char)] for char in b.decode('latin-1')])
 
 
     # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
@@ -211,16 +215,14 @@ def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int =100, tim
         vocab = {}
         for token, rank in bpe_ranks.items():
             vocab[token_bytes_to_string(token)] = rank
-
             if len(token) == 1:
                 continue
             merged = tuple(bpe(bpe_ranks, token, max_rank=rank))
             assert len(merged) == 2
-
             merges.append(' '.join(map(token_bytes_to_string, merged)))
         return vocab, merges
 
-    import json
+
     vocab, merges = generate_vocab_and_merges(bpe_ranks)
 
     vocab_file = "vocab.json"
@@ -240,6 +242,7 @@ def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int =100, tim
     tokenizer = WhisperTokenizer(vocab_file, merge_file)
     tokenizer.add_tokens(start_of_transcript + language_tokens + control_tokens,special_tokens=True)
     tokenizer.add_tokens(timestamp_tokens,special_tokens=False)
+    return tokenizer
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
