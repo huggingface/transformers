@@ -17,8 +17,7 @@ rendered properly in your Markdown viewer.
 # 分词器的摘要
 [[open-in-colab]]
 
-On this page, we will have a closer look at tokenization.
-在这个章节，我们来仔细研究分词的知识。
+在这个页面，我们来仔细研究分词的知识。
 <Youtube id="VFp38yj8h3A"/>
 
 正如我们在[the preprocessing tutorial](preprocessing)所看到的那样，对文本进行分词就是将一段文本分割成很多单词或者子单词，
@@ -187,9 +186,8 @@ Voice Search (Schuster et al., 2012)](https://static.googleusercontent.com/media
 WordPiece不会选择出现频次最大的符号对，而是选择了加入到字典以后能最大化训练数据似然值的符号对。
 
 所以这到底意味着什么？参考前面的例子，最大化训练数据的似然值，等价于找到一个符号对，它们的概率除以这个符号对中第一个符号的概率，
-也就是条件概率最大化$P(A|C)_{max}=\frac{P(AC)}{P(C)}$，找到第二个符号，这个符号在所有的符号对中能使得商最大。像：`"u"`，
-跟了`"g"`，当`"ug"`的概率除以`"u"`的概率的商，`"g"`的商能比其他任何符号更大，这个时候才能融合`"u"`和`"g"`。直觉上，WordPiece
-和BPE有点点不同，WordPiece是评估融合两个符号会失去的量，来确保这么做是值得的。
+接着除以第二个符号的概率，在所有的符号对中商最大。像：如果`"ug"`的概率除以`"u"`除以`"g"`的概率的商，比其他任何符号对更大，
+这个时候才能融合`"u"`和`"g"`。直觉上，WordPiece，和BPE有点点不同，WordPiece是评估融合两个符号会失去的量，来确保这么做是值得的。
 
 <a id='unigram'></a>
 
