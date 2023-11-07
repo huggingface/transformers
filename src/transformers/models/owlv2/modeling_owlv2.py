@@ -1811,9 +1811,13 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         text_embeds = text_outputs.text_embeds
-        feature_map = image_outputs.image_embeds
-        batch_size, num_patches, num_patches, hidden_dim = feature_map.shape
-        image_feats = torch.reshape(feature_map, (batch_size, num_patches * num_patches, hidden_dim))
+        if image_outputs.image_embeds.ndim == 4:
+            feature_map = image_outputs.image_embeds
+            batch_size, num_patches, num_patches, hidden_dim = feature_map.shape
+            image_feats = torch.reshape(feature_map, (batch_size, num_patches * num_patches, hidden_dim))
+        else:
+            image_feats = image_outputs.image_embeds
+            batch_size, _, hidden_dim = image_feats.shape
 
         # Reshape from [batch_size * max_text_queries, hidden_dim] -> [batch_size, max_text_queries, hidden_dim]
         max_text_queries = input_ids.shape[0] // batch_size
@@ -1822,6 +1826,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         # If first token is 0, then this is a padded query [batch_size, num_queries].
         input_ids = input_ids.reshape(batch_size, max_text_queries, input_ids.shape[-1])
         query_mask = input_ids[..., 0] > 0
+        if query_mask.all():
+            query_mask = None
 
         # Predict object classes [batch_size, num_patches, num_queries+1]
         pred_logits, class_embeds = self.class_predictor(image_feats, text_embeds, query_mask)
