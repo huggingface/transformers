@@ -214,3 +214,9 @@ class ASTFeatureExtractionWithoutTorchaudioTest(ASTFeatureExtractionTest):
 
         self.assertTrue(hasattr(feat_extract, "window"))
         self.assertTrue(hasattr(feat_extract, "mel_filters"))
+
+        from transformers.models.audio_spectrogram_transformer.feature_extraction_audio_spectrogram_transformer import (
+            is_speech_available,
+        )
+
+        self.assertFalse(is_speech_available())

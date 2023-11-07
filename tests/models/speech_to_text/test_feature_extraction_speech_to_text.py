@@ -317,3 +317,7 @@ class Speech2TextFeatureExtractionWithoutTorchaudioTest(Speech2TextFeatureExtrac
 
         self.assertTrue(hasattr(feat_extract, "window"))
         self.assertTrue(hasattr(feat_extract, "mel_filters"))
+
+        from transformers.models.speech_to_text.feature_extraction_speech_to_text import is_speech_available
+
+        self.assertFalse(is_speech_available())
