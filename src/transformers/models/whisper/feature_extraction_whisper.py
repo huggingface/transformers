@@ -93,6 +93,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 norm="slaney",
                 mel_scale="slaney",
             )
+        else:
+            mel_filters = np.array(mel_filters)
 
         self.mel_filters = mel_filters
 
