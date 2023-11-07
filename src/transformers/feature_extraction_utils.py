@@ -112,17 +112,9 @@ class BatchFeature(UserDict):
     def items(self):
         return self.data.items()
 
-    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
-        """
-        Convert the inner content to tensors.
-
-        Args:
-            tensor_type (`str` or [`~utils.TensorType`], *optional*):
-                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
-                `None`, no modification is done.
-        """
+    def _get_is_as_tensor_fns(self, tensor_type: Optional[Union[str, TensorType]] = None):
         if tensor_type is None:
-            return self
+            return None, None
 
         # Convert to TensorType
         if not isinstance(tensor_type, TensorType):
@@ -167,6 +159,21 @@ class BatchFeature(UserDict):
                 return np.asarray(value, dtype=dtype)
 
             is_tensor = is_numpy_array
+        return is_tensor, as_tensor
+
+    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
+        """
+        Convert the inner content to tensors.
+
+        Args:
+            tensor_type (`str` or [`~utils.TensorType`], *optional*):
+                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
+                `None`, no modification is done.
+        """
+        if tensor_type is None:
+            return self
+
+        is_tensor, as_tensor = self._get_is_as_tensor_fns(tensor_type)
 
         # Do the tensor conversion in batch
         for key, value in self.items():
@@ -351,7 +358,8 @@ class FeatureExtractionMixin(PushToHubMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(
@@ -385,7 +393,8 @@ class FeatureExtractionMixin(PushToHubMixin):
 
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if kwargs.get("token", None) is not None:
                 raise ValueError(
@@ -452,7 +461,8 @@ class FeatureExtractionMixin(PushToHubMixin):
 
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(

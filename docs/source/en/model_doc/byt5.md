@@ -40,14 +40,18 @@ experiments.*
 This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The original code can be
 found [here](https://github.com/google-research/byt5).
 
-ByT5's architecture is based on the T5v1.1 model, so one can refer to [T5v1.1's documentation page](t5v1.1). They
+<Tip>
+
+ByT5's architecture is based on the T5v1.1 model, refer to [T5v1.1's documentation page](t5v1.1) for the API reference. They
 only differ in how inputs should be prepared for the model, see the code examples below.
+
+</Tip>
 
 Since ByT5 was pre-trained unsupervisedly, there's no real advantage to using a task prefix during single-task
 fine-tuning. If you are doing multi-task fine-tuning, you should use a prefix.
 
 
-### Example
+## Usage example
 
 ByT5 works on raw UTF-8 bytes, so it can be used without a tokenizer:
 

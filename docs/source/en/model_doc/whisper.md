@@ -24,8 +24,10 @@ The abstract from the paper is the following:
 
 *We study the capabilities of speech processing systems trained simply to predict large amounts of transcripts of audio on the internet. When scaled to 680,000 hours of multilingual and multitask supervision, the resulting models generalize well to standard benchmarks and are often competitive with prior fully supervised results but in a zeroshot transfer setting without the need for any finetuning. When compared to humans, the models approach their accuracy and robustness. We are releasing models and inference code to serve as a foundation for further work on robust speech processing.*
 
+This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ). The Tensorflow version of this model was contributed by [amyeroberts](https://huggingface.co/amyeroberts).
+The original code can be found [here](https://github.com/openai/whisper).
 
-Tips:
+## Usage tips
 
 - The model usually performs well without requiring any finetuning.
 - The architecture follows a classic encoder-decoder architecture, which means that it relies on the [`~generation.GenerationMixin.generate`] function for inference.
@@ -80,6 +82,8 @@ Here is a step-by-step guide to transcribing an audio sample using a pre-trained
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
     - save_vocabulary
+    - batch_decode
+    - decode
 
 ## WhisperTokenizerFast
 
@@ -89,6 +93,8 @@ Here is a step-by-step guide to transcribing an audio sample using a pre-trained
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
     - save_vocabulary
+    - batch_decode
+    - decode
 
 ## WhisperFeatureExtractor
 
@@ -104,6 +110,9 @@ Here is a step-by-step guide to transcribing an audio sample using a pre-trained
     - batch_decode
     - decode
 
+<frameworkcontent>
+<pt>
+
 ## WhisperModel
 
 [[autodoc]] WhisperModel
@@ -114,12 +123,20 @@ Here is a step-by-step guide to transcribing an audio sample using a pre-trained
 
 [[autodoc]] WhisperForConditionalGeneration
     - forward
+    - generate
+
+## WhisperForCausalLM
+
+[[autodoc]] WhisperForCausalLM
+    - forward
 
 ## WhisperForAudioClassification
 
 [[autodoc]] WhisperForAudioClassification
     - forward
 
+</pt>
+<tf>
 
 ## TFWhisperModel
 
@@ -131,6 +148,8 @@ Here is a step-by-step guide to transcribing an audio sample using a pre-trained
 [[autodoc]] TFWhisperForConditionalGeneration
     - call
 
+</tf>
+<jax>
 
 ## FlaxWhisperModel
 
@@ -146,4 +165,7 @@ Here is a step-by-step guide to transcribing an audio sample using a pre-trained
 
 [[autodoc]] FlaxWhisperForAudioClassification
     - __call__
+
+</jax>
+</frameworkcontent>
 
