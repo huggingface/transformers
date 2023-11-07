@@ -26,6 +26,7 @@ from tqdm import tqdm
 
 from transformers import WhisperConfig, WhisperForConditionalGeneration, WhisperTokenizer
 from transformers.models.whisper.tokenization_whisper import LANGUAGES, bytes_to_unicode
+from transformers.utils.import_utils import _is_package_available
 
 
 _MODELS = {
@@ -201,12 +202,6 @@ def _bpe(mergeable_ranks, token: bytes, max_rank=None) -> list[bytes]:
 
 
 def convert_tiktoken_bpe_to_hf(tiktoken_url: str):
-    try:
-        from tiktoken.load import load_tiktoken_bpe
-    except Exception:
-        print("`tiktoken` is not installed, use `pip install tiktoken` to convert the tokenizer")
-        return
-
     bpe_ranks = load_tiktoken_bpe(tiktoken_url)
     byte_encoder = bytes_to_unicode()
 
@@ -290,6 +285,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.convert_tokenizer:
-        convert_tiktoken_to_hf(args.pytorch_dump_folder_path, args.multilingual, args.num_languages)
+        try:
+            if not _is_package_available("tiktoken"):
+                raise """`tiktoken` is not installed, use `pip install tiktoken` to convert the tokenizer"""
+        except Exception:
+            pass
+        else:
+            from tiktoken.load import load_tiktoken_bpe
+
+            convert_tiktoken_to_hf(args.pytorch_dump_folder_path, args.multilingual, args.num_languages)
 
     convert_openai_whisper_to_tfms(args.checkpoint_path, args.pytorch_dump_folder_path)
