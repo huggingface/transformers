@@ -37,9 +37,9 @@ The original code can be found [here](https://github.com/openai/whisper).
 - To convert the tokenizer, we recommend using the following:
 
 ```bash
-python src/transformers/models/whisper/convert_openai_to_hf.py --checkpoint_path "" --pytorch_dump_folder_path "Arthur/whisper-3" --convert_tokenizer True --num_languages 100 --multilingual True
+python src/transformers/models/whisper/convert_openai_to_hf.py --checkpoint_path "" --pytorch_dump_folder_path "Arthur/whisper-3" --convert_tokenizer True --whisper_version 3 --multilingual True
 ```
-Here the number of languages is set to `100` to account for `cantonese` which was added in `whisper-large-v3`.
+Here the `whisper_version` will set the number of languages to `100` to account for `cantonese` which was added in `whisper-large-v3`.
 
 
 ## Inference
