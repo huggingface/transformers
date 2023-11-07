@@ -41,6 +41,40 @@ python src/transformers/models/whisper/convert_openai_to_hf.py --checkpoint_path
 ```
 Here the number of languages is set to `100` to account for `cantonese` which was added in `whisper-large-v3`.
 
+
+## Inference
+
+Here is a step-by-step guide to transcribing an audio sample using a pre-trained Whisper model:
+
+```python
+>>> from datasets import load_dataset
+>>> from transformers import WhisperProcessor, WhisperForConditionalGeneration
+
+>>> # Select an audio file and read it:
+>>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+>>> audio_sample = ds[0]["audio"]
+>>> waveform = audio_sample["array"]
+>>> sampling_rate = audio_sample["sampling_rate"]
+
+>>> # Load the Whisper model in Hugging Face format:
+>>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+>>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+
+>>> # Use the model and processor to transcribe the audio:
+>>> input_features = processor(
+...     waveform, sampling_rate=sampling_rate, return_tensors="pt"
+... ).input_features
+
+>>> # Generate token ids
+>>> predicted_ids = model.generate(input_features)
+
+>>> # Decode token ids to text
+>>> transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
+
+>>> transcription[0]
+' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
+```
+
 ## WhisperConfig
 
 [[autodoc]] WhisperConfig
