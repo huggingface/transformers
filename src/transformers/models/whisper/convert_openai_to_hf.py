@@ -217,9 +217,8 @@ def convert_tiktoken_bpe_to_hf(tiktoken_url: str):
         if len(token) == 1:
             continue
         merged = tuple(_bpe(bpe_ranks, token, max_rank=rank))
-        if len(merged) != 2:  # account for empty token
-            merged = ""
-        merges.append(" ".join(map(token_bytes_to_string, merged)))
+        if len(merged) == 2:  # account for empty token
+            merges.append(" ".join(map(token_bytes_to_string, merged)))
     return vocab, merges
 
 
@@ -291,4 +290,3 @@ if __name__ == "__main__":
         convert_tiktoken_to_hf(args.pytorch_dump_folder_path, args.multilingual, args.num_languages)
 
     convert_openai_whisper_to_tfms(args.checkpoint_path, args.pytorch_dump_folder_path)
-
