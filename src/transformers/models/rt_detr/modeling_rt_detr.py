@@ -560,7 +560,7 @@ class MSDeformableAttention(nn.Module):
         """
         Multi-Scale Deformable Attention Module
         """
-        super(MSDeformableAttention, self).__init__()
+        super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.num_levels = num_levels
