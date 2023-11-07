@@ -530,7 +530,7 @@ class RepVggBlock(nn.Module):
 
 class CSPRepLayer(nn.Module):
     def __init__(self, in_channels, out_channels, num_blocks=3, expansion=1.0, bias=None, activation="silu"):
-        super(CSPRepLayer, self).__init__()
+        super().__init__()
         hidden_channels = int(out_channels * expansion)
         self.conv1 = ConvNormLayer(in_channels, hidden_channels, 1, 1, bias=bias, activation=activation)
         self.conv2 = ConvNormLayer(in_channels, hidden_channels, 1, 1, bias=bias, activation=activation)
