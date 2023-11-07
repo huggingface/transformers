@@ -181,7 +181,7 @@ def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int=100, time
     start_of_transcript = ["<|endoftext|>","<|startoftranscript|>"]
     control_tokens = ["<|translate|>","<|transcribe|>", "<|startoflm|>", "<|startofprev|>", "<|nocaptions|>", "<|notimestamps|>"]
 
-    language_tokens = [f"<|{k}|>" for k in LANGUAGES[:num_languages].keys()] # these are special tokens, not normalized
+    language_tokens = [f"<|{k}|>" for k in list(LANGUAGES)[:num_languages]] # these are special tokens, not normalized
     # These are not special but normalized
     timestamp_tokens = [("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)]
 
