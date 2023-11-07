@@ -49,30 +49,38 @@ from transformers import AutoProcessor, TvpForVideoGrounding
 def pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps):
     '''
     Convert the video from its original fps to the target_fps and decode the video with PyAV decoder.
+    Args:
+        container (container): pyav container.
+        sampling_rate (int): frame sampling rate (interval between two sampled frames).
+        num_frames (int): number of frames to sample.
+        clip_idx (int): if clip_idx is -1, perform random temporal sampling.
+            If clip_idx is larger than -1, uniformly split the video to num_clips
+            clips, and select the clip_idx-th video clip.
+        num_clips (int): overall number of clips to uniformly sample from the given video.
+        target_fps (int): the input video may have different fps, convert it to
+            the target video fps before frame sampling.
     Returns:
         frames (tensor): decoded frames from the video. Return None if the no
             video stream was found.
         fps (float): the number of frames per second of the video.
     '''
-    fps = float(container.streams.video[0].average_rate)
+    video = container.streams.video[0]
+    fps = float(video.average_rate)
     clip_size = sampling_rate * num_frames / target_fps * fps
-    delta = max(container.streams.video[0].frames - clip_size, 0)
+    delta = max(num_frames - clip_size, 0)
     start_idx = delta * clip_idx / num_clips
     end_idx = start_idx + clip_size - 1
-    timebase = container.streams.video[0].duration / container.streams.video[0].frames
+    timebase = video.duration / num_frames
     video_start_pts = int(start_idx * timebase)
     video_end_pts = int(end_idx * timebase)
-    stream_name = {"video": 0}
     seek_offset = max(video_start_pts - 1024, 0)
-    container.seek(seek_offset, any_frame=False, backward=True, stream=container.streams.video[0])
+    container.seek(seek_offset, any_frame=False, backward=True, stream=video)
     frames = {}
-    for frame in container.decode(**stream_name):
+    for frame in container.decode(video=0):
         if frame.pts < video_start_pts:
             continue
-        if frame.pts <= video_end_pts:
-            frames[frame.pts] = frame
-        else:
-            frames[frame.pts] = frame
+        frames[frame.pts] = frame
+        if frame.pts > video_end_pts:
             break
     frames = [frames[pts] for pts in sorted(frames)]
     return frames, fps
@@ -97,11 +105,10 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
     assert clip_idx >= -2, "Not a valied clip_idx {}".format(clip_idx)
     frames, fps = pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps)
     clip_size = sampling_rate * num_frames / target_fps * fps
-    index = torch.linspace(0, clip_size - 1, num_frames)
-    index = torch.clamp(index, 0, len(frames) - 1).long().tolist()
-    frames = [frames[idx] for idx in index]
-    frames = [frame.to_rgb().to_ndarray() for frame in frames]
-    frames = torch.from_numpy(np.stack(frames))
+    index = np.linspace(0, clip_size - 1, num_frames)
+    index = np.clip(index, 0, len(frames) - 1).astype(np.int64)
+    frames = np.array([frames[idx].to_rgb().to_ndarray() for idx in index])
+    frames = frames.transpose(0, 3, 1, 2)
     return frames
 
 def get_resize_size(image, max_size):
@@ -137,19 +144,17 @@ decoder_kwargs = dict(
     num_clips=1,
     target_fps=3,
 )
-raw_sampled_frms = decode(**decoder_kwargs).permute(0, 3, 1, 2)
+raw_sampled_frms = decode(**decoder_kwargs)
 
 text = "a person is sitting on a bed."
 processor = AutoProcessor.from_pretrained("Intel/tvp-base")
 size = get_resize_size(raw_sampled_frms, model.config.max_img_size)
 model_inputs = processor(
-    text=[text], videos=list(raw_sampled_frms.numpy()), return_tensors="pt", max_text_length=100, size=size
+    text=[text], videos=list(raw_sampled_frms), return_tensors="pt", max_text_length=100, size=size
 )
 
 model_inputs["pixel_values"] = model_inputs["pixel_values"].to(model.dtype)
-model_inputs["labels"] = torch.tensor([18.1, 0.0, 6.8])
 output = model(**model_inputs)
-print(f"The model's output is {output}")
 
 def get_video_duration(filename):
     cap = cv2.VideoCapture(filename)
@@ -161,8 +166,8 @@ def get_video_duration(filename):
     return -1
 
 duration = get_video_duration(file)
-timestamp = output['logits'].tolist()
-start, end = round(timestamp[0][0]*duration, 1), round(timestamp[0][1]*duration, 1)
+start, end = processor.post_process_video_grounding(output, duration)
+
 print(f"The time slot of the video corresponding to the text \"{text}\" is from {start}s to {end}s")
 ```
 
