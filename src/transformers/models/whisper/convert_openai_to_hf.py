@@ -267,7 +267,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--convert_tokenizer",
         type=bool,
-        default="store_true",
+        default=False,
         help="Whether or not the tokenizer should be converted along with the model.",
     )
     parser.add_argument(
