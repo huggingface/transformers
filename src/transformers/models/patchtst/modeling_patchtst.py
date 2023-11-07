@@ -1704,8 +1704,8 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Return:
-            [`SamplePatchTSTPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number
-            of samples, prediction_length, 1)` or `(batch_size, number of samples, prediction_length,
+            [`SamplePatchTSTPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
+            number of samples, prediction_length, 1)` or `(batch_size, number of samples, prediction_length,
             num_input_channels)` for multivariate predictions.
         """
         # get number of samples
