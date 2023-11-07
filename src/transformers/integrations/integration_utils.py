@@ -1613,7 +1613,7 @@ class FlyteCallback(TrainerCallback):
 
 class DVCLiveCallback(TrainerCallback):
     """
-    A [`TrainerCallback`] that sends the logs to [DVCLive](https://www.dvc.org/dvclive).
+    A [`TrainerCallback`] that sends the logs to [DVCLive](https://www.dvc.org/doc/dvclive).
 
     Use the environment variables below in `setup` to configure the integration. To customize this callback beyond
     those environment variables, see [here](https://dvc.org/doc/dvclive/ml-frameworks/huggingface).
