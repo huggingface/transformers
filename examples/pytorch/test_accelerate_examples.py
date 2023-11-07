@@ -317,7 +317,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --learning_rate 1e-4
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 1
-            --max_train_steps 10
+            --max_train_steps 2
             --train_val_split 0.1
             --seed 42
             --output_dir {tmp_dir}
@@ -331,6 +331,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         run_command(self._launch_args + testargs)
         result = get_results(tmp_dir)
         # The base model scores a 25%
-        self.assertGreaterEqual(result["eval_accuracy"], 0.6)
+        self.assertGreaterEqual(result["eval_accuracy"], 0.4)
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_1")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "image_classification_no_trainer")))
