@@ -1897,7 +1897,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
 
         self.config.num_speakers = new_num_speakers
         self.config.speaker_embedding_size = speaker_embedding_size
-        
+
     def get_input_embeddings(self):
         return self.text_encoder.get_input_embeddings()
 
