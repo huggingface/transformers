@@ -23,6 +23,7 @@ from torch import nn
 from tqdm import tqdm
 
 from transformers import WhisperConfig, WhisperForConditionalGeneration, WhisperTokenizer
+from transformers.models.whisper.tokenization_whisper import LANGUAGES
 
 
 _MODELS = {
@@ -173,8 +174,19 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
 
     model.save_pretrained(pytorch_dump_folder_path)
 
-def convert_tiktoken_to_hf(tikttoken_path: str) -> WhisperTokenizer:
-    pass
+def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int =100, time_precision = 0.2) -> WhisperTokenizer:
+    from whisper.tokenizer import get_tokenizer
+    tokenizer = get_tokenizer(multilingual = True, num_languages = 100)
+    merges = tokenizer.encoding._mergeable_ranks
+    start_of_transcript = ["<|endoftext|>","<|startoftranscript|>"]
+    control_tokens = ["<|translate|>","<|transcribe|>", "<|startoflm|>", "<|startofprev|>", "<|nocaptions|>", "<|notimestamps|>"]
+    language_tokens = list(LANGUAGES.keys()) # these are special tokens, not normalized
+    # These are not special but normalized
+    timestamp_tokens = [("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)]
+
+    tokenizer = WhisperTokenizer(vocab_file, merges_file)
+    tokenizer.add_tokens(start_of_transcript + language_tokens + control_tokens,special_tokens=True)
+    tokenizer.add_tokens(timestamp_tokens,special_tokens=False)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
