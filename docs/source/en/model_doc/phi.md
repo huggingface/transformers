@@ -61,14 +61,14 @@ are seeing improvement on that front thanks to the absence of web data. We open-
 promote further research on these urgent topics.*
 
 
-Tips:
+This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
+The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.co/microsoft/phi-1/blob/main/modeling_mixformer_sequential.py) and [here](https://huggingface.co/microsoft/phi-1_5/blob/main/modeling_mixformer_sequential.py) respectively.
+
+
+## Usage tips
 
 - This model is quite similar to `Llama` with the main difference in [`PhiDecoderLayer`], where they used [`PhiAttention`] and [`PhiMLP`] layers in parallel configuration.
 - The tokenizer used for this model is identical to the [`CodeGenTokenizer`].
-
-
-This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
-The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.co/microsoft/phi-1/blob/main/modeling_mixformer_sequential.py) and [here](https://huggingface.co/microsoft/phi-1_5/blob/main/modeling_mixformer_sequential.py) respectively.
 
 
 ### Example :
@@ -98,6 +98,9 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 
 [[autodoc]] PhiConfig
 
+<frameworkcontent>
+<pt>
+
 ## PhiModel
 
 [[autodoc]] PhiModel
@@ -118,3 +121,6 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 
 [[autodoc]] PhiForTokenClassification
     - forward
+
+</pt>
+</frameworkcontent>

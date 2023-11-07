@@ -748,16 +748,16 @@ class PhiForCausalLM(PhiPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, PhiForCausalLM
 
-        >>> model = PhiForCausalLM.from_pretrained("susnato/phi-1_dev")
-        >>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_dev")
+        >>> model = PhiForCausalLM.from_pretrained("susnato/phi-1_5_dev")
+        >>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_5_dev")
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> prompt = "This is an example script ."
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        'Hey, are you conscious? Can you talk to me?\\nYes, definitely!",\n    "I\'m not sure what you\'re talking about'
+        'This is an example script .py file that uses the `os` module to create a new directory and write some text to it.\n\n``'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
