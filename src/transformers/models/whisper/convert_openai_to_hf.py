@@ -16,16 +16,17 @@ import argparse
 import hashlib
 import json
 import os
+import tempfile
 import urllib
 import warnings
-import tempfile
+
 import torch
 from torch import nn
 from tqdm import tqdm
 
 from transformers import WhisperConfig, WhisperForConditionalGeneration, WhisperTokenizer
-from transformers.models.whisper.tokenization_whisper import LANGUAGES
 from transformers.models.gpt2.tokenization_gpt2 import bytes_to_unicode
+from transformers.models.whisper.tokenization_whisper import LANGUAGES
 
 
 _MODELS = {
@@ -42,9 +43,10 @@ _MODELS = {
 }
 
 _TOKENIZERS = {
-    "multilingual":"",
-    "english":"",
+    "multilingual": "",
+    "english": "",
 }
+
 
 def remove_ignore_keys_(state_dict):
     ignore_keys = ["layers", "blocks"]
@@ -198,10 +200,13 @@ def _bpe(mergeable_ranks, token: bytes, max_rank=None) -> list[bytes]:
         parts = parts[:min_idx] + [parts[min_idx] + parts[min_idx + 1]] + parts[min_idx + 2 :]
     return parts
 
-def convert_tiktoken_bpe_to_hf(tiktoken_url:str):
+
+def convert_tiktoken_bpe_to_hf(tiktoken_url: str):
     from tiktoken.load import load_tiktoken_bpe
+
     bpe_ranks = load_tiktoken_bpe(tiktoken_url)
     byte_encoder = bytes_to_unicode()
+
     def token_bytes_to_string(b):
         return "".join([byte_encoder[ord(char)] for char in b.decode("latin-1")])
 
@@ -212,7 +217,7 @@ def convert_tiktoken_bpe_to_hf(tiktoken_url:str):
         if len(token) == 1:
             continue
         merged = tuple(_bpe(bpe_ranks, token, max_rank=rank))
-        if len(merged) != 2: # account for empty token
+        if len(merged) != 2:  # account for empty token
             merged = ""
         merges.append(" ".join(map(token_bytes_to_string, merged)))
     return vocab, merges
@@ -237,7 +242,6 @@ def convert_tiktoken_to_hf(
     timestamp_tokens = [("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)]
 
     vocab, merges = convert_tiktoken_bpe_to_hf(tiktoken_tokenizer_path)
-
 
     with tempfile.TemporaryDirectory() as tmpdirname:
         vocab_file = f"{tmpdirname}/vocab.json"
