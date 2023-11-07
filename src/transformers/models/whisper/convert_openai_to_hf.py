@@ -36,6 +36,7 @@ _MODELS = {
     "medium": "https://openaipublic.azureedge.net/main/whisper/models/345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/medium.pt",
     "large": "https://openaipublic.azureedge.net/main/whisper/models/e4b87e7e0bf463eb8e6956e646f1e277e901512310def2c24bf0e11bd3c28e9a/large.pt",
     "large-v2": "https://openaipublic.azureedge.net/main/whisper/models/81f7c96c852ee8fc832187b0132e569d6c3065a3252ed18e56effd0b6a73e524/large-v2.pt",
+    "large-v3": "https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt",
 }
 
 
@@ -90,7 +91,7 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
-def _download(url: str, root: str) -> bytes:
+def _download(url: str, root: str) -> str:
     os.makedirs(root, exist_ok=True)
     filename = os.path.basename(url)
 
@@ -103,7 +104,7 @@ def _download(url: str, root: str) -> bytes:
     if os.path.isfile(download_target):
         model_bytes = open(download_target, "rb").read()
         if hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
-            return model_bytes
+            return download_target
         else:
             warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
 
@@ -125,14 +126,14 @@ def _download(url: str, root: str) -> bytes:
             "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
         )
 
-    return model_bytes
+    return download_target
 
 
 def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
     if ".pt" not in checkpoint_path:
-        original_checkpoint = _download(_MODELS[checkpoint_path])
-    else:
-        original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        checkpoint_path = _download(_MODELS[checkpoint_path], root=pytorch_dump_folder_path)
+
+    original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
     dimensions = original_checkpoint["dims"]
     state_dict = original_checkpoint["model_state_dict"]
     proj_out_weights = state_dict["decoder.token_embedding.weight"]
