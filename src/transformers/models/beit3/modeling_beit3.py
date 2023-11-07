@@ -489,6 +489,8 @@ class Beit3MultiheadAttention(nn.Module):
             attn_weights += attention_mask
 
         if key_padding_mask is not None:
+            key_padding_mask = 1 - key_padding_mask.type_as(query)
+
             attn_weights = attn_weights.view(batch_size, self.num_heads, target_length, src_len)
             attn_weights = attn_weights.masked_fill(
                 key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool),
@@ -691,10 +693,10 @@ class Beit3Encoder(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         if attention_mask is None:
-            attention_mask = torch.zeros(hidden_state.shape[:2], device=hidden_state.device).bool()
+            attention_mask = torch.ones(hidden_state.shape[:2], device=hidden_state.device).bool()
 
         hidden_state = self.add_position_embeddings(hidden_state, text_end_positions, multiway_split_position)
-        hidden_state = hidden_state * (1 - attention_mask.unsqueeze(-1).type_as(hidden_state))
+        hidden_state = hidden_state * (attention_mask.unsqueeze(-1).type_as(hidden_state))
 
         # past_key_value is not None during inference if we use the bidirectional encoder as a generator as in s2s-ft (https://arxiv.org/abs/2110.13640)
         for idx, layer in enumerate(self.layers):
@@ -837,9 +839,7 @@ class Beit3Model(Beit3PreTrainedModel):
             embeddings = torch.cat([vision_embeddings, text_embeddings], dim=1)
 
             if attention_mask is not None:
-                zeros_for_vision_padding = (
-                    torch.zeros(vision_embeddings.shape[:-1]).to(vision_embeddings.device).bool()
-                )
+                zeros_for_vision_padding = torch.ones(vision_embeddings.shape[:-1]).to(vision_embeddings.device).bool()
                 attention_mask = torch.cat(
                     [
                         zeros_for_vision_padding,
@@ -1149,7 +1149,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         >>> output = model(
         ...     input_ids=inputs.input_ids,
         ...     pixel_values=inputs.pixel_values,
-        ...     attention_mask=torch.zeros_like(language_masked_pos),
+        ...     attention_mask=torch.ones_like(language_masked_pos),
         ...     language_masked_pos=language_masked_pos,
         ... )
         >>> processor.tokenizer.decode([np.argmax(output.logits.cpu().detach().numpy())])
@@ -1293,7 +1293,7 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         >>> predicted_answer_idx = logits.argmax(-1).item()
         >>> predicted_answer = model.config.id2label[predicted_answer_idx]
         >>> print("Predicted answer:", predicted_answer)
-        Predicted answer: cat
+        Predicted answer: 2
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

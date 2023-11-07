@@ -149,7 +149,7 @@ class Beit3ModelTester:
             )
         else:
             pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        attention_mask = torch.zeros_like(input_ids)
+        attention_mask = torch.ones_like(input_ids)
 
         return self.get_config(), {
             "input_ids": input_ids,
@@ -201,7 +201,7 @@ class Beit3ModelTester:
     def prepare_config_and_inputs_for_visual_question_answering(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        text_padding_mask = torch.zeros((self.batch_size, self.seq_length))
+        text_padding_mask = torch.ones((self.batch_size, self.seq_length))
         return self.get_config(), {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
@@ -211,7 +211,7 @@ class Beit3ModelTester:
     def prepare_config_and_inputs_for_text_retrieval(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        text_padding_mask = torch.zeros((self.batch_size, self.seq_length))
+        text_padding_mask = torch.ones((self.batch_size, self.seq_length))
         return self.get_config(), {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
@@ -597,15 +597,17 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
         image = self.default_image
-        text = "This is a photo of a cat"
+        text = "How many cats are there?"
         inputs = processor(text=text, images=image, return_tensors="pt")
 
         # forward pass
-        output = model(**inputs)
-        assert output.logits.shape == torch.Size([1, 3129])
-        torch.testing.assert_allclose(
-            output.logits.detach()[:, :3], torch.tensor([[-10.862484, -12.388088, -7.6599636]])
+        output = model(
+            pixel_values=inputs["pixel_values"],
+            input_ids=inputs["input_ids"],
+            attention_mask=torch.ones_like(inputs["input_ids"]),
         )
+        assert output.logits.shape == torch.Size([1, 3129])
+        torch.testing.assert_allclose(output.logits.detach()[:, :3], torch.tensor([[-16.2096, -15.0801, -11.8275]]))
 
     @slow
     def test_inference_beit3_visual_reasoning(self):
@@ -629,7 +631,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
             attention_mask=torch.ones(inputs["input_ids"].shape),
         )
         assert output.logits.shape == torch.Size([1, 2])
-        torch.testing.assert_allclose(output.logits.detach(), torch.tensor([[6.593818, -6.582055]]))
+        torch.testing.assert_allclose(output.logits.detach(), torch.tensor([[3.3999, -3.3991]]))
 
     @slow
     def test_inference_beit3_for_image_captioning(self):
@@ -646,11 +648,11 @@ class BeitModelIntegrationTest(unittest.TestCase):
         output = model(
             input_ids=inputs.input_ids,
             pixel_values=inputs.pixel_values,
-            attention_mask=torch.zeros_like(language_masked_pos),
+            attention_mask=torch.ones_like(language_masked_pos),
             language_masked_pos=language_masked_pos,
         )
         assert output.logits.shape == torch.Size([1, 64010])
-        assert torch.allclose(output.logits.detach()[0, :3], torch.tensor([-2.697914, -2.697912, -2.645459]))
+        assert torch.allclose(output.logits.detach()[0, :3], torch.tensor([-2.5711, -2.5711, -1.2555]), rtol=1e-4)
 
     @slow
     def test_inference_beit3_for_image_text_retrieval(self):
