@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+"""Converts a Whisper model in OpenAI format to Hugging Face format."""
 # Copyright 2022 The HuggingFace Inc. team and the OpenAI team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +16,7 @@
 
 import argparse
 import hashlib
+import io
 import os
 import urllib
 import warnings
@@ -91,7 +94,11 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
+<<<<<<< HEAD
 def _download(url: str, root: str) -> str:
+=======
+def _download(url: str, root: str) -> io.BytesIO:
+>>>>>>> main
     os.makedirs(root, exist_ok=True)
     filename = os.path.basename(url)
 
@@ -104,7 +111,11 @@ def _download(url: str, root: str) -> str:
     if os.path.isfile(download_target):
         model_bytes = open(download_target, "rb").read()
         if hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
+<<<<<<< HEAD
             return download_target
+=======
+            return torch.load(io.BytesIO(model_bytes))
+>>>>>>> main
         else:
             warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
 
@@ -126,14 +137,25 @@ def _download(url: str, root: str) -> str:
             "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
         )
 
+<<<<<<< HEAD
     return download_target
+=======
+    return torch.load(io.BytesIO(model_bytes))
+>>>>>>> main
 
 
 def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
     if ".pt" not in checkpoint_path:
+<<<<<<< HEAD
         checkpoint_path = _download(_MODELS[checkpoint_path], root=pytorch_dump_folder_path)
 
     original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
+=======
+        root = os.path.dirname(pytorch_dump_folder_path) or "."
+        original_checkpoint = _download(_MODELS[checkpoint_path], root)
+    else:
+        original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
+>>>>>>> main
     dimensions = original_checkpoint["dims"]
     state_dict = original_checkpoint["model_state_dict"]
     proj_out_weights = state_dict["decoder.token_embedding.weight"]
@@ -152,7 +174,7 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
         encoder_layers=dimensions["n_audio_layer"],
         encoder_attention_heads=dimensions["n_audio_head"],
         decoder_layers=dimensions["n_text_layer"],
-        decoder_attention_heads=dimensions["n_text_state"],
+        decoder_attention_heads=dimensions["n_text_head"],
         max_source_positions=dimensions["n_audio_ctx"],
     )
 
