@@ -785,7 +785,7 @@ class RTDetrTransformer(nn.Module):
     __share__ = ["num_classes"]
 
     def __init__(self, config):
-        super(RTDetrTransformer, self).__init__()
+        super().__init__()
 
         position_embed_type = config.position_embed_type
         feat_channels = config.feat_channels
