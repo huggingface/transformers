@@ -18,13 +18,14 @@ import json
 import os
 import urllib
 import warnings
-
+import tempfile
 import torch
 from torch import nn
 from tqdm import tqdm
 
 from transformers import WhisperConfig, WhisperForConditionalGeneration, WhisperTokenizer
 from transformers.models.whisper.tokenization_whisper import LANGUAGES
+from transformers.models.gpt2.tokenization_gpt2 import bytes_to_unicode
 
 
 _MODELS = {
@@ -40,6 +41,10 @@ _MODELS = {
     "large-v2": "https://openaipublic.azureedge.net/main/whisper/models/81f7c96c852ee8fc832187b0132e569d6c3065a3252ed18e56effd0b6a73e524/large-v2.pt",
 }
 
+_TOKENIZERS = {
+    "multilingual":"",
+    "english":"",
+}
 
 def remove_ignore_keys_(state_dict):
     ignore_keys = ["layers", "blocks"]
@@ -176,13 +181,48 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
     model.save_pretrained(pytorch_dump_folder_path)
 
 
+# Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
+def _bpe(mergeable_ranks, token: bytes, max_rank=None) -> list[bytes]:
+    parts = [bytes([b]) for b in token]
+    while True:
+        min_idx = None
+        min_rank = None
+        for i, pair in enumerate(zip(parts[:-1], parts[1:])):
+            rank = mergeable_ranks.get(pair[0] + pair[1])
+            if rank is not None and (min_rank is None or rank < min_rank):
+                min_idx = i
+                min_rank = rank
+        if min_rank is None or (max_rank is not None and min_rank >= max_rank):
+            break
+        assert min_idx is not None
+        parts = parts[:min_idx] + [parts[min_idx] + parts[min_idx + 1]] + parts[min_idx + 2 :]
+    return parts
+
+def convert_tiktoken_bpe_to_hf(tiktoken_url:str):
+    from tiktoken.load import load_tiktoken_bpe
+    bpe_ranks = load_tiktoken_bpe(tiktoken_url)
+    byte_encoder = bytes_to_unicode()
+    def token_bytes_to_string(b):
+        return "".join([byte_encoder[ord(char)] for char in b.decode("latin-1")])
+
+    merges = []
+    vocab = {}
+    for token, rank in bpe_ranks.items():
+        vocab[token_bytes_to_string(token)] = rank
+        if len(token) == 1:
+            continue
+        merged = tuple(_bpe(bpe_ranks, token, max_rank=rank))
+        if len(merged) != 2: # account for empty token
+            merged = ""
+        merges.append(" ".join(map(token_bytes_to_string, merged)))
+    return vocab, merges
+
+
 def convert_tiktoken_to_hf(
     multilingual: bool = True, num_languages: int = 100, time_precision=0.02
 ) -> WhisperTokenizer:
-    from whisper.tokenizer import get_tokenizer
-
-    tokenizer = get_tokenizer(multilingual=multilingual, num_languages=num_languages)
-    bpe_ranks = tokenizer.encoding._mergeable_ranks
+    # requires whisper, unless we use the path to the tiktoken file
+    tiktoken_tokenizer_path = _TOKENIZERS[multilingual]
     start_of_transcript = ["<|endoftext|>", "<|startoftranscript|>"]
     control_tokens = [
         "<|translate|>",
@@ -192,61 +232,26 @@ def convert_tiktoken_to_hf(
         "<|nocaptions|>",
         "<|notimestamps|>",
     ]
-
     language_tokens = [f"<|{k}|>" for k in list(LANGUAGES)[:num_languages]]  # these are special tokens, not normalized
     # These are not special but normalized
     timestamp_tokens = [("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)]
 
-    from transformers.models.gpt2.tokenization_gpt2 import bytes_to_unicode
+    vocab, merges = convert_tiktoken_bpe_to_hf(tiktoken_tokenizer_path)
 
-    byte_encoder = bytes_to_unicode()
 
-    def token_bytes_to_string(b):
-        return "".join([byte_encoder[ord(char)] for char in b.decode("latin-1")])
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        vocab_file = f"{tmpdirname}/vocab.json"
+        merge_file = f"{tmpdirname}/merges.txt"
+        with open(vocab_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
-    # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
-    def bpe(mergeable_ranks, token: bytes, max_rank=None) -> list[bytes]:
-        parts = [bytes([b]) for b in token]
-        while True:
-            min_idx = None
-            min_rank = None
-            for i, pair in enumerate(zip(parts[:-1], parts[1:])):
-                rank = mergeable_ranks.get(pair[0] + pair[1])
-                if rank is not None and (min_rank is None or rank < min_rank):
-                    min_idx = i
-                    min_rank = rank
-            if min_rank is None or (max_rank is not None and min_rank >= max_rank):
-                break
-            assert min_idx is not None
-            parts = parts[:min_idx] + [parts[min_idx] + parts[min_idx + 1]] + parts[min_idx + 2 :]
-        return parts
+        with open(merge_file, "w", encoding="utf-8") as writer:
+            writer.write("#version: 0.2\n")
+            for bpe_tokens in merges:
+                writer.write(bpe_tokens + "\n")
 
-    def generate_vocab_and_merges(bpe_ranks):
-        merges = []
-        vocab = {}
-        for token, rank in bpe_ranks.items():
-            vocab[token_bytes_to_string(token)] = rank
-            if len(token) == 1:
-                continue
-            merged = tuple(bpe(bpe_ranks, token, max_rank=rank))
-            if len(merged) != 2:
-                merged = ""
-            merges.append(" ".join(map(token_bytes_to_string, merged)))
-        return vocab, merges
+        hf_tokenizer = WhisperTokenizer(vocab_file, merge_file)
 
-    vocab, merges = generate_vocab_and_merges(bpe_ranks)
-
-    vocab_file = "vocab.json"
-    merge_file = "merges.txt"
-    with open("vocab.json", "w", encoding="utf-8") as f:
-        f.write(json.dumps(vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
-
-    with open(merge_file, "w", encoding="utf-8") as writer:
-        writer.write("#version: 0.2\n")
-        for bpe_tokens in merges:
-            writer.write(bpe_tokens + "\n")
-
-    hf_tokenizer = WhisperTokenizer(vocab_file, merge_file)
     hf_tokenizer.add_tokens(start_of_transcript + language_tokens + control_tokens, special_tokens=True)
     hf_tokenizer.add_tokens(timestamp_tokens, special_tokens=False)
     return hf_tokenizer
