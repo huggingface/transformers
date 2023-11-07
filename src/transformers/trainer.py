@@ -2650,7 +2650,7 @@ class Trainer:
         """
         if self.state.epoch is not None:
             logs["epoch"] = round(self.state.epoch, 2)
-        logs["num_tokens_seen"] = self.state.num_tokens_seen
+        logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
 
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
