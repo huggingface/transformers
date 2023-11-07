@@ -174,13 +174,14 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
 
     model.save_pretrained(pytorch_dump_folder_path)
 
-def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int =100, time_precision = 0.02) -> WhisperTokenizer:
+def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int=100, time_precision = 0.02) -> WhisperTokenizer:
     from whisper.tokenizer import get_tokenizer
     tokenizer = get_tokenizer(multilingual=multilingual, num_languages = num_languages)
     bpe_ranks = tokenizer.encoding._mergeable_ranks
     start_of_transcript = ["<|endoftext|>","<|startoftranscript|>"]
     control_tokens = ["<|translate|>","<|transcribe|>", "<|startoflm|>", "<|startofprev|>", "<|nocaptions|>", "<|notimestamps|>"]
-    language_tokens = [f"<|{k}|>" for k in LANGUAGES.keys()] # these are special tokens, not normalized
+
+    language_tokens = [f"<|{k}|>" for k in LANGUAGES[:num_languages].keys()] # these are special tokens, not normalized
     # These are not special but normalized
     timestamp_tokens = [("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)]
 
