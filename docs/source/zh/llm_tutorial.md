@@ -144,7 +144,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 
 ### 生成的输出太短/太长
 
-如果在[`~generation.GenerationConfig`]文件中没有指定，`generate`默认返回20个tokens。我们强烈建议在您的`generate`调用中手动设置`max_new_tokens`以控制它可以返回的最大新tokens数量。请注意，LLMs（更准确地说，仅[解码器模型]）也将输入提示作为输出的一部分返回。
+如果在[`~generation.GenerationConfig`]文件中没有指定，`generate`默认返回20个tokens。我们强烈建议在您的`generate`调用中手动设置`max_new_tokens`以控制它可以返回的最大新tokens数量。请注意，LLMs（更准确地说，仅[解码器模型](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)）也将输入提示作为输出的一部分返回。
 
 ```py
 >>> model_inputs = tokenizer(["A sequence of numbers: 1, 2"], return_tensors="pt").to("cuda")
