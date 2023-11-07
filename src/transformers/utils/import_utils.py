@@ -615,9 +615,9 @@ def is_flash_attn_2_available():
 
 
 def is_flash_attn_available():
-    warnings.warn(
-        "Using `is_flash_attn_available` is deprecated and will be removed in v4.38. Please use `is_flash_attn_2_available` instead.",
-        FutureWarning,
+    logger.warning(
+        "Using `is_flash_attn_available` is deprecated and will be removed in v4.38. "
+        "Please use `is_flash_attn_2_available` instead."
     )
     return is_flash_attn_2_available()
 
