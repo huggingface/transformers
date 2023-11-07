@@ -34,8 +34,13 @@ The original code can be found [here](https://github.com/openai/whisper).
 - Inference is currently only implemented for short-form i.e. audio is pre-segmented into <=30s segments. Long-form (including timestamps) will be implemented in a future release.
 - One can use [`WhisperProcessor`] to prepare audio for the model, and decode the predicted ID's back into text.
 
-This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ). The Tensorflow version of this model was contributed by [amyeroberts](https://huggingface.co/amyeroberts).
-The original code can be found [here](https://github.com/openai/whisper).
+- To convert the tokenizer, we recommend using the following:
+
+```bash
+python src/transformers/models/whisper/convert_openai_to_hf.py --checkpoint_path "" --pytorch_dump_folder_path "Arthur/whisper-3" --convert_tokenizer True --whisper_version 3 --multilingual True
+```
+Here the `whisper_version` will set the number of languages to `100` to account for `cantonese` which was added in `whisper-large-v3`.
+
 
 ## Inference
 
