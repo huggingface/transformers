@@ -230,19 +230,15 @@ def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int =100, tim
     with open("vocab.json", "w", encoding="utf-8") as f:
         f.write(json.dumps(vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
-    index = 0
     with open(merge_file, "w", encoding="utf-8") as writer:
         writer.write("#version: 0.2\n")
-        for bpe_tokens, token_index in sorted(merges.items(), key=lambda kv: kv[1]):
-            if index != token_index:
-                index = token_index
+        for bpe_tokens in merges:
             writer.write(" ".join(bpe_tokens) + "\n")
-            index += 1
 
-    tokenizer = WhisperTokenizer(vocab_file, merge_file)
-    tokenizer.add_tokens(start_of_transcript + language_tokens + control_tokens,special_tokens=True)
-    tokenizer.add_tokens(timestamp_tokens,special_tokens=False)
-    return tokenizer
+    hf_tokenizer = WhisperTokenizer(vocab_file, merge_file)
+    hf_tokenizer.add_tokens(start_of_transcript + language_tokens + control_tokens,special_tokens=True)
+    hf_tokenizer.add_tokens(timestamp_tokens,special_tokens=False)
+    return hf_tokenizer
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
