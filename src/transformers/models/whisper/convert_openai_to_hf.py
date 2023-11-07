@@ -176,15 +176,68 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
 
 def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int =100, time_precision = 0.2) -> WhisperTokenizer:
     from whisper.tokenizer import get_tokenizer
-    tokenizer = get_tokenizer(multilingual = True, num_languages = 100)
-    merges = tokenizer.encoding._mergeable_ranks
+    tokenizer = get_tokenizer(multilingual=multilingual, num_languages = num_languages)
+    bpe_ranks = tokenizer.encoding._mergeable_ranks
     start_of_transcript = ["<|endoftext|>","<|startoftranscript|>"]
     control_tokens = ["<|translate|>","<|transcribe|>", "<|startoflm|>", "<|startofprev|>", "<|nocaptions|>", "<|notimestamps|>"]
     language_tokens = list(LANGUAGES.keys()) # these are special tokens, not normalized
     # These are not special but normalized
     timestamp_tokens = [("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)]
 
-    tokenizer = WhisperTokenizer(vocab_file, merges_file)
+    from transformers.models.gpt2.tokenization_gpt2 import bytes_to_unicode
+    def token_bytes_to_string(b):
+        return ''.join([bytes_to_unicode[ord(char)] for char in b.decode('latin-1')])
+
+
+    # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
+    def bpe(mergeable_ranks, token: bytes, max_rank = None) -> list[bytes]:
+        parts = [bytes([b]) for b in token]
+        while True:
+            min_idx = None
+            min_rank = None
+            for i, pair in enumerate(zip(parts[:-1], parts[1:])):
+                rank = mergeable_ranks.get(pair[0] + pair[1])
+                if rank is not None and (min_rank is None or rank < min_rank):
+                    min_idx = i
+                    min_rank = rank
+            if min_rank is None or (max_rank is not None and min_rank >= max_rank):
+                break
+            assert min_idx is not None
+            parts = parts[:min_idx] + [parts[min_idx] + parts[min_idx + 1]] + parts[min_idx + 2:]
+        return parts
+
+    def generate_vocab_and_merges(bpe_ranks):
+        merges = []
+        vocab = {}
+        for token, rank in bpe_ranks.items():
+            vocab[token_bytes_to_string(token)] = rank
+
+            if len(token) == 1:
+                continue
+            merged = tuple(bpe(bpe_ranks, token, max_rank=rank))
+            assert len(merged) == 2
+
+            merges.append(' '.join(map(token_bytes_to_string, merged)))
+        return vocab, merges
+
+    import json
+    vocab, merges = generate_vocab_and_merges(bpe_ranks)
+
+    vocab_file = "vocab.json"
+    merge_file = "merges.txt"
+    with open("vocab.json", "w", encoding="utf-8") as f:
+        f.write(json.dumps(vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+
+    index = 0
+    with open(merge_file, "w", encoding="utf-8") as writer:
+        writer.write("#version: 0.2\n")
+        for bpe_tokens, token_index in sorted(merges.items(), key=lambda kv: kv[1]):
+            if index != token_index:
+                index = token_index
+            writer.write(" ".join(bpe_tokens) + "\n")
+            index += 1
+
+    tokenizer = WhisperTokenizer(vocab_file, merge_file)
     tokenizer.add_tokens(start_of_transcript + language_tokens + control_tokens,special_tokens=True)
     tokenizer.add_tokens(timestamp_tokens,special_tokens=False)
 
