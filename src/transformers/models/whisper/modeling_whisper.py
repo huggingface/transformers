@@ -1853,7 +1853,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if hasattr(generation_config, "is_multilingual") and not generation_config.is_multilingual:
             if task is not None or language is not None:
                 raise ValueError(
-                    "Cannot specify `task` or `langauge` for an English-only model. If the model is intended to be "
+                    "Cannot specify `task` or `language` for an English-only model. If the model is intended to be "
                     "multilingual, pass `is_multilingual=True` to generate, or update the generation config."
                 )
 
