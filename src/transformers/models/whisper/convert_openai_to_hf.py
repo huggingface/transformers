@@ -287,7 +287,9 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    if args.convert_tokenizer:
+        convert_tiktoken_to_hf(args.pytorch_dump_folder_path, args.multilingual, args.num_languages)
+
+    exit(0)
     convert_openai_whisper_to_tfms(args.checkpoint_path, args.pytorch_dump_folder_path)
 
-    if args.convert_tokenizer:
-        convert_tiktoken_to_hf(args.pytorch_dump_folder_path, args.multmultilingual, args.num_languages)
