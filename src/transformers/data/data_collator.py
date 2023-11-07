@@ -563,6 +563,7 @@ class DataCollatorForSeq2Seq:
         # We have to pad the labels before calling `tokenizer.pad` as this method won't pad them and needs them of the
         # same length to return tensors.
         if labels is not None:
+            copied_features = [feature.copy() for feature in features]
             max_label_length = max(len(l) for l in labels)
             if self.pad_to_multiple_of is not None:
                 max_label_length = (
@@ -572,7 +573,7 @@ class DataCollatorForSeq2Seq:
                 )
 
             padding_side = self.tokenizer.padding_side
-            for feature in features:
+            for feature in copied_features:
                 remainder = [self.label_pad_token_id] * (max_label_length - len(feature["labels"]))
                 if isinstance(feature["labels"], list):
                     feature["labels"] = (
@@ -582,7 +583,8 @@ class DataCollatorForSeq2Seq:
                     feature["labels"] = np.concatenate([feature["labels"], remainder]).astype(np.int64)
                 else:
                     feature["labels"] = np.concatenate([remainder, feature["labels"]]).astype(np.int64)
-
+            features = copied_features
+        
         features = self.tokenizer.pad(
             features,
             padding=self.padding,
