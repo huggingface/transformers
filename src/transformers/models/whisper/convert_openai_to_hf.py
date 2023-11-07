@@ -16,8 +16,8 @@
 
 import argparse
 import hashlib
-import json
 import io
+import json
 import os
 import tempfile
 import urllib
@@ -275,10 +275,10 @@ if __name__ == "__main__":
         help="Whether or not the tokenizer should be converted along with the model.",
     )
     parser.add_argument(
-        "--num_languages",
+        "--whisper_version",
         type=int,
-        default=99,
-        help="Number of languages that are supported. Whisper-large-v3 supports 100 languages, 1 more than the previous releases.",
+        default=2,
+        help="Version of the whisper release",
     )
     parser.add_argument(
         "--multilingual",
@@ -297,6 +297,9 @@ if __name__ == "__main__":
         else:
             from tiktoken.load import load_tiktoken_bpe
 
-            convert_tiktoken_to_hf(args.pytorch_dump_folder_path, args.multilingual, args.num_languages)
+            NUM_LANGUAGES_PER_RELEASE = {1: 99, 2: 99, 3: 100}
+            convert_tiktoken_to_hf(
+                args.pytorch_dump_folder_path, args.multilingual, NUM_LANGUAGES_PER_RELEASE[args.whisper_version]
+            )
 
     convert_openai_whisper_to_tfms(args.checkpoint_path, args.pytorch_dump_folder_path)
