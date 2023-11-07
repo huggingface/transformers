@@ -1208,7 +1208,7 @@ def _combine_tokens_into_words(
     if language is None:
         language = "english"
 
-    if language in {"chinese", "japanese", "thai", "lao", "myanmar"}:
+    if language in {"chinese", "japanese", "thai", "lao", "myanmar", "cantonese"}:
         # These languages don't typically use spaces.
         words, word_tokens, token_indices = _split_tokens_on_unicode(tokenizer, tokens)
     else:
