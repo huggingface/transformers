@@ -1838,7 +1838,7 @@ class Trainer:
             step = -1
             for step, inputs in enumerate(epoch_iterator):
                 total_batched_samples += 1
-                
+
                 if self.args.include_num_input_tokens_seen:
                     main_input_name = getattr(self.model, "main_input_name", "input_ids")
                     if main_input_name not in inputs:
@@ -2651,7 +2651,7 @@ class Trainer:
         """
         if self.state.epoch is not None:
             logs["epoch"] = round(self.state.epoch, 2)
-        if args.include_num_input_tokens_seen: 
+        if self.args.include_num_input_tokens_seen:
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
 
         output = {**logs, **{"step": self.state.global_step}}
