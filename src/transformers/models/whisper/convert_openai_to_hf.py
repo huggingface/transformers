@@ -22,11 +22,12 @@ import urllib
 import warnings
 from typing import Any
 
+import numpy as np
 import torch
 from torch import nn
 from tqdm import tqdm
 
-from transformers import WhisperConfig, WhisperForConditionalGeneration
+from transformers import WhisperConfig, WhisperFeatureExtractor, WhisperForConditionalGeneration
 
 
 _MODELS = {
@@ -42,6 +43,9 @@ _MODELS = {
     "large-v2": "https://openaipublic.azureedge.net/main/whisper/models/81f7c96c852ee8fc832187b0132e569d6c3065a3252ed18e56effd0b6a73e524/large-v2.pt",
     "large-v3": "https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt",
 }
+
+
+MEL_FILTERS_URL = "https://raw.githubusercontent.com/openai/whisper/main/whisper/assets/mel_filters.npz"
 
 
 def remove_ignore_keys_(state_dict):
@@ -95,7 +99,23 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
-def _download(url: str, root: str) -> Any:
+def _download(url: str, target: str) -> str:
+    with urllib.request.urlopen(url) as source, open(target, "wb") as output:
+        with tqdm(
+            total=int(source.info().get("Content-Length")), ncols=80, unit="iB", unit_scale=True, unit_divisor=1024
+        ) as loop:
+            while True:
+                buffer = source.read(8192)
+                if not buffer:
+                    break
+
+                output.write(buffer)
+                loop.update(len(buffer))
+
+    return target
+
+
+def _download_model(url: str, root: str) -> Any:
     os.makedirs(root, exist_ok=True)
     filename = os.path.basename(url)
 
@@ -112,17 +132,7 @@ def _download(url: str, root: str) -> Any:
         else:
             warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
 
-    with urllib.request.urlopen(url) as source, open(download_target, "wb") as output:
-        with tqdm(
-            total=int(source.info().get("Content-Length")), ncols=80, unit="iB", unit_scale=True, unit_divisor=1024
-        ) as loop:
-            while True:
-                buffer = source.read(8192)
-                if not buffer:
-                    break
-
-                output.write(buffer)
-                loop.update(len(buffer))
+    _download(url, download_target)
 
     model_bytes = open(download_target, "rb").read()
     if hashlib.sha256(model_bytes).hexdigest() != expected_sha256:
@@ -133,10 +143,25 @@ def _download(url: str, root: str) -> Any:
     return torch.load(io.BytesIO(model_bytes))
 
 
+def _download_mel_filters(url: str, root: str, n_mels: int = 80) -> np.ndarray:
+    os.makedirs(root, exist_ok=True)
+    filename = os.path.basename(url)
+    download_target = os.path.join(root, filename)
+
+    if os.path.exists(download_target) and not os.path.isfile(download_target):
+        raise RuntimeError(f"{download_target} exists and is not a regular file")
+
+    if not os.path.isfile(download_target):
+        _download(url, download_target)
+
+    with np.load(download_target, allow_pickle=False) as f:
+        return f[f"mel_{n_mels}"].T
+
+
 def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
     if ".pt" not in checkpoint_path:
         root = os.path.dirname(pytorch_dump_folder_path) or "."
-        original_checkpoint = _download(_MODELS[checkpoint_path], root)
+        original_checkpoint = _download_model(_MODELS[checkpoint_path], root)
     else:
         original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
     dimensions = original_checkpoint["dims"]
@@ -178,6 +203,15 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
         model.proj_out.weight.data = proj_out_weights
 
     model.save_pretrained(pytorch_dump_folder_path)
+
+    # Export the feature extractor
+    mel_filters = _download_mel_filters(MEL_FILTERS_URL, pytorch_dump_folder_path, dimensions["n_mels"])
+    feature_extractor = WhisperFeatureExtractor(
+        feature_size=dimensions["n_mels"],
+        mel_filters=mel_filters,
+        # the rest of default parameters are the same as hardcoded in openai/whisper
+    )
+    feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

@@ -66,6 +66,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         n_fft=400,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
+        mel_filters=None,  # use pre-computed mel filters
         **kwargs,
     ):
         super().__init__(
@@ -81,15 +82,19 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
-        self.mel_filters = mel_filter_bank(
-            num_frequency_bins=1 + n_fft // 2,
-            num_mel_filters=feature_size,
-            min_frequency=0.0,
-            max_frequency=8000.0,
-            sampling_rate=sampling_rate,
-            norm="slaney",
-            mel_scale="slaney",
-        )
+
+        if mel_filters is None:
+            mel_filters = mel_filter_bank(
+                num_frequency_bins=1 + n_fft // 2,
+                num_mel_filters=feature_size,
+                min_frequency=0.0,
+                max_frequency=8000.0,
+                sampling_rate=sampling_rate,
+                norm="slaney",
+                mel_scale="slaney",
+            )
+
+        self.mel_filters = mel_filters
 
     def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
         """
@@ -272,6 +277,4 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         """
         output = copy.deepcopy(self.__dict__)
         output["feature_extractor_type"] = self.__class__.__name__
-        if "mel_filters" in output:
-            del output["mel_filters"]
         return output
