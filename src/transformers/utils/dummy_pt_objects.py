@@ -5990,13 +5990,6 @@ class PatchTSTForClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class PatchTSTForForecasting(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class PatchTSTForPrediction(metaclass=DummyObject):
     _backends = ["torch"]
 

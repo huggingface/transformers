@@ -55,12 +55,6 @@ The original code can be found [here](https://github.com/yuqinie98/PatchTST).
     - forward
 
 
-## PatchTSTForForecasting
-
-[[autodoc]] PatchTSTForForecasting
-    - forward
-
-
 ## PatchTSTForClassification
 
 [[autodoc]] PatchTSTForClassification

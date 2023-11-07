@@ -35,7 +35,6 @@ else:
         "PatchTSTModel",
         "PatchTSTPreTrainedModel",
         "PatchTSTForPrediction",
-        "PatchTSTForForecasting",
         "PatchTSTForPretraining",
         "PatchTSTForRegression",
         "PatchTSTForClassification",
@@ -54,7 +53,6 @@ if TYPE_CHECKING:
         from .modeling_patchtst import (
             PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
             PatchTSTForClassification,
-            PatchTSTForForecasting,
             PatchTSTForPrediction,
             PatchTSTForPretraining,
             PatchTSTForRegression,
