@@ -222,8 +222,9 @@ class BeamSearchScorer(BeamScorer):
         eos_token_id: Optional[Union[int, List[int]]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         group_index: Optional[int] = 0,
+        decoder_prompt_len: Optional[int] = 0,
     ) -> Dict[str, torch.Tensor]:
-        cur_len = input_ids.shape[-1] + 1  # add up to the length which the next_scores is calculated on
+        cur_len = input_ids.shape[-1] - decoder_prompt_len + 1  # add up to the length which the next_scores is calculated on
         batch_size = len(self._beam_hyps) // self.num_beam_groups
 
         if not (batch_size == (input_ids.shape[0] // self.group_size)):
@@ -277,10 +278,15 @@ class BeamSearchScorer(BeamScorer):
                     else:
                         beam_index = None
 
+                    # skip the corner case where the very first generated token is eos_token
+                    if decoder_prompt_len == input_ids.shape[-1]:
+                        continue
+
                     self._beam_hyps[batch_group_idx].add(
                         input_ids[batch_beam_idx].clone(),
                         next_score.item(),
                         beam_indices=beam_index,
+                        decoder_prompt_len=decoder_prompt_len,
                     )
                 else:
                     # add next predicted token since it is not eos_token
@@ -322,6 +328,7 @@ class BeamSearchScorer(BeamScorer):
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[Union[int, List[int]]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
+        decoder_prompt_len: Optional[int] = 0,
     ) -> Tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps) // self.num_beam_groups
 
@@ -340,7 +347,7 @@ class BeamSearchScorer(BeamScorer):
                 final_score = final_beam_scores[batch_beam_idx].item()
                 final_tokens = input_ids[batch_beam_idx]
                 beam_index = beam_indices[batch_beam_idx] if beam_indices is not None else None
-                beam_hyp.add(final_tokens, final_score, beam_indices=beam_index)
+                beam_hyp.add(final_tokens, final_score, beam_indices=beam_index, decoder_prompt_len=decoder_prompt_len)
 
         # select the best hypotheses
         sent_lengths = input_ids.new(batch_size * self.num_beam_hyps_to_keep)
@@ -931,11 +938,11 @@ class BeamHypotheses:
         """
         return len(self.beams)
 
-    def add(self, hyp: torch.LongTensor, sum_logprobs: float, beam_indices: Optional[torch.LongTensor] = None):
+    def add(self, hyp: torch.LongTensor, sum_logprobs: float, beam_indices: Optional[torch.LongTensor] = None, decoder_prompt_len: Optional[int] = 0):
         """
         Add a new hypothesis to the list.
         """
-        score = sum_logprobs / (hyp.shape[-1] ** self.length_penalty)
+        score = sum_logprobs / ((hyp.shape[-1] - decoder_prompt_len) ** self.length_penalty)
         if len(self) < self.num_beams or score > self.worst_score:
             self.beams.append((score, hyp, beam_indices))
             if len(self) > self.num_beams:
