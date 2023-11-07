@@ -24,6 +24,7 @@ import warnings
 import torch
 from torch import nn
 from tqdm import tqdm
+from typing import Any
 
 from transformers import WhisperConfig, WhisperForConditionalGeneration
 
@@ -94,11 +95,7 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
-<<<<<<< HEAD
-def _download(url: str, root: str) -> str:
-=======
-def _download(url: str, root: str) -> io.BytesIO:
->>>>>>> main
+def _download(url: str, root: str) -> Any:
     os.makedirs(root, exist_ok=True)
     filename = os.path.basename(url)
 
@@ -111,11 +108,7 @@ def _download(url: str, root: str) -> io.BytesIO:
     if os.path.isfile(download_target):
         model_bytes = open(download_target, "rb").read()
         if hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
-<<<<<<< HEAD
-            return download_target
-=======
             return torch.load(io.BytesIO(model_bytes))
->>>>>>> main
         else:
             warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
 
@@ -137,25 +130,15 @@ def _download(url: str, root: str) -> io.BytesIO:
             "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
         )
 
-<<<<<<< HEAD
-    return download_target
-=======
     return torch.load(io.BytesIO(model_bytes))
->>>>>>> main
 
 
 def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
     if ".pt" not in checkpoint_path:
-<<<<<<< HEAD
-        checkpoint_path = _download(_MODELS[checkpoint_path], root=pytorch_dump_folder_path)
-
-    original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
-=======
         root = os.path.dirname(pytorch_dump_folder_path) or "."
         original_checkpoint = _download(_MODELS[checkpoint_path], root)
     else:
         original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
->>>>>>> main
     dimensions = original_checkpoint["dims"]
     state_dict = original_checkpoint["model_state_dict"]
     proj_out_weights = state_dict["decoder.token_embedding.weight"]
