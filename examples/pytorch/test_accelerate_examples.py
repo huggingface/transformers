@@ -21,7 +21,6 @@ import os
 import shutil
 import sys
 import tempfile
-import unittest
 from unittest import mock
 
 from accelerate.utils import write_basic_config
@@ -89,6 +88,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --per_device_eval_batch_size=1
             --learning_rate=1e-4
             --seed=42
+            --num_warmup_steps=2
             --checkpointing_steps epoch
             --with_tracking
         """.split()
@@ -177,7 +177,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ner_no_trainer")))
 
-    @unittest.skip(reason="Fix me @muellerzr")
     @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_run_squad_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -318,7 +317,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --learning_rate 1e-4
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 1
-            --max_train_steps 2
+            --max_train_steps 10
             --train_val_split 0.1
             --seed 42
             --output_dir {tmp_dir}
