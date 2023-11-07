@@ -41,4 +41,6 @@
 - sections:
   - local: task_summary
     title: 🤗Transformers能做什么
+  - local: tokenizer_summary
+    title: 分词器的摘要
   title: 概念指南
