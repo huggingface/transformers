@@ -235,7 +235,7 @@ def convert_tiktoken_to_hf(
         "<|transcribe|>",
         "<|startoflm|>",
         "<|startofprev|>",
-        "<|nocaptions|>",
+        "<|nospeech|>",
         "<|notimestamps|>",
     ]
     # these are special tokens, not normalized
