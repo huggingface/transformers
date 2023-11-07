@@ -26,15 +26,10 @@ class BoundingBoxFormat(ExplicitEnum):
     XYXY = "xyxy"  # absolute coordinates
     XYWH = "xywh"  # absolute coordinates
     XCYCWH = "xcycwh"  # absolute coordinates
-    RELATIVE_XYXY = "relative_xyxy"  # relative coordinates
     RELATIVE_XYWH  = "relative_xywh"  # relative coordinates
-    RELATIVE_XCYCWH = "relative_xcycwh"  # relative coordinates
 
-_relative_formats = (BoundingBoxFormat.RELATIVE_XYXY, BoundingBoxFormat.RELATIVE_XYWH, BoundingBoxFormat.RELATIVE_XCYCWH)
-
-def _infer_box_format(bbox: Union[torch.Tensor, np.ndarray]) -> BoundingBoxFormat:
-    # check if bbox has 4 coordinates
-    pass
+def _is_relative_format(format):
+    return format.startswith("relative")
 
 def _xywh_to_xyxy(xywh: torch.Tensor, inplace: bool) -> torch.Tensor:
     xyxy = xywh if inplace else xywh.clone()
@@ -70,37 +65,24 @@ def _xyxy_to_xcycwh(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
     xyxy[..., :2].mul_(2).add_(xyxy[..., 2:]).div_(2, rounding_mode=rounding_mode)
     return xyxy
 
-def _relxywh_to_xyxy(relxywh: torch.Tensor, inplace: bool) -> torch.Tensor:
-    return relxywh  # TODO (Rafael): missing implementation
+def _relxywh_to_xyxy(relxywh: torch.Tensor, img_shape: Tuple[int, int], inplace: bool) -> torch.Tensor:
+    relxywh = relxywh if inplace else relxywh.clone()
+    # convert to xywh
+    relxywh.multiply_(img_shape.repeat(2).flip(0))
+    # convert to xyxy
+    relxywh[..., 2:].add_(relxywh[..., :2])
+    return relxywh
 
-def _relxyxy_to_xyxy(relxyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
-    return relxyxy  # TODO (Rafael): missing implementation
-
-def _relxcycwh_to_xyxy(relxcycwh: torch.Tensor, inplace: bool) -> torch.Tensor:
-    return relxcycwh  # TODO (Rafael): missing implementation
-
-def _xyxy_to_relxywh(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
-    return xyxy  # TODO (Rafael): missing implementation
-
-def _xyxy_to_relxyxy(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
-    return xyxy  # TODO (Rafael): missing implementation
-
-def _xyxy_to_relxcycwh(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
-    return xyxy  # TODO (Rafael): missing implementation
-
-def transform_box_format(bbox: Union[torch.Tensor, np.ndarray], dest_format: BoundingBoxFormat, orig_format: Optional[BoundingBoxFormat] = None, img_shape: Optional[Tuple[int, int]] = None, inplace: bool = False):
-    if orig_format is None:
-        orig_format = _infer_box_format(bbox)
-    
+def transform_box_format(bbox: Union[torch.Tensor, np.ndarray], orig_format: BoundingBoxFormat, dest_format: BoundingBoxFormat, img_shape: Optional[Tuple[int, int]] = None, inplace: bool = False):
     # no transformation is needed
     if orig_format == dest_format:
         return bbox
     
-    if dest_format in _relative_formats and img_shape is None:
-        raise ValueError(f"Image shape is required if the desired destination format is {dest_format}")
+    if _is_relative_format(orig_format) and img_shape is None:
+        raise ValueError(f"Image shape (height, width) is required if the input format format is {dest_format}")
 
-    if orig_format in _relative_formats and img_shape is None:
-        raise ValueError(f"Image shape is required if the input format format is {dest_format}")
+    if _is_relative_format(dest_format) and img_shape is None:
+        raise ValueError(f"Image shape (height, width) is required if the desired destination format is {dest_format}")
 
     bbox = bbox.type(torch.float)
     # convert to xyxy
@@ -109,8 +91,7 @@ def transform_box_format(bbox: Union[torch.Tensor, np.ndarray], dest_format: Bou
     elif orig_format == BoundingBoxFormat.XCYCWH:
         bbox = _xcycwh_to_xyxy(bbox, inplace)
     elif orig_format == BoundingBoxFormat.RELATIVE_XYWH:
-        # bbox = _relxywh_to_xyxy(bbox, inplace)
-        pass
+        bbox = _relxywh_to_xyxy(bbox, img_shape, inplace)
     elif orig_format == BoundingBoxFormat.RELATIVE_XYXY:
         # bbox = _relxyxy_to_xyxy(bbox, inplace)
         pass
@@ -133,16 +114,3 @@ def transform_box_format(bbox: Union[torch.Tensor, np.ndarray], dest_format: Bou
         pass
 
     return bbox
-
-# General transformations
-def horizontal_flip():
-    pass
-
-def vertical_flip():
-    pass
-
-def resize():
-    pass
-
-def crop():
-    pass

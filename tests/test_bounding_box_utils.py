@@ -27,6 +27,8 @@ if is_torchvision_available():
 # >>> box_convert(boxes_xywh, in_fmt="xywh", out_fmt="xywh")
     from torchvision.ops.boxes import box_convert
 
+_EPS = 1e-8
+
 @require_torch
 class UtilBoundingBoxConverters(unittest.TestCase):
     
@@ -87,6 +89,14 @@ class UtilBoundingBoxConverters(unittest.TestCase):
         self.assertTrue(torch.all(bboxes[..., 3] <= image_height)) # box height is le than image height
         return bboxes
     
+    def generate_rand_relxywh(self, image_height, image_width, total_samples):
+        # create xywh
+        bboxes = self.generate_rand_xywh(image_height, image_width, total_samples)
+        # make it relative
+        img_shape = torch.tensor((image_width, image_height, image_width, image_height))
+        bboxes = bboxes.add_(_EPS).divide(img_shape)
+        return bboxes
+
     def test_converters_xywh(self):
         # Assuming 10 bounding boxes are within an image of size 640x480
         (image_width,image_height) = 640, 480
@@ -94,9 +104,9 @@ class UtilBoundingBoxConverters(unittest.TestCase):
         # Create bounding boxes in the format XYWH
         bboxes_xywh = self.generate_rand_xywh(image_height, image_width, total_samples)
         # Apply transformation
-        transf_boxes_xywh = transform_box_format(bboxes_xywh, "xywh", "xywh")
-        transf_boxes_xyxy = transform_box_format(bboxes_xywh, "xyxy", "xywh")
-        transf_boxes_xcycwh = transform_box_format(bboxes_xywh, "xcycwh", "xywh")
+        transf_boxes_xywh = transform_box_format(bboxes_xywh, orig_format="xywh",  dest_format="xywh")
+        transf_boxes_xyxy = transform_box_format(bboxes_xywh, orig_format="xywh", dest_format="xyxy",  )
+        transf_boxes_xcycwh = transform_box_format(bboxes_xywh, orig_format="xywh", dest_format="xcycwh",  )
         # Test transformations
         self.assertTrue(torch.equal(bboxes_xywh, transf_boxes_xywh))
         self.assertFalse(torch.equal(bboxes_xywh, transf_boxes_xyxy))
@@ -116,9 +126,9 @@ class UtilBoundingBoxConverters(unittest.TestCase):
         # Create bounding boxes in the format XYXY
         bboxes_xyxy = self.generate_rand_xyxy(image_height, image_width, total_samples)
         # Apply transformation
-        transf_boxes_xyxy = transform_box_format(bboxes_xyxy, "xyxy", "xyxy")
-        transf_boxes_xywh = transform_box_format(bboxes_xyxy, "xywh", "xyxy")
-        transf_boxes_xcycwh = transform_box_format(bboxes_xyxy, "xcycwh", "xyxy")
+        transf_boxes_xyxy = transform_box_format(bboxes_xyxy, orig_format="xyxy", dest_format="xyxy")
+        transf_boxes_xywh = transform_box_format(bboxes_xyxy, orig_format="xyxy", dest_format="xywh", )
+        transf_boxes_xcycwh = transform_box_format(bboxes_xyxy, orig_format="xyxy", dest_format="xcycwh", )
         # Test transformations
         self.assertTrue(torch.equal(bboxes_xyxy, transf_boxes_xyxy))
         self.assertFalse(torch.equal(bboxes_xyxy, transf_boxes_xywh))
@@ -138,9 +148,9 @@ class UtilBoundingBoxConverters(unittest.TestCase):
         # Create bounding boxes in the format XCYCWH
         bboxes_xcycwh = self.generate_rand_xcycwh(image_height, image_width, total_samples)
         # Apply transformation
-        transf_boxes_xcycwh = transform_box_format(bboxes_xcycwh, "xcycwh", "xcycwh")
-        transf_boxes_xyxy = transform_box_format(bboxes_xcycwh, "xyxy", "xcycwh")
-        transf_boxes_xywh = transform_box_format(bboxes_xcycwh, "xywh", "xcycwh")
+        transf_boxes_xcycwh = transform_box_format(bboxes_xcycwh, orig_format="xcycwh", dest_format="xcycwh")
+        transf_boxes_xyxy = transform_box_format(bboxes_xcycwh, orig_format="xcycwh", dest_format="xyxy")
+        transf_boxes_xywh = transform_box_format(bboxes_xcycwh, orig_format="xcycwh", dest_format="xywh")
         # Test transformations
         self.assertTrue(torch.equal(bboxes_xcycwh, transf_boxes_xcycwh))
         self.assertFalse(torch.equal(bboxes_xcycwh, transf_boxes_xyxy))
