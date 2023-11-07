@@ -649,7 +649,7 @@ class TransformerDecoderLayer(nn.Module):
         n_levels=4,
         n_points=4,
     ):
-        super(TransformerDecoderLayer, self).__init__()
+        super().__init__()
 
         # self attention
         self.self_attn = nn.MultiheadAttention(d_model, n_head, dropout=dropout, batch_first=True)
