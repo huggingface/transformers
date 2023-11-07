@@ -20,11 +20,11 @@ import io
 import os
 import urllib
 import warnings
+from typing import Any
 
 import torch
 from torch import nn
 from tqdm import tqdm
-from typing import Any
 
 from transformers import WhisperConfig, WhisperForConditionalGeneration
 
