@@ -43,8 +43,8 @@ _MODELS = {
 }
 
 _TOKENIZERS = {
-    "multilingual": "",
-    "english": "",
+    "multilingual": "https://raw.githubusercontent.com/openai/whisper/main/whisper/assets/multilingual.tiktoken",
+    "english": "https://raw.githubusercontent.com/openai/whisper/main/whisper/assets/gpt2.tiktoken",
 }
 
 
@@ -224,10 +224,10 @@ def convert_tiktoken_bpe_to_hf(tiktoken_url: str):
 
 
 def convert_tiktoken_to_hf(
-    multilingual: bool = True, num_languages: int = 100, time_precision=0.02
+    pytorch_dump_folder_path: str, multilingual: bool = True, num_languages: int = 100, time_precision=0.02
 ) -> WhisperTokenizer:
     # requires whisper, unless we use the path to the tiktoken file
-    tiktoken_tokenizer_path = _TOKENIZERS[multilingual]
+    tiktoken_tokenizer_path = _TOKENIZERS["multilingual" if multilingual else "english"]
     start_of_transcript = ["<|endoftext|>", "<|startoftranscript|>"]
     control_tokens = [
         "<|translate|>",
@@ -237,7 +237,8 @@ def convert_tiktoken_to_hf(
         "<|nocaptions|>",
         "<|notimestamps|>",
     ]
-    language_tokens = [f"<|{k}|>" for k in list(LANGUAGES)[:num_languages]]  # these are special tokens, not normalized
+    # these are special tokens, not normalized
+    language_tokens = [f"<|{k}|>" for k in list(LANGUAGES)[:num_languages]]
     # These are not special but normalized
     timestamp_tokens = [("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)]
 
@@ -266,6 +267,27 @@ if __name__ == "__main__":
     # # Required parameters
     parser.add_argument("--checkpoint_path", type=str, help="Patht to the downloaded checkpoints")
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "--convert_tokenizer",
+        type=bool,
+        default="store_true",
+        help="Whether or not the tokenizer should be converted along with the model.",
+    )
+    parser.add_argument(
+        "--num_languages",
+        type=int,
+        default=99,
+        help="Number of languages that are supported. Whisper-large-v3 supports 100 languages, 1 more than the previous releases.",
+    )
+    parser.add_argument(
+        "--multilingual",
+        type=bool,
+        default="store_true",
+        help="Whether or not the model is multilingual or english only",
+    )
     args = parser.parse_args()
 
     convert_openai_whisper_to_tfms(args.checkpoint_path, args.pytorch_dump_folder_path)
+
+    if args.convert_tokenizer:
+        convert_tiktoken_to_hf(args.pytorch_dump_folder_path, args.multmultilingual, args.num_languages)
