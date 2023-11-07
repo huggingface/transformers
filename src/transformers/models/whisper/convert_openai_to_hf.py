@@ -174,14 +174,13 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
 
     model.save_pretrained(pytorch_dump_folder_path)
 
-def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int =100, time_precision = 0.2) -> WhisperTokenizer:
+def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int =100, time_precision = 0.02) -> WhisperTokenizer:
     from whisper.tokenizer import get_tokenizer
     tokenizer = get_tokenizer(multilingual=multilingual, num_languages = num_languages)
     bpe_ranks = tokenizer.encoding._mergeable_ranks
-    bpe_ranks.pop(b"")
     start_of_transcript = ["<|endoftext|>","<|startoftranscript|>"]
     control_tokens = ["<|translate|>","<|transcribe|>", "<|startoflm|>", "<|startofprev|>", "<|nocaptions|>", "<|notimestamps|>"]
-    language_tokens = list(LANGUAGES.keys()) # these are special tokens, not normalized
+    language_tokens = [f"<|{k}|>" for k in LANGUAGES.keys()] # these are special tokens, not normalized
     # These are not special but normalized
     timestamp_tokens = [("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)]
 
@@ -191,7 +190,6 @@ def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int =100, tim
 
     def token_bytes_to_string(b):
         return ''.join([byte_encoder[ord(char)] for char in b.decode('latin-1')])
-
 
     # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
     def bpe(mergeable_ranks, token: bytes, max_rank = None) -> list[bytes]:
@@ -218,7 +216,8 @@ def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int =100, tim
             if len(token) == 1:
                 continue
             merged = tuple(bpe(bpe_ranks, token, max_rank=rank))
-            assert len(merged) == 2
+            if len(merged) != 2:
+                merged = ""
             merges.append(' '.join(map(token_bytes_to_string, merged)))
         return vocab, merges
 
@@ -233,11 +232,11 @@ def convert_tiktoken_to_hf(multilingual:bool = True, num_languages:int =100, tim
     with open(merge_file, "w", encoding="utf-8") as writer:
         writer.write("#version: 0.2\n")
         for bpe_tokens in merges:
-            writer.write(" ".join(bpe_tokens) + "\n")
+            writer.write(bpe_tokens + "\n")
 
     hf_tokenizer = WhisperTokenizer(vocab_file, merge_file)
     hf_tokenizer.add_tokens(start_of_transcript + language_tokens + control_tokens,special_tokens=True)
-    hf_tokenizer.add_tokens(timestamp_tokens,special_tokens=False)
+    hf_tokenizer.add_tokens(timestamp_tokens, special_tokens=False)
     return hf_tokenizer
 
 if __name__ == "__main__":
