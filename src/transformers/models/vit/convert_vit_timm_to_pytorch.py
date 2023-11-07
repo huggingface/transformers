@@ -173,8 +173,6 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     if not isinstance(timm_model.patch_embed, timm.layers.PatchEmbed):
         raise ValueError(f"{vit_name} is not supported in transformers because it is a hybrid ResNet-ViT.")
 
-    # non-overlapping position and class token embedding (to be added)
-
     # get patch size and image size from the patch embedding submodule
     config.patch_size = timm_model.patch_embed.patch_size[0]
     config.image_size = timm_model.patch_embed.img_size[0]
