@@ -22,7 +22,7 @@ import torch
 from torch import nn
 from tqdm import tqdm
 
-from transformers import WhisperConfig, WhisperForConditionalGeneration
+from transformers import WhisperConfig, WhisperForConditionalGeneration, WhisperTokenizer
 
 
 _MODELS = {
@@ -173,6 +173,8 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
 
     model.save_pretrained(pytorch_dump_folder_path)
 
+def convert_tiktoken_to_hf(tikttoken_path: str) -> WhisperTokenizer:
+    pass
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
