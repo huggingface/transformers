@@ -301,5 +301,5 @@ if __name__ == "__main__":
             convert_tiktoken_to_hf(
                 args.pytorch_dump_folder_path, args.multilingual, NUM_LANGUAGES_PER_RELEASE[args.whisper_version]
             )
-    exit(0)
+
     convert_openai_whisper_to_tfms(args.checkpoint_path, args.pytorch_dump_folder_path)
