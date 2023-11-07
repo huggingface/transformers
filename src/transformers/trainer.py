@@ -1839,7 +1839,15 @@ class Trainer:
             for step, inputs in enumerate(epoch_iterator):
                 total_batched_samples += 1
                 main_input_name = getattr(self.model, "main_input_name", "input_ids")
-                self.state.num_tokens_seen += self.accelerator.gather(inputs[main_input_name]).numel()
+                if self.args.include_num_input_tokens_seen:
+                    if main_input_name not in inputs:
+                        logger.warning(
+                            "Tried to track the number of tokens seen, however could the current model is "
+                            "not configured properly to know what item is the input. To fix this, add "
+                            "a `main_input_name` attribute to the model class you are using."
+                        )
+                    else:
+                        self.state.num_input_tokens_seen += self.accelerator.gather(inputs[main_input_name]).numel()
                 if rng_to_sync:
                     self._load_rng_state(resume_from_checkpoint)
                     rng_to_sync = False
