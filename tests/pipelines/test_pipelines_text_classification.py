@@ -94,6 +94,70 @@ class TextClassificationPipelineTests(unittest.TestCase):
             ],
         )
 
+    ###################
+    @require_torch
+    def test_inputs_args_kwargs(self):
+        classifier = pipeline(
+            task="text-classification",
+            model="hf-internal-testing/tiny-random-distilbert",
+            framework="pt"
+        )
+
+        outputs0 = classifier(inputs=["test_args_kwargs input string",
+                                      "test_args_kwargs input string"])
+        outputs1 = classifier(["test_args_kwargs input string",
+                               "test_args_kwargs input string"])
+        self.assertTrue(outputs0 == outputs1)
+        # Fixed in this PR.
+        # Got and expected:
+        # output0 -> [{'label': 'LABEL_0', 'score': 0.5035483837127686}, {'label': 'LABEL_0', 'score': 0.5035483837127686}]
+        # output1 -> [{'label': 'LABEL_0', 'score': 0.5035483837127686}, {'label': 'LABEL_0', 'score': 0.5035483837127686}]
+
+    @require_torch
+    def test_top_k_args_kwargs(self):
+        classifier = pipeline(
+            task="text-classification",
+            model="hf-internal-testing/tiny-random-distilbert",
+            framework="pt"
+        )
+
+        # NOTE: OK.
+        outputs0 = classifier("test_args_kwargs input string")
+        outputs1 = classifier(["test_args_kwargs input string"])
+        self.assertTrue(isinstance(outputs0, dict) and isinstance(outputs1, list))
+        self.assertTrue(outputs0 == outputs1[0])
+        # Got and expected:
+        # output0 -> {'label': 'LABEL_0', 'score': 0.5035483837127686}
+        # output1 -> [{'label': 'LABEL_0', 'score': 0.5035483837127686}]
+
+        # NOTE: Not OK.
+        outputs0 = classifier("test_args_kwargs input string", top_k=2)
+        outputs1 = classifier("test_args_kwargs input string", 2)
+        self.assertTrue(isinstance(outputs0, list) and isinstance(outputs1, list))
+        self.assertTrue(outputs0 == outputs1)
+        # Got:
+        # Ignoring args : (2,)
+        # output0 -> [{'label': 'LABEL_0', 'score': 0.5035483837127686}, {'label': 'LABEL_1', 'score': 0.49645164608955383}]
+        # output1 -> [{'label': 'LABEL_0', 'score': 0.5035483837127686}]
+        # Expected:
+        # output0 -> [{'label': 'LABEL_0', 'score': 0.5035483837127686}, {'label': 'LABEL_1', 'score': 0.49645164608955383}]
+        # output1 -> [{'label': 'LABEL_0', 'score': 0.5035483837127686}, {'label': 'LABEL_1', 'score': 0.49645164608955383}]
+
+        # NOTE: Not OK.
+        outputs0 = classifier(["test_args_kwargs input string"], top_k=2)
+        outputs1 = classifier(["test_args_kwargs input string"], 2)
+        self.assertTrue(isinstance(outputs0, list) and isinstance(outputs1, list))
+        self.assertTrue(outputs0 == outputs1)
+        # Got:
+        # Ignoring args : (2,)
+        # output0 -> [[{'label': 'LABEL_0', 'score': 0.5035483837127686}, {'label': 'LABEL_1', 'score': 0.49645164608955383}]]
+        # output1 -> [[{'label': 'LABEL_0', 'score': 0.5035483837127686}, {'label': 'LABEL_1', 'score': 0.49645164608955383}]]
+        # Expected:
+        # output0 -> [[{'label': 'LABEL_0', 'score': 0.5035483837127686}, {'label': 'LABEL_1', 'score': 0.49645164608955383}]]
+        # output1 -> [[{'label': 'LABEL_0', 'score': 0.5035483837127686}, {'label': 'LABEL_1', 'score': 0.49645164608955383}]]
+
+    #####################
+
     @require_torch
     def test_accepts_torch_device(self):
         import torch
