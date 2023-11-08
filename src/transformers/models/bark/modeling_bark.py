@@ -252,14 +252,16 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if past_key_values is not None:
-            past_key = past_key_values[0]
-            past_value = past_key_values[1]
+            # (batch, head, seq_length, head_features) -> (batch, seq_length, head, head_features)
+            past_key = past_key_values[0].transpose(1,2)
+            past_value = past_key_values[1].transpose(1,2)
             # and merge on seq_length
             key = torch.cat((past_key, key), dim=1)
             value = torch.cat((past_value, value), dim=1)
 
         if use_cache is True:
-            present = (key, value)
+            #  (batch, head, seq_length, head_features)
+            present = (key.transpose(1,2), value.transpose(1,2))
         else:
             present = None
 
@@ -1631,7 +1633,7 @@ class BarkModel(BarkPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-
+        
         self.semantic = BarkSemanticModel(config.semantic_config)
         self.coarse_acoustics = BarkCoarseModel(config.coarse_acoustics_config)
         self.fine_acoustics = BarkFineModel(config.fine_acoustics_config)
@@ -1854,3 +1856,28 @@ class BarkModel(BarkPreTrainedModel):
             return audio, output_lengths
 
         return audio
+
+    @classmethod
+    def _check_and_enable_flash_attn_2(
+        cls, config, torch_dtype: Optional[torch.dtype] = None, device_map: Optional[Union[str, Dict[str, int]]] = None
+    ):
+        """
+        If you don't know about Flash Attention, check out the official repository of flash attention:
+        https://github.com/Dao-AILab/flash-attention
+
+        For using Flash Attention 1.0 you can do it directly via the `BetterTransformer` API, have a look at this
+        specific section of the documentation to learn more about it:
+        https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#decoder-models
+
+        The method checks if the current setup is compatible with Flash Attention as it requires the model to be in
+        half precision and not ran on CPU.
+
+        If all checks pass, the method will create an attribute in the config `_flash_attn_2_enabled` so that the model
+        can initialize the correct attention module
+        """
+        config = super()._check_and_enable_flash_attn_2(config, torch_dtype, device_map)
+        
+        config.semantic_config._flash_attn_2_enabled = getattr(config, "_flash_attn_2_enabled", False) 
+        config.coarse_acoustics_config._flash_attn_2_enabled = getattr(config, "_flash_attn_2_enabled", False) 
+        config.fine_acoustics_config._flash_attn_2_enabled = getattr(config, "_flash_attn_2_enabled", False) 
+        return config
