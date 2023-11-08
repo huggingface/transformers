@@ -1077,21 +1077,33 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             torch.ones((bsz, num_codebooks, max_length), dtype=torch.long, device=input_ids.device) * -1
         )
 
+        channel_codebooks = num_codebooks // 2 if self.config.audio_channels == 2 else num_codebooks
         # we only apply the mask if we have a large enough seq len - otherwise we return as is
-        if max_length < 2 * num_codebooks - 1:
+        if max_length < 2 * channel_codebooks - 1:
             return input_ids.reshape(bsz * num_codebooks, -1), input_ids_shifted.reshape(bsz * num_codebooks, -1)
 
         # fill the shifted ids with the prompt entries, offset by the codebook idx
-        for codebook in range(num_codebooks):
-            input_ids_shifted[:, codebook, codebook : seq_len + codebook] = input_ids[:, codebook]
+        for codebook in range(channel_codebooks):
+            if self.config.audio_channels == 1:
+                # mono channel - loop over the codebooks one-by-one
+                input_ids_shifted[:, codebook, codebook : seq_len + codebook] = input_ids[:, codebook]
+            else:
+                # left/right channels are interleaved in the generated codebooks, so handle one then the other
+                input_ids_shifted[:, 2 * codebook, codebook : seq_len + codebook] = input_ids[:, 2 * codebook]
+                input_ids_shifted[:, 2 * codebook + 1, codebook : seq_len + codebook] = input_ids[:, 2 * codebook + 1]
 
         # construct a pattern mask that indicates the positions of padding tokens for each codebook
         # first fill the upper triangular part (the EOS padding)
         delay_pattern = torch.triu(
-            torch.ones((num_codebooks, max_length), dtype=torch.bool), diagonal=max_length - num_codebooks + 1
+            torch.ones((channel_codebooks, max_length), dtype=torch.bool), diagonal=max_length - channel_codebooks + 1
         )
         # then fill the lower triangular part (the BOS padding)
-        delay_pattern = delay_pattern + torch.tril(torch.ones((num_codebooks, max_length), dtype=torch.bool))
+        delay_pattern = delay_pattern + torch.tril(torch.ones((channel_codebooks, max_length), dtype=torch.bool))
+
+        if self.config.audio_channels == 2:
+            # for left/right channel we need to duplicate every row of the pattern mask in an interleaved fashion
+            delay_pattern = delay_pattern.repeat_interleave(2, dim=0)
+
         mask = ~delay_pattern.to(input_ids.device)
         input_ids = mask * input_ids_shifted + ~mask * pad_token_id
 
@@ -1856,6 +1868,11 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                     f"Expected 1 frame in the audio code outputs, got {frames} frames. Ensure chunking is "
                     "disabled by setting `chunk_length=None` in the audio encoder."
                 )
+
+            if self.config.audio_channels == 2 and audio_codes.shape[2] == self.decoder.num_codebooks // 2:
+                # mono input through encodec that we convert to stereo
+                audio_codes = audio_codes.repeat_interleave(2, dim=2)
+
             decoder_input_ids = audio_codes[0, ...].reshape(bsz * self.decoder.num_codebooks, seq_len)
 
         # Decode
@@ -2074,12 +2091,42 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         # 3. make sure that encoder returns `ModelOutput`
         model_input_name = model_input_name if model_input_name is not None else self.audio_encoder.main_input_name
         encoder_kwargs["return_dict"] = True
-        encoder_kwargs[model_input_name] = input_values
 
-        audio_encoder_outputs = encoder.encode(**encoder_kwargs)
+        if self.decoder.config.audio_channels == 1:
+            encoder_kwargs[model_input_name] = input_values
+            audio_encoder_outputs = encoder.encode(**encoder_kwargs)
+            audio_codes = audio_encoder_outputs.audio_codes
+            audio_scales = audio_encoder_outputs.audio_scales
 
-        audio_codes = audio_encoder_outputs.audio_codes
-        frames, bsz, codebooks, seq_len = audio_codes.shape
+            frames, bsz, codebooks, seq_len = audio_codes.shape
+
+        else:
+            if input_values.shape[1] != 2:
+                raise ValueError(
+                    f"Expected stereo audio (2-channels) but example has {input_values.shape[1]} channel."
+                )
+
+            encoder_kwargs[model_input_name] = input_values[:, :1, :]
+            audio_encoder_outputs_left = encoder.encode(**encoder_kwargs)
+            audio_codes_left = audio_encoder_outputs_left.audio_codes
+            audio_scales_left = audio_encoder_outputs_left.audio_scales
+
+            encoder_kwargs[model_input_name] = input_values[:, 1:, :]
+            audio_encoder_outputs_right = encoder.encode(**encoder_kwargs)
+            audio_codes_right = audio_encoder_outputs_right.audio_codes
+            audio_scales_right = audio_encoder_outputs_right.audio_scales
+
+            frames, bsz, codebooks, seq_len = audio_codes_left.shape
+            # copy alternating left/right channel codes into stereo codebook
+            audio_codes = audio_codes_left.new_ones((frames, bsz, 2 * codebooks, seq_len))
+
+            audio_codes[:, :, ::2, :] = audio_codes_left
+            audio_codes[:, :, 1::2, :] = audio_codes_right
+
+            if audio_scales_left != [None] or audio_scales_right != [None]:
+                audio_scales = torch.stack([audio_scales_left, audio_scales_right], dim=1)
+            else:
+                audio_scales = [None] * bsz
 
         if frames != 1:
             raise ValueError(
@@ -2090,7 +2137,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         decoder_input_ids = audio_codes[0, ...].reshape(bsz * self.decoder.num_codebooks, seq_len)
 
         model_kwargs["decoder_input_ids"] = decoder_input_ids
-        model_kwargs["audio_scales"] = audio_encoder_outputs.audio_scales
+        model_kwargs["audio_scales"] = audio_scales
         return model_kwargs
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
@@ -2433,16 +2480,25 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         if audio_scales is None:
             audio_scales = [None] * batch_size
 
-        output_values = self.audio_encoder.decode(
-            output_ids,
-            audio_scales=audio_scales,
-        )
+        if self.decoder.config.audio_channels == 1:
+            output_values = self.audio_encoder.decode(
+                output_ids,
+                audio_scales=audio_scales,
+            ).audio_values
+        else:
+            codec_outputs_left = self.audio_encoder.decode(output_ids[:, :, ::2, :], audio_scales=audio_scales)
+            output_values_left = codec_outputs_left.audio_values
+
+            codec_outputs_right = self.audio_encoder.decode(output_ids[:, :, 1::2, :], audio_scales=audio_scales)
+            output_values_right = codec_outputs_right.audio_values
+
+            output_values = torch.cat([output_values_left, output_values_right], dim=1)
 
         if generation_config.return_dict_in_generate:
-            outputs.sequences = output_values.audio_values
+            outputs.sequences = output_values
             return outputs
         else:
-            return output_values.audio_values
+            return output_values
 
     def get_unconditional_inputs(self, num_samples=1):
         """
