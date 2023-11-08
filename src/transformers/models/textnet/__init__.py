@@ -20,6 +20,7 @@ from ...utils import (
     is_torch_available,
 )
 
+
 _import_structure = {
     "configuration_textnet": ["TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "TextNetConfig"],
     "image_processing_textnet": ["TextNetImageProcessor"],
@@ -31,8 +32,12 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_textnet"] = ["TextNetBackbone", "TextNetModel", "TextNetPreTrainedModel",
-                                             "TextNetForImageClassification"]
+    _import_structure["modeling_textnet"] = [
+        "TextNetBackbone",
+        "TextNetModel",
+        "TextNetPreTrainedModel",
+        "TextNetForImageClassification",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_textnet import TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP, TextNetConfig
