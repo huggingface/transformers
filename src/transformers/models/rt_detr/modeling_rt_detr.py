@@ -941,14 +941,14 @@ class RTDetrTransformer(nn.Module):
         level_start_index = [0]
         for feat in projected_features:
             height, width = feat.shape[-2:]
-            # [b, c, h, w] -> [b, h*w, c]
+            # [batch, channels, height, width] -> [batch, height*width, channel]
             feat_flatten.append(feat.flatten(2).permute(0, 2, 1))
             # [num_levels, 2]
-            spatial_shapes.append([h, w])
-            # [l], start index of each level
-            level_start_index.append(h * w + level_start_index[-1])
+            spatial_shapes.append([height, width])
+            # [level], start index of each level
+            level_start_index.append(height * width + level_start_index[-1])
 
-        # [b, l, c]
+        # [batch, level, channel]
         feat_flatten = torch.concat(feat_flatten, 1)
         level_start_index.pop()
 
