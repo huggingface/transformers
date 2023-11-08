@@ -229,7 +229,6 @@ _import_structure = {
     "models.ced": [
         "CED_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CedConfig",
-        "CedFeatureExtractor",
     ],
     "models.chinese_clip": [
         "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1423,6 +1422,7 @@ else:
     _import_structure["models.ced"].extend(
         [
             "CED_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CedFeatureExtractor",
             "CedForAudioClassification",
             "CedModel",
             "CedPreTrainedModel",
@@ -4431,7 +4431,6 @@ if TYPE_CHECKING:
     from .models.ced import (
         CED_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CedConfig,
-        CedFeatureExtractor,
     )
     from .models.chinese_clip import (
         CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5500,6 +5499,7 @@ if TYPE_CHECKING:
         )
         from .models.ced import (
             CED_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CedFeatureExtractor,
             CedForAudioClassification,
             CedModel,
             CedPreTrainedModel,

@@ -20,8 +20,7 @@ _import_structure = {
     "configuration_ced": [
         "CED_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CedConfig",
-    ],
-    "feature_extraction_ced": ["CedFeatureExtractor"],
+    ]
 }
 
 try:
@@ -50,7 +49,6 @@ if TYPE_CHECKING:
         CED_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CedConfig,
     )
-    from .feature_extraction_ced import CedFeatureExtractor
 
     try:
         if not is_torch_available():
