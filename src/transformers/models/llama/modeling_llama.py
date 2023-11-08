@@ -678,13 +678,16 @@ class LlamaDecoderLayer(nn.Module):
             use_cache=use_cache,
             **kwargs,
         )
-        hidden_states = residual + hidden_states
+        #Better because will only allocate enough memory for output tensor
+        hidden_states = torch.add(residual, hidden_states)
+        #hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+        hidden_states = torch.add(residual, hidden_states)
+        #hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
 
