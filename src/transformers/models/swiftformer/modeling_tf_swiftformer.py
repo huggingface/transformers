@@ -438,8 +438,6 @@ class TFSwiftFormerStage(tf.keras.layers.Layer):
 
     def call(self, input: tf.Tensor, training: bool = False) -> tf.Tensor:
         for i, block in enumerate(self.blocks):
-            print(f"SwiftFormerStage {i+1}/{len(self.blocks)}, {block}", end="... ")
-            print(input.shape)
             input = block(input, training=training)
         return input
 
@@ -483,11 +481,12 @@ class TFSwiftFormerEncoder(tf.keras.layers.Layer):
         all_hidden_states = (hidden_states,) if output_hidden_states else None
 
         for i, block in enumerate(self.network):
-            print(f"SwiftFormerEncoder {i+1}/{len(self.network)}, {block}", end="... ")
-            print(hidden_states.shape)
             hidden_states = block(hidden_states)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
+
+        hidden_states = tf.transpose(hidden_states, perm=[0, 3, 1, 2])
+        all_hidden_states = tuple(tf.transpose(s, perm=[0, 3, 1, 2]) for s in all_hidden_states)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
