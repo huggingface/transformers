@@ -224,7 +224,9 @@ class BeamSearchScorer(BeamScorer):
         group_index: Optional[int] = 0,
         decoder_prompt_len: Optional[int] = 0,
     ) -> Dict[str, torch.Tensor]:
-        cur_len = input_ids.shape[-1] - decoder_prompt_len + 1  # add up to the length which the next_scores is calculated on
+        cur_len = (
+            input_ids.shape[-1] - decoder_prompt_len + 1
+        )  # add up to the length which the next_scores is calculated on
         batch_size = len(self._beam_hyps) // self.num_beam_groups
 
         if not (batch_size == (input_ids.shape[0] // self.group_size)):
@@ -938,7 +940,13 @@ class BeamHypotheses:
         """
         return len(self.beams)
 
-    def add(self, hyp: torch.LongTensor, sum_logprobs: float, beam_indices: Optional[torch.LongTensor] = None, decoder_prompt_len: Optional[int] = 0):
+    def add(
+        self,
+        hyp: torch.LongTensor,
+        sum_logprobs: float,
+        beam_indices: Optional[torch.LongTensor] = None,
+        decoder_prompt_len: Optional[int] = 0,
+    ):
         """
         Add a new hypothesis to the list.
         """

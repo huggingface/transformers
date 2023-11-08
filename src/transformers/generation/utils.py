@@ -3173,7 +3173,7 @@ class GenerationMixin:
 
         this_peer_finished = False  # used by synced_gpus only
 
-        decoder_prompt_len = input_ids.shape[-1] # record the prompt length of decoder
+        decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.

@@ -633,7 +633,7 @@ class GenerationIntegrationTestsMixin:
             "do_sample": False,
             "num_beams": 3,
         }
-        expectation = 13
+        expectation = 20
 
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         text = """Hello, my dog is cute and"""
