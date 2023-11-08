@@ -8033,6 +8033,13 @@ class TextNetBackbone(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class TextNetForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class TextNetModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -8041,13 +8048,6 @@ class TextNetModel(metaclass=DummyObject):
 
 
 class TextNetPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TextNetForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
