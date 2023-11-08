@@ -18,7 +18,7 @@ import unittest
 
 import requests
 
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
@@ -137,6 +137,7 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
+    @slow
     def test_post_process_text_detection(self):
         model = FastForSceneTextRecognition.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
 
@@ -152,8 +153,8 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         output = model(pixel_values=torch.tensor(inputs["pixel_values"]))
         target_sizes = [(image.shape[1], image.shape[2]) for image in inputs["pixel_values"]]
-        threshold = 0.88
-        final_out = image_processor.post_process_text_detection(output, target_sizes, threshold)
+        threshold = 0.85
+        final_out = image_processor.post_process_text_detection(output, target_sizes, threshold, bbox_type="poly")
 
         assert len(final_out[0]["bboxes"]) == 2
         assert len(final_out[0]["bboxes"][0]) == 716

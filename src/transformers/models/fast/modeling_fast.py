@@ -804,8 +804,8 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(pixel_values=inputs["pixel_values"])
         >>> target_sizes = [(image.shape[1], image.shape[2]) for image in inputs["pixel_values"]]
-        >>> threshold = 0.88
-        >>> text_locations = processor.post_process_text_detection(outputs, target_sizes, threshold)
+        >>> threshold = 0.85
+        >>> text_locations = processor.post_process_text_detection(outputs, target_sizes, threshold, bbox_type="poly")
         >>> print(text_locations[0]["bboxes"][0][:10])
         [484, 175, 484, 178, 483, 179, 452, 179, 452, 182]
         ```
