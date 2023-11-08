@@ -95,8 +95,6 @@ class FastConfig(PretrainedConfig):
         head_final_act_func=None,
         head_final_dropout_rate=0,
         head_final_ops_order="weight",
-        min_area=250,
-        bbox_type="rect",
         loss_bg=False,
         initializer_range=0.02,
         **kwargs,
@@ -174,7 +172,5 @@ class FastConfig(PretrainedConfig):
         self.head_final_dropout_rate = head_final_dropout_rate
         self.head_final_ops_order = head_final_ops_order
 
-        self.min_area = min_area
-        self.bbox_type = bbox_type
         self.loss_bg = loss_bg
         self.initializer_range = initializer_range

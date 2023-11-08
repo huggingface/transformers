@@ -390,7 +390,7 @@ class FastImageProcessor(BaseImageProcessor):
             )
         return x
 
-    def post_process_text_detection(self, output, target_sizes, threshold):
+    def post_process_text_detection(self, output, target_sizes, threshold, bbox_type="rect"):
         scale = 2
         img_size = (self.size["height"], self.size["width"])
         out = output["hidden_states"]
@@ -429,13 +429,15 @@ class FastImageProcessor(BaseImageProcessor):
             org_img_size = target_sizes[i]
             scales = (float(org_img_size[1]) / float(img_size[1]), float(org_img_size[0]) / float(img_size[0]))
 
-            bboxes, scores = self.generate_bbox(keys[i], labels[i], score_maps[i], scales, threshold)
+            bboxes, scores = self.generate_bbox(
+                keys[i], labels[i], score_maps[i], scales, threshold, bbox_type=bbox_type
+            )
             results.append({"bboxes": bboxes, "scores": scores})
         final_results.update({"results": results})
 
         return results
 
-    def generate_bbox(self, keys, label, score, scales, threshold):
+    def generate_bbox(self, keys, label, score, scales, threshold, bbox_type):
         label_num = len(keys)
         bboxes = []
         scores = []
@@ -452,13 +454,13 @@ class FastImageProcessor(BaseImageProcessor):
                 label[ind] = 0
                 continue
 
-            if self.bbox_type == "rect":
+            if bbox_type == "rect":
                 rect = cv2.minAreaRect(points[:, ::-1])
                 alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
                 rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
                 bbox = cv2.boxPoints(rect) * scales
 
-            elif self.bbox_type == "poly":
+            elif bbox_type == "poly":
                 binary = np.zeros(label.shape, dtype="uint8")
                 binary[ind_np] = 1
                 contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
