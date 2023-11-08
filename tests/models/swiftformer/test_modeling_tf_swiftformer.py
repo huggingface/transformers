@@ -15,11 +15,10 @@
 """ Testing suite for the TensorFlow SwiftFormer model. """
 
 
-import copy
 import inspect
 import unittest
 
-from transformers import PretrainedConfig, SwiftFormerConfig
+from transformers import SwiftFormerConfig
 from transformers.testing_utils import (
     require_tf,
     require_vision,
