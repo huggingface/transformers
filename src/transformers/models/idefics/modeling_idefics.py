@@ -1161,7 +1161,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
         elif position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = torch.arange(
                 past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
             )
@@ -1186,7 +1185,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         elif image_encoder_embeddings is not None:
             batch_size, num_images, image_seq_len, image_hidden_size = image_encoder_embeddings.size()
-            image_hidden_states = image_encoder_embeddings.to(dtype=self.dtype, device=input_ids.device)
+            image_hidden_states = image_encoder_embeddings.to(dtype=self.dtype, device=device)
             image_hidden_states = image_hidden_states.view(batch_size * num_images, image_seq_len, image_hidden_size)
 
         if self.config.use_resampler:

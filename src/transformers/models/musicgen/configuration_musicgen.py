@@ -75,6 +75,9 @@ class MusicgenDecoderConfig(PretrainedConfig):
             The number of parallel codebooks forwarded to the model.
         tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether input and output word embeddings should be tied.
+        audio_channels (`int`, *optional*, defaults to 1
+            Number of channels in the audio data. Either 1 for mono or 2 for stereo. Stereo models generate a separate
+            audio stream for the left/right output channels. Mono models generate a single audio stream output.
     """
     model_type = "musicgen_decoder"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -96,6 +99,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
         initializer_factor=0.02,
         scale_embedding=False,
         num_codebooks=4,
+        audio_channels=1,
         pad_token_id=2048,
         bos_token_id=2048,
         eos_token_id=None,
@@ -117,6 +121,11 @@ class MusicgenDecoderConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.num_codebooks = num_codebooks
+
+        if audio_channels not in [1, 2]:
+            raise ValueError(f"Expected 1 (mono) or 2 (stereo) audio channels, got {audio_channels} channels.")
+        self.audio_channels = audio_channels
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
