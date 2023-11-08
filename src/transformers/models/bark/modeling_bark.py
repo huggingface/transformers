@@ -1862,6 +1862,10 @@ class BarkModel(BarkPreTrainedModel):
         cls, config, torch_dtype: Optional[torch.dtype] = None, device_map: Optional[Union[str, Dict[str, int]]] = None
     ):
         """
+        `_check_and_enable_flash_attn_2` originally don't expand flash attention enabling to the model
+        sub-configurations. We override the original method to make sure that Bark sub-models are using Flash Attention
+        if necessary.
+
         If you don't know about Flash Attention, check out the official repository of flash attention:
         https://github.com/Dao-AILab/flash-attention
 

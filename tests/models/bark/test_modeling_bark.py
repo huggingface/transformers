@@ -915,16 +915,8 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(inputs_dict["codebook_idx"], dummy_input, output_hidden_states=True)
                 outputs_fa = model_fa(inputs_dict["codebook_idx"], dummy_input, output_hidden_states=True)
 
-                logits = (
-                    outputs.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
 
@@ -937,16 +929,8 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(inputs_dict["codebook_idx"], dummy_input, **other_inputs)
                 outputs_fa = model_fa(inputs_dict["codebook_idx"], dummy_input, **other_inputs)
 
-                logits = (
-                    outputs.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
 
                 assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
 
@@ -994,16 +978,8 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(inputs_dict["codebook_idx"], dummy_input, output_hidden_states=True)
                 outputs_fa = model_fa(inputs_dict["codebook_idx"], dummy_input, output_hidden_states=True)
 
-                logits = (
-                    outputs.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
 
@@ -1016,16 +992,8 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(inputs_dict["codebook_idx"], dummy_input, **other_inputs)
                 outputs_fa = model_fa(inputs_dict["codebook_idx"], dummy_input, **other_inputs)
 
-                logits = (
-                    outputs.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
 
                 assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
