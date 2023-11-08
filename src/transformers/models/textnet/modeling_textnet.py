@@ -363,63 +363,63 @@ class TextNetModel(TextNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.first_conv = TextNetConvLayer(
-            config.backbone_in_channels,
-            config.backbone_out_channels,
-            config.backbone_kernel_size,
-            config.backbone_stride,
-            config.backbone_dilation,
-            config.backbone_groups,
-            config.backbone_bias,
-            config.backbone_has_shuffle,
-            config.backbone_use_bn,
-            config.backbone_act_func,
-            config.backbone_dropout_rate,
-            config.backbone_ops_order,
+            config.in_channels,
+            config.out_channels,
+            config.kernel_size,
+            config.stride,
+            config.dilation,
+            config.groups,
+            config.bias,
+            config.has_shuffle,
+            config.use_bn,
+            config.act_func,
+            config.dropout_rate,
+            config.ops_order,
         )
         stage1 = []
         for stage_config in zip(
-            config.backbone_stage1_in_channels,
-            config.backbone_stage1_out_channels,
-            config.backbone_stage1_kernel_size,
-            config.backbone_stage1_stride,
-            config.backbone_stage1_dilation,
-            config.backbone_stage1_groups,
+            config.stage1_in_channels,
+            config.stage1_out_channels,
+            config.stage1_kernel_size,
+            config.stage1_stride,
+            config.stage1_dilation,
+            config.stage1_groups,
         ):
             stage1.append(TestNetRepConvLayer(*stage_config))
         self.stage1 = nn.ModuleList(stage1)
 
         stage2 = []
         for stage_config in zip(
-            config.backbone_stage2_in_channels,
-            config.backbone_stage2_out_channels,
-            config.backbone_stage2_kernel_size,
-            config.backbone_stage2_stride,
-            config.backbone_stage2_dilation,
-            config.backbone_stage2_groups,
+            config.stage2_in_channels,
+            config.stage2_out_channels,
+            config.stage2_kernel_size,
+            config.stage2_stride,
+            config.stage2_dilation,
+            config.stage2_groups,
         ):
             stage2.append(TestNetRepConvLayer(*stage_config))
         self.stage2 = nn.ModuleList(stage2)
 
         stage3 = []
         for stage_config in zip(
-            config.backbone_stage3_in_channels,
-            config.backbone_stage3_out_channels,
-            config.backbone_stage3_kernel_size,
-            config.backbone_stage3_stride,
-            config.backbone_stage3_dilation,
-            config.backbone_stage3_groups,
+            config.stage3_in_channels,
+            config.stage3_out_channels,
+            config.stage3_kernel_size,
+            config.stage3_stride,
+            config.stage3_dilation,
+            config.stage3_groups,
         ):
             stage3.append(TestNetRepConvLayer(*stage_config))
         self.stage3 = nn.ModuleList(stage3)
 
         stage4 = []
         for stage_config in zip(
-            config.backbone_stage4_in_channels,
-            config.backbone_stage4_out_channels,
-            config.backbone_stage4_kernel_size,
-            config.backbone_stage4_stride,
-            config.backbone_stage4_dilation,
-            config.backbone_stage4_groups,
+            config.stage4_in_channels,
+            config.stage4_out_channels,
+            config.stage4_kernel_size,
+            config.stage4_stride,
+            config.stage4_dilation,
+            config.stage4_groups,
         ):
             stage4.append(TestNetRepConvLayer(*stage_config))
         self.stage4 = nn.ModuleList(stage4)
@@ -481,11 +481,11 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
 
         self.textnet = TextNetModel(config)
         self.num_features = [
-            config.backbone_out_channels,
-            config.backbone_stage1_out_channels[-1],
-            config.backbone_stage2_out_channels[-1],
-            config.backbone_stage3_out_channels[-1],
-            config.backbone_stage4_out_channels[-1],
+            config.out_channels,
+            config.stage1_out_channels[-1],
+            config.stage2_out_channels[-1],
+            config.stage3_out_channels[-1],
+            config.stage4_out_channels[-1],
         ]
 
         # initialize weights and apply final processing
