@@ -20,7 +20,8 @@ _import_structure = {
     "configuration_ced": [
         "CED_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CedConfig",
-    ]
+    ],
+    "feature_extraction_ced": ["CedFeatureExtractor"],
 }
 
 try:
