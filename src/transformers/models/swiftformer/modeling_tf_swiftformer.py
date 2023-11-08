@@ -654,9 +654,9 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         self.swiftformer = TFSwiftFormerMainLayer(config, name="swiftformer")
 
         # Classifier head
-        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9)  # FIXME
-        self.head = tf.keras.layers.Dense(self.num_labels) if self.num_labels > 0 else tf.keras.layers.Identity()
-        self.dist_head = tf.keras.layers.Dense(self.num_labels) if self.num_labels > 0 else tf.keras.layers.Identity()
+        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")  # FIXME
+        self.head = tf.keras.layers.Dense(self.num_labels, name="head") if self.num_labels > 0 else tf.keras.layers.Identity(name="head")
+        self.dist_head = tf.keras.layers.Dense(self.num_labels, name="dist_head") if self.num_labels > 0 else tf.keras.layers.Identity(name="dist_head")
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING)
@@ -691,6 +691,7 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         )
 
         sequence_output = outputs.last_hidden_state if return_dict else outputs[0]
+        sequence_output = tf.transpose(sequence_output, perm=[0, 2, 3, 1])
 
         # run classification head
         sequence_output = self.norm(sequence_output, training=training)
