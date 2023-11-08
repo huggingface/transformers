@@ -32,7 +32,6 @@ is transformed to its waveform and passed to the encoder, which transforms it to
 uses these latent representations to generate token ids in an autoregressive way. Each token id corresponds to one of four 
 different token types: time, velocity, note and 'special'. The token ids are then decoded to their equivalent MIDI file.
 
-
 The abstract from the paper is the following:
 
 *Piano covers of pop music are enjoyed by many people. However, the
@@ -49,22 +48,21 @@ directly from pop audio without using melody and chord extraction
 modules. We show that Pop2Piano, trained with our dataset, is capable
 of producing plausible piano covers.*
 
+This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
+The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 
-Tips:
+## Usage tips
 
-1. To use Pop2Piano, you will need to install the 🤗 Transformers library, as well as the following third party modules:  
+* To use Pop2Piano, you will need to install the 🤗 Transformers library, as well as the following third party modules:  
 ```
 pip install pretty-midi==0.2.9 essentia==2.1b6.dev1034 librosa scipy
 ```
 Please note that you may need to restart your runtime after installation.
-2. Pop2Piano is an Encoder-Decoder based model like T5.
-3. Pop2Piano can be used to generate midi-audio files for a given audio sequence.
-4. Choosing different composers in `Pop2PianoForConditionalGeneration.generate()` can lead to variety of different results.
-5. Setting the sampling rate to 44.1 kHz when loading the audio file can give good performance.
-6. Though Pop2Piano was mainly trained on Korean Pop music, it also does pretty well on other Western Pop or Hip Hop songs.
-
-This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
-The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
+* Pop2Piano is an Encoder-Decoder based model like T5.
+* Pop2Piano can be used to generate midi-audio files for a given audio sequence.
+* Choosing different composers in `Pop2PianoForConditionalGeneration.generate()` can lead to variety of different results.
+* Setting the sampling rate to 44.1 kHz when loading the audio file can give good performance.
+* Though Pop2Piano was mainly trained on Korean Pop music, it also does pretty well on other Western Pop or Hip Hop songs.
 
 ## Examples
 
