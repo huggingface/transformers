@@ -387,7 +387,7 @@ def get_all_doctest_files() -> List[str]:
 
     # These are files not doctested yet.
     with open("utils/not_doctested.txt") as fp:
-        not_doctested = set(fp.read().strip().split("\n"))
+        not_doctested = {x.split(" ")[0] for x in fp.read().strip().split("\n")}
 
     # So far we don't have 100% coverage for doctest. This line will be removed once we achieve 100%.
     test_files_to_run = [x for x in test_files_to_run if x not in not_doctested]
@@ -415,7 +415,9 @@ def get_new_doctest_files(repo, base_commit, branching_commit) -> List[str]:
         with open(folder / "utils/not_doctested.txt", "r", encoding="utf-8") as f:
             new_content = f.read()
         # Compute the removed lines and return them
-        removed_content = set(old_content.split("\n")) - set(new_content.split("\n"))
+        removed_content = {x.split(" ")[0] for x in old_content.split("\n")} - {
+            x.split(" ")[0] for x in new_content.split("\n")
+        }
         return sorted(removed_content)
     return []
 
