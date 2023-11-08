@@ -30,6 +30,7 @@ from functools import partial, wraps
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
+from accelerate.hooks import AlignDevicesHook, send_to_device
 from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, Identity
@@ -2093,21 +2094,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Save the model
         if state_dict is None:
-
-        # Save the model
-        if state_dict is None:
-            # if model parameters are offloaded, onload  and send state dicts to CPU 
-            if hasattr(model, "_hf_hook") and isinstance(model._hf_hook, AlignDevicesHook):
+            # if model parameters are offloaded, onload  and send state dicts to CPU
+            if hasattr(model_to_save, "_hf_hook") and isinstance(model_to_save._hf_hook, AlignDevicesHook):
                 state_dict = {}
-                for name, module in model.named_modules():
+                for name, module in model_to_save.named_modules():
                     if name == "":
                         continue
                     if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook):
                         # onload meta tensors to execution device
                         try:
                             module._hf_hook.pre_forward(module)
-                        except:
-                            raise MemoryError("Model must fit in CPU memory to call save_pretrained()")
+                        except MemoryError:
+                            print("Model must fit in CPU memory to call save_pretrained!")
                         module_state_dict = module.state_dict()
                         # offload meta tensors from execution device
                         module._hf_hook.post_forward(module, torch.tensor([]))
@@ -2120,9 +2118,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             continue
                         params = module_state_dict[key]
                         # .to(device) copies tensor, leading to OOM
-                        params = send_to_device(params, 'cpu')
-                        state_dict[name + f'.{key}'] = params
-                        
+                        params = send_to_device(params, "cpu")
+                        state_dict[name + f".{key}"] = params
+
             else:
                 state_dict = model_to_save.state_dict()
 
