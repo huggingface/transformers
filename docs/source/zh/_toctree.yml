@@ -47,6 +47,8 @@
     title: 综述
   - local: big_models
     title: 实例化大模型
+  - local: debugging
+    title: 问题定位及解决
   title: 性能和可扩展性
 - sections:
   - local: task_summary
