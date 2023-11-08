@@ -16,8 +16,10 @@
 Feature extractor class for CED.
 """
 
-from typing import Optional
+from typing import Optional, Union
 
+import numpy as np
+import torch
 import torchaudio.transforms as audio_transforms
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -70,7 +72,9 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
         self.f_max = f_max
         self.hop_size = hop_size
 
-    def __call__(self, x, sampling_rate: Optional[int] = None, return_tensors="pt") -> BatchFeature:
+    def __call__(
+        self, x: Union[np.ndarray, torch.Tensor], sampling_rate: Optional[int] = None, return_tensors="pt"
+    ) -> BatchFeature:
         r"""
         Extracts Mel spectrogram features from an audio signal tensor.
 
@@ -98,6 +102,7 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
         )
         amplitude_to_db = audio_transforms.AmplitudeToDB(top_db=120)
 
+        x = torch.from_numpy(x).float() if isinstance(x, np.ndarray) else x.float()
         if x.dim() == 1:
             x = x.unsqueeze(0)
 
