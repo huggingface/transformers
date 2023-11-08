@@ -940,7 +940,7 @@ class RTDetrTransformer(nn.Module):
         spatial_shapes = []
         level_start_index = [0]
         for feat in projected_features:
-            h, w = feat.shape[-2:]
+            height, width = feat.shape[-2:]
             # [b, c, h, w] -> [b, h*w, c]
             feat_flatten.append(feat.flatten(2).permute(0, 2, 1))
             # [num_levels, 2]
