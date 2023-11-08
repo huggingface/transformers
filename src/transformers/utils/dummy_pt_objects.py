@@ -1777,13 +1777,6 @@ def load_tf_weights_in_canine(*args, **kwargs):
 CED_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class CedFeatureExtractor(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class CedForAudioClassification(metaclass=DummyObject):
     _backends = ["torch"]
 

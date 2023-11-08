@@ -1012,6 +1012,20 @@ else:
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
 
 
+# Speech-specific objects
+try:
+    if not is_speech_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_speech_objects
+
+    _import_structure["utils.dummy_speech_objects"] = [
+        name for name in dir(dummy_speech_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.ced"].extend(["CedFeatureExtractor"])
+
+
 # PyTorch-backed objects
 try:
     if not is_torch_available():
@@ -1422,7 +1436,6 @@ else:
     _import_structure["models.ced"].extend(
         [
             "CED_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CedFeatureExtractor",
             "CedForAudioClassification",
             "CedModel",
             "CedPreTrainedModel",
@@ -5147,6 +5160,14 @@ if TYPE_CHECKING:
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
 
+    try:
+        if not is_speech_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_speech_objects import *
+    else:
+        from .models.ced import CedFeatureExtractor
+
     # Modeling
     try:
         if not is_torch_available():
@@ -5499,7 +5520,6 @@ if TYPE_CHECKING:
         )
         from .models.ced import (
             CED_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CedFeatureExtractor,
             CedForAudioClassification,
             CedModel,
             CedPreTrainedModel,
