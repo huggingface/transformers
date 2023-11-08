@@ -392,7 +392,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     modeling_name = config_source_file.split(os.path.sep)[-1].replace("configuration_", "").replace(".py", "")
 
     try:
-        print("Importing", model_type_to_module_name(model_type))
+        logger.warning("Importing", model_type_to_module_name(model_type))
         module_name = model_type_to_module_name(model_type)
         if not modeling_name.startswith(module_name):
             raise ValueError(f"{modeling_name} doesn't start with {module_name}!")
@@ -1415,10 +1415,10 @@ def create_tiny_models(
     results = {}
     if num_workers <= 1:
         for c, models_to_create in list(to_create.items()):
-            print(f"Create models for {c.__name__} ...")
+            logger.warning(f"Create models for {c.__name__} ...")
             result = build(c, models_to_create, output_dir=os.path.join(output_path, c.model_type))
             results[c.__name__] = result
-            print("=" * 40)
+            logger.warning("=" * 40)
     else:
         all_build_args = []
         for c, models_to_create in list(to_create.items()):
