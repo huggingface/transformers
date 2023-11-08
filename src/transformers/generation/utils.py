@@ -4586,13 +4586,23 @@ class GenerationMixin:
                     assistant_decoder_attention_mask = torch.cat(
                         (
                             assistant_decoder_attention_mask,
-                            torch.ones([1, 1], dtype=assistant_decoder_attention_mask.dtype),
+                            torch.ones(
+                                [1, 1],
+                                dtype=assistant_decoder_attention_mask.dtype,
+                                device=assistant_decoder_attention_mask.device,
+                            ),
                         ),
                         dim=-1,
                     )
                 elif not assistant_model.config.is_encoder_decoder and assistant_attention_mask is not None:
                     assistant_attention_mask = torch.cat(
-                        (assistant_attention_mask, torch.ones([1, 1], dtype=assistant_attention_mask.dtype)), dim=-1
+                        (
+                            assistant_attention_mask,
+                            torch.ones(
+                                [1, 1], dtype=assistant_attention_mask.dtype, device=assistant_attention_mask.device
+                            ),
+                        ),
+                        dim=-1,
                     )
 
                 # 1.3. stop assistant generation on EOS
