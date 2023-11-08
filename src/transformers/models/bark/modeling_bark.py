@@ -26,13 +26,14 @@ from ...generation.logits_process import (
     BarkEosPrioritizerLogitsProcessor,
     SuppressTokensLogitsProcessor,
 )
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel, get_parameter_device
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_accelerate_available,
+    is_flash_attn_2_available,
     logging,
 )
 from ..auto import AutoModel
@@ -48,6 +49,7 @@ from .generation_configuration_bark import (
     BarkFineGenerationConfig,
     BarkSemanticGenerationConfig,
 )
+
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -78,6 +80,7 @@ def _get_unpad_data(attention_mask):
         cu_seqlens,
         max_seqlen_in_batch,
     )
+
 
 class BarkSelfAttention(nn.Module):
     # adapted from GPTNeoSelfAttention and Bark code
@@ -203,6 +206,7 @@ class BarkSelfAttention(nn.Module):
 
         return outputs
 
+
 class BarkSelfFlashAttention2(BarkSelfAttention):
     """
     Bark flash attention module. This module inherits from `BarkSelfAttention` as the weights of the module stays
@@ -220,7 +224,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         output_attentions=False,
     ):
         batch_size, query_len, _ = hidden_states.size()
-        
+
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
         query, key, value = self.att_proj(hidden_states).split(self.embed_dim, dim=2)
 
@@ -344,6 +348,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
             (cu_seqlens_q, cu_seqlens_k),
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
+
 
 class BarkLayerNorm(nn.Module):
     """LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False."""
@@ -758,7 +763,6 @@ class BarkCausalModel(BarkPreTrainedModel):
             # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
             # from_seq_length is 1 to easily broadcast
             attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
-
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head

@@ -35,10 +35,10 @@ from transformers.models.bark.generation_configuration_bark import (
     BarkSemanticGenerationConfig,
 )
 from transformers.testing_utils import (
+    require_flash_attn,
     require_torch,
     require_torch_fp16,
     require_torch_gpu,
-    require_flash_attn,
     slow,
     torch_device,
 )
@@ -588,7 +588,6 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
-        
 
     @require_flash_attn
     @require_torch_gpu
@@ -660,7 +659,6 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
                     _ = model_fa(
                         dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True
                     ).hidden_states[-1]
-
 
 
 @require_torch
