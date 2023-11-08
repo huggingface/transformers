@@ -284,7 +284,6 @@ def convert_tiktoken_to_hf(
     hf_tokenizer.add_tokens(start_of_transcript + language_tokens + control_tokens, special_tokens=True)
     hf_tokenizer.add_tokens(timestamp_tokens, special_tokens=False)
     return hf_tokenizer
-    # hf_tokenizer.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
