@@ -48,7 +48,7 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.trainer_utils import get_last_checkpoint, set_seed
-from transformers.utils import WEIGHTS_NAME, is_torch_bf16_gpu_available
+from transformers.utils import SAFE_WEIGHTS_NAME, WEIGHTS_NAME, is_torch_bf16_gpu_available
 
 
 if is_torch_available():
@@ -563,10 +563,10 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         # see the note above how to get identical loss on a small bs
         self.assertAlmostEqual(no_grad_accum_loss, yes_grad_accum_loss, places=2)
 
-    def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage, dtype):
+    def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage, dtype, safe_weights=True):
         # adapted from TrainerIntegrationCommon.check_saved_checkpoints
-
-        file_list = [WEIGHTS_NAME, "training_args.bin", "trainer_state.json", "config.json"]
+        weights_file = WEIGHTS_NAME if not safe_weights else SAFE_WEIGHTS_NAME
+        file_list = [weights_file, "training_args.bin", "trainer_state.json", "config.json"]
 
         if stage == ZERO2:
             ds_file_list = ["mp_rank_00_model_states.pt"]
