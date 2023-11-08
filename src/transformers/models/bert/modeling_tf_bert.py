@@ -157,26 +157,23 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape: tf.TensorShape):
-        with tf.name_scope("word_embeddings"):
-            self.weight = self.add_weight(
-                name="weight",
-                shape=[self.config.vocab_size, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
+        self.weight = self.add_weight(
+            name="word_embeddings.weight",
+            shape=[self.config.vocab_size, self.hidden_size],
+            initializer=get_initializer(self.initializer_range),
+        )
 
-        with tf.name_scope("token_type_embeddings"):
-            self.token_type_embeddings = self.add_weight(
-                name="embeddings",
-                shape=[self.config.type_vocab_size, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
+        self.token_type_embeddings = self.add_weight(
+            name="token_type_embeddings.weight",
+            shape=[self.config.type_vocab_size, self.hidden_size],
+            initializer=get_initializer(self.initializer_range),
+        )
 
-        with tf.name_scope("position_embeddings"):
-            self.position_embeddings = self.add_weight(
-                name="embeddings",
-                shape=[self.max_position_embeddings, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
+        self.position_embeddings = self.add_weight(
+            name="position_embeddings.weight",
+            shape=[self.max_position_embeddings, self.hidden_size],
+            initializer=get_initializer(self.initializer_range),
+        )
 
         super().build(input_shape)
 

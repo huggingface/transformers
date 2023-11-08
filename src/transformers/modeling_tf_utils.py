@@ -35,7 +35,6 @@ import tensorflow as tf
 from huggingface_hub import Repository, list_repo_files
 from keras import backend as K
 from packaging.version import parse
-from tensorflow.python.util.keras_deps import get_call_context_function
 
 from . import DataCollatorWithPadding, DefaultDataCollator
 from .activations_tf import get_tf_activation
@@ -986,9 +985,11 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
 
 def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
     # Read the safetensors file
+    breakpoint()
     with safe_open(resolved_archive_file, framework="tf") as safetensors_archive:
         mismatched_layers = []
-        weight_names = [strip_model_name_and_prefix(w.name, _prefix=_prefix) for w in model.weights]
+        # Keras 3 calls the full path "path", previous versions call it "name"
+        weight_names = [strip_model_name_and_prefix(getattr(w, "path", w.name), _prefix=_prefix) for w in model.weights]
         loaded_weight_names = list(safetensors_archive.keys())
         # Find the missing layers from the high level list of layers
         missing_layers = list(set(weight_names) - set(loaded_weight_names))
@@ -996,7 +997,7 @@ def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismat
         unexpected_layers = list(set(loaded_weight_names) - set(weight_names))
 
         for weight in model.weights:
-            weight_name = strip_model_name_and_prefix(weight.name, _prefix=_prefix)
+            weight_name = strip_model_name_and_prefix(getattr(weight, "path", weight.name), _prefix=_prefix)
             if weight_name in loaded_weight_names:
                 weight_value = safetensors_archive.get_tensor(weight_name)
                 # Check if the shape of the current weight and the one from the H5 file are different
@@ -1090,6 +1091,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     _keys_to_ignore_on_load_unexpected = None
     _requires_load_weight_prefix = False
 
+    def __call__(self, *args, **kwargs):
+        if not self.built:
+            # Because our build() method uses dummy tensors, we don't automatically use it in __call__. It's mostly
+            # used to build models to allow weight loading.
+            self.built = True
+        super().__call__(*args, **kwargs)
+
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
         """
@@ -1129,15 +1137,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         return "tf"
 
     def build(self, input_shape=None):
-        call_context = get_call_context_function()
-        if self.built or call_context().in_call:
-            self.built = True
-        else:
-            self.built = True
-            # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
-            # Setting it in build() allows users to override the shape when loading a non-pretrained model from config
-            self._set_save_spec(self.input_signature)
-            self(self.dummy_inputs, training=False)
+        if self.built:
+            return
+        self.built = True
+        # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
+        # Setting it in build() allows users to override the shape when loading a non-pretrained model from config
+        # self._set_save_spec(self.input_signature)
+        self(self.dummy_inputs, training=False)
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)

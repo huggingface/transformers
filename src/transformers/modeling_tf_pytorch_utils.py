@@ -251,7 +251,6 @@ def load_pytorch_state_dict_in_tf2_model(
     """Load a pytorch state_dict in a TF 2.0 model. pt_state_dict can be either an actual dict or a lazy-loading
     safetensors archive created with the safe_open() function."""
     import tensorflow as tf
-    from keras import backend as K
 
     if tf_inputs is None:
         tf_inputs = tf_model.dummy_inputs
@@ -304,7 +303,7 @@ def load_pytorch_state_dict_in_tf2_model(
     mismatched_keys = []
     is_safetensor_archive = hasattr(pt_state_dict, "get_tensor")
     for symbolic_weight in symbolic_weights:
-        sw_name = symbolic_weight.name
+        sw_name = getattr(symbolic_weight, "path", symbolic_weight.name)  # Keras 3 calls it "path", Keras 2 "name"
         name, transpose = convert_tf_weight_name_to_pt_weight_name(
             sw_name,
             start_prefix_to_remove=start_prefix_to_remove,
@@ -344,7 +343,7 @@ def load_pytorch_state_dict_in_tf2_model(
 
         tf_loaded_numel += tensor_size(array)
 
-        K.set_value(symbolic_weight, array)
+        symbolic_weight.assign(array)
         del array  # Immediately free memory to keep peak usage as low as possible
         all_pytorch_weights.discard(name)
 
