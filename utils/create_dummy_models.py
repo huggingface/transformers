@@ -392,7 +392,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     modeling_name = config_source_file.split(os.path.sep)[-1].replace("configuration_", "").replace(".py", "")
 
     try:
-        logger.warning("Importing", model_type_to_module_name(model_type))
+        logger.warning(f"Importing, {model_type_to_module_name(model_type)}")
         module_name = model_type_to_module_name(model_type)
         if not modeling_name.startswith(module_name):
             raise ValueError(f"{modeling_name} doesn't start with {module_name}!")
