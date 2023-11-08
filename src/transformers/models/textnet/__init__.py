@@ -49,7 +49,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_textnet import TextNetBackbone, TextNetModel, TextNetPreTrainedModel
+        from .modeling_textnet import (
+            TextNetBackbone,
+            TextNetForImageClassification,
+            TextNetModel,
+            TextNetPreTrainedModel,
+        )
 
 
 else:
