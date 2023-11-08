@@ -25,8 +25,9 @@ if is_torch_available():
 
     from transformers import CedForAudioClassification
 
-    if is_torchaudio_available():
-        from transformers import CedFeatureExtractor
+
+if is_torchaudio_available():
+    from transformers import CedFeatureExtractor
 
 
 @require_torch
