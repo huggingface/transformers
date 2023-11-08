@@ -16,16 +16,11 @@
 import inspect
 import unittest
 
-from transformers import (
-    TextNetBackbone,
-    TextNetConfig,
-    is_torch_available,
-)
-from transformers.models.textnet.modeling_textnet import TextNetForImageClassification
 from transformers.testing_utils import (
     require_torch,
     torch_device,
 )
+from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -38,7 +33,11 @@ if is_torch_available():
     import torch.nn as nn
 
     from transformers import (
+        TextNetBackbone,
+        TextNetConfig,
+        TextNetForImageClassification,
         TextNetModel,
+        is_torch_available,
     )
 
 
