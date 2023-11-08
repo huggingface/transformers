@@ -576,8 +576,11 @@ class AwqConfig(QuantizationConfigMixin):
                 f"Only supported quantization backends in {AwqBackendPackingMethod.AUTOAWQ} and {AwqBackendPackingMethod.LLMAWQ} - not recognized backend {self.backend}"
             )
 
+        self.version = AWQLinearVersion.from_str(self.version)
         if self.version not in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV]:
-            self.version = AWQLinearVersion.from_str(self.version)
+            raise ValueError(
+                f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV] - not recognized version {self.version}"
+            )
 
         if self.backend == AwqBackendPackingMethod.LLMAWQ:
             compute_capability = torch.cuda.get_device_capability()
