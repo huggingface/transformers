@@ -1283,6 +1283,7 @@ class MistralForSequenceClassification(MistralPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        use_legacy_cache: Optional[bool] = True,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1302,6 +1303,7 @@ class MistralForSequenceClassification(MistralPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            use_legacy_cache=use_legacy_cache,
         )
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)

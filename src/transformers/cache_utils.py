@@ -1,16 +1,25 @@
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple, TypeVar
+from typing import Dict, List, Optional, Tuple
 
 import torch
-
-
-T = TypeVar("T")
 
 
 class Cache(ABC):
     def __init__(self) -> None:
         self.key_cache: Dict[int, Tuple[torch.Tensor]] = {}
         self.value_cache: Dict[int, Tuple[torch.Tensor]] = {}
+
+    def __getitem__(self, key: int) -> Dict[int, Tuple[torch.Tensor]]:
+        """
+        Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
+        sequence length.
+        """
+        if key == 0:
+            return self.key_cache
+        elif key == 1:
+            return self.value_cache
+        else:
+            raise KeyError(f"Cache only supports 0 (key) and 1 (value) indexing, got {key}")
 
     @abstractmethod
     def update(
