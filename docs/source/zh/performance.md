@@ -46,7 +46,7 @@ rendered properly in your Markdown viewer.
 
 * [在单个CPU上进行推理](perf_infer_cpu)
 * [在单个GPU上进行推理](perf_infer_gpu_one)
-* [多GPU推理](perf_infer_gpu_many)
+* [多GPU推理](perf_infer_gpu_one)
 * [TensorFlow模型的XLA集成](tf_xla)
 
 ## 训练和推理
