@@ -238,6 +238,8 @@ class TrainingArguments:
             when all data is exhausted
         lr_scheduler_type (`str` or [`SchedulerType`], *optional*, defaults to `"linear"`):
             The scheduler type to use. See the documentation of [`SchedulerType`] for all possible values.
+        lr_scheduler_kwargs ('dict', *optional*, defaults to {}):
+            The extra arguments for the lr_scheduler. See the documentation of each scheduler for possible values.
         warmup_ratio (`float`, *optional*, defaults to 0.0):
             Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
         warmup_steps (`int`, *optional*, defaults to 0):
@@ -621,6 +623,14 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
+        split_batches (`bool`, *optional*):
+            Whether or not the accelerator should split the batches yielded by the dataloaders across the devices
+            during distributed training. If
+
+            set to `True`, the actual batch size used will be the same on any kind of distributed processes, but it
+            must be a
+
+            round multiple of the number of processes you are using (such as GPUs).
         include_tokens_per_second (`bool`, *optional*):
             Whether or not to compute the number of tokens per second per device for training speed metrics.
 
@@ -720,6 +730,14 @@ class TrainingArguments:
     lr_scheduler_type: Union[SchedulerType, str] = field(
         default="linear",
         metadata={"help": "The scheduler type to use."},
+    )
+    lr_scheduler_kwargs: Optional[Dict] = field(
+        default_factory=dict,
+        metadata={
+            "help": (
+                "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts"
+            )
+        },
     )
     warmup_ratio: float = field(
         default=0.0, metadata={"help": "Linear warmup over warmup_ratio fraction of total steps."}
@@ -1223,6 +1241,15 @@ class TrainingArguments:
             "help": "Whether to dispatch batches across devices in distributed training. If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process "
             "and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
             "underlying dataset is an `IterableDataset`, `False` otherwise."
+        },
+    )
+
+    split_batches: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether or not the accelerator should split the batches yielded by the dataloaders across the devices during distributed training. If"
+            "set to `True`, the actual batch size used will be the same on any kind of distributed processes, but it must be a"
+            "round multiple of the number of processes you are using (such as GPUs)."
         },
     )
 
