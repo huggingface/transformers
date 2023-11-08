@@ -1511,7 +1511,7 @@ class HybridEncoder(RTDetrPreTrainedModel):
         # encoder
         if self.num_encoder_layers > 0:
             for i, enc_ind in enumerate(self.use_encoder_idx):
-                h, w = proj_feats[enc_ind].shape[2:]
+                height, weight = proj_feats[enc_ind].shape[2:]
                 # flatten [B, C, H, W] to [B, HxW, C]
                 src_flatten = proj_feats[enc_ind].flatten(2).permute(0, 2, 1)
                 if self.training or self.eval_size is None:
