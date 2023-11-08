@@ -1103,83 +1103,67 @@ class PatchTSTStdScaler(nn.Module):
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeries->PatchTST
 class PatchTSTMeanScaler(nn.Module):
     """
-    Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
+    Computes a scaling factor as the weighted average absolute value along the first dimension, and scales the data
     accordingly.
-
-    Args:
-        dim (`int`):
-            Dimension along which to compute the scale.
-        keepdim (`bool`, *optional*, defaults to `False`):
-            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
-        default_scale (`float`, *optional*, defaults to `None`):
-            Default scale that is used for elements that are constantly zero. If `None`, we use the scale of the batch.
-        minimum_scale (`float`, *optional*, defaults to 1e-10):
-            Default minimum possible scale that is used for any item.
     """
 
-    def __init__(
-        self, dim: int = -1, keepdim: bool = True, default_scale: Optional[float] = None, minimum_scale: float = 1e-10
-    ):
+    def __init__(self):
         super().__init__()
-        self.dim = dim
-        self.keepdim = keepdim
-        self.minimum_scale = minimum_scale
-        self.default_scale = default_scale
 
     @torch.no_grad()
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # shape: (N, [C], T=1)
-        ts_sum = (data * observed_indicator).abs().sum(self.dim, keepdim=True)
-        num_observed = observed_indicator.sum(self.dim, keepdim=True)
-
+        """
+        Parameters:
+            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                input for Batch norm calculation
+        Returns:
+            tuple of `torch.Tensor` of shapes
+                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
+                `(batch_size, 1, num_input_channels)`)
+        """
+        ts_sum = (data * observed_indicator).abs().sum(dim=1, keepdim=True)
+        num_observed = observed_indicator.sum(dim=1, keepdim=True)
         scale = ts_sum / torch.clamp(num_observed, min=1)
 
-        # If `default_scale` is provided, we use it, otherwise we use the scale
-        # of the batch.
-        if self.default_scale is None:
-            batch_sum = ts_sum.sum(dim=0)
-            batch_observations = torch.clamp(num_observed.sum(0), min=1)
-            default_scale = torch.squeeze(batch_sum / batch_observations)
-        else:
-            default_scale = self.default_scale * torch.ones_like(scale)
+        # use the scale of the batch.
+        batch_sum = ts_sum.sum(dim=0)
+        batch_observations = torch.clamp(num_observed.sum(0), min=1)
+        default_scale = torch.squeeze(batch_sum / batch_observations)
 
         # apply default scale where there are no observations
         scale = torch.where(num_observed > 0, scale, default_scale)
 
-        # ensure the scale is at least `self.minimum_scale`
-        scale = torch.clamp(scale, min=self.minimum_scale)
+        # ensure the scale is at least 1e-10
+        scale = torch.clamp(scale, min=1e-10)
         scaled_data = data / scale
-
-        if not self.keepdim:
-            scale = scale.squeeze(dim=self.dim)
-
         return scaled_data, torch.zeros_like(scale), scale
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeries->PatchTST
 class PatchTSTNOPScaler(nn.Module):
     """
-    Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
-
-    Args:
-        dim (`int`):
-            Dimension along which to compute the scale.
-        keepdim (`bool`, *optional*, defaults to `False`):
-            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+    Assigns a scaling factor equal to 1 along the first dimension, and therefore applies no scaling to the input data.
     """
 
-    def __init__(self, dim: int, keepdim: bool = False):
+    def __init__(self):
         super().__init__()
-        self.dim = dim
-        self.keepdim = keepdim
 
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
-        loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+        """
+        Parameters:
+            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                input for Batch norm calculation
+        Returns:
+            tuple of `torch.Tensor` of shapes
+                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
+                `(batch_size, 1, num_input_channels)`)
+        """
+        scale = torch.ones_like(data, requires_grad=False).mean(dim=1, keepdim=True)
+        loc = torch.zeros_like(data, requires_grad=False).mean(dim=1, keepdim=True)
         return data, loc, scale
 
 
@@ -1187,15 +1171,24 @@ class PatchTSTScaler(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
         if config.scaling == "mean" or config.scaling is True:
-            self.scaler = PatchTSTMeanScaler(dim=1, keepdim=True)
+            self.scaler = PatchTSTMeanScaler()
         elif config.scaling == "std":
-            self.scaler = PatchTSTStdScaler(dim=1, keepdim=True)
+            self.scaler = PatchTSTStdScaler()
         else:
-            self.scaler = PatchTSTNOPScaler(dim=1, keepdim=True)
+            self.scaler = PatchTSTNOPScaler()
 
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Parameters:
+            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                input for Batch norm calculation
+        Returns:
+            tuple of `torch.Tensor` of shapes
+                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
+                `(batch_size, 1, um_input_channels)`)
+        """
         data, loc, scale = self.scaler(data, observed_indicator)
         return data, loc, scale
 
