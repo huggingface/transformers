@@ -1069,34 +1069,33 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeries->PatchTST
 class PatchTSTStdScaler(nn.Module):
     """
-    Standardize features by calculating the mean and scaling along some given dimension `dim`, and then normalizes it
+    Standardize features by calculating the mean and scaling along the first dimension, and then normalizes it
     by subtracting from the mean and dividing by the standard deviation.
-
-    Args:
-        dim (`int`):
-            Dimension along which to calculate the mean and standard deviation.
-        keepdim (`bool`, *optional*, defaults to `False`):
-            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
-        minimum_scale (`float`, *optional*, defaults to 1e-5):
-            Default scale that is used for elements that are constantly zero along dimension `dim`.
     """
 
-    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-5):
+    def __init__(self):
         super().__init__()
-        if not dim > 0:
-            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
-        self.dim = dim
-        self.keepdim = keepdim
-        self.minimum_scale = minimum_scale
 
     @torch.no_grad()
-    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        denominator = weights.sum(self.dim, keepdim=self.keepdim)
+    def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor
+                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Parameters:
+            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                input for Batch norm calculation
+            observed_indicator (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                Calculating the scale on the observed indicator.
+        Returns:
+            tuple of `torch.Tensor` of shapes
+                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
+                `(batch_size, 1, num_input_channels)`)
+        """
+        denominator = observed_indicator.sum(dim=1, keepdim=True)
         denominator = denominator.clamp_min(1.0)
-        loc = (data * weights).sum(self.dim, keepdim=self.keepdim) / denominator
+        loc = (data * observed_indicator).sum(dim=1, keepdim=True) / denominator
 
-        variance = (((data - loc) * weights) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
-        scale = torch.sqrt(variance + self.minimum_scale)
+        variance = (((data - loc) * observed_indicator) ** 2).sum(dim=1, keepdim=True) / denominator
+        scale = torch.sqrt(variance + 1e-10)
         return (data - loc) / scale, loc, scale
 
 
@@ -1106,7 +1105,6 @@ class PatchTSTMeanScaler(nn.Module):
     Computes a scaling factor as the weighted average absolute value along the first dimension, and scales the data
     accordingly.
     """
-
     def __init__(self):
         super().__init__()
 
@@ -1118,6 +1116,8 @@ class PatchTSTMeanScaler(nn.Module):
         Parameters:
             data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
                 input for Batch norm calculation
+            observed_indicator (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                Calculating the scale on the observed indicator.
         Returns:
             tuple of `torch.Tensor` of shapes
                 (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
@@ -1151,7 +1151,7 @@ class PatchTSTNOPScaler(nn.Module):
         super().__init__()
 
     def forward(
-        self, data: torch.Tensor, observed_indicator: torch.Tensor
+        self, data: torch.Tensor, observed_indicator: torch.Tensor=None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Parameters:
@@ -1184,6 +1184,8 @@ class PatchTSTScaler(nn.Module):
         Parameters:
             data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
                 input for Batch norm calculation
+            observed_indicator (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                Calculating the scale on the observed indicator.
         Returns:
             tuple of `torch.Tensor` of shapes
                 (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
