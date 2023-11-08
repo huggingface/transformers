@@ -919,9 +919,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 
                 assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
 
-                other_inputs = {
-                    "output_hidden_states": True,
-                }
+                other_inputs = {"output_hidden_states": True}
                 if dummy_attention_mask is not None:
                     other_inputs["attention_mask"] = dummy_attention_mask
 
