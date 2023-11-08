@@ -395,7 +395,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
 
 @require_torch
-class BitBackboneTest(BackboneTesterMixin, unittest.TestCase):
+class TextNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
     all_model_classes = (TextNetBackbone,) if is_torch_available() else ()
     config_class = TextNetConfig
 
