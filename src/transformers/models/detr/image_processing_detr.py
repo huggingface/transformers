@@ -326,10 +326,10 @@ def prepare_coco_detection_annotation(
 
     if annotations and "keypoints" in annotations[0]:
         keypoints = [obj["keypoints"] for obj in annotations]
-        # Apply the keep mask here to filter the relevant annotations
-        keypoints = [keypoints[i] for i in range(len(keypoints)) if keep[i]]
-        # converting the filtered keypoints list to a numpy array and reshape it
+        # Converting the filtered keypoints list to a numpy array
         keypoints = np.asarray(keypoints, dtype=np.float32)
+        # Apply the keep mask here to filter the relevant annotations
+        keypoints = keypoints[keep]
         num_keypoints = keypoints.shape[0]
         keypoints = keypoints.reshape((-1, 3)) if num_keypoints else keypoints
         new_target["keypoints"] = keypoints
