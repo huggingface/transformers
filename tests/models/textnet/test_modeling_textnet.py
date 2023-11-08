@@ -16,8 +16,6 @@
 import inspect
 import unittest
 
-import torch.nn as nn
-
 from transformers import (
     TextNetBackbone,
     TextNetConfig,
@@ -37,6 +35,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
     from transformers import (
         TextNetModel,
