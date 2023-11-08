@@ -3305,6 +3305,8 @@ else:
             "TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
             "TextNetBackbone",
             "TextNetModel",
+            "TextNetForImageClassification",
+            "TextNetPreTrainedModel"
         ]
     )
     _import_structure["models.time_series_transformer"].extend(
@@ -7664,6 +7666,7 @@ if TYPE_CHECKING:
             TextNetBackbone,
             TextNetModel,
             TextNetPreTrainedModel,
+            TextNetForImageClassification,
         )
         from .models.time_series_transformer import (
             TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
