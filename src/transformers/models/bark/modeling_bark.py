@@ -253,15 +253,15 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
 
         if past_key_values is not None:
             # (batch, head, seq_length, head_features) -> (batch, seq_length, head, head_features)
-            past_key = past_key_values[0].transpose(1,2)
-            past_value = past_key_values[1].transpose(1,2)
+            past_key = past_key_values[0].transpose(1, 2)
+            past_value = past_key_values[1].transpose(1, 2)
             # and merge on seq_length
             key = torch.cat((past_key, key), dim=1)
             value = torch.cat((past_value, value), dim=1)
 
         if use_cache is True:
             #  (batch, head, seq_length, head_features)
-            present = (key.transpose(1,2), value.transpose(1,2))
+            present = (key.transpose(1, 2), value.transpose(1, 2))
         else:
             present = None
 
@@ -1633,7 +1633,7 @@ class BarkModel(BarkPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        
+
         self.semantic = BarkSemanticModel(config.semantic_config)
         self.coarse_acoustics = BarkCoarseModel(config.coarse_acoustics_config)
         self.fine_acoustics = BarkFineModel(config.fine_acoustics_config)
@@ -1876,8 +1876,8 @@ class BarkModel(BarkPreTrainedModel):
         can initialize the correct attention module
         """
         config = super()._check_and_enable_flash_attn_2(config, torch_dtype, device_map)
-        
-        config.semantic_config._flash_attn_2_enabled = getattr(config, "_flash_attn_2_enabled", False) 
-        config.coarse_acoustics_config._flash_attn_2_enabled = getattr(config, "_flash_attn_2_enabled", False) 
-        config.fine_acoustics_config._flash_attn_2_enabled = getattr(config, "_flash_attn_2_enabled", False) 
+
+        config.semantic_config._flash_attn_2_enabled = getattr(config, "_flash_attn_2_enabled", False)
+        config.coarse_acoustics_config._flash_attn_2_enabled = getattr(config, "_flash_attn_2_enabled", False)
+        config.fine_acoustics_config._flash_attn_2_enabled = getattr(config, "_flash_attn_2_enabled", False)
         return config
