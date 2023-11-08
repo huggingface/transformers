@@ -214,6 +214,25 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
+    def _split_heads(self, tensor, num_heads, attn_head_size):
+        """
+        Splits hidden_size dim into attn_head_size and num_heads
+        """
+        new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
+        tensor = tensor.view(new_shape)
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim - (batch, seq_length, head, head_features)
+        return tensor
+
+    def _merge_heads(self, tensor, num_heads, attn_head_size):
+        """
+        Merges attn_head_size dim and num_attn_heads dim into hidden_size
+        """
+        # re-assemble all head outputs side by side
+        # (batch, seq_len, num_heads, attn_head_size) -> (batch, seq_len, num_heads*attn_head_size)
+        tensor = tensor.view(tensor.size()[:-2] + (num_heads * attn_head_size,))
+        return tensor
+
     def forward(
         self,
         hidden_states,
@@ -235,15 +254,16 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         if past_key_values is not None:
             past_key = past_key_values[0]
             past_value = past_key_values[1]
-            key = torch.cat((past_key, key), dim=-2)
-            value = torch.cat((past_value, value), dim=-2)
+            # and merge on seq_length
+            key = torch.cat((past_key, key), dim=1)
+            value = torch.cat((past_value, value), dim=1)
 
         if use_cache is True:
             present = (key, value)
         else:
             present = None
 
-        attn_output = self._attn(query, key, value, attention_mask, query_len, dropout=self.dropout)
+        attn_output = self._flash_attention_forward(query, key, value, attention_mask, query_len, dropout=self.dropout)
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
         attn_output = self.out_proj(attn_output)
@@ -350,6 +370,12 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         )
 
 
+BARK_ATTENTION_CLASSES = {
+    "default": BarkSelfAttention,
+    "flash_attention_2": BarkSelfFlashAttention2,
+}
+
+
 class BarkLayerNorm(nn.Module):
     """LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False."""
 
@@ -392,7 +418,8 @@ class BarkBlock(nn.Module):
             self.layernorm_1 = nn.LayerNorm(config.hidden_size)
             self.layernorm_2 = nn.LayerNorm(config.hidden_size)
 
-        self.attn = BarkSelfAttention(config, is_causal=is_causal)
+        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
+        self.attn = BARK_ATTENTION_CLASSES[attn_type](config, is_causal=is_causal)
 
         self.mlp = BarkMLP(config)
 
@@ -440,6 +467,7 @@ class BarkPreTrainedModel(PreTrainedModel):
 
     config_class = BarkConfig
     supports_gradient_checkpointing = False
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -759,10 +787,13 @@ class BarkCausalModel(BarkPreTrainedModel):
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
-            attention_mask = attention_mask.view(batch_size, -1)
-            # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
-            # from_seq_length is 1 to easily broadcast
-            attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
+            if getattr(self.config, "_flash_attn_2_enabled", False):
+                attention_mask = attention_mask if 0 in attention_mask else None
+            else:
+                attention_mask = attention_mask.view(batch_size, -1)
+                # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
+                # from_seq_length is 1 to easily broadcast
+                attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -1385,9 +1416,12 @@ class BarkFineModel(BarkPreTrainedModel):
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
-            # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
-            # from_seq_length is 1 to easily broadcast
-            attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
+            if getattr(self.config, "_flash_attn_2_enabled", False):
+                attention_mask = attention_mask if 0 in attention_mask else None
+            else:
+                # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
+                # from_seq_length is 1 to easily broadcast
+                attention_mask = _prepare_4d_attention_mask(attention_mask, input_embeds.dtype, tgt_len=1)
 
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
 
