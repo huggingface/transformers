@@ -16,7 +16,7 @@
 
 
 import collections.abc
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -58,6 +58,7 @@ TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all SwiftFormer models at https://huggingface.co/models?filter=swiftformer
 ]
 
+
 class TFSwiftFormerPatchEmbeddingSequential(tf.keras.layers.Layer):
     """
     The sequential component of the patch embedding layer.
@@ -66,6 +67,7 @@ class TFSwiftFormerPatchEmbeddingSequential(tf.keras.layers.Layer):
 
     Output: tensor of shape `[batch_size, out_channels, height/4, width/4]`
     """
+
     def __init__(self, config: SwiftFormerConfig, **kwargs):
         super().__init__(**kwargs)
         out_chs = config.embed_dims[0]
@@ -74,11 +76,11 @@ class TFSwiftFormerPatchEmbeddingSequential(tf.keras.layers.Layer):
         self.conv1 = tf.keras.layers.Conv2D(out_chs // 2, kernel_size=3, strides=2, name="0")
         self.batch_norm1 = tf.keras.layers.BatchNormalization(
             epsilon=config.batch_norm_eps, momentum=0.9, name="1"
-        ) # FIXME: is this the equivalent momentum?
+        )  # FIXME: is this the equivalent momentum?
         self.conv2 = tf.keras.layers.Conv2D(out_chs, kernel_size=3, strides=2, name="3")
         self.batch_norm2 = tf.keras.layers.BatchNormalization(
             epsilon=config.batch_norm_eps, momentum=0.9, name="4"
-        ) # FIXME: is this the equivalent momentum?
+        )  # FIXME: is this the equivalent momentum?
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         x = self.zero_padding(x)
@@ -100,10 +102,10 @@ class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
 
     Output: tensor of shape `[batch_size, out_channels, height/4, width/4]`
     """
+
     def __init__(self, config: SwiftFormerConfig, **kwargs):
         super().__init__(**kwargs)
         self.patch_embedding = TFSwiftFormerPatchEmbeddingSequential(config, name="patch_embedding")
-
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         return self.patch_embedding(x, training=training)
@@ -432,7 +434,9 @@ class TFSwiftFormerStage(tf.keras.layers.Layer):
 
             if depth - block_idx <= 1:
                 # FIXME: no names?
-                self.blocks.append(TFSwiftFormerEncoderBlock(config, dim=dim, drop_path=block_dpr, name=f"blocks_._{block_idx}"))
+                self.blocks.append(
+                    TFSwiftFormerEncoderBlock(config, dim=dim, drop_path=block_dpr, name=f"blocks_._{block_idx}")
+                )
             else:
                 self.blocks.append(TFSwiftFormerConvEncoder(config, dim=dim, name=f"blocks_._{block_idx}"))
 
@@ -486,7 +490,7 @@ class TFSwiftFormerEncoder(tf.keras.layers.Layer):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         hidden_states = tf.transpose(hidden_states, perm=[0, 3, 1, 2])
-        if all_hidden_states: # TODO: needed this to pass test_compile_tf_model
+        if all_hidden_states:  # TODO: needed this to pass test_compile_tf_model
             all_hidden_states = tuple(tf.transpose(s, perm=[0, 3, 1, 2]) for s in all_hidden_states)
 
         if not return_dict:
@@ -654,9 +658,19 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         self.swiftformer = TFSwiftFormerMainLayer(config, name="swiftformer")
 
         # Classifier head
-        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")  # FIXME
-        self.head = tf.keras.layers.Dense(self.num_labels, name="head") if self.num_labels > 0 else tf.keras.layers.Identity(name="head")
-        self.dist_head = tf.keras.layers.Dense(self.num_labels, name="dist_head") if self.num_labels > 0 else tf.keras.layers.Identity(name="dist_head")
+        self.norm = tf.keras.layers.BatchNormalization(
+            epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
+        )  # FIXME
+        self.head = (
+            tf.keras.layers.Dense(self.num_labels, name="head")
+            if self.num_labels > 0
+            else tf.keras.layers.Identity(name="head")
+        )
+        self.dist_head = (
+            tf.keras.layers.Dense(self.num_labels, name="dist_head")
+            if self.num_labels > 0
+            else tf.keras.layers.Identity(name="dist_head")
+        )
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING)
