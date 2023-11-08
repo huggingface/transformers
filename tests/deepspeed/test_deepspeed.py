@@ -581,7 +581,6 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         for step in range(freq, total, freq):
             checkpoint = os.path.join(output_dir, f"checkpoint-{step}")
             self.assertTrue(os.path.isdir(checkpoint), f"[{stage}] {checkpoint} dir is not found")
-            print(os.listdir(checkpoint))
             # common files
             for filename in file_list:
                 path = os.path.join(checkpoint, filename)
