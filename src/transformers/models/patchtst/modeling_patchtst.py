@@ -199,33 +199,6 @@ class PatchTSTAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class PatchTSTTranspose(nn.Module):
-    """
-    Transpose the tensor to the dimension defined in **dims**
-
-    Parameters:
-        dims (`list`): list of dimensions to be transposed
-        contiguous (`bool`, default to False): if True, the transposed tensor is contiguous
-    """
-
-    def __init__(self, *dims, contiguous=False):
-        super().__init__()
-        self.dims = dims
-        self.contiguous = dims
-
-    def forward(self, inputs: torch.Tensor):
-        """
-        Parameters:
-            inputs (`torch.Tensor`): input to be transposed
-        Returns:
-            `torch.Tensor`: transposed tensor
-        """
-        if self.contiguous:
-            return inputs.transpose(*self.dims).contiguous()
-        else:
-            return inputs.transpose(*self.dims)
-
-
 class PatchTSTBatchNorm(nn.Module):
     """
     Parameters:
@@ -233,11 +206,9 @@ class PatchTSTBatchNorm(nn.Module):
         d_model (`int`): model dimension
     """
 
-    def __init__(self, d_model):
+    def __init__(self, config):
         super().__init__()
-        self.d_model = d_model
-        self.transpose = PatchTSTTranspose(1, 2)
-        self.batchnorm = nn.BatchNorm1d(self.d_model)
+        self.batchnorm = nn.BatchNorm1d(config.d_model)
 
     def forward(self, inputs: torch.Tensor):
         """
@@ -245,12 +216,11 @@ class PatchTSTBatchNorm(nn.Module):
             inputs (`torch.Tensor` of shape `(batch_size, sequence_length, d_model)`):
                 input for Batch norm calculation
         Returns:
-            `torch.Tensor`: tensor
+            `torch.Tensor` of shape `(batch_size, sequence_length, d_model)`
         """
-        output = self.transpose(inputs)  # output: (batch_size, d_model, sequence_length)
+        output = inputs.transpose(1, 2)  # output: (batch_size, d_model, sequence_length)
         output = self.batchnorm(output)
-        output = self.transpose(output)  # output: (batch_size, sequence_length, d_model)
-        return output
+        return output.transpose(1, 2)
 
 
 def positional_encoding(position_embedding_type, learned, q_len, d_model):
@@ -742,7 +712,6 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
     """
     PatchTST Encoder
     """
-
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
         self.num_input_channels = config.num_input_channels
@@ -1297,7 +1266,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         )
 
 
-class MaskPretrainHead(nn.Module):
+class PatchTSTMaskPretrainHead(nn.Module):
     """
     Pretraining head for mask modelling
     """
@@ -1335,7 +1304,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
 
         config.mask_input = True
         self.model = PatchTSTModel(config=config)
-        self.head = MaskPretrainHead(config)
+        self.head = PatchTSTMaskPretrainHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
