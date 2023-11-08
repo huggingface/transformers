@@ -2093,7 +2093,38 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Save the model
         if state_dict is None:
-            state_dict = model_to_save.state_dict()
+
+        # Save the model
+        if state_dict is None:
+            # if model parameters are offloaded, onload  and send state dicts to CPU 
+            if hasattr(model, "_hf_hook") and isinstance(model._hf_hook, AlignDevicesHook):
+                state_dict = {}
+                for name, module in model.named_modules():
+                    if name == "":
+                        continue
+                    if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook):
+                        # onload meta tensors to execution device
+                        try:
+                            module._hf_hook.pre_forward(module)
+                        except:
+                            raise MemoryError("Model must fit in CPU memory to call save_pretrained()")
+                        module_state_dict = module.state_dict()
+                        # offload meta tensors from execution device
+                        module._hf_hook.post_forward(module, torch.tensor([]))
+                    else:
+                        module_state_dict = module.state_dict()
+
+                    for key in module_state_dict:
+                        # ignore placeholder parameters that are still on the meta device
+                        if str(module_state_dict[key].device) == "meta":
+                            continue
+                        params = module_state_dict[key]
+                        # .to(device) copies tensor, leading to OOM
+                        params = send_to_device(params, 'cpu')
+                        state_dict[name + f'.{key}'] = params
+                        
+            else:
+                state_dict = model_to_save.state_dict()
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
         if IS_SAGEMAKER_MP_POST_1_10:
