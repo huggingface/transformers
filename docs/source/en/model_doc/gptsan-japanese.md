@@ -24,7 +24,7 @@ GPTSAN is a Japanese language model using Switch Transformer. It has the same st
 in the T5 paper, and support both Text Generation and Masked Language Modeling tasks. These basic tasks similarly can
 fine-tune for translation or summarization.
 
-### Generation
+### Usage example
 
 The `generate()` method can be used to generate text using GPTSAN-Japanese model.
 
@@ -56,7 +56,7 @@ This length applies to the text entered in `prefix_text` for the tokenizer.
 The tokenizer returns the mask of the `Prefix` part of Prefix-LM as `token_type_ids`.
 The model treats the part where `token_type_ids` is 1 as a `Prefix` part, that is, the input can refer to both tokens before and after.
 
-Tips:
+## Usage tips
 
 Specifying the Prefix part is done with a mask passed to self-attention.
 When token_type_ids=None or all zero, it is equivalent to regular causal mask
