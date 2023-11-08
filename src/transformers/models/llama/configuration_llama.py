@@ -95,9 +95,8 @@ class LlamaConfig(PretrainedConfig):
             experimental feature, subject to breaking API changes in future versions.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        rope_dim (`int`, *optional*, defaults to `None`):
-            Dimension of heads to apply Rotary Position Embedding. If `None`, defaults to `hidden_size //
-            num_attention_heads`.
+        partial_rotary_factor (`float`, *optional*, default to 1):
+            Percentage of the query and keys which will have rotary embedding.
 
 
     ```python
@@ -136,7 +135,7 @@ class LlamaConfig(PretrainedConfig):
         rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
-        rope_dim=None,
+        partial_rotary_factor=1,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -150,9 +149,6 @@ class LlamaConfig(PretrainedConfig):
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
 
-        if rope_dim is None:
-            rope_dim = hidden_size // num_attention_heads
-
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
@@ -163,7 +159,7 @@ class LlamaConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self._rope_scaling_validation()
         self.attention_bias = attention_bias
-        self.rope_dim = rope_dim
+        self.partial_rotary_factor = partial_rotary_factor
 
         super().__init__(
             pad_token_id=pad_token_id,
