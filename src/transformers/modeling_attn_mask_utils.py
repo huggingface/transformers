@@ -48,7 +48,7 @@ class AttentionMaskConverter:
         key_value_length: int,
         dtype: torch.dtype = torch.float32,
         device: Union[torch.device, "str"] = "cpu",
-    ) -> torch.Tensor:
+    ) -> Optional[torch.Tensor]:
         """
         Creates a causal 4D mask of (bsz, head_dim=1, query_length, key_value_length) shape and adds large negative
         bias to upper right hand triangular matrix (causal mask).
@@ -367,9 +367,6 @@ def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, 
         tgt_len (`int`):
             The target length or query length the created mask shall have.
     """
-    # output_attentions=True can not be supported when using SDPA, and we fall back on
-    # the manual implementation that requires a 4D causal mask in all cases.
-
     batch_size, key_value_length = mask.shape
     tgt_len = tgt_len if tgt_len is not None else key_value_length
     if batch_size == 1 and torch.all(mask == 1):
@@ -393,7 +390,7 @@ def _create_4d_causal_attention_mask(
     device: torch.device,
     past_key_values_length: int = 0,
     sliding_window: Optional[int] = None,
-):
+) -> Optional[torch.Tensor]:
     """
     Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)`
 

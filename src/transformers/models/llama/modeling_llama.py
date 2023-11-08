@@ -710,15 +710,15 @@ class LlamaSDPAAttention(LlamaAttention):
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
 
-        # Note that Llama does not use dropout in the attention, hence the hard-coded
-        # dropout_p=0.0 independent of self.training.
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=attention_mask,
+            # Llama does not use dropout in the attention, hence the hard-coded dropout_p=0.0 independent of self.training.
             dropout_p=0.0,
-            is_causal=self.is_causal and attention_mask is None,
+            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
+            is_causal=self.is_causal and attention_mask is None and q_len > 1,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()

@@ -574,7 +574,8 @@ class BartSDPAAttention(BartAttention):
             value_states,
             attn_mask=attention_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=self.is_causal and attention_mask is not None,
+            # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
+            is_causal=self.is_causal and attention_mask is None and tgt_len > 1,
         )
 
         if attn_output.size() != (bsz, self.num_heads, tgt_len, self.head_dim):

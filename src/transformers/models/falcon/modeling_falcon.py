@@ -443,20 +443,14 @@ class FalconAttention(nn.Module):
 
         if alibi is None:
             if hasattr(F, "scaled_dot_product_attention") and not output_attentions:
-                # TODO: deprecate this once we add FA2 support in Falcon
-                logger.warning_once(
-                    "The current implementation of Falcon calls `torch.scaled_dot_product_attention` directly, this will be deprecated in the"
-                    " future in favor of the `BetterTransformer` API. Please install the latest optimum library with `pip install -U optimum` and call "
-                    "`model.to_bettertransformer()` to benefit from `torch.scaled_dot_product_attention` and future performance optimizations."
-                )
-
                 attn_output = F.scaled_dot_product_attention(
                     query_layer,
                     key_layer,
                     value_layer,
                     attention_mask,
                     0.0,
-                    is_causal=self.is_causal and attention_mask is None,
+                    # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case query_length == 1.
+                    is_causal=self.is_causal and attention_mask is None and query_length > 1,
                 )
                 attention_scores = None
             else:
@@ -486,7 +480,7 @@ class FalconAttention(nn.Module):
                     value_layer,
                     attn_mask=attention_mask,
                     dropout_p=self.attention_dropout.p if self.training else 0.0,
-                    is_causal=self.is_causal and attention_mask is None,
+                    is_causal=self.is_causal and attention_mask is None and query_length > 1,
                 )
                 context_layer = context_layer.transpose(1, 2)
                 context_layer = context_layer.reshape(batch_size, query_length, self.num_heads * self.head_dim)
