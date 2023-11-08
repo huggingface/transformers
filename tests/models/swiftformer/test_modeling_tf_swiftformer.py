@@ -106,7 +106,7 @@ class TFSwiftFormerModelTester:
         model = TFSwiftFormerModel(config=config)
         result = model(pixel_values)
         # FIXME: channels_first or last?
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, 7, 7, self.embed_dims[-1]))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.embed_dims[-1], 7, 7))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -213,7 +213,7 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
             hidden_states = outputs.hidden_states
 
             expected_num_stages = 8
-            self.assertEqual(len(hidden_states), expected_num_stages)  # TODO
+            self.assertEqual(len(hidden_states), expected_num_stages)
 
             # SwiftFormer's feature maps are of shape (batch_size, embed_dims, height, width)
             # with the width and height being successively divided by 2, after every 2 blocks
@@ -222,12 +222,10 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
                     hidden_states[i].shape,
                     tf.TensorShape(
                         [
-                            # FIXME: channels_last?
                             self.model_tester.batch_size,
-                            # self.model_tester.embed_dims[i // 2],
-                            (self.model_tester.image_size // 4) // 2 ** (i // 2),
-                            (self.model_tester.image_size // 4) // 2 ** (i // 2),
                             self.model_tester.embed_dims[i // 2],
+                            (self.model_tester.image_size // 4) // 2 ** (i // 2),
+                            (self.model_tester.image_size // 4) // 2 ** (i // 2),
                         ]
                     ),
                 )
