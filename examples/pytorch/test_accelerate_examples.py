@@ -28,7 +28,6 @@ from accelerate.utils import write_basic_config
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
-    is_torch_fp16_available_on_device,
     run_command,
     slow,
     torch_device,
@@ -92,9 +91,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --checkpointing_steps epoch
             --with_tracking
         """.split()
-
-        if is_torch_fp16_available_on_device(torch_device):
-            testargs.append("--fp16")
 
         run_command(self._launch_args + testargs)
         result = get_results(tmp_dir)
@@ -324,9 +320,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --with_tracking
             --checkpointing_steps 1
         """.split()
-
-        if is_torch_fp16_available_on_device(torch_device):
-            testargs.append("--fp16")
 
         run_command(self._launch_args + testargs)
         result = get_results(tmp_dir)
