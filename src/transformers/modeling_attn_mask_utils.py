@@ -14,8 +14,10 @@
 from typing import List, Optional, Tuple, Union
 
 import torch
+from dataclasses import dataclass
 
 
+@dataclass
 class AttentionMaskConverter:
     """
     A utility attention mask class that allows one to:
@@ -31,6 +33,8 @@ class AttentionMaskConverter:
         sliding_window (`int`, *optional*):
             Optionally, the sliding window masks can be created if `sliding_window` is defined to a positive integer.
     """
+    is_causal: bool
+    sliding_window: int
 
     def __init__(self, is_causal: bool, sliding_window: Optional[int] = None):
         self.is_causal = is_causal
