@@ -290,13 +290,12 @@ extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
 extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
-extras["vision"] = deps_list("Pillow")
+extras["vision"] = deps_list("Pillow", "opencv-python")
 extras["timm"] = deps_list("timm")
 extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 extras["video"] = deps_list("decord", "av")
-extras["opencv-python"] = deps_list("opencv-python")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
