@@ -822,6 +822,10 @@ _import_structure = {
         "TapasConfig",
         "TapasTokenizer",
     ],
+    "models.textnet": [
+        "TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TextNetConfig"
+    ],
     "models.time_series_transformer": [
         "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TimeSeriesTransformerConfig",
@@ -1300,6 +1304,7 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.siglip"].append("SiglipImageProcessor")
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
+    _import_structure["models.textnet"].append("TextNetImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.tvp"].append("TvpImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
@@ -3293,6 +3298,13 @@ else:
             "TapasModel",
             "TapasPreTrainedModel",
             "load_tf_weights_in_tapas",
+        ]
+    )
+    _import_structure["models.textnet"].extend(
+        [
+            "TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+            "TextNetBackbone",
+            "TextNetModel",
         ]
     )
     _import_structure["models.time_series_transformer"].extend(
@@ -5518,6 +5530,10 @@ if TYPE_CHECKING:
         TapasConfig,
         TapasTokenizer,
     )
+    from .models.textnet import (
+        TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TextNetConfig,
+    )
     from .models.time_series_transformer import (
         TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TimeSeriesTransformerConfig,
@@ -5993,6 +6009,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.siglip import SiglipImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
+        from .models.textnet import TextNetImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.tvp import TvpImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
@@ -7641,6 +7658,12 @@ if TYPE_CHECKING:
             TapasModel,
             TapasPreTrainedModel,
             load_tf_weights_in_tapas,
+        )
+        from .models.textnet import (
+            TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+            TextNetBackbone,
+            TextNetModel,
+            TextNetPreTrainedModel,
         )
         from .models.time_series_transformer import (
             TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -207,6 +207,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("t5", "T5Model"),
         ("table-transformer", "TableTransformerModel"),
         ("tapas", "TapasModel"),
+        ("textnet", "TextNetModel"),
         ("time_series_transformer", "TimeSeriesTransformerModel"),
         ("timesformer", "TimesformerModel"),
         ("timm_backbone", "TimmBackbone"),
@@ -538,6 +539,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("swiftformer", "SwiftFormerForImageClassification"),
         ("swin", "SwinForImageClassification"),
         ("swinv2", "Swinv2ForImageClassification"),
+        ("textnet", "TextNetForImageClassification"),
         ("van", "VanForImageClassification"),
         ("vit", "ViTForImageClassification"),
         ("vit_hybrid", "ViTHybridForImageClassification"),
@@ -1123,6 +1125,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("resnet", "ResNetBackbone"),
         ("swin", "SwinBackbone"),
         ("swinv2", "Swinv2Backbone"),
+        ("textnet", "TextNetBackbone"),
         ("timm_backbone", "TimmBackbone"),
         ("vitdet", "VitDetBackbone"),
     ]
