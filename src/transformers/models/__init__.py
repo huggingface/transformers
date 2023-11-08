@@ -198,6 +198,7 @@ from . import (
     swinv2,
     switch_transformers,
     t5,
+    textnet,
     table_transformer,
     tapas,
     time_series_transformer,
