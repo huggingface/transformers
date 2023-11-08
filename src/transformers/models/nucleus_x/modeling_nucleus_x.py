@@ -138,7 +138,7 @@ class NucleusXRelPos(nn.Module):
             e = torch.log(torch.tensor(1 / 512))
             decay = torch.log(1 - torch.exp(torch.linspace(s, e, num_heads)))  # [h,]
         else:
-            decay = torch.log(1 - 2 ** (-5 - torch.arange(num_heads, dtype=torch.float)))
+            decay = torch.log(1 - 2 ** (-5 - torch.arange(num_heads, dtype=angle.dtype)))
         self.register_buffer("angle", angle)
         self.register_buffer("decay", decay)
         self.recurrent_chunk_size = config.recurrent_chunk_size
@@ -233,7 +233,7 @@ class NucleusXRelPos(nn.Module):
         return retention_rel_pos
 
     def compute_decay_scale(self, slen, retention_mask=None):
-        exponent = torch.arange(slen, device=self.decay.device).float()
+        exponent = torch.arange(slen, device=self.decay.device, dtype=self.decay.dtype)
         decay_scale = self.decay.exp().view(-1, 1) ** exponent.view(1, -1)  # [h, t]
         if retention_mask is not None:
             seqlen = retention_mask.sum(dim=-1)  # [b,]
@@ -468,7 +468,10 @@ class NucleusXMultiScaleRetention(nn.Module):
             raise ValueError(f"forward_mode {forward_mode} not supported.")
 
         # concaat heads
-        normed = self.group_norm(retention_out).reshape(B, T, self.value_dim)
+        dtype = retention_out.dtype
+        # when elementwise_affine=False, apex.normalization.FusedRMSNorm may autocast to
+        # fp32. We want it back to original dtype.
+        normed = self.group_norm(retention_out).reshape(B, T, self.value_dim).to(dtype)
         # out gate & proj
         out = self.gate_fn(g) * normed
         out = self.out_proj(out)
