@@ -1548,6 +1548,8 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         """
         decoder_fixing_codes = self.config.decoder_config.decoder_fixing_codes
         speech_ids = speech_ids[:, 1:]
+        if torch.isin(self.speech_decoder_model.config.eos_token_id, speech_ids):
+            speech_ids = torch.nn.functional.pad(speech_ids, pad=(0, 1), value=self.speech_decoder_model.config.eos_token_id)
 
         stop_token_indices = torch.where(speech_ids == self.speech_decoder_model.config.eos_token_id, 1, 0)
         speech_ids = torch.masked_fill(speech_ids, mask=stop_token_indices.bool(), value=decoder_fixing_codes[0])
@@ -1561,7 +1563,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             stm = each_seq_stop_token_index.argmax()
             speech_ids[i, stm:] = decoder_fixing_codes[0]
             if stm - 3 < speech_ids.shape[1]:
-                speech_ids[i, -3:] = torch.LongTensor([decoder_fixing_codes[1:]], device=speech_ids.device)
+                speech_ids[i, -3:] = torch.tensor([decoder_fixing_codes[1:]], device=speech_ids.device, dtype=torch.long)
 
         return speech_ids
 
