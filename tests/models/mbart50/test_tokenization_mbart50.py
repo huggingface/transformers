@@ -84,7 +84,7 @@ class MBart50TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
-        self.assertListEqual(tokens,[SPIECE_UNDERLINE + "I", SPIECE_UNDERLINE + "was", SPIECE_UNDERLINE + "b", "or", "n", SPIECE_UNDERLINE + "in", SPIECE_UNDERLINE + "", "9", "2", "0", "0", "0", ",", SPIECE_UNDERLINE + "and", SPIECE_UNDERLINE + "this", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "f", "al", "s", "é", "."]) # fmt: skip
+        self.assertListEqual(tokens,[SPIECE_UNDERLINE + "I", SPIECE_UNDERLINE + "was", SPIECE_UNDERLINE + "b", "or", "n", SPIECE_UNDERLINE + "in", SPIECE_UNDERLINE + "", "9", "2", "0", "0", "0", ",", SPIECE_UNDERLINE + "and", SPIECE_UNDERLINE + "this", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "f", "al", "s", "é", "."])  # fmt: skip
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(
             ids,
@@ -95,7 +95,7 @@ class MBart50TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
-        self.assertListEqual(back_tokens,[SPIECE_UNDERLINE + "I", SPIECE_UNDERLINE + "was", SPIECE_UNDERLINE + "b", "or", "n", SPIECE_UNDERLINE + "in", SPIECE_UNDERLINE + "", "<unk>", "2", "0", "0", "0", ",", SPIECE_UNDERLINE + "and", SPIECE_UNDERLINE + "this", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "f", "al", "s", "<unk>", "."],) # fmt: skip
+        self.assertListEqual(back_tokens,[SPIECE_UNDERLINE + "I", SPIECE_UNDERLINE + "was", SPIECE_UNDERLINE + "b", "or", "n", SPIECE_UNDERLINE + "in", SPIECE_UNDERLINE + "", "<unk>", "2", "0", "0", "0", ",", SPIECE_UNDERLINE + "and", SPIECE_UNDERLINE + "this", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "f", "al", "s", "<unk>", "."],)  # fmt: skip
 
     @slow
     def test_tokenizer_integration(self):
