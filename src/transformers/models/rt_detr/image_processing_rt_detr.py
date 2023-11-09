@@ -143,34 +143,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
         )
         return image
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
-    def rescale(
-        self,
-        image: np.ndarray,
-        rescale_factor: float,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.ndarray:
-        """
-        Rescale the image by the given factor. image = image * rescale_factor.
-
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            rescale_factor (`float`):
-                The value to use for rescaling.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            input_data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the input image. If unset, is inferred from the input image. Can be
-                one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-        """
-        return rescale(image, rescale_factor, data_format=data_format, input_data_format=input_data_format)
 
     def preprocess(
         self,
@@ -276,99 +248,12 @@ class RTDetrImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    @property
-    def mscoco_label_category_map(self):
-        """Mapping categories of detected classes to COCO dataset"""
-        return {
-            1: 1,
-            2: 2,
-            3: 3,
-            4: 4,
-            5: 5,
-            6: 6,
-            7: 7,
-            8: 8,
-            9: 9,
-            10: 10,
-            11: 11,
-            12: 13,
-            13: 14,
-            14: 15,
-            15: 16,
-            16: 17,
-            17: 18,
-            18: 19,
-            19: 20,
-            20: 21,
-            21: 22,
-            22: 23,
-            23: 24,
-            24: 25,
-            25: 27,
-            26: 28,
-            27: 31,
-            28: 32,
-            29: 33,
-            30: 34,
-            31: 35,
-            32: 36,
-            33: 37,
-            34: 38,
-            35: 39,
-            36: 40,
-            37: 41,
-            38: 42,
-            39: 43,
-            40: 44,
-            41: 46,
-            42: 47,
-            43: 48,
-            44: 49,
-            45: 50,
-            46: 51,
-            47: 52,
-            48: 53,
-            49: 54,
-            50: 55,
-            51: 56,
-            52: 57,
-            53: 58,
-            54: 59,
-            55: 60,
-            56: 61,
-            57: 62,
-            58: 63,
-            59: 64,
-            60: 65,
-            61: 67,
-            62: 70,
-            63: 72,
-            64: 73,
-            65: 74,
-            66: 75,
-            67: 76,
-            68: 77,
-            69: 78,
-            70: 79,
-            71: 80,
-            72: 81,
-            73: 82,
-            74: 84,
-            75: 85,
-            76: 86,
-            77: 87,
-            78: 88,
-            79: 89,
-            80: 90,
-        }
-
     def post_process_object_detection(
         self,
         outputs,
         threshold: float = 0.5,
         target_sizes: Union[TensorType, List[Tuple]] = None,
         use_focal_loss: bool = True,
-        remap_coco_category: bool = True,
     ):
         """
         Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -385,8 +270,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
             use_focal_loss (`bool` defaults to True):
                 Variable informing if the focal loss was used to predict the outputs. Depending on its value, a
                 different function is used to process the logits and obtain the scores.
-            remap_coco_category (`bool` defaults to True):
-                Variable informing if a remapping to COCO's category should be used in the labels.
 
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
@@ -426,13 +309,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 scores, index = torch.topk(scores, num_top_queries, dim=-1)
                 labels = torch.gather(labels, dim=1, index=index)
                 boxes = torch.gather(boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1]))
-
-        if remap_coco_category:
-            labels = (
-                torch.tensor([self.mscoco_label_category_map[int(x.item()) + 1] for x in labels.flatten()])
-                .to(boxes.device)
-                .reshape(labels.shape)
-            )
 
         results = []
         for s, l, b in zip(scores, labels, boxes):
