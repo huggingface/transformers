@@ -33,11 +33,11 @@ VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "hf-internal-testing/llama-code-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer.model",
-        "codellama/CodeLlama-34b-Instruct-hf":"https://huggingface.co/codellama/CodeLlama-34b-Instruct-hf/resolve/main/tokenizer.model",
+        "codellama/CodeLlama-34b-Instruct-hf": "https://huggingface.co/codellama/CodeLlama-34b-Instruct-hf/resolve/main/tokenizer.model",
     },
     "tokenizer_file": {
         "hf-internal-testing/llama-code-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer_config.json",
-        "codellama/CodeLlama-34b-Instruct-hf":"https://huggingface.co/codellama/CodeLlama-34b-Instruct-hf/resolve/main/tokenizer_config.json",
+        "codellama/CodeLlama-34b-Instruct-hf": "https://huggingface.co/codellama/CodeLlama-34b-Instruct-hf/resolve/main/tokenizer_config.json",
     },
 }
 
