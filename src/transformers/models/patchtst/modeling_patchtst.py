@@ -208,7 +208,7 @@ class PatchTSTBatchNorm(nn.Module):
 
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
-        self.batchnorm = nn.BatchNorm1d(config.d_model)
+        self.batchnorm = nn.BatchNorm1d(config.d_model, eps=config.norm_eps)
 
     def forward(self, inputs: torch.Tensor):
         """
