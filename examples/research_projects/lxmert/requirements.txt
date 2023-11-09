@@ -62,7 +62,7 @@ prometheus-client==0.8.0
 prompt-toolkit==3.0.7
 ptyprocess==0.6.0
 pyaml==20.4.0
-pyarrow==1.0.1
+pyarrow==14.0.1
 pycparser==2.20
 Pygments>=2.7.4
 pyparsing==2.4.6
