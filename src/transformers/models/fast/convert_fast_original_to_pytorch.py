@@ -171,7 +171,6 @@ def get_base_model_config():
 def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_folder_path, validate_logits):
     response = requests.get(checkpoint_config_url)
     content = response.text
-    print("Got respose")
     namespace = {}
 
     exec(content, namespace)
@@ -204,7 +203,6 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_
     if "train" in data_config:
         if "short_size" in data_config["train"]:
             size = data_config["train"]["short_size"]
-    print("we got config")
     model = FastForSceneTextRecognition(config)
     fast_image_processor = FastImageProcessor(
         size={"height": size, "width": size},

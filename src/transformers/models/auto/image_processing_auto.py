@@ -104,6 +104,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("swin2sr", "Swin2SRImageProcessor"),
         ("swinv2", "ViTImageProcessor"),
         ("table-transformer", "DetrImageProcessor"),
+        ("textnet", "TextNetImageProcessor"),
         ("timesformer", "VideoMAEImageProcessor"),
         ("tvlt", "TvltImageProcessor"),
         ("tvp", "TvpImageProcessor"),
