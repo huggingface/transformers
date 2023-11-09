@@ -948,7 +948,7 @@ def infer_tests_to_run(
     print(f"\n### IMPACTED FILES ###\n{_print_list(impacted_files)}")
 
     # Grab the corresponding test files:
-    if "setup.py" in modified_files:
+    if any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"]):
         test_files_to_run = ["tests", "examples"]
         repo_utils_launch = True
     # in order to trigger pipeline tests even if no code change at all
