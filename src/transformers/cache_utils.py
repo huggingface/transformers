@@ -22,6 +22,10 @@ class Cache(ABC):
             raise KeyError(f"Cache only supports 0 (key) and 1 (value) indexing, got {key}")
 
     def __iter__(self):
+        """
+        Support for backwards-compatible `past_key_value` iteration, e.g. `for x in past_key_value:` to iterate over
+        keys and values
+        """
         yield self.key_cache
         yield self.value_cache
 
