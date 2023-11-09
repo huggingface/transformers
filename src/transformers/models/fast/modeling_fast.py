@@ -15,7 +15,7 @@
 """ PyTorch FAST model."""
 
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
@@ -578,7 +578,8 @@ class FastForSceneTextRecognitionOutput(ModelOutput):
     """
 
     loss: Optional[torch.Tensor] = None
-    hidden_states: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @add_start_docstrings(
@@ -613,7 +614,7 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
 
         self.backbone = backbone
         self.neck = FASTNeck(config=config)
-        self.det_head = FASTHead(config=config)
+        self.text_detection_head = FASTHead(config=config)
 
         self.pooling_1s = nn.MaxPool2d(
             kernel_size=config.head_pooling_size, stride=1, padding=(config.head_pooling_size - 1) // 2
@@ -699,7 +700,9 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
 
         hidden_states = self.neck(features)
 
-        text_detection_output = self.det_head(hidden_states)
+        text_detection_output = self.text_detection_head(hidden_states)
+
+        all_hidden_states = (features, hidden_states)
 
         loss = None
         if labels:
@@ -708,6 +711,11 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         text_detection_output = self._upsample(text_detection_output, pixel_values.size(), scale=4)
 
         if not return_dict:
-            return (loss, text_detection_output) if loss is not None else (text_detection_output,)
+            output = (loss, text_detection_output) if loss is not None else (text_detection_output,)
+            return output + (all_hidden_states,) if output_hidden_states else output
 
-        return FastForSceneTextRecognitionOutput(loss, text_detection_output)
+        return FastForSceneTextRecognitionOutput(
+            loss=loss,
+            last_hidden_state=text_detection_output,
+            hidden_states=all_hidden_states if output_hidden_states else None,
+        )
