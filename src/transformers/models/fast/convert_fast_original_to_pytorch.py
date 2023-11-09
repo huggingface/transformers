@@ -164,7 +164,9 @@ def get_base_model_config():
     pass
 
 
-def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_folder_path, validate_logits):
+def convert_fast_checkpoint(
+    checkpoint_url, checkpoint_config_url, pytorch_dump_folder_path, validate_logits, save_backbone_separately
+):
     response = requests.get(checkpoint_config_url)
     content = response.text
     namespace = {}
@@ -218,6 +220,8 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_
     model.load_state_dict(state_dict_changed)
 
     model.save_pretrained(pytorch_dump_folder_path)
+    if save_backbone_separately:
+        model.backbone.save_pretrained(pytorch_dump_folder_path + "/textnet/")
     fast_image_processor.save_pretrained(pytorch_dump_folder_path)
     logging.info("The converted weights are save here : " + pytorch_dump_folder_path)
 
@@ -246,8 +250,18 @@ if __name__ == "__main__":
         type=bool,
         help="whether to assert logits outputs",
     )
+    parser.add_argument(
+        "--save_backbone_separately",
+        default=False,
+        type=bool,
+        help="whether to assert logits outputs",
+    )
     args = parser.parse_args()
 
     convert_fast_checkpoint(
-        args.checkpoint_url, args.checkpoint_config_url, args.pytorch_dump_folder_path, args.validate_logits
+        args.checkpoint_url,
+        args.checkpoint_config_url,
+        args.pytorch_dump_folder_path,
+        args.validate_logits,
+        args.save_backbone_separately,
     )

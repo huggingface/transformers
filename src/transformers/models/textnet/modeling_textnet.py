@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -61,17 +61,14 @@ BIT_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
 """
 
-BIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # "google/bit-50",
-    # See all BiT models at https://huggingface.co/models?filter=bit
-]
+BIT_PRETRAINED_MODEL_ARCHIVE_LIST = ["Raghavan/textnet-base"]
 
 
 def get_same_padding(kernel_size):
     if isinstance(kernel_size, tuple):
-        p1 = get_same_padding(kernel_size[0])
-        p2 = get_same_padding(kernel_size[1])
-        return p1, p2
+        padding1 = get_same_padding(kernel_size[0])
+        padding2 = get_same_padding(kernel_size[1])
+        return padding1, padding2
     return kernel_size // 2
 
 
@@ -91,11 +88,6 @@ class TextNetConvLayer(nn.Module):
         self.activation_function = act_func
 
         padding = get_same_padding(self.kernel_size)
-        # if isinstance(padding, int):
-        #     padding *= self.dilation
-        # else:
-        #     padding[0] *= self.dilation
-        #     padding[1] *= self.dilation
 
         self.conv = nn.Conv2d(
             in_channels,
