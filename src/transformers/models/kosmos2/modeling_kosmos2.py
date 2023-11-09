@@ -1149,7 +1149,9 @@ class Kosmos2TextTransformer(nn.Module):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if image_embeds is not None:
-            inputs_embeds[img_input_mask.to(dtype=torch.bool)] = image_embeds.view(-1, image_embeds.size(-1))
+            inputs_embeds[img_input_mask.to(dtype=torch.bool)] = image_embeds.to(inputs_embeds.device).view(
+                -1, image_embeds.size(-1)
+            )
 
         inputs_embeds = inputs_embeds * self.embed_scale
 
@@ -1338,7 +1340,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
 
     config_class = Kosmos2Config
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Kosmos2VisionEncoderLayer, Kosmos2TextBlock"]
+    _no_split_modules = ["Kosmos2VisionEncoderLayer", "Kosmos2TextBlock"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
