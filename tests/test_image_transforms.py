@@ -278,7 +278,7 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertEqual(resized_image.shape, (4, 30, 40))
 
     def test_normalize(self):
-        image = np.random.randint(0, 256, (224, 224, 3)).astype(np.float32) / 255
+        image = np.random.randint(0, 256, (224, 224, 3)) / 255
 
         # Test that exception is raised if inputs are incorrect
         # Not a numpy array image
@@ -308,7 +308,7 @@ class ImageTransformsTester(unittest.TestCase):
         image = np.random.randint(0, 256, (224, 224, 4)) / 255
         mean = (0.5, 0.6, 0.7, 0.8)
         std = (0.1, 0.2, 0.3, 0.4)
-        expected_image = (image.astype(np.float32) - mean) / std
+        expected_image = (image - mean) / std
         self.assertTrue(
             np.allclose(
                 normalize(image, mean=mean, std=std, input_data_format="channels_last"), expected_image, atol=1e-6
