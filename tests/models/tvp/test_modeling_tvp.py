@@ -206,20 +206,13 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # cnn params and transformer params and head params are randomly initialized.
-                    if "vision_model" in name or "visual_prompter" in name or "transformer" in name or "head" in name:
-                        self.assertAlmostEqual(
-                            param.data.mean().item(),
-                            0.0,
-                            delta=1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
+                    # params are randomly initialized.
+                    self.assertAlmostEqual(
+                        param.data.mean().item(),
+                        0.0,
+                        delta=1.0,
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
     def test_attention_outputs(self):
         if not self.has_attentions:
