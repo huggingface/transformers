@@ -25,6 +25,7 @@ from torch import Tensor, nn
 
 from transformers import AutoBackbone
 
+from ...activations import ACT2CLS
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -161,29 +162,6 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     else:
         raise ValueError("Only 3-dimensional tensors are supported")
     return NestedTensor(tensor, mask)
-
-
-def get_activation(activation: str, inplace: bool = True):
-    activation = activation.lower()
-    if activation == "silu":
-        activation_func = nn.SiLU()
-    elif activation == "relu":
-        activation_func = nn.ReLU()
-    elif activation == "leaky_relu":
-        activation_func = nn.LeakyReLU()
-    elif activation == "silu":
-        activation_func = nn.SiLU()
-    elif activation == "gelu":
-        activation_func = nn.GELU()
-    elif activation is None:
-        activation_func = nn.Identity()
-    elif isinstance(activation, nn.Module):
-        activation_func = activation
-    else:
-        raise RuntimeError(f"Not valid activation {activation}")
-    if hasattr(activation_func, "inplace"):
-        activation_func.inplace = inplace
-    return activation_func
 
 
 # Copied from transformers.models.detr.modeling_detr.generalized_box_iou
@@ -372,7 +350,7 @@ class ConvNormLayer(nn.Module):
             bias=bias,
         )
         self.norm = nn.BatchNorm2d(channels_out)
-        self.activation = nn.Identity() if activation is None else get_activation(activation)
+        self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, x):
         return self.activation(self.norm(self.conv(x)))
@@ -433,7 +411,7 @@ class TransformerEncoderLayer(nn.Module):
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
-        self.activation = get_activation(activation)
+        self.activation = ACT2CLS[activation]()
 
     @staticmethod
     def with_pos_embed(tensor, pos_embed):
@@ -485,7 +463,7 @@ class RepVggBlock(nn.Module):
         self.channels_out = channels_out
         self.conv1 = ConvNormLayer(channels_in, channels_out, 3, 1, padding=1, activation=None)
         self.conv2 = ConvNormLayer(channels_in, channels_out, 1, 1, padding=0, activation=None)
-        self.activation = nn.Identity() if activation is None else get_activation(activation)
+        self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, x):
         if hasattr(self, "conv"):
@@ -773,7 +751,7 @@ class MLP(nn.Module):
         self.num_layers = num_layers
         hidden = [hidden_dim] * (num_layers - 1)
         self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + hidden, hidden + [output_dim]))
-        self.act = nn.Identity() if act is None else get_activation(act)
+        self.act = nn.Identity() if act is None else ACT2CLS[act]()
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
