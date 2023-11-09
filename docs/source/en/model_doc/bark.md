@@ -44,16 +44,6 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16).to(device)
 ```
 
-#### Using 🤗 Better Transformer
-
-Better Transformer is an 🤗 Optimum feature that performs kernel fusion under the hood. You can gain 20% to 30% in speed with zero performance degradation. It only requires one line of code to export the model to 🤗 Better Transformer:
-
-```python
-model =  model.to_bettertransformer()
-```
-
-Note that 🤗 Optimum must be installed before using this feature. [Here's how to install it.](https://huggingface.co/docs/optimum/installation)
-
 #### Using CPU offload
 
 As mentioned above, Bark is made up of 4 sub-models, which are called up sequentially during audio generation. In other words, while one sub-model is in use, the other sub-models are idle.
@@ -66,9 +56,47 @@ model.enable_cpu_offload()
 
 Note that 🤗 Accelerate must be installed before using this feature. [Here's how to install it.](https://huggingface.co/docs/accelerate/basic_tutorials/install)
 
+#### Using 🤗 Better Transformer
+
+Better Transformer is an 🤗 Optimum feature that performs kernel fusion under the hood. You can gain 20% to 30% in speed with zero performance degradation. It only requires one line of code to export the model to 🤗 Better Transformer:
+
+```python
+model =  model.to_bettertransformer()
+```
+
+Note that 🤗 Optimum must be installed before using this feature. [Here's how to install it.](https://huggingface.co/docs/optimum/installation)
+
+#### Using Flash Attention 2
+
+Flash Attention 2 is an even faster, optimized version of the previous optimization.
+
+##### Installation 
+
+First, make sure to [install](https://github.com/Dao-AILab/flash-attention#installation-and-features) the latest version of Flash Attention 2.
+
+```bash
+pip install -U flash-attn --no-build-isolation
+```
+
+Make also sure that you have a hardware that is compatible with Flash Attention 2. Read more about it in the [official documentation](https://github.com/Dao-AILab/flash-attention) of flash-attn repository. Make also sure to load your model in half-precision (e.g. `torch.float16``)
+
+##### Usage
+
+To load and run a model using FA2, refer to the snippet below:
+
+```python
+model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16, use_flash_attention_2=True).to(device)
+```
+
+##### Performance comparison
+
+Flash Attention 2 is also consistently faster than Better Transformer, and its performance improves even more as batch sizes increase.
+
+To put this into perspective, you can generate 17 times more text and still be 2s faster than the unoptimized version. At batch size 8, Flash Attention 2 is also 10% faster than Better Transformer, and at batch size 16, 25%.
+
 #### Combining optimization techniques
 
-You can combine optimization techniques, and use CPU offload, half-precision and 🤗 Better Transformer all at once.
+You can combine optimization techniques, and use CPU offload, half-precision and Flash Attention 2 (or 🤗 Better Transformer) all at once.
 
 ```python
 from transformers import BarkModel
@@ -76,11 +104,8 @@ import torch
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# load in fp16
-model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16).to(device)
-
-# convert to bettertransformer
-model = BetterTransformer.transform(model, keep_original_model=False)
+# load in fp16 and use Flash Attention 2
+model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16, use_flash_attention_2=True).to(device)
 
 # enable CPU offload
 model.enable_cpu_offload()
