@@ -54,11 +54,6 @@ class FastConfig(PretrainedConfig):
             Denotes the kernel_size of FASTRepConvLayer in neck module. Should be of same length of `neck_in_channels`
         neck_stride (`List[int]`, *optional*, defaults to `[1, 1, 1, 1]`):
             Denotes the neck_stride of FASTRepConvLayer in neck module. Should be of same length of `neck_in_channels`
-        neck_dilation (`List[int]`, *optional*, defaults to `[1, 1, 1, 1]`):
-            Denotes the neck_dilation of FASTRepConvLayer in neck module. Should be of same length of
-            `neck_in_channels`
-        neck_groups (`List[int]`, *optional*, defaults to `[1, 1, 1, 1]`):
-            Denotes the groups of FASTRepConvLayer in neck module. Should be of same length of `neck_in_channels`
         head_pooling_size (`int`, *optional*, defaults to 9):
             Denotes the pooling size of head layer
         head_dropout_ratio (`int`, *optional*, defaults to 0):
@@ -71,22 +66,12 @@ class FastConfig(PretrainedConfig):
             Denotes the conv kernel size of first conv layer in head layer.
         head_conv_stride (`int`, *optional*, defaults to 1):
             Denotes the conv stride of first conv layer in head layer.
-        head_conv_dilation (`int`, *optional*, defaults to 1):
-            Denotes the conv dilation of first conv layer in head layer.
-        head_conv_groups (`int`, *optional*, defaults to 1):
-            Denotes the conv groups of first conv layer in head layer.
         head_final_kernel_size (`int`, *optional*, defaults to 1):
             Denotes the conv kernel size of final conv layer in head layer.
         head_final_stride (`int`, *optional*, defaults to 1):
             Denotes the conv stride of final conv layer in head layer.
-        head_final_dilation (`int`, *optional*, defaults to 1):
-            Denotes the conv dilation of final conv layer in head layer.
-        head_final_groups (`int`, *optional*, defaults to 1):
-            Denotes the conv groups of final conv layer in head layer.
         head_final_bias (`bool`, *optional*, defaults to `False`):
             Denotes the conv bais of final conv layer in head layer.
-        head_final_has_shuffle (`bool`, *optional*, defaults to `False`):
-            Denotes the conv shuffle of final conv layer in head layer.
         head_final_in_channels (`int`, *optional*, defaults to 128):
             Denotes the in channels of final conv layer in head layer.
         head_final_out_channels (`int`, *optional*, defaults to 5):
@@ -130,22 +115,15 @@ class FastConfig(PretrainedConfig):
         neck_out_channels=[128, 128, 128, 128],
         neck_kernel_size=[[3, 3], [3, 3], [3, 3], [3, 3]],
         neck_stride=[1, 1, 1, 1],
-        neck_dilation=[1, 1, 1, 1],
-        neck_groups=[1, 1, 1, 1],
         head_pooling_size=9,
         head_dropout_ratio=0,
         head_conv_in_channels=512,
         head_conv_out_channels=128,
         head_conv_kernel_size=[3, 3],
         head_conv_stride=1,
-        head_conv_dilation=1,
-        head_conv_groups=1,
         head_final_kernel_size=1,
         head_final_stride=1,
-        head_final_dilation=1,
-        head_final_groups=1,
         head_final_bias=False,
-        head_final_has_shuffle=False,
         head_final_in_channels=128,
         head_final_out_channels=5,
         backbone="resnet50",
@@ -180,8 +158,6 @@ class FastConfig(PretrainedConfig):
         self.neck_out_channels = neck_out_channels
         self.neck_kernel_size = neck_kernel_size
         self.neck_stride = neck_stride
-        self.neck_dilation = neck_dilation
-        self.neck_groups = neck_groups
 
         self.head_pooling_size = head_pooling_size
         self.head_dropout_ratio = head_dropout_ratio
@@ -190,15 +166,10 @@ class FastConfig(PretrainedConfig):
         self.head_conv_out_channels = head_conv_out_channels
         self.head_conv_kernel_size = head_conv_kernel_size
         self.head_conv_stride = head_conv_stride
-        self.head_conv_dilation = head_conv_dilation
-        self.head_conv_groups = head_conv_groups
 
         self.head_final_kernel_size = head_final_kernel_size
         self.head_final_stride = head_final_stride
-        self.head_final_dilation = head_final_dilation
-        self.head_final_groups = head_final_groups
         self.head_final_bias = head_final_bias
-        self.head_final_has_shuffle = head_final_has_shuffle
         self.head_final_in_channels = head_final_in_channels
         self.head_final_out_channels = head_final_out_channels
 

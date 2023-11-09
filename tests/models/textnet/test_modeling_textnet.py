@@ -47,10 +47,6 @@ class TextNetModelTester:
         parent,
         kernel_size=3,
         stride=2,
-        dilation=1,
-        groups=1,
-        bias=False,
-        has_shuffle=False,
         in_channels=3,
         out_channels=64,
         use_bn=True,
@@ -61,26 +57,18 @@ class TextNetModelTester:
         stage1_out_channels=[64],
         stage1_kernel_size=[[3, 3]],
         stage1_stride=[1],
-        stage1_dilation=[1],
-        stage1_groups=[1],
         stage2_in_channels=[64],
         stage2_out_channels=[128],
         stage2_kernel_size=[[3, 1]],
         stage2_stride=[2],
-        stage2_dilation=[1],
-        stage2_groups=[1],
         stage3_in_channels=[128],
         stage3_out_channels=[256],
         stage3_kernel_size=[[1, 3]],
         stage3_stride=[2],
-        stage3_dilation=[1],
-        stage3_groups=[1],
         stage4_in_channels=[256],
         stage4_out_channels=[512],
         stage4_kernel_size=[[3, 3]],
         stage4_stride=[2],
-        stage4_dilation=[1],
-        stage4_groups=[1],
         out_features=["stage1", "stage2", "stage3", "stage4"],
         out_indices=[1, 2, 3, 4],
         batch_size=3,
@@ -95,10 +83,6 @@ class TextNetModelTester:
         self.parent = parent
         self.kernel_size = kernel_size
         self.stride = stride
-        self.dilation = dilation
-        self.groups = groups
-        self.bias = bias
-        self.has_shuffle = has_shuffle
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.use_bn = use_bn
@@ -110,29 +94,21 @@ class TextNetModelTester:
         self.stage1_out_channels = stage1_out_channels
         self.stage1_kernel_size = stage1_kernel_size
         self.stage1_stride = stage1_stride
-        self.stage1_dilation = stage1_dilation
-        self.stage1_groups = stage1_groups
 
         self.stage2_in_channels = stage2_in_channels
         self.stage2_out_channels = stage2_out_channels
         self.stage2_kernel_size = stage2_kernel_size
         self.stage2_stride = stage2_stride
-        self.stage2_dilation = stage2_dilation
-        self.stage2_groups = stage2_groups
 
         self.stage3_in_channels = stage3_in_channels
         self.stage3_out_channels = stage3_out_channels
         self.stage3_kernel_size = stage3_kernel_size
         self.stage3_stride = stage3_stride
-        self.stage3_dilation = stage3_dilation
-        self.stage3_groups = stage3_groups
 
         self.stage4_in_channels = stage4_in_channels
         self.stage4_out_channels = stage4_out_channels
         self.stage4_kernel_size = stage4_kernel_size
         self.stage4_stride = stage4_stride
-        self.stage4_dilation = stage4_dilation
-        self.stage4_groups = stage4_groups
 
         self.out_features = out_features
         self.out_indices = out_indices
@@ -151,10 +127,6 @@ class TextNetModelTester:
         return TextNetConfig(
             kernel_size=self.kernel_size,
             stride=self.stride,
-            dilation=self.dilation,
-            groups=self.groups,
-            bias=self.bias,
-            has_shuffle=self.has_shuffle,
             in_channels=self.in_channels,
             out_channels=self.out_channels,
             use_bn=self.use_bn,
@@ -165,26 +137,18 @@ class TextNetModelTester:
             stage1_out_channels=self.stage1_out_channels,
             stage1_kernel_size=self.stage1_kernel_size,
             stage1_stride=self.stage1_stride,
-            stage1_dilation=self.stage1_dilation,
-            stage1_groups=self.stage1_groups,
             stage2_in_channels=self.stage2_in_channels,
             stage2_out_channels=self.stage2_out_channels,
             stage2_kernel_size=self.stage2_kernel_size,
             stage2_stride=self.stage2_stride,
-            stage2_dilation=self.stage2_dilation,
-            stage2_groups=self.stage2_groups,
             stage3_in_channels=self.stage3_in_channels,
             stage3_out_channels=self.stage3_out_channels,
             stage3_kernel_size=self.stage3_kernel_size,
             stage3_stride=self.stage3_stride,
-            stage3_dilation=self.stage3_dilation,
-            stage3_groups=self.stage3_groups,
             stage4_in_channels=self.stage4_in_channels,
             stage4_out_channels=self.stage4_out_channels,
             stage4_kernel_size=self.stage4_kernel_size,
             stage4_stride=self.stage4_stride,
-            stage4_dilation=self.stage4_dilation,
-            stage4_groups=self.stage4_groups,
             out_features=self.out_features,
             out_indices=self.out_indices,
             hidden_sizes=self.hidden_sizes,
