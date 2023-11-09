@@ -1377,7 +1377,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
             module.in_proj_weight.data.fill_(1.0)
 
 
-class HybridEncoder(RTDetrPreTrainedModel):
+class RTDetrHybridEncoder(RTDetrPreTrainedModel):
     """
     Decoder consists of a projection layer, a set of `TransformerEncoder`, a top-down Feature Pyramid Network (FPN) and
     a bottom-up Path Aggregation Network (PAN). More details on the paper: https://arxiv.org/abs/2304.08069
@@ -1543,7 +1543,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         self.backbone = AutoBackbone.from_config(config.backbone_config)
         # enconder
-        self.encoder = HybridEncoder(config)
+        self.encoder = RTDetrHybridEncoder(config)
         # decoder
         self.decoder = RTDetrTransformer(config)
 
