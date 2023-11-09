@@ -506,7 +506,7 @@ class RepVggBlock(nn.Module):
         return kernel * t, beta - running_mean * gamma / std
 
 
-class CSPRepLayer(nn.Module):
+class RTDetrCSPRepLayer(nn.Module):
     def __init__(self, in_channels, out_channels, num_blocks=3, expansion=1.0, bias=None, activation="silu"):
         super().__init__()
         hidden_channels = int(out_channels * expansion)
@@ -1433,7 +1433,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
                 RTDetrConvNormLayer(self.hidden_dim, self.hidden_dim, 1, 1, activation=act_encoder)
             )
             self.fpn_blocks.append(
-                CSPRepLayer(
+                RTDetrCSPRepLayer(
                     self.hidden_dim * 2,
                     self.hidden_dim,
                     round(3 * depth_mult),
@@ -1450,7 +1450,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
                 RTDetrConvNormLayer(self.hidden_dim, self.hidden_dim, 3, 2, activation=act_encoder)
             )
             self.pan_blocks.append(
-                CSPRepLayer(
+                RTDetrCSPRepLayer(
                     self.hidden_dim * 2,
                     self.hidden_dim,
                     round(3 * depth_mult),
