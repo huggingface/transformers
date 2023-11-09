@@ -34,13 +34,13 @@ class RTDetrImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         do_resize=True,
-        size=640,
+        size=None,
         do_rescale=True,
         rescale_factor=1 / 255,
         return_tensors="pt",
     ):
         self.do_resize = do_resize
-        self.size = size
+        self.size = size if size is not None else {"height": 640, "width": 640}
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.return_tensors = return_tensors
