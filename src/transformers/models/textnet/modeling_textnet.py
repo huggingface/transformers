@@ -82,28 +82,20 @@ class TextNetConvLayer(nn.Module):
         out_channels,
         kernel_size=3,
         stride=1,
-        dilation=1,
-        groups=1,
-        bias=False,
-        has_shuffle=False,
         act_func="relu",
     ):
         super().__init__()
 
         self.kernel_size = kernel_size
         self.stride = stride
-        self.dilation = dilation
-        self.groups = groups
-        self.bias = bias
-        self.has_shuffle = has_shuffle
         self.activation_function = act_func
 
         padding = get_same_padding(self.kernel_size)
-        if isinstance(padding, int):
-            padding *= self.dilation
-        else:
-            padding[0] *= self.dilation
-            padding[1] *= self.dilation
+        # if isinstance(padding, int):
+        #     padding *= self.dilation
+        # else:
+        #     padding[0] *= self.dilation
+        #     padding[1] *= self.dilation
 
         self.conv = nn.Conv2d(
             in_channels,
@@ -111,9 +103,7 @@ class TextNetConvLayer(nn.Module):
             kernel_size=kernel_size,
             stride=stride,
             padding=padding,
-            dilation=dilation,
-            groups=groups,
-            bias=bias,
+            bias=False,
         )
         self.batch_norm = nn.Identity()
 
@@ -154,17 +144,15 @@ class TextNetConvLayer(nn.Module):
 
 
 class TestNetRepConvLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1):
         super().__init__()
 
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
         self.stride = stride
-        self.dilation = dilation
-        self.groups = groups
 
-        padding = (int(((kernel_size[0] - 1) * dilation) / 2), int(((kernel_size[1] - 1) * dilation) / 2))
+        padding = (int((kernel_size[0] - 1) / 2), int((kernel_size[1] - 1) / 2))
 
         self.nonlinearity = nn.ReLU(inplace=True)
 
@@ -174,14 +162,12 @@ class TestNetRepConvLayer(nn.Module):
             kernel_size=kernel_size,
             stride=stride,
             padding=padding,
-            dilation=dilation,
-            groups=groups,
             bias=False,
         )
         self.main_batch_norm = nn.BatchNorm2d(num_features=out_channels)
 
-        ver_pad = (int(((kernel_size[0] - 1) * dilation) / 2), 0)
-        hor_pad = (0, int(((kernel_size[1] - 1) * dilation) / 2))
+        ver_pad = (int((kernel_size[0] - 1) / 2), 0)
+        hor_pad = (0, int((kernel_size[1] - 1) / 2))
 
         if kernel_size[1] != 1:
             self.vertical_conv = nn.Conv2d(
@@ -190,23 +176,19 @@ class TestNetRepConvLayer(nn.Module):
                 kernel_size=(kernel_size[0], 1),
                 stride=stride,
                 padding=ver_pad,
-                dilation=dilation,
-                groups=groups,
                 bias=False,
             )
             self.vertical_batch_norm = nn.BatchNorm2d(num_features=out_channels)
         else:
             self.vertical_conv, self.vertical_batch_norm = None, None
 
-        if kernel_size[0] != 1:  # 卷积核的高大于1 -> 有水平卷积
+        if kernel_size[0] != 1:
             self.horizontal_conv = nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 kernel_size=(1, kernel_size[1]),
                 stride=stride,
                 padding=hor_pad,
-                dilation=dilation,
-                groups=groups,
                 bias=False,
             )
             self.horizontal_batch_norm = nn.BatchNorm2d(num_features=out_channels)
@@ -251,7 +233,7 @@ class TestNetRepConvLayer(nn.Module):
         if identity is None:
             return 0, 0
         if not hasattr(self, "id_tensor"):
-            input_dim = self.in_channels // self.groups
+            input_dim = self.in_channels
             kernel_value = np.zeros((self.in_channels, input_dim, 1, 1), dtype=np.float32)
             for i in range(self.in_channels):
                 kernel_value[i, i % input_dim, 0, 0] = 1
@@ -309,8 +291,6 @@ class TestNetRepConvLayer(nn.Module):
             kernel_size=self.main_conv.kernel_size,
             stride=self.main_conv.stride,
             padding=self.main_conv.padding,
-            dilation=self.main_conv.dilation,
-            groups=self.main_conv.groups,
             bias=True,
         )
         self.fused_conv.weight.data = kernel
@@ -348,10 +328,6 @@ class TextNetModel(TextNetPreTrainedModel):
             config.out_channels,
             config.kernel_size,
             config.stride,
-            config.dilation,
-            config.groups,
-            config.bias,
-            config.has_shuffle,
             config.act_func,
         )
         stage1 = []
@@ -360,8 +336,6 @@ class TextNetModel(TextNetPreTrainedModel):
             config.stage1_out_channels,
             config.stage1_kernel_size,
             config.stage1_stride,
-            config.stage1_dilation,
-            config.stage1_groups,
         ):
             stage1.append(TestNetRepConvLayer(*stage_config))
         self.stage1 = nn.ModuleList(stage1)
@@ -372,8 +346,6 @@ class TextNetModel(TextNetPreTrainedModel):
             config.stage2_out_channels,
             config.stage2_kernel_size,
             config.stage2_stride,
-            config.stage2_dilation,
-            config.stage2_groups,
         ):
             stage2.append(TestNetRepConvLayer(*stage_config))
         self.stage2 = nn.ModuleList(stage2)
@@ -384,8 +356,6 @@ class TextNetModel(TextNetPreTrainedModel):
             config.stage3_out_channels,
             config.stage3_kernel_size,
             config.stage3_stride,
-            config.stage3_dilation,
-            config.stage3_groups,
         ):
             stage3.append(TestNetRepConvLayer(*stage_config))
         self.stage3 = nn.ModuleList(stage3)
@@ -396,8 +366,6 @@ class TextNetModel(TextNetPreTrainedModel):
             config.stage4_out_channels,
             config.stage4_kernel_size,
             config.stage4_stride,
-            config.stage4_dilation,
-            config.stage4_groups,
         ):
             stage4.append(TestNetRepConvLayer(*stage_config))
         self.stage4 = nn.ModuleList(stage4)
