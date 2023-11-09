@@ -397,23 +397,21 @@ def deformable_attention_core_func(value, value_spatial_shapes, sampling_locatio
 
 
 class RTDetrTransformerEncoderLayer(nn.Module):
-    def __init__(
-        self, d_model, num_head, dim_feedforward=2048, dropout=0.1, activation="relu", normalize_before=False
-    ):
+    def __init__(self, config: RTDetrConfig):
         super().__init__()
-        self.normalize_before = normalize_before
+        self.normalize_before = config.normalize_before
+        
+        self.self_attn = nn.MultiheadAttention(config.hidden_dim, config.num_head, config.dropout, batch_first=True)
 
-        self.self_attn = nn.MultiheadAttention(d_model, num_head, dropout, batch_first=True)
+        self.linear1 = nn.Linear(config.hidden_dim, config.dim_feedforward)
+        self.dropout = nn.Dropout(config.dropout)
+        self.linear2 = nn.Linear(config.dim_feedforward, config.hidden_dim)
 
-        self.linear1 = nn.Linear(d_model, dim_feedforward)
-        self.dropout = nn.Dropout(dropout)
-        self.linear2 = nn.Linear(dim_feedforward, d_model)
-
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.dropout1 = nn.Dropout(dropout)
-        self.dropout2 = nn.Dropout(dropout)
-        self.activation = ACT2CLS[activation]()
+        self.norm1 = nn.LayerNorm(config.hidden_dim)
+        self.norm2 = nn.LayerNorm(config.hidden_dim)
+        self.dropout1 = nn.Dropout(config.dropout)
+        self.dropout2 = nn.Dropout(config.dropout)
+        self.activation = ACT2CLS[config.enc_act]()
 
     @staticmethod
     def with_pos_embed(tensor, pos_embed):
@@ -1399,10 +1397,6 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
         self.eval_size = config.eval_size
         self.out_channels = [self.hidden_dim for _ in range(len(self.in_channels))]
         self.out_strides = self.feat_strides
-        num_head = config.num_head
-        dim_feedforward = config.dim_feedforward
-        dropout = config.dropout
-        enc_act = config.enc_act
         expansion = config.expansion
         depth_mult = config.depth_mult
         act_encoder = config.act_encoder
@@ -1416,10 +1410,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
             )
 
         # encoder transformer
-        encoder_layer = RTDetrTransformerEncoderLayer(
-            self.hidden_dim, num_head=num_head, dim_feedforward=dim_feedforward, dropout=dropout, activation=enc_act
-        )
-
+        encoder_layer = RTDetrTransformerEncoderLayer(config)
         self.encoder = nn.ModuleList(
             [
                 TransformerEncoder(copy.deepcopy(encoder_layer), self.num_encoder_layers)

@@ -40,6 +40,8 @@ class RTDetrConfig(PretrainedConfig):
     Args:
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone in a dictionary or the config object of the backbone.
         in_channels (`List[int]`, *optional*, defaults to `[512, 1024, 2048]`):
@@ -72,6 +74,8 @@ class RTDetrConfig(PretrainedConfig):
         eval_size (`Tuple[int, int]`, *optional*):
             Height and width used to computes the effective height and width of the position embeddings after taking
             into account the stride.
+        normalize_before (`bool`, *optional*, defaults to `False`):
+            Determine whether to apply layer normalization in the transformer encoder layer before self-attention and feed-forward modules.
         num_classes (`int`, *optional*, defaults to 80):
             Number of target classes or labels used by the detector.
         num_queries (`int`, *optional*, defaults to 300):
@@ -153,6 +157,7 @@ class RTDetrConfig(PretrainedConfig):
     def __init__(
         self,
         initializer_range=0.02,
+        layer_norm_eps=1e-5,
         # backbone
         backbone_config=None,
         # encoder HybridEncoder
@@ -170,6 +175,7 @@ class RTDetrConfig(PretrainedConfig):
         depth_mult=1.0,
         act_encoder="silu",
         eval_size=None,
+        normalize_before=False,
         # decoder RTDetrTransformer
         num_classes=80,
         num_queries=300,
@@ -203,7 +209,8 @@ class RTDetrConfig(PretrainedConfig):
         **kwargs,
     ):
         self.initializer_range = initializer_range
-
+        self.layer_norm_eps = layer_norm_eps
+        
         # backbone
         if backbone_config is None:
             logger.info("Initializing the config with a `TimmBackbone` backbone.")
@@ -238,6 +245,7 @@ class RTDetrConfig(PretrainedConfig):
         self.depth_mult = depth_mult
         self.act_encoder = act_encoder
         self.eval_size = eval_size
+        self.normalize_before = normalize_before
         # decoder
         self.num_classes = num_classes
         self.num_queries = num_queries

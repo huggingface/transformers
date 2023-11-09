@@ -49,6 +49,7 @@ class RTDetrConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
         self.parent.assertTrue(hasattr(config, "initializer_range"))
+        self.parent.assertTrue(hasattr(config, "layer_norm_eps"))
         self.parent.assertTrue(hasattr(config, "backbone_config"))
         self.parent.assertTrue(hasattr(config, "in_channels"))
         self.parent.assertTrue(hasattr(config, "feat_strides"))
@@ -64,6 +65,7 @@ class RTDetrConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "depth_mult"))
         self.parent.assertTrue(hasattr(config, "act_encoder"))
         self.parent.assertTrue(hasattr(config, "eval_size"))
+        self.parent.assertTrue(hasattr(config, "normalize_before"))
         self.parent.assertTrue(hasattr(config, "num_classes"))
         self.parent.assertTrue(hasattr(config, "num_queries"))
         self.parent.assertTrue(hasattr(config, "position_embed_type"))
