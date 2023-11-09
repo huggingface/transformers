@@ -40,7 +40,7 @@ The original code can be found [here](https://github.com/lyuwenyu/RT-DETR/).
 
 [[autodoc]] RTDetrImageProcessor
     - preprocess
-    - post_process
+    - post_process_object_detection
 
 ## RTDetrModel
 

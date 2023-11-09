@@ -269,45 +269,6 @@ class RTDetrModelTester:
             weight_loss_bbox=self.weight_loss_bbox,
             weight_loss_giou=self.weight_loss_giou,
             eos_coefficient=self.eos_coefficient,
-            # depth=self.depth,
-            # variant=self.variant,
-            # num_stages=self.num_stages,
-            # return_idx=self.return_idx,
-            # act_presnet=self.act_presnet,
-            # freeze_at=self.freeze_at,
-            # freeze_norm=self.freeze_norm,
-            # pretrained=self.pretrained,
-            # is_encoder_decoder=self.is_encoder_decoder,
-            # block_nums=self.block_nums,
-            # in_channels=self.in_channels,
-            # feat_strides=self.feat_strides,
-            # hidden_dim=self.hidden_dim,
-            # num_head=self.num_head,
-            # dim_feedforward=self.dim_feedforward,
-            # dropout=self.dropout,
-            # enc_act=self.enc_act,
-            # use_encoder_idx=self.use_encoder_idx,
-            # num_encoder_layers=self.num_encoder_layers,
-            # pe_temperature=self.pe_temperature,
-            # expansion=self.expansion,
-            # depth_mult=self.depth_mult,
-            # act_encoder=self.act_encoder,
-            # eval_size=self.eval_size,
-            # num_classes=self.num_classes,
-            # num_queries=self.num_queries,
-            # position_embed_type=self.position_embed_type,
-            # feat_channels=self.feat_channels,
-            # num_levels=self.num_levels,
-            # num_decoder_points=self.num_decoder_points,
-            # num_decoder_layers=self.num_decoder_layers,
-            # act_decoder=self.act_decoder,
-            # num_denoising=self.num_denoising,
-            # label_noise_ratio=self.label_noise_ratio,
-            # box_noise_scale=self.box_noise_scale,
-            # learnt_init_query=self.learnt_init_query,
-            # eval_spatial_size=self.eval_spatial_size,
-            # eval_idx=self.eval_idx,
-            # eps=self.eps,
         )
 
     def create_and_check_model(self, model_class, config, pixel_values, labels):
@@ -448,8 +409,8 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
 
         # verify post processor
         target_sizes = torch.tensor([image.size[::-1]])
-        results = image_processor.post_process(
-            outputs, target_sizes=target_sizes, use_focal_loss=model.config.use_focal_loss, remap_coco_category=True
+        results = image_processor.post_process_object_detection(
+            outputs, threshold=0., target_sizes=target_sizes, use_focal_loss=model.config.use_focal_loss, remap_coco_category=True
         )
         # expecting 1 result per image in the batch
         self.assertEqual(len(results), batch_size)
