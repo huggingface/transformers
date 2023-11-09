@@ -201,7 +201,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertLess(result["perplexity"], 42)
 
-    @unittest.skip("This test is flaky on CI.")
+    @unittest.skip("TODO: FIXME (Zack) - This test is flaky on CI.")
     def test_run_ner(self):
         # with so little data distributed training needs more epochs to get the score on par with 0/1 gpu
         epochs = 7 if backend_device_count(torch_device) > 1 else 2
