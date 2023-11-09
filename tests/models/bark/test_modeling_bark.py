@@ -20,7 +20,7 @@ import inspect
 import tempfile
 import unittest
 
-from pytest import mark
+import pytest
 
 from transformers import (
     BarkCoarseConfig,
@@ -877,7 +877,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 
     @require_flash_attn
     @require_torch_gpu
-    @mark.flash_attn_test
+    @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference(self):
         for model_class in self.all_model_classes:
@@ -936,7 +936,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 
     @require_flash_attn
     @require_torch_gpu
-    @mark.flash_attn_test
+    @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_padding_right(self):
         for model_class in self.all_model_classes:
