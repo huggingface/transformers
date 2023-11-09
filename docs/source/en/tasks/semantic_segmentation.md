@@ -117,7 +117,7 @@ results = instance_segmentation(Image.open(image))
 results
 ```
 
-As you can see below, there are multiple cars classified, and there's no classification for pixels other than pixels that belong to car and person instances.
+As you can see below, there are multiple cars classified, and there's no classification for pixels other than those that belong to car and person instances.
 
 ```bash
 [{'score': 0.999944,
