@@ -410,8 +410,7 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
         # verify post processor
         target_sizes = torch.tensor([image.size[::-1]])
         results = image_processor.post_process_object_detection(
-            outputs, threshold=0., target_sizes=target_sizes, use_focal_loss=model.config.use_focal_loss, remap_coco_category=True
-        )
+            outputs, threshold=0., target_sizes=target_sizes, use_focal_loss=model.config.use_focal_loss)
         # expecting 1 result per image in the batch
         self.assertEqual(len(results), batch_size)
         # result of the first image
@@ -423,7 +422,7 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
         expected_box_shape = torch.Size([300, 4])
         self.assertEqual(result["boxes"].shape, expected_box_shape)
         # labels
-        expected_labels = torch.tensor([63, 17, 17, 75]).to(model.device)
+        expected_labels = torch.tensor([57, 15, 15, 65]).to(model.device)
         self.assertTrue(torch.equal(result["labels"][:4], expected_labels))
         # scores
         expected_scores = torch.tensor(

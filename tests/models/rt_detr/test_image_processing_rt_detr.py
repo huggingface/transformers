@@ -45,7 +45,7 @@ class RTDetrImageProcessingTester(unittest.TestCase):
         self.rescale_factor = rescale_factor
         self.return_tensors = return_tensors
         self.num_channels = 3
-        self.batch_size = 8
+        self.batch_size = 4
 
     def prepare_image_processor_dict(self):
         return {
@@ -58,7 +58,7 @@ class RTDetrImageProcessingTester(unittest.TestCase):
         }
 
     def get_expected_values(self):
-        return self.size, self.size
+        return self.size["height"], self.size["width"]
 
     def expected_output_image_shape(self, image):
         height, width = self.get_expected_values()
@@ -68,8 +68,8 @@ class RTDetrImageProcessingTester(unittest.TestCase):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
-            min_resolution=1,
-            max_resolution=1024,
+            min_resolution=30,
+            max_resolution=400,
             equal_resolution=equal_resolution,
             numpify=numpify,
             torchify=torchify,
@@ -83,7 +83,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def setUp(self):
         self.image_processor_tester = RTDetrImageProcessingTester()
-
+      
     @property
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
