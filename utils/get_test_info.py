@@ -81,6 +81,8 @@ def get_test_classes(test_file):
     test_module = get_test_module(test_file)
     for attr in dir(test_module):
         attr_value = getattr(test_module, attr)
+        if not (isinstance(attr_value, type) and "ModelTesterMixin" in [x.__name__ for x in attr_value.__bases__]):
+            continue
         # (TF/Flax)ModelTesterMixin is also an attribute in specific model test module. Let's exclude them by checking
         # `all_model_classes` is not empty (which also excludes other special classes).
         model_classes = getattr(attr_value, "all_model_classes", [])
