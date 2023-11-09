@@ -380,10 +380,10 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 Tensor containing the size (height, width) of each image of the batch. For evaluation, this must be the
                 original image size (before any data augmentation). For visualization, this should be the image size
                 after data augment, but before padding.
-            use_focal_loss (`bool` defaults to True):
+            use_focal_loss (`bool` defaults to `True`):
                 Variable informing if the focal loss was used to predict the outputs. Depending on its value, a
                 different function is used to process the logits and obtain the scores.
-            remap_coco_category (`bool` defaults to True):
+            remap_coco_category (`bool` defaults to `True`):
                 Variable informing if a remapping to COCO's category should be used in the labels.
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
