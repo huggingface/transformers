@@ -338,7 +338,7 @@ def get_contrastive_denoising_training_group(
     return input_query_class, input_query_bbox, attn_mask, dn_meta
 
 
-class ConvNormLayer(nn.Module):
+class RTDetrConvNormLayer(nn.Module):
     def __init__(self, channels_in, channels_out, kernel_size, stride, padding=None, bias=False, activation=None):
         super().__init__()
         self.conv = nn.Conv2d(
@@ -461,8 +461,8 @@ class RepVggBlock(nn.Module):
         super().__init__()
         self.channels_in = channels_in
         self.channels_out = channels_out
-        self.conv1 = ConvNormLayer(channels_in, channels_out, 3, 1, padding=1, activation=None)
-        self.conv2 = ConvNormLayer(channels_in, channels_out, 1, 1, padding=0, activation=None)
+        self.conv1 = RTDetrConvNormLayer(channels_in, channels_out, 3, 1, padding=1, activation=None)
+        self.conv2 = RTDetrConvNormLayer(channels_in, channels_out, 1, 1, padding=0, activation=None)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, x):
@@ -492,7 +492,7 @@ class RepVggBlock(nn.Module):
         else:
             return F.pad(kernel1x1, [1, 1, 1, 1])
 
-    def _fuse_bn_tensor(self, branch: ConvNormLayer):
+    def _fuse_bn_tensor(self, branch: RTDetrConvNormLayer):
         if branch is None:
             return 0, 0
         kernel = branch.conv.weight
@@ -510,13 +510,13 @@ class CSPRepLayer(nn.Module):
     def __init__(self, in_channels, out_channels, num_blocks=3, expansion=1.0, bias=None, activation="silu"):
         super().__init__()
         hidden_channels = int(out_channels * expansion)
-        self.conv1 = ConvNormLayer(in_channels, hidden_channels, 1, 1, bias=bias, activation=activation)
-        self.conv2 = ConvNormLayer(in_channels, hidden_channels, 1, 1, bias=bias, activation=activation)
+        self.conv1 = RTDetrConvNormLayer(in_channels, hidden_channels, 1, 1, bias=bias, activation=activation)
+        self.conv2 = RTDetrConvNormLayer(in_channels, hidden_channels, 1, 1, bias=bias, activation=activation)
         self.bottlenecks = nn.Sequential(
             *[RepVggBlock(hidden_channels, hidden_channels, activation=activation) for _ in range(num_blocks)]
         )
         if hidden_channels != out_channels:
-            self.conv3 = ConvNormLayer(hidden_channels, out_channels, 1, 1, bias=bias, activation=activation)
+            self.conv3 = RTDetrConvNormLayer(hidden_channels, out_channels, 1, 1, bias=bias, activation=activation)
         else:
             self.conv3 = nn.Identity()
 
@@ -1429,7 +1429,9 @@ class HybridEncoder(RTDetrPreTrainedModel):
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1, 0, -1):
-            self.lateral_convs.append(ConvNormLayer(self.hidden_dim, self.hidden_dim, 1, 1, activation=act_encoder))
+            self.lateral_convs.append(
+                RTDetrConvNormLayer(self.hidden_dim, self.hidden_dim, 1, 1, activation=act_encoder)
+            )
             self.fpn_blocks.append(
                 CSPRepLayer(
                     self.hidden_dim * 2,
@@ -1444,7 +1446,9 @@ class HybridEncoder(RTDetrPreTrainedModel):
         self.downsample_convs = nn.ModuleList()
         self.pan_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1):
-            self.downsample_convs.append(ConvNormLayer(self.hidden_dim, self.hidden_dim, 3, 2, activation=act_encoder))
+            self.downsample_convs.append(
+                RTDetrConvNormLayer(self.hidden_dim, self.hidden_dim, 3, 2, activation=act_encoder)
+            )
             self.pan_blocks.append(
                 CSPRepLayer(
                     self.hidden_dim * 2,
