@@ -192,9 +192,6 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_call_numpy(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
-        print("=" * 3000)
-        print(image_processing)
-        print("=" * 3000)
         # create random numpy tensors
         video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
         for video in video_inputs:
