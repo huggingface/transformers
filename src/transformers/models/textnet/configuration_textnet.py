@@ -31,6 +31,7 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     [Raghavan/fast_base_tt_800_finetune_ic17mlt](https://huggingface.co/Raghavan/fast_base_tt_800_finetune_ic17mlt)
     """
+    model_type = "textnet"
 
     def __init__(
         self,

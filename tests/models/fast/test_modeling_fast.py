@@ -21,12 +21,14 @@ from PIL import Image
 
 from transformers import (
     FastConfig,
+    TextNetConfig,
     is_torch_available,
 )
 from transformers.models.fast.image_processing_fast import FastImageProcessor
 from transformers.testing_utils import (
     require_torch,
     require_vision,
+    slow,
     torch_device,
 )
 
@@ -203,43 +205,50 @@ class FastModelTester:
         return config, {"pixel_values": pixel_values}
 
     def get_config(self):
+        textnet_config = TextNetConfig(
+            kernel_size=self.backbone_kernel_size,
+            stride=self.backbone_stride,
+            dilation=self.backbone_dilation,
+            groups=self.backbone_groups,
+            bias=self.backbone_bias,
+            has_shuffle=self.backbone_has_shuffle,
+            in_channels=self.backbone_in_channels,
+            out_channels=self.backbone_out_channels,
+            use_bn=self.backbone_use_bn,
+            act_func=self.backbone_act_func,
+            dropout_rate=self.backbone_dropout_rate,
+            ops_order=self.backbone_ops_order,
+            stage1_in_channels=self.backbone_stage1_in_channels,
+            stage1_out_channels=self.backbone_stage1_out_channels,
+            stage1_kernel_size=self.backbone_stage1_kernel_size,
+            stage1_stride=self.backbone_stage1_stride,
+            stage1_dilation=self.backbone_stage1_dilation,
+            stage1_groups=self.backbone_stage1_groups,
+            stage2_in_channels=self.backbone_stage2_in_channels,
+            stage2_out_channels=self.backbone_stage2_out_channels,
+            stage2_kernel_size=self.backbone_stage2_kernel_size,
+            stage2_stride=self.backbone_stage2_stride,
+            stage2_dilation=self.backbone_stage2_dilation,
+            stage2_groups=self.backbone_stage2_groups,
+            stage3_in_channels=self.backbone_stage3_in_channels,
+            stage3_out_channels=self.backbone_stage3_out_channels,
+            stage3_kernel_size=self.backbone_stage3_kernel_size,
+            stage3_stride=self.backbone_stage3_stride,
+            stage3_dilation=self.backbone_stage3_dilation,
+            stage3_groups=self.backbone_stage3_groups,
+            stage4_in_channels=self.backbone_stage4_in_channels,
+            stage4_out_channels=self.backbone_stage4_out_channels,
+            stage4_kernel_size=self.backbone_stage4_kernel_size,
+            stage4_stride=self.backbone_stage4_stride,
+            stage4_dilation=self.backbone_stage4_dilation,
+            stage4_groups=self.backbone_stage4_groups,
+            out_features=["stage1", "stage2", "stage3", "stage4"],
+            out_indices=[1, 2, 3, 4],
+        )
+
         return FastConfig(
-            backbone_kernel_size=self.backbone_kernel_size,
-            backbone_stride=self.backbone_stride,
-            backbone_dilation=self.backbone_dilation,
-            backbone_groups=self.backbone_groups,
-            backbone_bias=self.backbone_bias,
-            backbone_has_shuffle=self.backbone_has_shuffle,
-            backbone_in_channels=self.backbone_in_channels,
-            backbone_out_channels=self.backbone_out_channels,
-            backbone_use_bn=self.backbone_use_bn,
-            backbone_act_func=self.backbone_act_func,
-            backbone_dropout_rate=self.backbone_dropout_rate,
-            backbone_ops_order=self.backbone_ops_order,
-            backbone_stage1_in_channels=self.backbone_stage1_in_channels,
-            backbone_stage1_out_channels=self.backbone_stage1_out_channels,
-            backbone_stage1_kernel_size=self.backbone_stage1_kernel_size,
-            backbone_stage1_stride=self.backbone_stage1_stride,
-            backbone_stage1_dilation=self.backbone_stage1_dilation,
-            backbone_stage1_groups=self.backbone_stage1_groups,
-            backbone_stage2_in_channels=self.backbone_stage2_in_channels,
-            backbone_stage2_out_channels=self.backbone_stage2_out_channels,
-            backbone_stage2_kernel_size=self.backbone_stage2_kernel_size,
-            backbone_stage2_stride=self.backbone_stage2_stride,
-            backbone_stage2_dilation=self.backbone_stage2_dilation,
-            backbone_stage2_groups=self.backbone_stage2_groups,
-            backbone_stage3_in_channels=self.backbone_stage3_in_channels,
-            backbone_stage3_out_channels=self.backbone_stage3_out_channels,
-            backbone_stage3_kernel_size=self.backbone_stage3_kernel_size,
-            backbone_stage3_stride=self.backbone_stage3_stride,
-            backbone_stage3_dilation=self.backbone_stage3_dilation,
-            backbone_stage3_groups=self.backbone_stage3_groups,
-            backbone_stage4_in_channels=self.backbone_stage4_in_channels,
-            backbone_stage4_out_channels=self.backbone_stage4_out_channels,
-            backbone_stage4_kernel_size=self.backbone_stage4_kernel_size,
-            backbone_stage4_stride=self.backbone_stage4_stride,
-            backbone_stage4_dilation=self.backbone_stage4_dilation,
-            backbone_stage4_groups=self.backbone_stage4_groups,
+            use_timm_backbone=False,
+            backbone_config=textnet_config,
             neck_in_channels=self.neck_in_channels,
             neck_out_channels=self.neck_out_channels,
             neck_kernel_size=self.neck_kernel_size,
@@ -387,7 +396,7 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 @require_torch
 @require_vision
 class FastModelIntegrationTest(unittest.TestCase):
-    # @slow
+    @slow
     def test_inference_fast_tiny_ic17mlt_model(self):
         model = FastForSceneTextRecognition.from_pretrained("Raghavan/ic17mlt_Fast_T")
 
@@ -409,7 +418,7 @@ class FastModelIntegrationTest(unittest.TestCase):
         assert final_out[0]["bboxes"][0] == [224, 120, 246, 120, 246, 134, 224, 134]
         assert round(float(final_out[0]["scores"][0]), 5) == 0.95541
 
-    # @slow
+    @slow
     def test_inference_fast_base_800_total_text_ic17mlt_model(self):
         model = FastForSceneTextRecognition.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
 

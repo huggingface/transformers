@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Fast model configuration"""
-from transformers import PretrainedConfig
+from transformers import CONFIG_MAPPING, PretrainedConfig
 from transformers.utils import logging
 
 
@@ -33,42 +33,9 @@ class FastConfig(PretrainedConfig):
 
     def __init__(
         self,
-        backbone_kernel_size=3,
-        backbone_stride=2,
-        backbone_dilation=1,
-        backbone_groups=1,
-        backbone_bias=False,
-        backbone_has_shuffle=False,
-        backbone_in_channels=3,
-        backbone_out_channels=64,
-        backbone_use_bn=True,
-        backbone_act_func="relu",
-        backbone_dropout_rate=0,
-        backbone_ops_order="weight_bn_act",
-        backbone_stage1_in_channels=[64, 64, 64],
-        backbone_stage1_out_channels=[64, 64, 64],
-        backbone_stage1_kernel_size=[[3, 3], [3, 3], [3, 3]],
-        backbone_stage1_stride=[1, 2, 1],
-        backbone_stage1_dilation=[1, 1, 1],
-        backbone_stage1_groups=[1, 1, 1],
-        backbone_stage2_in_channels=[64, 128, 128, 128],
-        backbone_stage2_out_channels=[128, 128, 128, 128],
-        backbone_stage2_kernel_size=[[3, 3], [1, 3], [3, 3], [3, 1]],
-        backbone_stage2_stride=[2, 1, 1, 1],
-        backbone_stage2_dilation=[1, 1, 1, 1],
-        backbone_stage2_groups=[1, 1, 1, 1],
-        backbone_stage3_in_channels=[128, 256, 256, 256],
-        backbone_stage3_out_channels=[256, 256, 256, 256],
-        backbone_stage3_kernel_size=[[3, 3], [3, 3], [3, 1], [1, 3]],
-        backbone_stage3_stride=[2, 1, 1, 1],
-        backbone_stage3_dilation=[1, 1, 1, 1],
-        backbone_stage3_groups=[1, 1, 1, 1],
-        backbone_stage4_in_channels=[256, 512, 512, 512],
-        backbone_stage4_out_channels=[512, 512, 512, 512],
-        backbone_stage4_kernel_size=[[3, 3], [3, 1], [1, 3], [3, 3]],
-        backbone_stage4_stride=[2, 1, 1, 1],
-        backbone_stage4_dilation=[1, 1, 1, 1],
-        backbone_stage4_groups=[1, 1, 1, 1],
+        use_timm_backbone=True,
+        backbone_config=None,
+        num_channels=3,
         neck_in_channels=[64, 128, 256, 512],
         neck_out_channels=[128, 128, 128, 128],
         neck_kernel_size=[[3, 3], [3, 3], [3, 3], [3, 3]],
@@ -96,51 +63,33 @@ class FastConfig(PretrainedConfig):
         head_final_dropout_rate=0,
         head_final_ops_order="weight",
         loss_bg=False,
+        backbone="resnet50",
+        use_pretrained_backbone=True,
+        dilation=False,
         initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        self.backbone_kernel_size = backbone_kernel_size
-        self.backbone_stride = backbone_stride
-        self.backbone_dilation = backbone_dilation
-        self.backbone_groups = backbone_groups
-        self.backbone_bias = backbone_bias
-        self.backbone_has_shuffle = backbone_has_shuffle
-        self.backbone_in_channels = backbone_in_channels
-        self.backbone_out_channels = backbone_out_channels
-        self.backbone_use_bn = backbone_use_bn
-        self.backbone_act_func = backbone_act_func
-        self.backbone_dropout_rate = backbone_dropout_rate
-        self.backbone_ops_order = backbone_ops_order
+        if backbone_config is not None and use_timm_backbone:
+            raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
 
-        self.backbone_stage1_in_channels = backbone_stage1_in_channels
-        self.backbone_stage1_out_channels = backbone_stage1_out_channels
-        self.backbone_stage1_kernel_size = backbone_stage1_kernel_size
-        self.backbone_stage1_stride = backbone_stage1_stride
-        self.backbone_stage1_dilation = backbone_stage1_dilation
-        self.backbone_stage1_groups = backbone_stage1_groups
+        if not use_timm_backbone:
+            if backbone_config is None:
+                logger.info(
+                    "`backbone_config` is `None`. Initializing the config with the default `TextNet` backbone."
+                )
+                backbone_config = CONFIG_MAPPING["textnet"](out_features=["stage1", "stage2", "stage3", "stage4"])
+            elif isinstance(backbone_config, dict):
+                backbone_model_type = backbone_config.get("model_type")
+                config_class = CONFIG_MAPPING[backbone_model_type]
+                backbone_config = config_class.from_dict(backbone_config)
+            # set timm attributes to None
+            dilation, backbone, use_pretrained_backbone = None, None, None
 
-        self.backbone_stage2_in_channels = backbone_stage2_in_channels
-        self.backbone_stage2_out_channels = backbone_stage2_out_channels
-        self.backbone_stage2_kernel_size = backbone_stage2_kernel_size
-        self.backbone_stage2_stride = backbone_stage2_stride
-        self.backbone_stage2_dilation = backbone_stage2_dilation
-        self.backbone_stage2_groups = backbone_stage2_groups
-
-        self.backbone_stage3_in_channels = backbone_stage3_in_channels
-        self.backbone_stage3_out_channels = backbone_stage3_out_channels
-        self.backbone_stage3_kernel_size = backbone_stage3_kernel_size
-        self.backbone_stage3_stride = backbone_stage3_stride
-        self.backbone_stage3_dilation = backbone_stage3_dilation
-        self.backbone_stage3_groups = backbone_stage3_groups
-
-        self.backbone_stage4_in_channels = backbone_stage4_in_channels
-        self.backbone_stage4_out_channels = backbone_stage4_out_channels
-        self.backbone_stage4_kernel_size = backbone_stage4_kernel_size
-        self.backbone_stage4_stride = backbone_stage4_stride
-        self.backbone_stage4_dilation = backbone_stage4_dilation
-        self.backbone_stage4_groups = backbone_stage4_groups
+        self.use_timm_backbone = use_timm_backbone
+        self.backbone_config = backbone_config
+        self.num_channels = num_channels
 
         self.neck_in_channels = neck_in_channels
         self.neck_out_channels = neck_out_channels
@@ -173,4 +122,20 @@ class FastConfig(PretrainedConfig):
         self.head_final_ops_order = head_final_ops_order
 
         self.loss_bg = loss_bg
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
+        self.dilation = dilation
+
         self.initializer_range = initializer_range
+
+    @classmethod
+    def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
+        """Instantiate a [`FastConfig`] (or a derived class) from a pre-trained backbone model configuration.
+
+        Args:
+            backbone_config ([`PretrainedConfig`]):
+                The backbone configuration.
+        Returns:
+            [`DetrConfig`]: An instance of a configuration object
+        """
+        return cls(backbone_config=backbone_config, **kwargs)
