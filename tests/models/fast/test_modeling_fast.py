@@ -28,7 +28,6 @@ from transformers.models.fast.image_processing_fast import FastImageProcessor
 from transformers.testing_utils import (
     require_torch,
     require_vision,
-    slow,
     torch_device,
 )
 
@@ -59,7 +58,7 @@ class FastModelTester:
         backbone_in_channels=3,
         backbone_out_channels=64,
         backbone_use_bn=True,
-        backbone_act_func="relu",
+        backbone_activation_func="relu",
         backbone_dropout_rate=0,
         backbone_ops_order="weight_bn_act",
         backbone_stage1_in_channels=[64],
@@ -108,7 +107,7 @@ class FastModelTester:
         head_final_has_shuffle=False,
         head_final_in_channels=4,
         head_final_out_channels=5,
-        head_final_use_bn=False,
+        head_final_use_batch_norm=False,
         head_final_act_func=None,
         head_final_dropout_rate=0,
         head_final_ops_order="weight",
@@ -127,7 +126,7 @@ class FastModelTester:
         self.backbone_in_channels = backbone_in_channels
         self.backbone_out_channels = backbone_out_channels
         self.backbone_use_bn = backbone_use_bn
-        self.backbone_act_func = backbone_act_func
+        self.backbone_act_func = backbone_activation_func
         self.backbone_dropout_rate = backbone_dropout_rate
         self.backbone_ops_order = backbone_ops_order
 
@@ -184,7 +183,7 @@ class FastModelTester:
         self.head_final_has_shuffle = head_final_has_shuffle
         self.head_final_in_channels = head_final_in_channels
         self.head_final_out_channels = head_final_out_channels
-        self.head_final_use_bn = head_final_use_bn
+        self.head_final_use_bn = head_final_use_batch_norm
         self.head_final_act_func = head_final_act_func
         self.head_final_dropout_rate = head_final_dropout_rate
         self.head_final_ops_order = head_final_ops_order
@@ -214,10 +213,7 @@ class FastModelTester:
             has_shuffle=self.backbone_has_shuffle,
             in_channels=self.backbone_in_channels,
             out_channels=self.backbone_out_channels,
-            use_bn=self.backbone_use_bn,
             act_func=self.backbone_act_func,
-            dropout_rate=self.backbone_dropout_rate,
-            ops_order=self.backbone_ops_order,
             stage1_in_channels=self.backbone_stage1_in_channels,
             stage1_out_channels=self.backbone_stage1_out_channels,
             stage1_kernel_size=self.backbone_stage1_kernel_size,
@@ -271,10 +267,6 @@ class FastModelTester:
             head_final_has_shuffle=self.head_final_has_shuffle,
             head_final_in_channels=self.head_final_in_channels,
             head_final_out_channels=self.head_final_out_channels,
-            head_final_use_bn=self.head_final_use_bn,
-            head_final_act_func=self.head_final_act_func,
-            head_final_dropout_rate=self.head_final_dropout_rate,
-            head_final_ops_order=self.head_final_ops_order,
         )
 
     def create_and_check_model(self, config, input):
@@ -396,7 +388,7 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 @require_torch
 @require_vision
 class FastModelIntegrationTest(unittest.TestCase):
-    @slow
+    # @slow
     def test_inference_fast_tiny_ic17mlt_model(self):
         model = FastForSceneTextRecognition.from_pretrained("Raghavan/ic17mlt_Fast_T")
 
@@ -418,7 +410,7 @@ class FastModelIntegrationTest(unittest.TestCase):
         assert final_out[0]["bboxes"][0] == [224, 120, 246, 120, 246, 134, 224, 134]
         assert round(float(final_out[0]["scores"][0]), 5) == 0.95541
 
-    @slow
+    # @slow
     def test_inference_fast_base_800_total_text_ic17mlt_model(self):
         model = FastForSceneTextRecognition.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
 

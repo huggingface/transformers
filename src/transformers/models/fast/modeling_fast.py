@@ -68,25 +68,10 @@ FAST_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
 
 def get_same_padding(kernel_size):
     if isinstance(kernel_size, tuple):
-        p1 = get_same_padding(kernel_size[0])
-        p2 = get_same_padding(kernel_size[1])
-        return p1, p2
+        padding1 = get_same_padding(kernel_size[0])
+        padding2 = get_same_padding(kernel_size[1])
+        return padding1, padding2
     return kernel_size // 2
-
-
-def build_activation(act_func, inplace=True):
-    if act_func == "relu":
-        return nn.ReLU(inplace=inplace)
-    elif act_func == "relu6":
-        return nn.ReLU6(inplace=inplace)
-    elif act_func == "tanh":
-        return nn.Tanh()
-    elif act_func == "sigmoid":
-        return nn.Sigmoid()
-    elif act_func is None:
-        return None
-    else:
-        raise ValueError("do not support: %s" % act_func)
 
 
 class FASTConvLayer(nn.Module):
@@ -100,10 +85,6 @@ class FASTConvLayer(nn.Module):
         groups=1,
         bias=False,
         has_shuffle=False,
-        use_batch_norm=True,
-        act_func="relu",
-        dropout_rate=0,
-        use_act=True,
     ):
         super().__init__()
 
@@ -113,7 +94,6 @@ class FASTConvLayer(nn.Module):
         self.groups = groups
         self.bias = bias
         self.has_shuffle = has_shuffle
-        self.activation_function = act_func
 
         padding = get_same_padding(self.kernel_size)
         if isinstance(padding, int):
@@ -132,29 +112,17 @@ class FASTConvLayer(nn.Module):
             groups=groups,
             bias=bias,
         )
-        self.batch_norm = nn.Identity()
-        if use_batch_norm:
-            self.batch_norm = nn.BatchNorm2d(out_channels)
-
-        self.activation = nn.Identity()
-        if use_act:
-            act = build_activation(self.activation_function, True)
-            if act is not None:
-                self.activation = act
 
     def forward(self, hidden_states):
         if self.training:
             if hasattr(self, "fused_conv"):
                 delattr(self, "fused_conv")
             hidden_states = self.conv(hidden_states)
-            hidden_states = self.batch_norm(hidden_states)
-            return self.activation(hidden_states)
+            return hidden_states
         else:
             if not hasattr(self, "fused_conv"):
-                setattr(self, "fused_conv", self.fuse_conv_batch_norm(self.conv, self.batch_norm))
+                setattr(self, "fused_conv", self.fuse_conv_batch_norm(self.conv, nn.Identity()))
             hidden_states = self.fused_conv(hidden_states)
-            if self.activation is not None:
-                hidden_states = self.activation(hidden_states)
             return hidden_states
 
     def fuse_conv_batch_norm(self, conv, batch_norm):
@@ -411,10 +379,6 @@ class FASTHead(nn.Module):
             config.head_final_groups,
             config.head_final_bias,
             config.head_final_has_shuffle,
-            config.head_final_use_bn,
-            config.head_final_act_func,
-            config.head_final_dropout_rate,
-            config.head_final_ops_order,
         )
 
         self.pooling_size = config.head_pooling_size
@@ -519,7 +483,7 @@ def emb_loss(
     return loss
 
 
-def emb_loss_batch(emb, instance, kernel, training_mask, reduce=True, loss_weight=0.25, bg_sample=False):
+def emb_loss_batch(emb, instance, kernel, training_mask, reduce=True, loss_weight=0.25):
     loss_batch = emb.new_zeros((emb.size(0)), dtype=torch.float32)
 
     for i in range(loss_batch.size(0)):
@@ -676,7 +640,6 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         self.backbone = backbone
         self.neck = FASTNeck(config=config)
         self.det_head = FASTHead(config=config)
-        self.loss_bg = config.loss_bg
 
         self.pooling_1s = nn.MaxPool2d(
             kernel_size=config.head_pooling_size, stride=1, padding=(config.head_pooling_size - 1) // 2
@@ -714,7 +677,7 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         loss_kernel = dice_loss_with_masks(kernels, gt_kernels, selected_masks, reduce=False)
         loss_kernel = torch.mean(loss_kernel, dim=0)
 
-        loss_emb = emb_loss_batch(embs, gt_instances, gt_kernels, training_masks, reduce=False, bg_sample=self.loss_bg)
+        loss_emb = emb_loss_batch(embs, gt_instances, gt_kernels, training_masks, reduce=False)
 
         return torch.mean(loss_text) + torch.mean(loss_kernel) + torch.mean(loss_emb)
 
