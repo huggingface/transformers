@@ -73,7 +73,7 @@ class FastConfig(PretrainedConfig):
         head_final_dropout_rate (`int`, *optional*, defaults to 0):
         head_final_ops_order (`str`, *optional*, defaults to `"weight"`):
         loss_bg (`bool`, *optional*, defaults to `False`):
-        backbone (`str`, *optional*, defaults to `"textnet"`):
+        backbone (`str`, *optional*, defaults to `"resnet50"`):
             Name of convolutional backbone to use in case `use_timm_backbone` = `True`. Supports any convolutional
             backbone from the timm package. For a list of all available models, see [this
             page](https://rwightman.github.io/pytorch-image-models/#load-a-pretrained-model).
@@ -135,7 +135,7 @@ class FastConfig(PretrainedConfig):
         head_final_dropout_rate=0,
         head_final_ops_order="weight",
         loss_bg=False,
-        backbone="textnet",
+        backbone="resnet50",
         use_pretrained_backbone=True,
         dilation=False,
         initializer_range=0.02,

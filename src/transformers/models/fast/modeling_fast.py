@@ -655,7 +655,6 @@ class FastForSceneTextRecognitionOutput(ModelOutput):
 class FastForSceneTextRecognition(FastPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        # self.backbone = FastTextNet(config=config)
         self.config = config
 
         if config.use_timm_backbone:
