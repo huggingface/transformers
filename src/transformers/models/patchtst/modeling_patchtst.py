@@ -1072,11 +1072,11 @@ class PatchTSTStdScaler(nn.Module):
                 (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
                 `(batch_size, 1, num_input_channels)`)
         """
-        denominator = weights.sum(self.dim, keepdim=self.keepdim)
+        denominator = observed_indicator.sum(self.dim, keepdim=self.keepdim)
         denominator = denominator.clamp_min(1.0)
-        loc = (data * weights).sum(self.dim, keepdim=self.keepdim) / denominator
+        loc = (data * observed_indicator).sum(self.dim, keepdim=self.keepdim) / denominator
 
-        variance = (((data - loc) * weights) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
+        variance = (((data - loc) * observed_indicator) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
         scale = torch.sqrt(variance + self.minimum_scale)
         return (data - loc) / scale, loc, scale
 
@@ -1217,11 +1217,31 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_observed_mask: Optional[torch.Tensor] = None,
-        future_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PatchTSTModelOutput]:
+        """
+        Parameters:
+            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
+                Input sequence to the model
+            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+                in `[0, 1]`:
+
+                - 1 for values that are **observed**,
+                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the output attention of all layers
+            return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
+
+        Returns:
+            `PatchTSTModelOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
+            `config.return_dict`=False)
+
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
@@ -1585,7 +1605,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 - 1 for values that are **observed**,
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             future_values (`torch.Tensor` of shape `(bs, forecast_len, num_input_channels)`, *optional*):
-                future target values associates with the `past_values`
+                future target values associated with the `past_values`
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
@@ -1679,10 +1699,8 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         distribution = self.distribution_output.distribution(
             outputs.prediction_outputs, loc=outputs.loc, scale=outputs.scale
         )
-        # get samples
-        samples = [
-            distribution.sample() for _ in range(num_parallel_samples)
-        ]  # samples: list of [bs x forecast_len x num_channels]
+        # get samples: list of [bs x forecast_len x num_channels]
+        samples = [distribution.sample() for _ in range(num_parallel_samples)]
         # stack tensors
         samples = torch.stack(samples, dim=1)  # [bs x num_samples x forecast_len x num_channels]
         return SamplePatchTSTPredictionOutput(sequences=samples)
@@ -1861,8 +1879,8 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
 
         # get distribution
         distribution = self.distribution_output.distribution(outputs.forecast_outputs)
-        # get samples
-        samples = [distribution.sample() for _ in range(num_parallel_samples)]  # samples: list of [bs x num_targets]
+        # get samples: list of [bs x num_targets]
+        samples = [distribution.sample() for _ in range(num_parallel_samples)]
         # stack tensors
         samples = torch.stack(samples, dim=1)  # [bs x num_samples x num_targets]
         return SamplePatchTSTRegressionOutput(sequences=samples)
