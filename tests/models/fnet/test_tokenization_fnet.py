@@ -425,11 +425,15 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         model_main_input_name: str = "input_ids",
     ):
         for i_r in input_r.values():
-            self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), max_length), self.assertEqual(
-                len(i_r[1]), max_length
+            (
+                self.assertEqual(len(i_r), 2),
+                self.assertEqual(len(i_r[0]), max_length),
+                self.assertEqual(len(i_r[1]), max_length),
             )
-            self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), max_length), self.assertEqual(
-                len(i_r[1]), max_length
+            (
+                self.assertEqual(len(i_r), 2),
+                self.assertEqual(len(i_r[0]), max_length),
+                self.assertEqual(len(i_r[1]), max_length),
             )
 
         for i_r, i_p in zip(input_r[model_main_input_name], input_p[model_main_input_name]):

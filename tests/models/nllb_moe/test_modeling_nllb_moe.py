@@ -469,6 +469,7 @@ class NllbMoeRouterTest(unittest.TestCase):
     Original implementation of the routers here:
 
     """
+
     config = NllbMoeConfig(
         num_experts=4,
         hidden_size=32,
