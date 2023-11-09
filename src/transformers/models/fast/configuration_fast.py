@@ -91,15 +91,6 @@ class FastConfig(PretrainedConfig):
             Denotes the in channels of final conv layer in head layer.
         head_final_out_channels (`int`, *optional*, defaults to 5):
             Denotes the out channels of final conv layer in head layer.
-        head_final_use_batch_norm (`bool`, *optional*, defaults to `False`):
-            Denotes to use or not to use batch norm of final conv layer in head layer.
-        head_final_act_func (`str`, *optional*):
-            Denotes to activation function of final conv layer in head layer.
-        head_final_dropout_rate (`int`, *optional*, defaults to 0):
-            Denotes to dropout_rate of dropout layer of final conv layer in head layer.
-        head_final_ops_order (`str`, *optional*, defaults to `"weight"`):
-            Denotes to dropout_rate of dropout layer of final conv layer in head layer.
-        loss_bg (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         backbone (`str`, *optional*, defaults to `"resnet50"`):
             Name of convolutional backbone to use in case `use_timm_backbone` = `True`. Supports any convolutional
             backbone from the timm package. For a list of all available models, see [this
@@ -157,11 +148,6 @@ class FastConfig(PretrainedConfig):
         head_final_has_shuffle=False,
         head_final_in_channels=128,
         head_final_out_channels=5,
-        head_final_use_batch_norm=False,
-        head_final_act_func=None,
-        head_final_dropout_rate=0,
-        head_final_ops_order="weight",
-        loss_bg=False,
         backbone="resnet50",
         use_pretrained_backbone=True,
         dilation=False,
@@ -216,7 +202,6 @@ class FastConfig(PretrainedConfig):
         self.head_final_in_channels = head_final_in_channels
         self.head_final_out_channels = head_final_out_channels
 
-        self.loss_bg = loss_bg
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.dilation = dilation
