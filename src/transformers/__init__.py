@@ -108,6 +108,7 @@ _import_structure = {
     "integrations": [
         "is_clearml_available",
         "is_comet_available",
+        "is_dvclive_available",
         "is_neptune_available",
         "is_optuna_available",
         "is_ray_available",
@@ -146,6 +147,7 @@ _import_structure = {
     "models.audio_spectrogram_transformer": [
         "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ASTConfig",
+        "ASTFeatureExtractor",
     ],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -535,6 +537,7 @@ _import_structure = {
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
+        "Speech2TextFeatureExtractor",
         "Speech2TextProcessor",
     ],
     "models.speech_to_text_2": [
@@ -912,20 +915,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
-
-# Speech-specific objects
-try:
-    if not is_speech_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_speech_objects
-
-    _import_structure["utils.dummy_speech_objects"] = [
-        name for name in dir(dummy_speech_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
-    _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
 
 # Tensorflow-text-specific objects
 try:
@@ -4313,6 +4302,7 @@ if TYPE_CHECKING:
     from .integrations import (
         is_clearml_available,
         is_comet_available,
+        is_dvclive_available,
         is_neptune_available,
         is_optuna_available,
         is_ray_available,
@@ -4353,6 +4343,7 @@ if TYPE_CHECKING:
     from .models.audio_spectrogram_transformer import (
         AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ASTConfig,
+        ASTFeatureExtractor,
     )
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4723,6 +4714,7 @@ if TYPE_CHECKING:
     from .models.speech_to_text import (
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Speech2TextConfig,
+        Speech2TextFeatureExtractor,
         Speech2TextProcessor,
     )
     from .models.speech_to_text_2 import (
@@ -5067,15 +5059,6 @@ if TYPE_CHECKING:
         from .utils.dummies_sentencepiece_and_tokenizers_objects import *
     else:
         from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
-
-    try:
-        if not is_speech_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        from .utils.dummy_speech_objects import *
-    else:
-        from .models.audio_spectrogram_transformer import ASTFeatureExtractor
-        from .models.speech_to_text import Speech2TextFeatureExtractor
 
     try:
         if not is_tensorflow_text_available():
