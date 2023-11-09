@@ -22,7 +22,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import FastConfig, FastForSceneTextRecognition
+from transformers import FastConfig, FastForSceneTextRecognition, TextNetConfig
 from transformers.models.fast.image_processing_fast import FastImageProcessor
 
 
@@ -84,43 +84,50 @@ def prepare_config(size_config_url, pooling_size, min_area, bbox_type, loss_bg):
             neck_dilation.append(layer_dict["dilation"])
             neck_groups.append(layer_dict["groups"])
 
+    textnet_config = TextNetConfig(
+        kernel_size=config_dict["first_conv"]["kernel_size"],
+        stride=config_dict["first_conv"]["stride"],
+        dilation=config_dict["first_conv"]["dilation"],
+        groups=config_dict["first_conv"]["groups"],
+        bias=config_dict["first_conv"]["bias"],
+        has_shuffle=config_dict["first_conv"]["has_shuffle"],
+        in_channels=config_dict["first_conv"]["in_channels"],
+        out_channels=config_dict["first_conv"]["out_channels"],
+        use_bn=config_dict["first_conv"]["use_bn"],
+        act_func=config_dict["first_conv"]["act_func"],
+        dropout_rate=config_dict["first_conv"]["dropout_rate"],
+        ops_order=config_dict["first_conv"]["ops_order"],
+        stage1_in_channels=backbone_config["stage1"]["in_channels"],
+        stage1_out_channels=backbone_config["stage1"]["out_channels"],
+        stage1_kernel_size=backbone_config["stage1"]["kernel_size"],
+        stage1_stride=backbone_config["stage1"]["stride"],
+        stage1_dilation=backbone_config["stage1"]["dilation"],
+        stage1_groups=backbone_config["stage1"]["groups"],
+        stage2_in_channels=backbone_config["stage2"]["in_channels"],
+        stage2_out_channels=backbone_config["stage2"]["out_channels"],
+        stage2_kernel_size=backbone_config["stage2"]["kernel_size"],
+        stage2_stride=backbone_config["stage2"]["stride"],
+        stage2_dilation=backbone_config["stage2"]["dilation"],
+        stage2_groups=backbone_config["stage2"]["groups"],
+        stage3_in_channels=backbone_config["stage3"]["in_channels"],
+        stage3_out_channels=backbone_config["stage3"]["out_channels"],
+        stage3_kernel_size=backbone_config["stage3"]["kernel_size"],
+        stage3_stride=backbone_config["stage3"]["stride"],
+        stage3_dilation=backbone_config["stage3"]["dilation"],
+        stage3_groups=backbone_config["stage3"]["groups"],
+        stage4_in_channels=backbone_config["stage4"]["in_channels"],
+        stage4_out_channels=backbone_config["stage4"]["out_channels"],
+        stage4_kernel_size=backbone_config["stage4"]["kernel_size"],
+        stage4_stride=backbone_config["stage4"]["stride"],
+        stage4_dilation=backbone_config["stage4"]["dilation"],
+        stage4_groups=backbone_config["stage4"]["groups"],
+        out_features=["stage1", "stage2", "stage3", "stage4"],
+        out_indices=[1, 2, 3, 4],
+    )
+
     return FastConfig(
-        backbone_kernel_size=config_dict["first_conv"]["kernel_size"],
-        backbone_stride=config_dict["first_conv"]["stride"],
-        backbone_dilation=config_dict["first_conv"]["dilation"],
-        backbone_groups=config_dict["first_conv"]["groups"],
-        backbone_bias=config_dict["first_conv"]["bias"],
-        backbone_has_shuffle=config_dict["first_conv"]["has_shuffle"],
-        backbone_in_channels=config_dict["first_conv"]["in_channels"],
-        backbone_out_channels=config_dict["first_conv"]["out_channels"],
-        backbone_use_bn=config_dict["first_conv"]["use_bn"],
-        backbone_act_func=config_dict["first_conv"]["act_func"],
-        backbone_dropout_rate=config_dict["first_conv"]["dropout_rate"],
-        backbone_ops_order=config_dict["first_conv"]["ops_order"],
-        backbone_stage1_in_channels=backbone_config["stage1"]["in_channels"],
-        backbone_stage1_out_channels=backbone_config["stage1"]["out_channels"],
-        backbone_stage1_kernel_size=backbone_config["stage1"]["kernel_size"],
-        backbone_stage1_stride=backbone_config["stage1"]["stride"],
-        backbone_stage1_dilation=backbone_config["stage1"]["dilation"],
-        backbone_stage1_groups=backbone_config["stage1"]["groups"],
-        backbone_stage2_in_channels=backbone_config["stage2"]["in_channels"],
-        backbone_stage2_out_channels=backbone_config["stage2"]["out_channels"],
-        backbone_stage2_kernel_size=backbone_config["stage2"]["kernel_size"],
-        backbone_stage2_stride=backbone_config["stage2"]["stride"],
-        backbone_stage2_dilation=backbone_config["stage2"]["dilation"],
-        backbone_stage2_groups=backbone_config["stage2"]["groups"],
-        backbone_stage3_in_channels=backbone_config["stage3"]["in_channels"],
-        backbone_stage3_out_channels=backbone_config["stage3"]["out_channels"],
-        backbone_stage3_kernel_size=backbone_config["stage3"]["kernel_size"],
-        backbone_stage3_stride=backbone_config["stage3"]["stride"],
-        backbone_stage3_dilation=backbone_config["stage3"]["dilation"],
-        backbone_stage3_groups=backbone_config["stage3"]["groups"],
-        backbone_stage4_in_channels=backbone_config["stage4"]["in_channels"],
-        backbone_stage4_out_channels=backbone_config["stage4"]["out_channels"],
-        backbone_stage4_kernel_size=backbone_config["stage4"]["kernel_size"],
-        backbone_stage4_stride=backbone_config["stage4"]["stride"],
-        backbone_stage4_dilation=backbone_config["stage4"]["dilation"],
-        backbone_stage4_groups=backbone_config["stage4"]["groups"],
+        use_timm_backbone=False,
+        backbone_config=textnet_config,
         neck_in_channels=neck_in_channels,
         neck_out_channels=neck_out_channels,
         neck_kernel_size=neck_kernel_size,
@@ -164,7 +171,7 @@ def get_base_model_config():
 def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_folder_path, validate_logits):
     response = requests.get(checkpoint_config_url)
     content = response.text
-
+    print("Got respose")
     namespace = {}
 
     exec(content, namespace)
@@ -197,7 +204,7 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_
     if "train" in data_config:
         if "short_size" in data_config["train"]:
             size = data_config["train"]["short_size"]
-
+    print("we got config")
     model = FastForSceneTextRecognition(config)
     fast_image_processor = FastImageProcessor(
         size={"height": size, "width": size},
@@ -209,7 +216,7 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_
     state_dict_changed = copy.deepcopy(state_dict)
     for key in state_dict:
         val = state_dict_changed.pop(key)
-        new_key = key.replace("module.", "")
+        new_key = key.replace("module.", "").replace("backbone.", "backbone.textnet.")
         for search, replacement in rename_key_mappings.items():
             if search in new_key:
                 new_key = new_key.replace(search, replacement)

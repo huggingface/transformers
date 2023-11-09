@@ -21,8 +21,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from timm import create_model
 
-from transformers import FastConfig, PreTrainedModel, add_start_docstrings
+from transformers import AutoBackbone, FastConfig, PreTrainedModel, add_start_docstrings, requires_backends
 from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, replace_return_docstrings
 
 
@@ -341,94 +342,6 @@ class FastPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
 
-class FastTextNet(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.first_conv = FASTConvLayer(
-            config.backbone_in_channels,
-            config.backbone_out_channels,
-            config.backbone_kernel_size,
-            config.backbone_stride,
-            config.backbone_dilation,
-            config.backbone_groups,
-            config.backbone_bias,
-            config.backbone_has_shuffle,
-            config.backbone_use_bn,
-            config.backbone_act_func,
-            config.backbone_dropout_rate,
-            config.backbone_ops_order,
-        )
-        stage1 = []
-        for stage_config in zip(
-            config.backbone_stage1_in_channels,
-            config.backbone_stage1_out_channels,
-            config.backbone_stage1_kernel_size,
-            config.backbone_stage1_stride,
-            config.backbone_stage1_dilation,
-            config.backbone_stage1_groups,
-        ):
-            stage1.append(FASTRepConvLayer(*stage_config))
-        self.stage1 = nn.ModuleList(stage1)
-
-        stage2 = []
-        for stage_config in zip(
-            config.backbone_stage2_in_channels,
-            config.backbone_stage2_out_channels,
-            config.backbone_stage2_kernel_size,
-            config.backbone_stage2_stride,
-            config.backbone_stage2_dilation,
-            config.backbone_stage2_groups,
-        ):
-            stage2.append(FASTRepConvLayer(*stage_config))
-        self.stage2 = nn.ModuleList(stage2)
-
-        stage3 = []
-        for stage_config in zip(
-            config.backbone_stage3_in_channels,
-            config.backbone_stage3_out_channels,
-            config.backbone_stage3_kernel_size,
-            config.backbone_stage3_stride,
-            config.backbone_stage3_dilation,
-            config.backbone_stage3_groups,
-        ):
-            stage3.append(FASTRepConvLayer(*stage_config))
-        self.stage3 = nn.ModuleList(stage3)
-
-        stage4 = []
-        for stage_config in zip(
-            config.backbone_stage4_in_channels,
-            config.backbone_stage4_out_channels,
-            config.backbone_stage4_kernel_size,
-            config.backbone_stage4_stride,
-            config.backbone_stage4_dilation,
-            config.backbone_stage4_groups,
-        ):
-            stage4.append(FASTRepConvLayer(*stage_config))
-        self.stage4 = nn.ModuleList(stage4)
-
-    def forward(self, hidden_states):
-        hidden_states = self.first_conv(hidden_states)
-        output = []
-
-        for block in self.stage1:
-            hidden_states = block(hidden_states)
-        output.append(hidden_states)
-
-        for block in self.stage2:
-            hidden_states = block(hidden_states)
-        output.append(hidden_states)
-
-        for block in self.stage3:
-            hidden_states = block(hidden_states)
-        output.append(hidden_states)
-
-        for block in self.stage4:
-            hidden_states = block(hidden_states)
-        output.append(hidden_states)
-
-        return output
-
-
 class FASTNeck(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -729,7 +642,26 @@ class FastForSceneTextRecognitionOutput(ModelOutput):
 class FastForSceneTextRecognition(FastPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.backbone = FastTextNet(config=config)
+        # self.backbone = FastTextNet(config=config)
+        self.config = config
+
+        if config.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            kwargs = {}
+            if config.dilation:
+                kwargs["output_stride"] = 16
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                out_indices=(1, 2, 3, 4),
+                in_chans=config.num_channels,
+                **kwargs,
+            )
+        else:
+            backbone = AutoBackbone.from_config(config.backbone_config)
+
+        self.backbone = backbone
         self.neck = FASTNeck(config=config)
         self.det_head = FASTHead(config=config)
         self.loss_bg = config.loss_bg
@@ -812,9 +744,11 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         """
         # outputs = {}
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        hidden_states = self.backbone(pixel_values)
+        features = (
+            self.backbone(pixel_values) if self.config.use_timm_backbone else self.backbone(pixel_values).feature_maps
+        )
 
-        hidden_states = self.neck(hidden_states)
+        hidden_states = self.neck(features)
 
         text_detection_output = self.det_head(hidden_states)
 
