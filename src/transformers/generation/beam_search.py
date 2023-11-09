@@ -520,6 +520,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[Union[int, List[int]]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
+        decoder_prompt_len: Optional[int] = 0,
     ) -> Tuple[torch.Tensor]:
         r"""
         Args:
@@ -559,7 +560,9 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 indicating to which beam the next tokens shall be added.
         """
 
-        cur_len = input_ids.shape[-1] + 1  # add up to the length which the next_scores is calculated on
+        cur_len = (
+            input_ids.shape[-1] - decoder_prompt_len + 1
+        )  # add up to the length which the next_scores is calculated on
         batch_size = len(self._beam_hyps)
         if not (batch_size == (input_ids.shape[0] // self.group_size)):
             if self.num_beam_groups > 1:
@@ -615,10 +618,16 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                         else:
                             beam_index = None
 
+                        # skip the corner case where the only constraint token is
+                        # eos_token and the very first generated token is eos_token
+                        if decoder_prompt_len == input_ids.shape[-1]:
+                            continue
+
                         beam_hyp.add(
                             input_ids[batch_beam_idx].clone(),
                             next_score.item(),
                             beam_indices=beam_index,
+                            decoder_prompt_len=decoder_prompt_len,
                         )
                 else:
                     # add next predicted token since it is not eos_token
@@ -814,6 +823,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[Union[int, List[int]]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
+        decoder_prompt_len: Optional[int] = 0,
     ) -> Tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps)
 
@@ -837,7 +847,9 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 completes_constraint = self.check_completes_constraints(final_tokens.cpu().tolist())
                 if completes_constraint:
                     beam_index = beam_indices[batch_beam_idx] if beam_indices is not None else None
-                    beam_hyp.add(final_tokens, final_score, beam_indices=beam_index)
+                    beam_hyp.add(
+                        final_tokens, final_score, beam_indices=beam_index, decoder_prompt_len=decoder_prompt_len
+                    )
                     ids_collect.append(beam_id)
 
             # due to overly complex constraints or other factors, sometimes we can't gaurantee a successful
@@ -848,7 +860,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                         batch_beam_idx = batch_idx * self.num_beams + beam_id
                         final_score = final_beam_scores[batch_beam_idx].item()
                         final_tokens = input_ids[batch_beam_idx]
-                        beam_hyp.add(final_tokens, final_score)
+                        beam_hyp.add(final_tokens, final_score, decoder_prompt_len=decoder_prompt_len)
                     if len(ids_collect) >= self.num_beam_hyps_to_keep:
                         break
 
