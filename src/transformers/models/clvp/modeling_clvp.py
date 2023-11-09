@@ -28,6 +28,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationConfig
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -60,39 +61,6 @@ CLVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(
-    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
-):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
-    mask_cond = torch.arange(mask.size(-1), device=device)
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
-
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
-
-
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
-
-
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
@@ -114,9 +82,29 @@ def rotate_half(x):
 
 
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
-    cos = cos[position_ids].unsqueeze(1)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
-    sin = sin[position_ids].unsqueeze(1)
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`):
+            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
+            used to pass offsetted position ids when working with a KV-cache.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos[position_ids].unsqueeze(unsqueeze_dim)
+    sin = sin[position_ids].unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -719,14 +707,6 @@ class ClvpPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ClvpEncoder):
-            module.gradient_checkpointing = value
-        if isinstance(module, ClvpDecoder):
-            module.gradient_checkpointing = value
-        if isinstance(module, ClvpConditioningEncoder):
-            module.gradient_checkpointing = value
-
 
 CLVP_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -936,7 +916,7 @@ class ClvpEncoder(ClvpPreTrainedModel):
         # expand attention_mask and create position_ids if needed
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -1035,29 +1015,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.layers[layer].attn.prune_heads(heads)
 
-    # Copied from transformers.models.whisper.modeling_whisper.WhisperDecoder._prepare_decoder_attention_mask
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape,
-                inputs_embeds.dtype,
-                device=inputs_embeds.device,
-                past_key_values_length=past_key_values_length,
-            )
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
-
     @add_start_docstrings_to_model_forward(CLVP_DECODER_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1114,7 +1071,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
         position_embeds = self.position_embeds_layer(position_ids)
         inputs_embeds = inputs_embeds + position_embeds
 
-        attention_mask = self._prepare_decoder_attention_mask(
+        attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
 
@@ -1370,9 +1327,18 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
             if token_type_ids is not None:
-                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
+                token_type_ids = token_type_ids[:, -input_ids.shape[1] :]
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
@@ -1549,7 +1515,9 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         decoder_fixing_codes = self.config.decoder_config.decoder_fixing_codes
         speech_ids = speech_ids[:, 1:]
         if torch.isin(self.speech_decoder_model.config.eos_token_id, speech_ids):
-            speech_ids = torch.nn.functional.pad(speech_ids, pad=(0, 1), value=self.speech_decoder_model.config.eos_token_id)
+            speech_ids = torch.nn.functional.pad(
+                speech_ids, pad=(0, 1), value=self.speech_decoder_model.config.eos_token_id
+            )
 
         stop_token_indices = torch.where(speech_ids == self.speech_decoder_model.config.eos_token_id, 1, 0)
         speech_ids = torch.masked_fill(speech_ids, mask=stop_token_indices.bool(), value=decoder_fixing_codes[0])
@@ -1563,7 +1531,9 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             stm = each_seq_stop_token_index.argmax()
             speech_ids[i, stm:] = decoder_fixing_codes[0]
             if stm - 3 < speech_ids.shape[1]:
-                speech_ids[i, -3:] = torch.tensor([decoder_fixing_codes[1:]], device=speech_ids.device, dtype=torch.long)
+                speech_ids[i, -3:] = torch.tensor(
+                    [decoder_fixing_codes[1:]], device=speech_ids.device, dtype=torch.long
+                )
 
         return speech_ids
 
