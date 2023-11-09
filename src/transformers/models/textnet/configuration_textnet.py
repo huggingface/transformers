@@ -37,52 +37,49 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        kernel_size (`int`, *optional*, defaults to 3): <fill_docstring>
+        kernel_size (`int`, *optional*, defaults to 3):
             The kernel size for the initial convolution layer.
-        stride (`int`, *optional*, defaults to 2): <fill_docstring>
+        stride (`int`, *optional*, defaults to 2):
             The stride for the initial convolution layer.
-        in_channels (`int`, *optional*, defaults to 3): <fill_docstring>
+        in_channels (`int`, *optional*, defaults to 3):
             The num of channels in input for the initial convolution layer.
-        out_channels (`int`, *optional*, defaults to 64): <fill_docstring>
+        out_channels (`int`, *optional*, defaults to 64):
             The num of channels in out for the initial convolution layer.
-        act_func (`str`, *optional*, defaults to `"relu"`): <fill_docstring>
+        act_func (`str`, *optional*, defaults to `"relu"`):
             The activation function for the initial convolution layer.
-        stage1_in_channels (`List[int]`, *optional*, defaults to `[64, 64, 64]`): <fill_docstring>
+        stage1_in_channels (`List[int]`, *optional*, defaults to `[64, 64, 64]`):
             The num of channels in input for list of conv in stage 1.
-        stage1_out_channels (`List[int]`, *optional*, defaults to `[64, 64, 64]`): <fill_docstring>
+        stage1_out_channels (`List[int]`, *optional*, defaults to `[64, 64, 64]`):
             The num of channels in output for list of conv in stage 1.Should be of same length os `stage1_in_channels`
-        stage1_kernel_size (`List[int]`, *optional*, defaults to `[[3, 3], [3, 3], [3, 3]]`): <fill_docstring>
+        stage1_kernel_size (`List[int]`, *optional*, defaults to `[[3, 3], [3, 3], [3, 3]]`):
             The kernel sizes for list of conv in stage 1.Should be of same length os `stage1_in_channels`
-        stage1_stride (`List[int]`, *optional*, defaults to `[1, 2, 1]`): <fill_docstring>
+        stage1_stride (`List[int]`, *optional*, defaults to `[1, 2, 1]`):
             The strides for list of conv in stage 1.Should be of same length os `stage1_in_channels`
-        stage2_in_channels (`List[int]`, *optional*, defaults to `[64, 128, 128, 128]`): <fill_docstring>
+        stage2_in_channels (`List[int]`, *optional*, defaults to `[64, 128, 128, 128]`):
             The num of channels in input for list of conv in stage 2.
-        stage2_out_channels (`List[int]`, *optional*, defaults to `[128, 128, 128, 128]`): <fill_docstring>
+        stage2_out_channels (`List[int]`, *optional*, defaults to `[128, 128, 128, 128]`):
             The num of channels in output for list of conv in stage 2.Should be of same length os `stage2_in_channels`
         stage2_kernel_size (`List[List[int]]`, *optional*, defaults to `[[3, 3], [1, 3], [3, 3], [3, 1]]`):
-            <fill_docstring> The kernel sizes for list of conv in stage 2.Should be of same length os
-            `stage2_in_channels`
-        stage2_stride (`List[int]`, *optional*, defaults to `[2, 1, 1, 1]`): <fill_docstring>
+            The kernel sizes for list of conv in stage 2.Should be of same length os `stage2_in_channels`
+        stage2_stride (`List[int]`, *optional*, defaults to `[2, 1, 1, 1]`):
             The strides for list of conv in stage 2.Should be of same length os `stage2_in_channels`
-        stage3_in_channels (`List[int]`, *optional*, defaults to `[128, 256, 256, 256]`): <fill_docstring>
+        stage3_in_channels (`List[int]`, *optional*, defaults to `[128, 256, 256, 256]`):
             The num of channels in input for list of conv in stage 3.
-        stage3_out_channels (`List[int]`, *optional*, defaults to `[256, 256, 256, 256]`): <fill_docstring>
+        stage3_out_channels (`List[int]`, *optional*, defaults to `[256, 256, 256, 256]`):
             The num of channels in output for list of conv in stage 3.Should be of same length os `stage3_in_channels`
         stage3_kernel_size (`List[List[int]]`, *optional*, defaults to `[[3, 3], [3, 3], [3, 1], [1, 3]]`):
-            <fill_docstring> The kernel sizes for list of conv in stage 3.Should be of same length os
-            `stage3_in_channels`
-        stage3_stride (`List[int]`, *optional*, defaults to `[2, 1, 1, 1]`): <fill_docstring>
+            The kernel sizes for list of conv in stage 3.Should be of same length os `stage3_in_channels`
+        stage3_stride (`List[int]`, *optional*, defaults to `[2, 1, 1, 1]`):
             The strides for list of conv in stage 3.Should be of same length os `stage3_in_channels`
-        stage4_in_channels (`List[int]`, *optional*, defaults to `[256, 512, 512, 512]`): <fill_docstring>
+        stage4_in_channels (`List[int]`, *optional*, defaults to `[256, 512, 512, 512]`):
             The strides for list of conv in stage 4.Should be of same length os `stage4_in_channels`
-        stage4_out_channels (`List[int]`, *optional*, defaults to `[512, 512, 512, 512]`): <fill_docstring>
+        stage4_out_channels (`List[int]`, *optional*, defaults to `[512, 512, 512, 512]`):
             The num of channels in output for list of conv in stage 4.Should be of same length os `stage4_in_channels`
         stage4_kernel_size (`List[List[int]]`, *optional*, defaults to `[[3, 3], [3, 1], [1, 3], [3, 3]]`):
-            <fill_docstring> The kernel sizes for list of conv in stage 4.Should be of same length os
-            `stage4_in_channels`
-        stage4_stride (`List[int]`, *optional*, defaults to `[2, 1, 1, 1]`): <fill_docstring>
+            The kernel sizes for list of conv in stage 4.Should be of same length os `stage4_in_channels`
+        stage4_stride (`List[int]`, *optional*, defaults to `[2, 1, 1, 1]`):
             The strides for list of conv in stage 4.Should be of same length os `stage4_in_channels`
-        hidden_sizes (`List[int]`, *optional*, defaults to `[64, 64, 128, 256, 512]`): <fill_docstring>
+        hidden_sizes (`List[int]`, *optional*, defaults to `[64, 64, 128, 256, 512]`):
             Dimensionality (hidden size) at each stage.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
