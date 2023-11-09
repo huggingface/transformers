@@ -509,9 +509,7 @@ class TFHubertGroupNormConvLayer(tf.keras.layers.Layer):
             name="conv",
         )
         self.activation = get_tf_activation(config.feat_extract_activation)
-        self.layer_norm = TFHubertGroupNorm(
-            groups=self.out_conv_dim, epsilon=config.layer_norm_eps, name="layer_norm"
-        )
+        self.layer_norm = TFHubertGroupNorm(groups=self.out_conv_dim, epsilon=config.layer_norm_eps, name="layer_norm")
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.conv(hidden_states)

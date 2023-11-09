@@ -174,6 +174,7 @@ class EncoderDecoderModel(PreTrainedModel):
     :meth*~transformers.AutoModel.from_pretrained* class method for the encoder and
     :meth*~transformers.AutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
+
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"

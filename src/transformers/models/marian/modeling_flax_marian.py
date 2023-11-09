@@ -472,7 +472,8 @@ class FlaxMarianEncoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxMarianEncoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.encoder_layers)
+            FlaxMarianEncoderLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.encoder_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
 
@@ -615,7 +616,8 @@ class FlaxMarianDecoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxMarianDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.decoder_layers)
+            FlaxMarianDecoderLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.decoder_layers)
         ]
         self.layerdrop = self.config.decoder_layerdrop
 

@@ -120,6 +120,7 @@ class DPTConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "dpt"
 
     def __init__(

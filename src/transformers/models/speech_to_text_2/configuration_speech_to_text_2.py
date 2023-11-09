@@ -86,6 +86,7 @@ class Speech2Text2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "speech_to_text_2"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "decoder_attention_heads", "hidden_size": "d_model"}

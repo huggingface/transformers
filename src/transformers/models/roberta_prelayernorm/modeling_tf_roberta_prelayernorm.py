@@ -1013,7 +1013,9 @@ class TFRobertaPreLayerNormForMaskedLM(TFRobertaPreLayerNormPreTrainedModel, TFM
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.roberta_prelayernorm = TFRobertaPreLayerNormMainLayer(config, add_pooling_layer=False, name="roberta_prelayernorm")
+        self.roberta_prelayernorm = TFRobertaPreLayerNormMainLayer(
+            config, add_pooling_layer=False, name="roberta_prelayernorm"
+        )
         self.lm_head = TFRobertaPreLayerNormLMHead(config, self.roberta_prelayernorm.embeddings, name="lm_head")
 
     def get_lm_head(self):
@@ -1093,10 +1095,16 @@ class TFRobertaPreLayerNormForCausalLM(TFRobertaPreLayerNormPreTrainedModel, TFC
         super().__init__(config, *inputs, **kwargs)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `TFRobertaPreLayerNormLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning(
+                "If you want to use `TFRobertaPreLayerNormLMHeadModel` as a standalone, add `is_decoder=True.`"
+            )
 
-        self.roberta_prelayernorm = TFRobertaPreLayerNormMainLayer(config, add_pooling_layer=False, name="roberta_prelayernorm")
-        self.lm_head = TFRobertaPreLayerNormLMHead(config, input_embeddings=self.roberta_prelayernorm.embeddings, name="lm_head")
+        self.roberta_prelayernorm = TFRobertaPreLayerNormMainLayer(
+            config, add_pooling_layer=False, name="roberta_prelayernorm"
+        )
+        self.lm_head = TFRobertaPreLayerNormLMHead(
+            config, input_embeddings=self.roberta_prelayernorm.embeddings, name="lm_head"
+        )
 
     def get_lm_head(self):
         return self.lm_head
@@ -1338,7 +1346,9 @@ class TFRobertaPreLayerNormForMultipleChoice(TFRobertaPreLayerNormPreTrainedMode
         )
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,

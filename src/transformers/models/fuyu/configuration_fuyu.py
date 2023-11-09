@@ -102,6 +102,7 @@ class FuyuConfig(PretrainedConfig):
     >>> # Initializing a Fuyu fuyu-7b style configuration
     >>> configuration = FuyuConfig()
     ```"""
+
     model_type = "fuyu"
     keys_to_ignore_at_inference = ["past_key_values"]
 

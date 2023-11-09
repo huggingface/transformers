@@ -212,7 +212,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                 # Loading a torch-saved transfo-xl vocab dict with pickle results in an integer
                 # Entering this if statement means that we tried to load a torch-saved file with pickle, and we failed.
                 # We therefore load it with torch, if it's available.
-                if type(vocab_dict) == int:
+                if isinstance(vocab_dict, int):
                     if not is_torch_available():
                         raise ImportError(
                             "Not trying to load dict with PyTorch as you need to install pytorch to load "

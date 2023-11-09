@@ -1218,8 +1218,7 @@ class InformerEncoder(InformerPreTrainedModel):
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerDecoder with TimeSeriesTransformer->Informer,TimeSeriesTransformerConfig->InformerConfig,time-series-transformer->informer,Transformer->Informer,TimeSeries->Informer
 class InformerDecoder(InformerPreTrainedModel):
     """
-    Informer decoder consisting of *config.decoder_layers* layers. Each layer is a
-    [`InformerDecoderLayer`]
+    Informer decoder consisting of *config.decoder_layers* layers. Each layer is a [`InformerDecoderLayer`]
 
     Args:
         config: InformerConfig
@@ -1778,9 +1777,7 @@ class InformerForPrediction(InformerPreTrainedModel):
         ... )
         >>> batch = torch.load(file)
 
-        >>> model = InformerForPrediction.from_pretrained(
-        ...     "huggingface/informer-tourism-monthly"
-        ... )
+        >>> model = InformerForPrediction.from_pretrained("huggingface/informer-tourism-monthly")
 
         >>> # during training, one provides both past and future values
         >>> # as well as possible additional features

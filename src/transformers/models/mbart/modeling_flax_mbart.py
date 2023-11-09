@@ -471,7 +471,8 @@ class FlaxMBartEncoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxMBartEncoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.encoder_layers)
+            FlaxMBartEncoderLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.encoder_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
 
@@ -613,7 +614,8 @@ class FlaxMBartDecoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxMBartDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.decoder_layers)
+            FlaxMBartDecoderLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.decoder_layers)
         ]
         self.layerdrop = self.config.decoder_layerdrop
 

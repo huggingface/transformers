@@ -489,7 +489,8 @@ class Wav2Vec2ConformerFeatureEncoder(nn.Module):
 
         if config.feat_extract_norm == "group":
             conv_layers = [Wav2Vec2ConformerGroupNormConvLayer(config, layer_id=0)] + [
-                Wav2Vec2ConformerNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
+                Wav2Vec2ConformerNoLayerNormConvLayer(config, layer_id=i + 1)
+                for i in range(config.num_feat_extract_layers - 1)
             ]
         elif config.feat_extract_norm == "layer":
             conv_layers = [
@@ -1444,7 +1445,10 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         ```python
         >>> import torch
         >>> from transformers import AutoFeatureExtractor, Wav2Vec2ConformerForPreTraining
-        >>> from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import _compute_mask_indices, _sample_negative_indices
+        >>> from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
+        ...     _compute_mask_indices,
+        ...     _sample_negative_indices,
+        ... )
         >>> from datasets import load_dataset
 
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")

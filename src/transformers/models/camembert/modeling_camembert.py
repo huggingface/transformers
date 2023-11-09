@@ -1130,7 +1130,9 @@ class CamembertForMultipleChoice(CamembertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CAMEMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CAMEMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,

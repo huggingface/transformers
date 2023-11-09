@@ -73,6 +73,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
     >>> # Accessing the configuration
     >>> configuration
     ```"""
+
     model_type = "bridgetower_vision_model"
 
     def __init__(
@@ -179,6 +180,7 @@ class BridgeTowerTextConfig(PretrainedConfig):
     >>> # Accessing the configuration
     >>> configuration
     ```"""
+
     model_type = "bridgetower_text_model"
 
     def __init__(
@@ -291,6 +293,7 @@ class BridgeTowerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "bridgetower"
 
     def __init__(

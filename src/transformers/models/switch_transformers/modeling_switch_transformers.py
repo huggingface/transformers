@@ -606,7 +606,9 @@ class SwitchTransformersAttention(nn.Module):
 class SwitchTransformersLayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.SelfAttention = SwitchTransformersAttention(config, has_relative_attention_bias=has_relative_attention_bias)
+        self.SelfAttention = SwitchTransformersAttention(
+            config, has_relative_attention_bias=has_relative_attention_bias
+        )
         self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 

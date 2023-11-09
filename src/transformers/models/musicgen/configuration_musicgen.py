@@ -76,6 +76,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
         tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether input and output word embeddings should be tied.
     """
+
     model_type = "musicgen_decoder"
     keys_to_ignore_at_inference = ["past_key_values"]
 

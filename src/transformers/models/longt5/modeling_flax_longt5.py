@@ -304,7 +304,9 @@ class FlaxLongT5LayerFF(nn.Module):
         else:
             self.DenseReluDense = FlaxLongT5DenseActDense(self.config, dtype=self.dtype)
 
-        self.layer_norm = FlaxLongT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
+        self.layer_norm = FlaxLongT5LayerNorm(
+            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
     def __call__(self, hidden_states, deterministic=True):
@@ -1187,7 +1189,9 @@ class FlaxLongT5LayerSelfAttention(nn.Module):
             causal=self.config.causal,
             dtype=self.dtype,
         )
-        self.layer_norm = FlaxLongT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
+        self.layer_norm = FlaxLongT5LayerNorm(
+            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
     def __call__(
@@ -1222,7 +1226,9 @@ class FlaxLongT5LayerCrossAttention(nn.Module):
         self.EncDecAttention = FlaxLongT5Attention(
             self.config, has_relative_attention_bias=False, causal=False, dtype=self.dtype
         )
-        self.layer_norm = FlaxLongT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
+        self.layer_norm = FlaxLongT5LayerNorm(
+            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
     def __call__(

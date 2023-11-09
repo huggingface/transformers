@@ -197,7 +197,7 @@ class FuyuImageProcessor(BaseImageProcessor):
                 indices_in_stream_per_subsequence = torch.full_like(image_input_ids[bi][si], -1)
                 indices_in_stream_per_batch[
                     torch.nonzero(image_input_ids[bi][si] == image_placeholder_id, as_tuple=True)[0]
-                ] = (indices + index_offset)
+                ] = indices + index_offset
                 indices_in_stream_per_subsequence[
                     torch.nonzero(image_input_ids[bi][si] == image_placeholder_id, as_tuple=True)[0]
                 ] = indices

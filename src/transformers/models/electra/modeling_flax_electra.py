@@ -533,7 +533,8 @@ class FlaxElectraLayerCollection(nn.Module):
             ]
         else:
             self.layers = [
-                FlaxElectraLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
+                FlaxElectraLayer(self.config, name=str(i), dtype=self.dtype)
+                for i in range(self.config.num_hidden_layers)
             ]
 
     def __call__(
@@ -1195,6 +1196,7 @@ class FlaxElectraSequenceSummary(nn.Module):
             - **summary_first_dropout** (`float`) -- Optional dropout probability before the projection and activation.
             - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
     """
+
     config: ElectraConfig
     dtype: jnp.dtype = jnp.float32
 
