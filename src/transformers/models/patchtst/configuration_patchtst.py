@@ -51,9 +51,9 @@ class PatchTSTConfig(PretrainedConfig):
             distributions it is the negative log likelihood ("nll") and for point estimates it is the mean squared
             error "mse".
         patch_length (`int`, *optional*, defaults to 1):
-            Define the patch length of the patchification process. Default to 1.
+            Define the patch length of the patchification process.
         stride (`int`, *optional*, defaults to 1):
-            define the stride of the patchification process. Default to 1.
+            define the stride of the patchification process.
         encoder_layers (`int`, *optional*, defaults to 3):
             Number of encoder layers.
         d_model (`int`, *optional*, defaults to 64):
@@ -69,7 +69,7 @@ class PatchTSTConfig(PretrainedConfig):
         norm (`str` , *optional*, defaults to `"BatchNorm"`):
             Normalization at each Transformer layer. Can be `"BatchNorm"` or `"LayerNorm"`.
         norm_eps (`float`, *optional*, defaults to 1e-5):
-            A value added to the denominator for numerical stability of normalization. Default: 1e-5
+            A value added to the denominator for numerical stability of normalization.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for the attention probabilities.
         dropout (`float`, *optional*, defaults to 0.0):
@@ -85,7 +85,7 @@ class PatchTSTConfig(PretrainedConfig):
         activation_function (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (string) in the encoder.`"gelu"` and `"relu"` are supported.
         pre_norm (`bool`, *optional*, defaults to `True`):
-            Normalization is applied before self-attention if pre_norm is set to True. Otherwise, normalization is
+            Normalization is applied before self-attention if pre_norm is set to `True`. Otherwise, normalization is
             applied after residual block.
         positional_encoding (`str`, *optional*, defaults to `"sincos"`):
             Positional encodings. `"zeros"`, `"normal"`, `"uniform"' and `"sincos"` are supported.
@@ -98,7 +98,7 @@ class PatchTSTConfig(PretrainedConfig):
         shared_projection (`bool`, *optional*, defaults to `True`):
             Sharing the projection layer across different channels in the forecast head.
         seed_number (`Optional`, *optional*):
-            Use seed number for random masking.
+            Seed number used for random masking. If unset, no seed is set.
         scaling (`Union`, *optional*, defaults to `"mean"`):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
             scaler is set to "mean".

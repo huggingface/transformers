@@ -270,11 +270,11 @@ def random_masking(
         mask_ratio (`float`):
             Mask ratio.
         unmasked_channel_indices (list, *optional*):
-            indices of unmasked channels. These channels will not be masked. Defaults to None.
+            indices of unmasked channels. These channels will not be masked.
         channel_consistent_masking (bool, *optional* defaults to False):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
-            across channels. Defaults to False.
-        mask_value (int, *optional* defaults to 0):
+            across channels.
+        mask_value (int, *optional*, defaults to 0):
             Value to use for masking.
         seed_number (int, *optional*):
             Value to set for the random seed.
@@ -337,11 +337,11 @@ def forecast_masking(
             List of patch lengths to mask in the end of the data.
         forecast_mask_ratios (`list`, *optional*): [0.7, 0.3]
             List of weights to use for each patch length. For Ex. if forecast_mask_patches is [5,4] and
-            forecast_mask_ratios is [1,1], then equal weights to both patch lengths. Defaults to None.
+            forecast_mask_ratios is [1,1], then equal weights to both patch lengths.
         unmasked_channel_indices (`list`, *optional*):
-            Control Variable channel indices. These channels will not be masked. Defaults to None.
-        mask_value (`int`, *optional* defaults to 0):
-            Value to use for masking. Defaults to 0.
+            Control Variable channel indices. These channels will not be masked.
+        mask_value (`int`, *optional*, defaults to 0):
+            Value to use for masking.
         seed_number (`int`, *optional*):
             Value to set for the random seed.
 
@@ -716,13 +716,11 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
             )
         else:
             self.position_enc = positional_encoding(
-                config.positional_encoding, config.learn_pe, config.num_patches, config.d_model
-            )
+                config.positional_encoding, config.learn_pe, config.num_patches, config.d_model)
 
         # Positional dropout
         self.positional_dropout = (
-            nn.Dropout(config.positional_dropout) if config.positional_dropout > 0 else nn.Identity()
-        )
+            nn.Dropout(config.positional_dropout) if config.positional_dropout > 0 else nn.Identity())
 
         # Encoder
         self.layers = nn.ModuleList([PatchTSTEncoderLayer(config) for i in range(config.encoder_layers)])
@@ -1058,7 +1056,6 @@ class PatchTSTStdScaler(nn.Module):
         self.keepdim = True if config.keepdim is None else config.keepdim
         self.minimum_scale = 1e-10 if config.minimum_scale is None else config.minimum_scale
 
-    @torch.no_grad()
     def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor
                 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -1094,7 +1091,6 @@ class PatchTSTMeanScaler(nn.Module):
         self.minimum_scale = 1e-10 if config.minimum_scale is None else config.minimum_scale
         self.default_scale = config.default_scale if config.default_scale else None
 
-    @torch.no_grad()
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
