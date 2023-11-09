@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch TVP model. """
 
 
-import inspect
 import unittest
 
 from transformers import ResNetConfig, TvpConfig
