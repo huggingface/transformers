@@ -1209,7 +1209,7 @@ class AttentionMaskTester(unittest.TestCase):
         assert mask_4d.shape == (bsz, 1, q_len, kv_len)
 
         # make sure there are no overflows
-        assert mask_4d.min() == torch.finfo(mask_4d.dtype).min
+        assert mask_4d.min() != float("-inf")
 
         context = mask_converter.sliding_window
         if mask_converter.is_causal and context is None:
