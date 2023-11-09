@@ -284,6 +284,7 @@ torch_and_tf_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
+        "pip install huggingface_hub==0.17.4", # FIXME - this is a temporary fix until accelerate/tokenizers/hub are all made compatible
     ],
     marker="is_pt_tf_cross_test",
     pytest_options={"rA": None, "durations": 0},
