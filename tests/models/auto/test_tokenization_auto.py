@@ -419,6 +419,9 @@ class AutoTokenizerTest(unittest.TestCase):
         ):
             _ = AutoTokenizer.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
+    @unittest.skip(
+        "Currently failing with new huggingface_hub release. See: https://github.com/huggingface/transformers/pull/27389"
+    )
     def test_cached_tokenizer_has_minimum_calls_to_head(self):
         # Make sure we have cached the tokenizer.
         _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
