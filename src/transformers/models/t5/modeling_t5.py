@@ -776,43 +776,47 @@ class T5Block(nn.Module):
 class T5ClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
-    def __init__(self, config: T5Config, projection_only: Optional[bool] = False):
+    def __init__(self, config: T5Config):
         super().__init__()
-        self.include_dense_layer = not projection_only
-        if self.include_dense_layer:
-            self.dense = nn.Linear(config.d_model, config.d_model)
+        self.dense = nn.Linear(config.d_model, config.d_model)
         self.dropout = nn.Dropout(p=config.classifier_dropout)
         self.out_proj = nn.Linear(config.d_model, config.num_labels)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        if self.include_dense_layer:
-            hidden_states = self.dropout(hidden_states)
-            hidden_states = self.dense(hidden_states)
-            hidden_states = torch.tanh(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = torch.tanh(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.out_proj(hidden_states)
         return hidden_states
 
 
-class T5MultiLabelClassificationHeads(nn.Module):
-    """Heads for sentence-level multi-label classification tasks."""
+class T5EncoderBasedClassificationHead(nn.Module):
+    """Head for encoder-based sentence-level classification tasks."""
 
     def __init__(self, config: T5Config):
         super().__init__()
-        self.weights = nn.Parameter(torch.Tensor(config.num_labels, config.d_model))
-        self.biases = nn.Parameter(torch.Tensor(config.num_labels))
+        self.problem_type = config.problem_type
         self.dropout = nn.Dropout(p=config.classifier_dropout)
+        if self.problem_type == "multi_label_classification":
+            self.weights = nn.Parameter(torch.Tensor(config.num_labels, config.d_model))
+            self.biases = nn.Parameter(torch.Tensor(config.num_labels))
+        else:
+            self.out_proj = nn.Linear(config.d_model, config.num_labels)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # The input hidden_states shape should be (batch_size, num_labels, d_model)
-        hidden_states = self.dropout(hidden_states)
-
-        # The following element-wise multiplication simulates multiple per-label classification heads (one head per
-        # label). The element-wise multiplication of the weights, followed by a summation and addition of biases, is
-        # equivalent to a linear projection from d_model down to 1 for each label, but works better with vectorization.
-        hidden_states = torch.sum(hidden_states * self.weights, dim=-1) + self.biases  # (batch_size, num_labels)
-
-        return hidden_states
+        if self.problem_type == "multi_label_classification":
+            # The input hidden_states shape should be (batch_size, num_labels, d_model)
+            hidden_states = self.dropout(hidden_states)
+            # The following element-wise multiplication simulates multiple per-label classification heads (one head per
+            # label). The element-wise multiplication of the weights, followed by a summation and addition of biases, is
+            # equivalent to a linear projection from d_model down to 1 for each label (but with vectorization).
+            hidden_states = torch.sum(hidden_states * self.weights, dim=-1) + self.biases  # (batch_size, num_labels)
+            return hidden_states
+        else:
+            hidden_states = self.dropout(hidden_states)
+            hidden_states = self.out_proj(hidden_states)
+            return hidden_states
 
 
 class T5PreTrainedModel(PreTrainedModel):
@@ -857,7 +861,7 @@ class T5PreTrainedModel(PreTrainedModel):
             if hasattr(module, "qa_outputs"):
                 module.qa_outputs.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
                 module.qa_outputs.bias.data.zero_()
-        elif isinstance(module, T5ForEncoderSequenceClassification):
+        elif isinstance(module, T5ForEncoderBasedSequenceClassification):
             module.decoder_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, T5ClassificationHead):
             if hasattr(module, "dense"):
@@ -867,9 +871,15 @@ class T5PreTrainedModel(PreTrainedModel):
             module.out_proj.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
                 module.out_proj.bias.data.zero_()
-        elif isinstance(module, T5MultiLabelClassificationHeads):
-            module.weights.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            module.biases.data.zero_()
+        elif isinstance(module, T5EncoderBasedClassificationHead):
+            if hasattr(module, "weights"):
+                module.weights.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module, "biases"):
+                module.biases.data.zero_()
+            if hasattr(module, "out_proj"):
+                module.out_proj.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+                if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
+                    module.out_proj.bias.data.zero_()
         elif isinstance(module, T5DenseActDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
@@ -2328,15 +2338,15 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
 @add_start_docstrings(
     """
     T5 model utilizing mainly the encoder for sequence classification. Research has shown that this model can be more
-    efficient and usable over T5 and BERT for non-autoregressive tasks (https://arxiv.org/abs/2110.08426).
+    efficient and usable over T5 and BERT for non-autoregressive tasks (EncT5: https://arxiv.org/abs/2110.08426).
 
     This is similar to T5ForSequenceClassification, except: 1) there are less decoder layers (and as a result, less
     parameters), 2) there is a separate decoder word embedding, and the decoder input ids are predefined constants, and
-    3) the classification heads are designed differently (only projects, without using a FFN).
+    3) the classification head is designed differently (only projects, without using a FFN).
     """,
     T5_START_DOCSTRING,
 )
-class T5ForEncoderSequenceClassification(T5PreTrainedModel):
+class T5ForEncoderBasedSequenceClassification(T5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
 
     def __init__(self, config: T5Config):
@@ -2355,10 +2365,7 @@ class T5ForEncoderSequenceClassification(T5PreTrainedModel):
         self.transformer.get_decoder().set_input_embeddings(self.decoder_embeddings)
 
         # Initiate decoder projection head from scratch.
-        if config.problem_type == "multi_label_classification":
-            self.classification_head = T5MultiLabelClassificationHeads(config)
-        else:
-            self.classification_head = T5ClassificationHead(config, projection_only=True)
+        self.classification_head = T5EncoderBasedClassificationHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
