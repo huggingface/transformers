@@ -43,21 +43,13 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import get_activation
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
 )
-
-
-try:
-    from apex.normalization import FusedRMSNorm
-
-    SUPPORT_APEX = True
-except ImportError:
-    SUPPORT_APEX = False
-
 from .configuration_nucleus_x import NucleusXConfig
 
 
@@ -82,12 +74,6 @@ def rotate_every_two(x):
 
 def theta_shift(x, sin, cos):
     return (x * cos) + (rotate_every_two(x) * sin)
-
-
-def build_rms_norm(dim, eps=1e-6, elementwise_affine=True):
-    if SUPPORT_APEX:
-        return FusedRMSNorm(dim, eps=eps, elementwise_affine=elementwise_affine)
-    return NucleusXRMSNorm(dim, eps=eps, elementwise_affine=elementwise_affine)
 
 
 class NucleusXRMSNorm(nn.Module):
@@ -117,6 +103,22 @@ class NucleusXRMSNorm(nn.Module):
         if self.weight is not None:
             output = output * self.weight
         return output
+
+
+try:
+    from apex.normalization import FusedRMSNorm
+
+    NucleusXRMSNorm = FusedRMSNorm  # noqa
+
+    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of NucleusXRMSNorm")
+except ImportError:
+    # using the normal NucleusXRMSNorm
+    pass
+except Exception:
+    logger.warning("discovered apex but it failed to load, falling back to NucleusXRMSNorm")
+    pass
+
+ALL_LAYERNORM_LAYERS.append(NucleusXRMSNorm)
 
 
 class NucleusXRelPos(nn.Module):
@@ -278,7 +280,7 @@ class NucleusXMultiScaleRetention(nn.Module):
 
         self.out_proj = nn.Linear(self.value_dim, self.embed_dim, bias=False)
 
-        self.group_norm = build_rms_norm(self.head_dim, eps=config.groupnorm_eps, elementwise_affine=False)
+        self.group_norm = NucleusXRMSNorm(self.head_dim, eps=config.groupnorm_eps, elementwise_affine=False)
 
     def reset_parameters(self, gain=2**-2.5):
         nn.init.xavier_uniform_(self.q_proj.weight, gain=gain)
@@ -583,13 +585,13 @@ class NucleusXDecoderLayer(nn.Module):
 
         self.normalize_before = config.decoder_normalize_before
 
-        self.retention_rms_norm = build_rms_norm(self.embed_dim, eps=config.rms_norm_eps)
+        self.retention_rms_norm = NucleusXRMSNorm(self.embed_dim, eps=config.rms_norm_eps)
 
         self.ffn_dim = config.decoder_ffn_embed_dim
 
         self.ffn = self.build_ffn()
 
-        self.final_rms_norm = build_rms_norm(self.embed_dim, eps=config.rms_norm_eps)
+        self.final_rms_norm = NucleusXRMSNorm(self.embed_dim, eps=config.rms_norm_eps)
 
         if config.deepnorm:
             self.alpha = math.pow(2.0 * config.decoder_layers, 0.25)
@@ -681,8 +683,6 @@ class NucleusXPreTrainedModel(PreTrainedModel):
         lm_head_std = self.config.lm_head_initializer_range
         gain = self.config.initializer_factor
 
-        rms_norm_module = FusedRMSNorm if SUPPORT_APEX else NucleusXRMSNorm
-
         if isinstance(module, NucleusXForCausalLM):
             module.reset_parameters(std=lm_head_std)
         elif isinstance(module, NucleusXForSequenceClassification):
@@ -691,7 +691,7 @@ class NucleusXPreTrainedModel(PreTrainedModel):
             module.reset_parameters(gain=gain)
         elif isinstance(module, NucleusXGLU):
             module.reset_parameters(std=std)
-        elif isinstance(module, rms_norm_module):
+        elif isinstance(module, NucleusXRMSNorm):
             module.reset_parameters()  # this reset the weight to ones.
         # copied from LlamaPretrainedModel
         elif isinstance(module, nn.Embedding):
@@ -895,7 +895,7 @@ class NucleusXModel(NucleusXPreTrainedModel):
         self.embed_tokens = embed_tokens
 
         if config.rms_norm_embedding:
-            self.rms_norm_embedding = build_rms_norm(self.embed_dim, eps=config.rms_norm_eps)
+            self.rms_norm_embedding = NucleusXRMSNorm(self.embed_dim, eps=config.rms_norm_eps)
         else:
             self.rms_norm_embedding = None
 
@@ -907,7 +907,7 @@ class NucleusXModel(NucleusXPreTrainedModel):
         self.decoder_layers = len(self.layers)
 
         if config.decoder_normalize_before:
-            self.rms_norm = build_rms_norm(self.embed_dim, eps=config.rms_norm_eps)
+            self.rms_norm = NucleusXRMSNorm(self.embed_dim, eps=config.rms_norm_eps)
         else:
             self.rms_norm = None
 
