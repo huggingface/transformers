@@ -1990,7 +1990,7 @@ class RequestCounter:
     Usage:
     ```py
     with RequestCounter() as counter:
-    _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+        _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
     assert counter["GET"] == 0
     assert counter["HEAD"] == 1
     assert counter.total_calls == 1
