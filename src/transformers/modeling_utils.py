@@ -2098,7 +2098,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if hasattr(model_to_save, "_hf_hook") and isinstance(model_to_save._hf_hook, AlignDevicesHook):
                 state_dict = {}
                 for name, module in model_to_save.named_modules():
-                    print (name)
                     if name == "":
                         continue
                     if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook):
@@ -2179,6 +2178,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 logger.warning_once(
                     f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
                 )
+        print ('Safe serialization complete')
 
         # Shard the model if it is too big.
         if not _hf_peft_config_loaded:
@@ -2188,6 +2188,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             weights_name = ADAPTER_SAFE_WEIGHTS_NAME if safe_serialization else ADAPTER_WEIGHTS_NAME
 
         shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
+
+        print ('Sharding complete')
 
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
@@ -2208,7 +2210,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
                 os.remove(full_filename)
-
+        print ('cleaned folder')
         # Save the model
         for shard_file, shard in shards.items():
             if safe_serialization:
@@ -2217,7 +2219,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "pt"})
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
-
+        print ('shards saved')
         if index is None:
             path_to_weights = os.path.join(save_directory, _add_variant(WEIGHTS_NAME, variant))
             logger.info(f"Model weights saved in {path_to_weights}")
@@ -2233,7 +2235,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 f"split in {len(shards)} checkpoint shards. You can find where each parameters has been saved in the "
                 f"index located at {save_index_file}."
             )
-
+        print ('complete except for hub push')
         if push_to_hub:
             self._upload_modified_files(
                 save_directory,
