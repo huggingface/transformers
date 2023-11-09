@@ -618,7 +618,7 @@ class RTDetrMSDeformableAttention(nn.Module):
         return output
 
 
-class TransformerDecoderLayer(nn.Module):
+class RTDetrTransformerDecoderLayer(nn.Module):
     def __init__(
         self,
         d_model=256,
@@ -805,7 +805,7 @@ class RTDetrTransformer(nn.Module):
         self.build_input_proj_layer(feat_channels)
 
         # Transformer module
-        decoder_layer = TransformerDecoderLayer(
+        decoder_layer = RTDetrTransformerDecoderLayer(
             self.hidden_dim, self.num_head, dim_feedforward, dropout, activation, num_levels, num_decoder_points
         )
         self.decoder = TransformerDecoder(self.hidden_dim, decoder_layer, self.num_decoder_layers, eval_idx)
