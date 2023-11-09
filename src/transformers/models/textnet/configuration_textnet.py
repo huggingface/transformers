@@ -43,10 +43,7 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
         has_shuffle=False,
         in_channels=3,
         out_channels=64,
-        use_bn=True,
         act_func="relu",
-        dropout_rate=0,
-        ops_order="weight_bn_act",
         stage1_in_channels=[64, 64, 64],
         stage1_out_channels=[64, 64, 64],
         stage1_kernel_size=[[3, 3], [3, 3], [3, 3]],
@@ -87,10 +84,7 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
         self.has_shuffle = has_shuffle
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.use_bn = use_bn
         self.act_func = act_func
-        self.dropout_rate = dropout_rate
-        self.ops_order = ops_order
 
         self.stage1_in_channels = stage1_in_channels
         self.stage1_out_channels = stage1_out_channels

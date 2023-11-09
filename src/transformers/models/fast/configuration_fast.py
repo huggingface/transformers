@@ -47,32 +47,59 @@ class FastConfig(PretrainedConfig):
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         neck_in_channels (`List[int]`, *optional*, defaults to `[64, 128, 256, 512]`):
+            Denotes the in channels of FASTRepConvLayer in neck module.
         neck_out_channels (`List[int]`, *optional*, defaults to `[128, 128, 128, 128]`):
+            Denotes the out channels of FASTRepConvLayer in neck module. Should be of same length of `neck_in_channels`
         neck_kernel_size (`List[int]`, *optional*, defaults to `[[3, 3], [3, 3], [3, 3], [3, 3]]`):
+            Denotes the kernel_size of FASTRepConvLayer in neck module. Should be of same length of `neck_in_channels`
         neck_stride (`List[int]`, *optional*, defaults to `[1, 1, 1, 1]`):
+            Denotes the neck_stride of FASTRepConvLayer in neck module. Should be of same length of `neck_in_channels`
         neck_dilation (`List[int]`, *optional*, defaults to `[1, 1, 1, 1]`):
+            Denotes the neck_dilation of FASTRepConvLayer in neck module. Should be of same length of
+            `neck_in_channels`
         neck_groups (`List[int]`, *optional*, defaults to `[1, 1, 1, 1]`):
+            Denotes the groups of FASTRepConvLayer in neck module. Should be of same length of `neck_in_channels`
         head_pooling_size (`int`, *optional*, defaults to 9):
+            Denotes the pooling size of head layer
         head_dropout_ratio (`int`, *optional*, defaults to 0):
+            Denotes the dropout ratio used in dropout layer of head layer..
         head_conv_in_channels (`int`, *optional*, defaults to 512):
+            Denotes the in channels of first conv layer in head layer.
         head_conv_out_channels (`int`, *optional*, defaults to 128):
+            Denotes the out channels of first conv layer in head layer.
         head_conv_kernel_size (`List[int]`, *optional*, defaults to `[3, 3]`):
+            Denotes the conv kernel size of first conv layer in head layer.
         head_conv_stride (`int`, *optional*, defaults to 1):
+            Denotes the conv stride of first conv layer in head layer.
         head_conv_dilation (`int`, *optional*, defaults to 1):
+            Denotes the conv dilation of first conv layer in head layer.
         head_conv_groups (`int`, *optional*, defaults to 1):
+            Denotes the conv groups of first conv layer in head layer.
         head_final_kernel_size (`int`, *optional*, defaults to 1):
+            Denotes the conv kernel size of final conv layer in head layer.
         head_final_stride (`int`, *optional*, defaults to 1):
+            Denotes the conv stride of final conv layer in head layer.
         head_final_dilation (`int`, *optional*, defaults to 1):
+            Denotes the conv dilation of final conv layer in head layer.
         head_final_groups (`int`, *optional*, defaults to 1):
+            Denotes the conv groups of final conv layer in head layer.
         head_final_bias (`bool`, *optional*, defaults to `False`):
+            Denotes the conv bais of final conv layer in head layer.
         head_final_has_shuffle (`bool`, *optional*, defaults to `False`):
+            Denotes the conv shuffle of final conv layer in head layer.
         head_final_in_channels (`int`, *optional*, defaults to 128):
+            Denotes the in channels of final conv layer in head layer.
         head_final_out_channels (`int`, *optional*, defaults to 5):
-        head_final_use_bn (`bool`, *optional*, defaults to `False`):
+            Denotes the out channels of final conv layer in head layer.
+        head_final_use_batch_norm (`bool`, *optional*, defaults to `False`):
+            Denotes to use or not to use batch norm of final conv layer in head layer.
         head_final_act_func (`str`, *optional*):
+            Denotes to activation function of final conv layer in head layer.
         head_final_dropout_rate (`int`, *optional*, defaults to 0):
+            Denotes to dropout_rate of dropout layer of final conv layer in head layer.
         head_final_ops_order (`str`, *optional*, defaults to `"weight"`):
-        loss_bg (`bool`, *optional*, defaults to `False`):
+            Denotes to dropout_rate of dropout layer of final conv layer in head layer.
+        loss_bg (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         backbone (`str`, *optional*, defaults to `"resnet50"`):
             Name of convolutional backbone to use in case `use_timm_backbone` = `True`. Supports any convolutional
             backbone from the timm package. For a list of all available models, see [this
@@ -130,7 +157,7 @@ class FastConfig(PretrainedConfig):
         head_final_has_shuffle=False,
         head_final_in_channels=128,
         head_final_out_channels=5,
-        head_final_use_bn=False,
+        head_final_use_batch_norm=False,
         head_final_act_func=None,
         head_final_dropout_rate=0,
         head_final_ops_order="weight",
@@ -188,10 +215,6 @@ class FastConfig(PretrainedConfig):
         self.head_final_has_shuffle = head_final_has_shuffle
         self.head_final_in_channels = head_final_in_channels
         self.head_final_out_channels = head_final_out_channels
-        self.head_final_use_bn = head_final_use_bn
-        self.head_final_act_func = head_final_act_func
-        self.head_final_dropout_rate = head_final_dropout_rate
-        self.head_final_ops_order = head_final_ops_order
 
         self.loss_bg = loss_bg
         self.backbone = backbone

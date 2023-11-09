@@ -22,6 +22,7 @@ from torch import Tensor
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from transformers import PreTrainedModel, add_start_docstrings
+from transformers.activations import ACT2CLS
 from transformers.modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -74,21 +75,6 @@ def get_same_padding(kernel_size):
     return kernel_size // 2
 
 
-def build_activation(act_func, inplace=True):
-    if act_func == "relu":
-        return nn.ReLU(inplace=inplace)
-    elif act_func == "relu6":
-        return nn.ReLU6(inplace=inplace)
-    elif act_func == "tanh":
-        return nn.Tanh()
-    elif act_func == "sigmoid":
-        return nn.Sigmoid()
-    elif act_func is None:
-        return None
-    else:
-        raise ValueError("do not support: %s" % act_func)
-
-
 class TextNetConvLayer(nn.Module):
     def __init__(
         self,
@@ -100,10 +86,7 @@ class TextNetConvLayer(nn.Module):
         groups=1,
         bias=False,
         has_shuffle=False,
-        use_batch_norm=True,
         act_func="relu",
-        dropout_rate=0,
-        use_act=True,
     ):
         super().__init__()
 
@@ -133,14 +116,12 @@ class TextNetConvLayer(nn.Module):
             bias=bias,
         )
         self.batch_norm = nn.Identity()
-        if use_batch_norm:
-            self.batch_norm = nn.BatchNorm2d(out_channels)
+
+        self.batch_norm = nn.BatchNorm2d(out_channels)
 
         self.activation = nn.Identity()
-        if use_act:
-            act = build_activation(self.activation_function, True)
-            if act is not None:
-                self.activation = act
+        if self.activation_function is not None:
+            self.activation = ACT2CLS[self.activation_function](inplace=True)
 
     def forward(self, hidden_states):
         if self.training:
@@ -371,10 +352,7 @@ class TextNetModel(TextNetPreTrainedModel):
             config.groups,
             config.bias,
             config.has_shuffle,
-            config.use_bn,
             config.act_func,
-            config.dropout_rate,
-            config.ops_order,
         )
         stage1 = []
         for stage_config in zip(
