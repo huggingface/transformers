@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-加速线性代数，也称为XLA，是一个用于加速TensorFlow模型运行时的编译器。从[官方文档](https://www.tensorflow.org/xla)中可以看到：
+加速线性代数，也称为XLA，是一个用于加速TensorFlow模型运行时间的编译器。从[官方文档](https://www.tensorflow.org/xla)中可以看到：
 
 XLA（加速线性代数）是一种针对线性代数的特定领域编译器，可以在可能不需要更改源代码的情况下加速TensorFlow模型。
 
@@ -31,7 +31,7 @@ XLA（加速线性代数）是一种针对线性代数的特定领域编译器�
 
 ## 使用 XLA 运行 TensorFlow 函数
 
-让我们考虑TensorFlow 中的以下模型：
+让我们考虑以下TensorFlow 中的模型：
 
 ```py
 import tensorflow as tf
@@ -101,11 +101,11 @@ print(f"Generated -- {decoded_text}")
 # Generated -- TensorFlow is an open-source, open-source, distributed-source application # framework for the
 ```
 
-正如您所注意到的，在`generate()`上启用XLA只需要一行代码。代码的其余部分保持不变。然而，上面的代码片段中有一些与XLA相关的注意事项。您需要了解这些注意事项，以充分利用XLA可能带来的性能提升。我们将在下面的部分讨论这些内容。
+正如您所注意到的，在`generate()`上启用XLA只需要一行代码。其余部分代码保持不变。然而，上面的代码片段中有一些与XLA相关的注意事项。您需要了解这些注意事项，以充分利用XLA可能带来的性能提升。我们将在下面的部分讨论这些内容。
 
 ## 需要关注的注意事项
 
-当您首次执行启用XLA的函数（如上面的`xla_generate()`）时，它将在内部尝试推断计算图，这是一个耗时的过程。这个过程被称为[“跟踪”](https://www.tensorflow.org/guide/intro_to_graphs#when_is_a_function_tracing)。
+当您首次执行启用XLA的函数（如上面的`xla_generate()`）时，它将在内部尝试推断计算图，这是一个耗时的过程。这个过程被称为[“tracing”](https://www.tensorflow.org/guide/intro_to_graphs#when_is_a_function_tracing)。
 
 您可能会注意到生成时间并不快。连续调用`xla_generate()`（或任何其他启用了XLA的函数）不需要再次推断计算图，只要函数的输入与最初构建计算图时的形状相匹配。对于具有固定输入形状的模态（例如图像），这不是问题，但如果您正在处理具有可变输入形状的模态（例如文本），则必须注意。
 
@@ -159,7 +159,7 @@ Execution time -- 79.0 ms
 Execution time -- 78.9 ms
 ```
 
-第一次调用`xla_generate()`会因为跟踪而耗时，但后续的调用会快得多。请注意，任何时候对生成选项的更改都会触发重新跟踪，从而导致生成时间减慢。
+第一次调用`xla_generate()`会因为`tracing`而耗时，但后续的调用会快得多。请注意，任何时候对生成选项的更改都会触发重新`tracing`，从而导致生成时间减慢。
 
 在本文档中，我们没有涵盖🤗 Transformers提供的所有文本生成选项。我们鼓励您阅读文档以了解高级用例。
 

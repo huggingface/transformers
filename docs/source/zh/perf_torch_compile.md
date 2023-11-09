@@ -35,11 +35,11 @@ model = AutoModelForImageClassification.from_pretrained(MODEL_ID).to("cuda")
 
 `compile()` 提供了多种编译模式，它们在编译时间和推理开销上有所不同。`max-autotune` 比 `reduce-overhead` 需要更长的时间，但会得到更快的推理速度。默认模式在编译时最快，但在推理时间上与 `reduce-overhead` 相比效率较低。在本指南中，我们使用了默认模式。您可以在[这里](https://pytorch.org/get-started/pytorch-2.0/#user-experience)了解更多信息。
 
-我们在 PyTorch 2.0.1 版本上使用不同的计算机视觉模型、任务、硬件类型和批量大小对 `torch.compile` 进行了基准测试。
+我们在 PyTorch 2.0.1 版本上使用不同的计算机视觉模型、任务、硬件类型和数据批量大小对 `torch.compile` 进行了基准测试。
 
 ## 基准测试代码
 
-以下是每个任务的基准测试代码。我们在推理之前预热 GPU，并取300次推理的平均值，每次使用相同的图像。
+以下是每个任务的基准测试代码。我们在推理之前”预热“GPU，并取300次推理的平均值，每次使用相同的图像。
 
 ### 使用 ViT 进行图像分类
 
@@ -113,7 +113,7 @@ with torch.no_grad():
 - [facebook/detr-resnet-101](https://huggingface.co/facebook/detr-resnet-101)
 - [microsoft/conditional-detr-resnet-50](https://huggingface.co/microsoft/conditional-detr-resnet-50)
 
- 下面是使用和不使用`torch.compile()`的推理持续时间可视化，以及每个模型在不同硬件和批量大小下的百分比改进。
+ 下面是使用和不使用`torch.compile()`的推理持续时间可视化，以及每个模型在不同硬件和数据批量大小下的改进百分比。
 
 
 <div class="flex">
