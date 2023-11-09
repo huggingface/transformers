@@ -102,10 +102,10 @@ class PatchTSTConfig(PretrainedConfig):
         scaling (`Union`, *optional*, defaults to `"mean"`):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
             scaler is set to "mean".
-        mask_input (`bool`, *optional*, defaults to False):
+        mask_input (`bool`, *optional*, defaults to `False`):
             Apply masking during the pretraining.
         mask_type (`str`, *optional*, defaults to `"random"`):
-            Masking type. Only `"random"` is currently supported.
+            Masking type. Only `"random"` and `"forecast"` are currently supported.
         random_mask_ratio (`float`, *optional*, defaults to 0.5):
             Masking ratio is applied to mask the input data during random pretraining.
         forecast_mask_patches (`List`, *optional*, defaults to `[2, 3]`):
@@ -116,9 +116,9 @@ class PatchTSTConfig(PretrainedConfig):
         channel_consistent_masking (`bool`, *optional*, defaults to `False`):
             If channel consistent masking is True, all the channels will have the same masking.
         unmasked_channel_indices (`list`, *optional*):
-            Channels are not masked during pretraining.
+            Channels that are not masked during pretraining.
         mask_value (`int`, *optional*, defaults to 0):
-            Mask value to set.
+            Define the value of entries to be masked when pretraining.
         pooling (`str`, *optional*, defaults to `"mean"`):
             Pooling in the latent representation. `"mean"`, `"max"` and None are supported.
         head_dropout (`float`, *optional*, defaults to 0.0):
@@ -132,7 +132,7 @@ class PatchTSTConfig(PretrainedConfig):
             Output range for regression task. The range of output values can be set to enforce the model to produce
             values within a range.
         num_parallel_samples (`int`, *optional*, defaults to 100):
-            The number of samples to generate in parallel for probablistic prediction.
+            The number of samples is generated in parallel for probablistic prediction.
 
 
     ```python
