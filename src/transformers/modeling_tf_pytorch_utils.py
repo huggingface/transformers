@@ -183,7 +183,7 @@ def load_pytorch_checkpoint_in_tf2_model(
     for path in pytorch_checkpoint_path:
         pt_path = os.path.abspath(path)
         logger.info(f"Loading PyTorch weights from {pt_path}")
-        if pt_path.endswith('.safetensors'):
+        if pt_path.endswith(".safetensors"):
             state_dict = safe_load_file(pt_path)
         else:
             state_dict = torch.load(pt_path, map_location="cpu")
