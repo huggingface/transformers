@@ -577,58 +577,47 @@ class PatchTSTEncoderLayer(nn.Module):
         if self.pre_norm:
             ## Norm and Multi-Head attention and Add residual connection
             attn_output, attn_weights, _ = self.self_attn(
-                hidden_states=self.norm_sublayer1(hidden_state), output_attentions=output_attentions
-            )
+                hidden_states=self.norm_sublayer1(hidden_state), output_attentions=output_attentions)
             # Add: residual connection with residual dropout
             hidden_state = hidden_state + self.dropout_path1(attn_output)
         else:
             ## Multi-Head attention and Add residual connection and Norm - Standard Transformer from BERT
             attn_output, attn_weights, _ = self.self_attn(
-                hidden_states=hidden_state, output_attentions=output_attentions
-            )
+                hidden_states=hidden_state, output_attentions=output_attentions)
             # hidden_states: [(bs*num_channels) x sequence_length x d_model]
-            hidden_state = self.norm_sublayer1(
-                hidden_state + self.dropout_path1(attn_output))
+            hidden_state = self.norm_sublayer1(hidden_state + self.dropout_path1(attn_output))
 
-        # [bs x num_channels x sequence_length x d_model]
-        hidden_state = hidden_state.reshape(
-            batch_size, num_input_channels, sequence_length, d_model)
+        # hidden_state: [bs x num_channels x sequence_length x d_model]
+        hidden_state = hidden_state.reshape(batch_size, num_input_channels, sequence_length, d_model)
 
         # second sublayer: attention across variable at any given time
-        # [bs x num_channels x sequence_length x d_model] -> [bs x sequence_length x num_channels x d_model]
-        #                                                 -> [(bs*sequence_length) x num_channels x d_model]
         if self.channel_attention:
-            hidden_state = (
-                hidden_state.transpose(2, 1)
-                .contiguous()
-                .view(batch_size * sequence_length, num_input_channels, d_model)
-            )  # [(bs*sequence_length) x num_channels x d_model]
+            # hidden_state: [bs x sequence_length x num_channels x d_model]
+            hidden_state = hidden_state.transpose(2, 1).contiguous()
+            # hidden_state: [(bs*sequence_length) x num_channels x d_model]
+            hidden_state = hidden_state.view(batch_size * sequence_length, num_input_channels, d_model)
             if self.pre_norm:
                 ## Norm and Multi-Head attention and Add residual connection
                 attn_output, channel_attn_weights, _ = self.self_attn(
-                    hidden_states=self.norm_sublayer2(hidden_state), output_attentions=output_attentions
-                )
+                    hidden_states=self.norm_sublayer2(hidden_state), output_attentions=output_attentions)
                 # Add: residual connection with residual dropout
                 hidden_state = hidden_state + self.dropout_path2(attn_output)
             else:
                 ## Multi-Head attention and Add residual connection and Norm
                 attn_output, channel_attn_weights, _ = self.self_attn(
-                    hidden_states=hidden_state, output_attentions=output_attentions
-                )
+                    hidden_states=hidden_state, output_attentions=output_attentions)
                 # hidden_states: [(bs*sequence_length) x num_channels x d_model]
-                hidden_state = self.norm_sublayer2(
-                    hidden_state + self.dropout_path2(attn_output))
+                hidden_state = self.norm_sublayer2(hidden_state + self.dropout_path2(attn_output))
 
-            hidden_state = (
-                hidden_state.reshape(batch_size, sequence_length, num_input_channels, d_model)
-                .transpose(1, 2)
-                .contiguous()
-            )  # src: [bs x num_channels x sequence_length x d_model]
+            # Reshape hidden state
+            # hidden_state: [bs x sequence_length x num_channels x d_model]
+            hidden_state = hidden_state.reshape(batch_size, sequence_length, num_input_channels, d_model)
+            # hidden_state: [bs x num_channels x sequence_length x d_model]
+            hidden_state = hidden_state.transpose(1, 2).contiguous()
 
         # Third sublayer: mixing across hidden
-        # src: [(batch_size*num_channels) x sequence_length x d_model]
-        hidden_state = hidden_state.view(
-            batch_size * num_input_channels, sequence_length, d_model)
+        # hidden_state: [(batch_size*num_channels) x sequence_length x d_model]
+        hidden_state = hidden_state.view(batch_size * num_input_channels, sequence_length, d_model)
         if self.pre_norm:
             ## Norm and Position-wise Feed-Forward and Add residual connection
             # Add: residual connection with residual dropout
