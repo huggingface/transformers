@@ -75,7 +75,8 @@ class RTDetrConfig(PretrainedConfig):
             Height and width used to computes the effective height and width of the position embeddings after taking
             into account the stride.
         normalize_before (`bool`, *optional*, defaults to `False`):
-            Determine whether to apply layer normalization in the transformer encoder layer before self-attention and feed-forward modules.
+            Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
+            feed-forward modules.
         num_classes (`int`, *optional*, defaults to 80):
             Number of target classes or labels used by the detector.
         num_queries (`int`, *optional*, defaults to 300):
@@ -210,7 +211,7 @@ class RTDetrConfig(PretrainedConfig):
     ):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        
+
         # backbone
         if backbone_config is None:
             logger.info("Initializing the config with a `TimmBackbone` backbone.")
