@@ -30,11 +30,7 @@ tiny_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fas
 small_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_small.config"
 base_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_base.config"
 
-rename_key_mappings = {
-    "bn": "batch_norm",
-    "hor": "horizontal",
-    "ver": "vertical",
-}
+rename_key_mappings = {"bn": "batch_norm", "hor": "horizontal", "ver": "vertical", "det_head": "text_detection_head"}
 
 
 def prepare_img():

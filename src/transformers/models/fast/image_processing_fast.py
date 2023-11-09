@@ -389,7 +389,7 @@ class FastImageProcessor(BaseImageProcessor):
     def post_process_text_detection(self, output, target_sizes, threshold, bbox_type="rect"):
         scale = 2
         img_size = (self.size["height"], self.size["width"])
-        out = output["hidden_states"]
+        out = output["last_hidden_state"]
         batch_size = out.size(0)
         final_results = {}
 
