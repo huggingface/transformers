@@ -482,6 +482,9 @@ class AutoModelTest(unittest.TestCase):
         with self.assertRaisesRegex(EnvironmentError, "Use `from_flax=True` to load this model"):
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
 
+    @unittest.skip(
+        "Currently failing with new huggingface_hub release. See: https://github.com/huggingface/transformers/pull/27389"
+    )
     def test_cached_model_has_minimum_calls_to_head(self):
         # Make sure we have cached the model.
         _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
