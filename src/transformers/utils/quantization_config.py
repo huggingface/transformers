@@ -542,6 +542,7 @@ class AwqConfig(QuantizationConfigMixin):
         zero_point: bool = True,
         version: AWQLinearVersion = AWQLinearVersion.GEMM,
         backend: AwqBackendPackingMethod = AwqBackendPackingMethod.AUTOAWQ,
+        fusing_mapping: Optional[dict] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AWQ
@@ -551,6 +552,7 @@ class AwqConfig(QuantizationConfigMixin):
         self.zero_point = zero_point
         self.version = version
         self.backend = backend
+        self.fusing_mapping = fusing_mapping
 
         self.post_init()
 

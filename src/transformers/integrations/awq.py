@@ -17,6 +17,7 @@ from ..utils.quantization_config import AwqBackendPackingMethod, AWQLinearVersio
 
 
 if is_torch_available():
+    import torch
     import torch.nn as nn
 
 
@@ -102,3 +103,96 @@ def replace_with_awq_linear(
         # Remove the last key for recursion
         current_key_name.pop(-1)
     return model, has_been_replaced
+
+
+def fuse_awq_modules(model, quantization_config):
+    """
+    Optionally fuse some modules in the model to speedup inference.
+
+    Args:
+        model (`~transformers.PreTrainedModel`):
+            The model to fuse - note this model should have been converted into AWQ format beforehand.
+        quantization_config (`~transformers.quantization_config.AWQConfig`):
+            The quantization configuration to use.
+    """
+    backend = quantization_config.backend
+    fusing_mapping = quantization_config.fusing_mapping
+
+    if backend == AwqBackendPackingMethod.AUTOAWQ:
+        from awq.modules.fused.attn import QuantAttentionFused
+        from awq.modules.fused.norm import FasterTransformerRMSNorm
+        from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
+    else:
+        raise ValueError("Fusing is only supported for the AutoAWQ backend")
+
+    for name, module in model.named_modules():
+        # Replace layer norms
+        for module_name in fusing_mapping["layernorm"]:
+            if hasattr(module, module_name):
+                old_module = getattr(module, module_name)
+                module._modules[module_name] = FasterTransformerRMSNorm(
+                    old_module.weight,
+                    old_module.variance_epsilon,
+                ).to(old_module.weight.device)
+                del old_module
+        # Replace MLP layers
+        for module_name in fusing_mapping["mlp"]:
+            if hasattr(module, module_name):
+                pass
+
+        # Replace attention layers
+        # inside fusing_mapping["attention"] we should have (in correct order): q, k, v, o layer
+        if hasattr(module, fusing_mapping["attention"][0]):
+            # First, we pack the QKV layers together
+            q_proj = getattr(module, fusing_mapping["attention"][0])
+            previous_device = q_proj.qweight.device
+
+            if isinstance(q_proj, WQLinear_GEMV):
+                target_cls = WQLinear_GEMV
+                cat_dim = 0
+            else:
+                target_cls = WQLinear_GEMM
+                cat_dim = 1
+
+            k_proj = getattr(module, fusing_mapping["attention"][1])
+            v_proj = getattr(module, fusing_mapping["attention"][2])
+            o_proj = getattr(module, fusing_mapping["attention"][3])
+
+            bias = torch.cat([q_proj.bias, k_proj.bias, v_proj.bias], dim=0) if q_proj.bias is not None else None
+
+            qkv_layer = target_cls(
+                q_proj.w_bit,
+                q_proj.group_size,
+                q_proj.in_features,
+                q_proj.out_features + k_proj.out_features + v_proj.out_features,
+                q_proj.bias is not None,
+                next(iter(module.state_dict().values())).device,
+            )
+
+            qkv_layer.qweight = torch.cat([q_proj.qweight, k_proj.qweight, v_proj.qweight], dim=cat_dim)
+            qkv_layer.qzeros = torch.cat([q_proj.qzeros, k_proj.qzeros, v_proj.qzeros], dim=cat_dim)
+            qkv_layer.scales = torch.cat([q_proj.scales, k_proj.scales, v_proj.scales], dim=cat_dim)
+
+            if isinstance(qkv_layer, WQLinear_GEMV):
+                qkv_layer.split_k_iters = q_proj.split_k_iters
+
+            qkv_layer.bias = bias
+
+            fused_attention_layer = QuantAttentionFused(
+                fusing_mapping["hidden_size"],
+                fusing_mapping["num_attention_heads"],
+                fusing_mapping["num_key_value_heads"],
+                qkv_layer,
+                o_proj,
+                previous_device,
+                fusing_mapping["max_seq_len"],
+                use_alibi=fusing_mapping["use_alibi"],
+            )
+
+            parent_name, child_name = name.rsplit(".", 1)
+            parent = model.get_submodule(parent_name)
+            setattr(parent, child_name, fused_attention_layer.to(previous_device))
+
+            del q_proj, k_proj, v_proj, o_proj
+
+    return model

@@ -2676,17 +2676,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
         quantization_method_from_args = None
-        if quantization_config is not None:
-            quantization_method_from_args = getattr(
-                quantization_config, "quant_method", QuantizationMethod.BITS_AND_BYTES
-            )
-
-            if quantization_method_from_args == QuantizationMethod.AWQ:
-                raise ValueError(
-                    "You cannot pass an `AwqConfig` when loading a model as you can only use AWQ models"
-                    " for inference. To quantize transformers models with AWQ algorithm, please refer to our"
-                    " quantization docs: https://huggingface.co/docs/transformers/main_classes/quantization "
-                )
 
         if quantization_config is None and (load_in_8bit or load_in_4bit):
             quantization_method_from_args = QuantizationMethod.BITS_AND_BYTES
@@ -2782,7 +2771,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "quant_method", QuantizationMethod.BITS_AND_BYTES
             )
 
-        if quantization_method_from_config == QuantizationMethod.GPTQ and quantization_method_from_args is not None:
+        if (
+            quantization_method_from_config == QuantizationMethod.GPTQ
+            or quantization_method_from_config == QuantizationMethod.AWQ
+        ) and quantization_method_from_args is not None:
             loading_attr_dict = quantization_config.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 config.quantization_config[attr] = val
@@ -3309,7 +3301,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = quantizer.convert_model(model)
             model._is_quantized_training_enabled = True
         elif quantization_method_from_config == QuantizationMethod.AWQ:
-            from .integrations import get_keys_to_not_convert, replace_with_awq_linear
+            from .integrations import fuse_awq_modules, get_keys_to_not_convert, replace_with_awq_linear
 
             modules_to_not_convert = get_keys_to_not_convert(model)
 
@@ -3526,6 +3518,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Generation config file not found, using a generation config created from the model config."
                 )
                 pass
+
+        if quantization_config.quant_method == QuantizationMethod.AWQ and len(quantization_config.fusing_mapping) > 0:
+            model = fuse_awq_modules(model, quantization_config)
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
