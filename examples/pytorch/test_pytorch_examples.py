@@ -18,7 +18,6 @@ import json
 import logging
 import os
 import sys
-import unittest
 from unittest.mock import patch
 
 from transformers import ViTMAEForPreTraining, Wav2Vec2ForPreTraining
