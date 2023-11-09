@@ -447,6 +447,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
             "{% set loop_messages = messages %}"
             "{% set system_message = false %}"
             "{% endif %}"
+            "{% if loop_messages|length == 0 and system_message %}"  # Special handling when only sys message present
+            "{{ bos_token + '[INST] <<SYS>>\\n' + system_message + '\\n<</SYS>>\\n\\n [/INST]' }}"
+            "{% endif %}"
             "{% for message in loop_messages %}"  # Loop over all non-system messages
             "{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
             "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}"
