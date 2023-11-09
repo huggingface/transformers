@@ -19,6 +19,7 @@ from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..timm_backbone import TimmBackboneConfig
 
+
 logger = logging.get_logger(__name__)
 
 RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -151,9 +152,8 @@ class RTDetrConfig(PretrainedConfig):
 
     def __init__(
         self,
-        # General
         initializer_range=0.02,
-        # Backbone
+        # backbone
         backbone_config=None,
         # encoder HybridEncoder
         in_channels=[512, 1024, 2048],
@@ -203,7 +203,7 @@ class RTDetrConfig(PretrainedConfig):
         **kwargs,
     ):
         self.initializer_range = initializer_range
-        
+
         # backbone
         if backbone_config is None:
             logger.info("Initializing the config with a `TimmBackbone` backbone.")
@@ -211,7 +211,7 @@ class RTDetrConfig(PretrainedConfig):
                 "backbone": "resnet50d",
                 "out_indices": [2, 3, 4],
                 "freeze_batch_norm_2d": True,
-                }
+            }
             self.backbone_config = TimmBackboneConfig(**backbone_config)
         elif isinstance(backbone_config, dict):
             logger.info("Initializing the config with a `TimmBackbone` backbone.")
@@ -222,7 +222,7 @@ class RTDetrConfig(PretrainedConfig):
             raise ValueError(
                 f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
             )
-        
+
         # encoder
         self.in_channels = in_channels
         self.feat_strides = feat_strides

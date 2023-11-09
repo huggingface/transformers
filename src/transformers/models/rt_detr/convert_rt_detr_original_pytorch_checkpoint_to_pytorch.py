@@ -15,12 +15,10 @@
 """Convert RT Detr checkpoints with Timm backbone"""
 
 import argparse
-import json
 from pathlib import Path
 
 import requests
 import torch
-from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import RTDetrConfig, RTDetrImageProcessor, RTDetrModel
@@ -386,9 +384,9 @@ id2label = {
     "76": "scissors",
     "77": "teddy bear",
     "78": "hair drier",
-    "79": "toothbrush"
-  }
-  
+    "79": "toothbrush",
+}
+
 expected_logits = {
     "rtdetr_r50vd_6x_coco_from_paddle.pth": torch.tensor(
         [-4.159348487854004, -4.703853607177734, -5.946484565734863, -5.562824249267578, -4.7707929611206055]
@@ -501,9 +499,16 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     assert torch.allclose(output_logits[0, :3, :3], original_logits[0, :3, :3], atol=1e-4)
 
     if push_to_hub:
-        config.push_to_hub(repo_id=repo_id, commit_message="Add config from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py")
-        model.push_to_hub(repo_id=repo_id, commit_message="Add model from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py")
-        image_processor.push_to_hub(repo_id=repo_id, commit_message="Add image processor from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py")
+        config.push_to_hub(
+            repo_id=repo_id, commit_message="Add config from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py"
+        )
+        model.push_to_hub(
+            repo_id=repo_id, commit_message="Add model from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py"
+        )
+        image_processor.push_to_hub(
+            repo_id=repo_id,
+            commit_message="Add image processor from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py",
+        )
 
 
 if __name__ == "__main__":
