@@ -108,6 +108,7 @@ _import_structure = {
     "integrations": [
         "is_clearml_available",
         "is_comet_available",
+        "is_dvclive_available",
         "is_neptune_available",
         "is_optuna_available",
         "is_ray_available",
@@ -4300,6 +4301,7 @@ if TYPE_CHECKING:
     from .integrations import (
         is_clearml_available,
         is_comet_available,
+        is_dvclive_available,
         is_neptune_available,
         is_optuna_available,
         is_ray_available,
