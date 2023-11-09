@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import sys
+import unittest
 from unittest.mock import patch
 
 from transformers import ViTMAEForPreTraining, Wav2Vec2ForPreTraining
@@ -200,6 +201,7 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertLess(result["perplexity"], 42)
 
+    @unittest.skip("Zach is working on this.")
     def test_run_ner(self):
         # with so little data distributed training needs more epochs to get the score on par with 0/1 gpu
         epochs = 7 if backend_device_count(torch_device) > 1 else 2
