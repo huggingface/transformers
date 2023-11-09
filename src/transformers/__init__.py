@@ -564,7 +564,7 @@ _import_structure = {
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
     "models.table_transformer": ["TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TableTransformerConfig"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
-    "models.textnet": ["TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "TextNetConfig"],
+    "models.textnet": ["TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "TextNetConfig", "TextNetImageProcessor"],
     "models.time_series_transformer": [
         "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TimeSeriesTransformerConfig",
@@ -4532,7 +4532,7 @@ if TYPE_CHECKING:
     from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
     from .models.falcon import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconConfig
-    from .models.fast import FAST_PRETRAINED_CONFIG_ARCHIVE_MAP, FastConfig, FastImageProcessor
+    from .models.fast import FAST_PRETRAINED_CONFIG_ARCHIVE_MAP, FastConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5117,6 +5117,7 @@ if TYPE_CHECKING:
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientformer import EfficientFormerImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
+        from .models.fast import FastImageProcessor
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor

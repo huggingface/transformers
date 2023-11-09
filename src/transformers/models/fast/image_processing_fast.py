@@ -94,8 +94,6 @@ class FastImageProcessor(BaseImageProcessor):
             number of channels of the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         min_area (`int`, *optional*, defaults to 200):
             Threshold for min area for results
-        bbox_type (`str`, *optional*, defaults to `"rect"`):
-            Type of bbox, rect or poly
         pooling_size (`int`, *optional*, defaults to 9):
             Pooling size for text detection
     """
@@ -115,7 +113,6 @@ class FastImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         min_area: int = 200,
-        bbox_type: str = "rect",
         pooling_size: int = 9,
         **kwargs,
     ) -> None:
@@ -136,7 +133,6 @@ class FastImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.min_area = min_area
         # self.threshold = threshold
-        self.bbox_type = bbox_type
         self.pooling_size = pooling_size
 
     @classmethod

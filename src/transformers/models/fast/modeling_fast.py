@@ -21,9 +21,22 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from timm import create_model
 
-from transformers import AutoBackbone, FastConfig, PreTrainedModel, add_start_docstrings, requires_backends
+from ...utils import is_timm_available
+
+
+if is_timm_available():
+    from timm import create_model
+
+
+from transformers import (
+    AutoBackbone,
+    FastConfig,
+    PreTrainedModel,
+    add_start_docstrings,
+    is_timm_available,
+    requires_backends,
+)
 from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, replace_return_docstrings
 
 
