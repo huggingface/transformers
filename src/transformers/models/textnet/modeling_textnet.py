@@ -49,7 +49,7 @@ TEXTNET_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-BIT_INPUTS_DOCSTRING = r"""
+TEXTNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`BitImageProcessor.__call__`]
@@ -61,7 +61,7 @@ BIT_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
 """
 
-BIT_PRETRAINED_MODEL_ARCHIVE_LIST = ["Raghavan/textnet-base"]
+TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST = ["Raghavan/textnet-base"]
 
 
 def get_same_padding(kernel_size):
@@ -429,7 +429,7 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward("BIT_INPUTS_DOCSTRING")
+    @add_start_docstrings_to_model_forward(TEXTNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class="")
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None

@@ -17,8 +17,10 @@ import inspect
 import unittest
 
 from transformers import TextNetConfig
+from transformers.models.textnet.modeling_textnet import TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST
 from transformers.testing_utils import (
     require_torch,
+    slow,
     torch_device,
 )
 from transformers.utils import is_torch_available
@@ -164,6 +166,14 @@ class TextNetModelTester:
             (self.batch_size, self.hidden_sizes[-1], 2, 2),
         )
 
+    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+        config.num_labels = self.num_labels
+        model = TextNetForImageClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
@@ -222,11 +232,6 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else {}
     )
-    # fx_compatible = False
-    # test_pruning = False
-    # test_resize_embeddings = False
-    # test_head_masking = False
-    # has_attentions = False
 
     fx_compatible = False
     test_pruning = False
@@ -347,15 +352,15 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_feed_forward_chunking(self):
         pass
 
-    # def test_for_image_classification(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
-    #     self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+    def test_for_image_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
-    # @slow
-    # def test_model_from_pretrained(self):
-    #     for model_name in BIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-    #         model = BitModel.from_pretrained(model_name)
-    #         self.assertIsNotNone(model)
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TextNetModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
 
 
 @require_torch
