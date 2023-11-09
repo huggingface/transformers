@@ -17,8 +17,7 @@
 Feature extractor class for CLVP
 """
 
-import copy
-from typing import Any, Dict, List, Optional, Union
+from typing import List, Optional, Union
 
 import numpy as np
 
@@ -237,17 +236,3 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_features"] = input_features
 
         return padded_inputs.convert_to_tensors(return_tensors)
-
-    # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor.to_dict
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Serializes this instance to a Python dictionary.
-
-        Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["feature_extractor_type"] = self.__class__.__name__
-        if "mel_filters" in output:
-            del output["mel_filters"]
-        return output
