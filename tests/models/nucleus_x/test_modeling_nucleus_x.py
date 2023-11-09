@@ -131,6 +131,7 @@ class NucleusXModelTester:
             decoder_layers=self.num_hidden_layers,
             is_decoder=False,
             decoder_retention_heads=self.num_attention_heads,
+            use_cache=False,
         )
 
     def create_and_check_model(
@@ -342,30 +343,35 @@ class NucleusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
     def test_nucleus_x_parallel_recurrent(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = input_dict["input_ids"]
-        model = NucleusXForCausalLM(config)
-        model.to(torch_device)
-        model.eval()
-        parallel_outputs = model(input_ids, forward_mode="parallel", use_cache=True)
-        parallel_logits = parallel_outputs.logits
-        parallel_cache = parallel_outputs.past_key_values
+        for _ in range(10):
+            config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            input_ids = input_dict["input_ids"]
+            model = NucleusXForCausalLM(config)
+            model.to(torch_device)
+            model.eval()
+            parallel_outputs = model(input_ids, forward_mode="parallel", use_cache=True)
+            parallel_logits = parallel_outputs.logits
+            parallel_cache = parallel_outputs.past_key_values
 
-        rnn_logits = []
-        past_kv = None
-        for i in range(input_ids.shape[1]):
-            rnn_out = model(input_ids[:, : i + 1], forward_mode="recurrent", past_key_values=past_kv, use_cache=True)
-            rnn_logits.append(rnn_out.logits)
-            past_kv = rnn_out.past_key_values
-        rnn_logits = torch.cat(rnn_logits, dim=1)
-        rnn_cache = rnn_out.past_key_values
-        logit_success = torch.allclose(parallel_logits, rnn_logits, atol=1e-5)
-        cache_success = False
-        for pkv1, pkv2 in zip(parallel_cache, rnn_cache):
-            kv_success = torch.allclose(pkv1[0], pkv2[0], atol=1e-5)
-            scale_success = torch.allclose(pkv1[1], pkv2[1], atol=1e-9)
-            cache_success = kv_success and scale_success
-            if not cache_success:
+            rnn_logits = []
+            past_kv = None
+            for i in range(input_ids.shape[1]):
+                rnn_out = model(
+                    input_ids[:, : i + 1], forward_mode="recurrent", past_key_values=past_kv, use_cache=True
+                )
+                rnn_logits.append(rnn_out.logits)
+                past_kv = rnn_out.past_key_values
+            rnn_logits = torch.cat(rnn_logits, dim=1)
+            rnn_cache = rnn_out.past_key_values
+            logit_success = torch.allclose(parallel_logits, rnn_logits, atol=1e-5)
+            cache_success = False
+            for pkv1, pkv2 in zip(parallel_cache, rnn_cache):
+                kv_success = torch.allclose(pkv1[0], pkv2[0], atol=1e-5)
+                scale_success = torch.allclose(pkv1[1], pkv2[1], atol=1e-9)
+                cache_success = kv_success and scale_success
+                if not cache_success:
+                    break
+            if not (logit_success and cache_success):
                 break
 
         self.assertTrue(logit_success and cache_success)
