@@ -2097,7 +2097,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # if model parameters are offloaded, onload and send state dicts to CPU
             if hasattr(model_to_save, "_hf_hook") and isinstance(model_to_save._hf_hook, AlignDevicesHook):
                 state_dict = {}
-                for name, module in model_zto_save.named_modules():
+                for name, module in model_to_save.named_modules():
                     print (name)
                     if name == "":
                         continue
@@ -2114,7 +2114,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         module_state_dict = module.state_dict()
 
                     for key in module_state_dict:
-                        print (key)
                         # ignore placeholder parameters that are still on the meta device
                         if str(module_state_dict[key].device) == "meta":
                             continue
