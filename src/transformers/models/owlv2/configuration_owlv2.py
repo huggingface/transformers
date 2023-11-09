@@ -145,7 +145,7 @@ class Owlv2TextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-# Copied from transformers.models.owlvit.configuration_owlvit.OwlViTVisionConfig with OwlViT->Owlv2,owlvit-base-patch32->owlv2-base-patch16,owlvit->owlv2,OWL-ViT->OWLv2,patch_size=32->patch_size=16,32->16
+# Copied from transformers.models.owlvit.configuration_owlvit.OwlViTVisionConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2, 32->16
 class Owlv2VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`Owlv2VisionModel`]. It is used to instantiate an
