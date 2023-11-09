@@ -583,13 +583,13 @@ class NucleusXDecoderLayer(nn.Module):
 
         self.normalize_before = config.decoder_normalize_before
 
-        self.retention_layer_norm = build_rms_norm(self.embed_dim, eps=config.rms_norm_eps)
+        self.retention_rms_norm = build_rms_norm(self.embed_dim, eps=config.rms_norm_eps)
 
         self.ffn_dim = config.decoder_ffn_embed_dim
 
         self.ffn = self.build_ffn()
 
-        self.final_layer_norm = build_rms_norm(self.embed_dim, eps=config.rms_norm_eps)
+        self.final_rms_norm = build_rms_norm(self.embed_dim, eps=config.rms_norm_eps)
 
         if config.deepnorm:
             self.alpha = math.pow(2.0 * config.decoder_layers, 0.25)
@@ -620,7 +620,7 @@ class NucleusXDecoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor, Optional[torch.FloatTensor]]:
         residual = hidden_states
         if self.normalize_before:
-            hidden_states = self.retention_layer_norm(hidden_states)
+            hidden_states = self.retention_rms_norm(hidden_states)
 
         msr_outs = self.retention(
             hidden_states,
@@ -641,11 +641,11 @@ class NucleusXDecoderLayer(nn.Module):
 
         hidden_states = self.residual_connection(hidden_states, residual)
         if not self.normalize_before:
-            hidden_states = self.retention_layer_norm(hidden_states)
+            hidden_states = self.retention_rms_norm(hidden_states)
 
         residual = hidden_states
         if self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
+            hidden_states = self.final_rms_norm(hidden_states)
 
         hidden_states = self.ffn(hidden_states)
 
@@ -654,7 +654,7 @@ class NucleusXDecoderLayer(nn.Module):
 
         hidden_states = self.residual_connection(hidden_states, residual)
         if not self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
+            hidden_states = self.final_rms_norm(hidden_states)
 
         outputs = (hidden_states, curr_kv)
 
@@ -915,9 +915,9 @@ class NucleusXModel(NucleusXPreTrainedModel):
         self.decoder_layers = len(self.layers)
 
         if config.decoder_normalize_before:
-            self.layer_norm = build_rms_norm(self.embed_dim, eps=config.rms_norm_eps)
+            self.rms_norm = build_rms_norm(self.embed_dim, eps=config.rms_norm_eps)
         else:
-            self.layer_norm = None
+            self.rms_norm = None
 
         self.rel_pos = NucleusXRelPos(config)
         self.recurrent_chunk_size = config.recurrent_chunk_size
@@ -1103,8 +1103,8 @@ class NucleusXModel(NucleusXPreTrainedModel):
         if need_pad_for_chunkwise:
             hidden_states = hidden_states[:, :seq_length, :]
 
-        if self.layer_norm is not None:
-            hidden_states = self.layer_norm(hidden_states)
+        if self.rms_norm is not None:
+            hidden_states = self.rms_norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
