@@ -396,7 +396,7 @@ def deformable_attention_core_func(value, value_spatial_shapes, sampling_locatio
     return output.permute(0, 2, 1)
 
 
-class TransformerEncoderLayer(nn.Module):
+class RTDetrTransformerEncoderLayer(nn.Module):
     def __init__(
         self, d_model, num_head, dim_feedforward=2048, dropout=0.1, activation="relu", normalize_before=False
     ):
@@ -1416,7 +1416,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
             )
 
         # encoder transformer
-        encoder_layer = TransformerEncoderLayer(
+        encoder_layer = RTDetrTransformerEncoderLayer(
             self.hidden_dim, num_head=num_head, dim_feedforward=dim_feedforward, dropout=dropout, activation=enc_act
         )
 
