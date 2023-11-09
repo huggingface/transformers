@@ -381,8 +381,10 @@ def deformable_attention_core_func(value, value_spatial_shapes, sampling_locatio
             new_value_list, new_sampling_grid, mode="bilinear", padding_mode="zeros", align_corners=False
         )
         sampling_value_list.append(new_sampling_value)
-    # (N_, Lq_, M_, L_, P_) -> (N_, M_, Lq_, L_, P_) -> (N_*M_, 1, Lq_, L_*P_)
-    attention_weights = attention_weights.permute(0, 2, 1, 3, 4).reshape(
+    # (batch_size, len_q, num_head, n_levels, n_points) -> (batch_size, num_head, len_q, n_levels, n_points)
+    attention_weights = attention_weights.permute(0, 2, 1, 3, 4)
+    # (batch_size, num_head, len_q, n_levels, n_points) -> (batch_size*num_head, 1, len_q, n_levels*n_points)
+    attention_weights = attention_weights.reshape(
         batch_size * num_head, 1, len_q, n_levels * n_points
     )
     output = (
