@@ -17,7 +17,6 @@ import inspect
 import unittest
 
 from transformers import TextNetConfig
-from transformers.models.textnet.modeling_textnet import TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -41,6 +40,7 @@ if is_torch_available():
         TextNetModel,
         is_torch_available,
     )
+    from transformers.models.textnet.modeling_textnet import TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class TextNetModelTester:
