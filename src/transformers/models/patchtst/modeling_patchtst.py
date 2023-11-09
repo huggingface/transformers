@@ -1448,7 +1448,7 @@ class PatchTSTClassificationHead(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
         self.use_cls_token = config.use_cls_token
-        self.pooling = config.pooling
+        self.pooling_type = config.pooling_type
         self.flatten = nn.Flatten(start_dim=1)
         self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
         self.linear = nn.Linear(config.num_input_channels * config.d_model, config.num_targets)
@@ -1464,17 +1464,21 @@ class PatchTSTClassificationHead(nn.Module):
 
         """
         if self.use_cls_token:
-            x = embedding[:, :, 0, :]  # use the first output token, x: bs x num_channels x d_model
-        elif self.pooling == "mean":
-            x = embedding.mean(dim=2)  # x: [bs x num_channels x d_model]
-        elif self.pooling == "max":
-            x = embedding.max(dim=2)  # x: [bs x num_channels x d_model]
+            # use the first output token, pooled_embedding: bs x num_channels x d_model
+            pooled_embedding = embedding[:, :, 0, :]
+        elif self.pooling_type == "mean":
+            # pooled_embedding: [bs x num_channels x d_model]
+            pooled_embedding = embedding.mean(dim=2)
+        elif self.pooling_type == "max":
+            # pooled_embedding: [bs x num_channels x d_model]
+            pooled_embedding = embedding.max(dim=2)
         else:
-            raise Exception(f"pooling operator {self.pooling} is not implemented yet")
-
-        x = self.flatten(x)  # x: bs x num_channels * d_model
-        y = self.linear(self.dropout(x))  # y: bs x n_classes
-        return y
+            raise Exception(f"pooling operator {self.pooling_type} is not implemented yet")
+        # pooled_embedding: bs x num_channels * d_model
+        pooled_embedding = self.flatten(pooled_embedding)
+        # output: bs x n_classes
+        output = self.linear(self.dropout(pooled_embedding))
+        return output
 
 
 class PatchTSTPredictionHead(nn.Module):
@@ -1484,8 +1488,8 @@ class PatchTSTPredictionHead(nn.Module):
         self.shared_projection = config.shared_projection
         self.num_input_channels = config.num_input_channels
         self.use_cls_token = config.use_cls_token
-        self.pooling = config.pooling
-        head_dim = config.d_model if self.pooling else config.d_model * config.num_patches
+        self.pooling_type = config.pooling_type
+        head_dim = config.d_model if self.pooling_type else config.d_model * config.num_patches
 
         if not self.shared_projection:
             # if each channel has its own head
@@ -1523,29 +1527,38 @@ class PatchTSTPredictionHead(nn.Module):
 
         """
         if self.use_cls_token:
-            y = embedding[:, :, 0, :]  # y: [bs x num_channels x d_model]
+            # pooled_embedding: [bs x num_channels x d_model]
+            pooled_embedding = embedding[:, :, 0, :]
         else:
-            if self.pooling == "mean":
-                y = embedding.mean(dim=2)  # y: [bs x num_channels x d_model]
-            elif self.pooling == "max":
-                y = embedding.max(dim=2)  # y: [bs x num_channels x d_model]
+            if self.pooling_type == "mean":
+                # pooled_embedding: [bs x num_channels x d_model]
+                pooled_embedding = embedding.mean(dim=2)
+            elif self.pooling_type == "max":
+                # pooled_embedding: [bs x num_channels x d_model]
+                pooled_embedding = embedding.max(dim=2)
             else:
-                y = embedding  # y: [bs x num_channels x num_patches x d_model]
+                # pooled_embedding: [bs x num_channels x num_patches x d_model]
+                pooled_embedding = embedding
 
         if not self.shared_projection:
-            x_out = []
+            output = []
             for i in range(self.num_input_channels):
-                z = self.flattens[i](y[:, i, :])  # y: [bs x (d_model * num_patches)] or [bs x d_model)]
-                z = self.dropouts[i](z)
-                # z: [bs x forecast_len]  or tuple ([bs x forecast_len], [bs x forecast_len]) if using distribution head
-                z = self.projections[i](z)
-                x_out.append(z)
-            output = torch.stack(x_out, dim=1)  # x: [bs x num_channels x forecast_len]
+                # pooled_embedding: [bs x (d_model * num_patches)] or [bs x d_model)]
+                pooled_embedding = self.flattens[i](pooled_embedding[:, i, :])
+                pooled_embedding = self.dropouts[i](pooled_embedding)
+                # pooled_embedding: [bs x forecast_len]
+                #  or tuple ([bs x forecast_len], [bs x forecast_len]) if using distribution head
+                pooled_embedding = self.projections[i](pooled_embedding)
+                output.append(pooled_embedding)
+            # output: [bs x num_channels x forecast_len]
+            output = torch.stack(output, dim=1)
         else:
-            z = self.flatten(y)  # z: [bs x num_channels x (d_model * num_patches)] or [bs x num_channels x d_model)]
-            z = self.dropout(z)
-            output = self.projection(z)  # output: [bs x num_channels x forecast_len]
-            # or tuple ([bs x num_channels x forecast_len], [bs x num_channels x forecast_len]) if using distribution head
+            # pooled_embedding: [bs x num_channels x (d_model * num_patches)] or [bs x num_channels x d_model)]
+            pooled_embedding = self.flatten(pooled_embedding)
+            pooled_embedding = self.dropout(pooled_embedding)
+            # output: [bs x num_channels x forecast_len] or
+            # tuple ([bs x num_channels x forecast_len], [bs x num_channels x forecast_len]) if using distribution head
+            output = self.projection(pooled_embedding)
 
         if isinstance(output, tuple):
             # output: ([bs x forecast_len x num_channels], [bs x forecast_len x num_channels])
@@ -1628,8 +1641,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         if future_values is not None:
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(
-                    y_hat, loc=model_output.loc, scale=model_output.scale
-                )
+                    y_hat, loc=model_output.loc, scale=model_output.scale)
                 loss_val = nll(distribution, future_values)
                 # take average of the loss
                 loss_val = weighted_average(loss_val)
@@ -1711,7 +1723,7 @@ class PatchTSTRegressionHead(nn.Module):
         super().__init__()
         self.y_range = config.output_range
         self.use_cls_token = config.use_cls_token
-        self.pooling = config.pooling
+        self.pooling_type = config.pooling_type
         self.distribution_output = distribution_output
 
         head_dim = config.num_input_channels * config.d_model
@@ -1735,22 +1747,26 @@ class PatchTSTRegressionHead(nn.Module):
 
         """
         if self.use_cls_token:
-            x = embedding[:, :, 0, :]  # use the first output token, x: [bs x num_channels x d_model]
-        elif self.pooling == "mean":
-            x = embedding.mean(dim=2)  # x: [bs x num_channels x d_model]
-        elif self.pooling == "max":
-            x = embedding.max(dim=2)  # x: [bs x num_channels x d_model]
+            # use the first output token, pooled_embedding: [bs x num_channels x d_model]
+            pooled_embedding = embedding[:, :, 0, :]
+        elif self.pooling_type == "mean":
+            # pooled_embedding: [bs x num_channels x d_model]
+            pooled_embedding = embedding.mean(dim=2)
+        elif self.pooling_type == "max":
+            # pooled_embedding: [bs x num_channels x d_model]
+            pooled_embedding = embedding.max(dim=2)
         else:
-            raise Exception(f"pooling operator {self.pooling} is not implemented yet")
+            raise Exception(f"pooling operator {self.pooling_type} is not implemented yet")
         # flatten the input
-        x = self.dropout(self.flatten(x))  # x: bs x (num_channels * d_model)
+        # pooled_embedding: bs x (num_channels * d_model)
+        pooled_embedding = self.dropout(self.flatten(pooled_embedding))
         # projection
-        y = self.projection(x)  # y: bs x output_dim or a tuple of this shape for distribution head
+        # output: bs x output_dim or a tuple of this shape for distribution head
+        output = self.projection(pooled_embedding)
         #
         if (self.distribution_output is None) & (self.y_range is not None):  # linear head
-            y = torch.sigmoid(y) * (self.y_range[1] - self.y_range[0]) + self.y_range[0]
-
-        return y
+            output = torch.sigmoid(output) * (self.y_range[1] - self.y_range[0]) + self.y_range[0]
+        return output
 
 
 class PatchTSTForRegression(PatchTSTPreTrainedModel):

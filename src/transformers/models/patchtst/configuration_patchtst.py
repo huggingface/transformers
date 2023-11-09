@@ -119,8 +119,8 @@ class PatchTSTConfig(PretrainedConfig):
             Channels that are not masked during pretraining.
         mask_value (`int`, *optional*, defaults to 0):
             Define the value of entries to be masked when pretraining.
-        pooling (`str`, *optional*, defaults to `"mean"`):
-            Pooling in the latent representation. `"mean"`, `"max"` and None are supported.
+        pooling_type (`str`, *optional*, defaults to `"mean"`):
+            Pooling of the embedding. `"mean"`, `"max"` and `None` are supported.
         head_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for head.
         prediction_length (`int`, *optional*, defaults to 24):
@@ -198,7 +198,7 @@ class PatchTSTConfig(PretrainedConfig):
         unmasked_channel_indices: Optional[List[int]] = None,
         mask_value=0,
         # head
-        pooling: str = "mean",
+        pooling_type: str = "mean",
         head_dropout: float = 0.0,
         prediction_length: int = 24,
         num_targets: int = 1,
@@ -254,7 +254,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.mask_value = mask_value
 
         # general head params
-        self.pooling = pooling
+        self.pooling_type = pooling_type
         self.head_dropout = head_dropout
 
         # For prediction head
