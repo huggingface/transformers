@@ -120,6 +120,7 @@ def fuse_awq_modules(model, quantization_config):
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
         from awq.modules.fused.attn import QuantAttentionFused
+        from awq.modules.fused.mlp import QuantLlamaMLP
         from awq.modules.fused.norm import FasterTransformerRMSNorm
         from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
     else:
@@ -136,9 +137,19 @@ def fuse_awq_modules(model, quantization_config):
                 ).to(old_module.weight.device)
                 del old_module
         # Replace MLP layers
-        for module_name in fusing_mapping["mlp"]:
-            if hasattr(module, module_name):
-                pass
+        if hasattr(module, fusing_mapping["mlp"][0]):
+            gate_proj = getattr(module, fusing_mapping["mlp"][0])
+            up_proj = getattr(module, fusing_mapping["mlp"][1])
+            down_proj = getattr(module, fusing_mapping["mlp"][2])
+
+            previous_device = gate_proj.qweight.device
+            new_module = QuantLlamaMLP(gate_proj, down_proj, up_proj)
+
+            parent_name, child_name = name.rsplit(".", 1)
+            parent = model.get_submodule(parent_name)
+            setattr(parent, child_name, new_module.to(previous_device))
+
+            del gate_proj, up_proj, down_proj
 
         # Replace attention layers
         # inside fusing_mapping["attention"] we should have (in correct order): q, k, v, o layer
