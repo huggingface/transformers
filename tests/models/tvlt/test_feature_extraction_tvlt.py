@@ -23,7 +23,7 @@ import unittest
 import numpy as np
 
 from transformers import TvltFeatureExtractor, is_datasets_available
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
+from transformers.testing_utils import require_torch, require_torchaudio
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -122,21 +122,6 @@ class TvltFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         self.assertTrue(hasattr(feature_extractor, "hop_length"))
         self.assertTrue(hasattr(feature_extractor, "chunk_length"))
         self.assertTrue(hasattr(feature_extractor, "sampling_rate"))
-
-    def test_feat_extract_from_and_save_pretrained(self):
-        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            saved_file = feat_extract_first.save_pretrained(tmpdirname)[0]
-            check_json_file_has_correct_format(saved_file)
-            feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
-
-        dict_first = feat_extract_first.to_dict()
-        dict_second = feat_extract_second.to_dict()
-        mel_1 = dict_first.pop("mel_filters")
-        mel_2 = dict_second.pop("mel_filters")
-        self.assertTrue(np.allclose(mel_1, mel_2))
-        self.assertEqual(dict_first, dict_second)
 
     def test_feat_extract_to_json_file(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
