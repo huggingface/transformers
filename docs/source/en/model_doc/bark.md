@@ -92,7 +92,9 @@ model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16, 
 
 Flash Attention 2 is also consistently faster than Better Transformer, and its performance improves even more as batch sizes increase.
 
-To put this into perspective, you can generate 17 times more text and still be 2s faster than the unoptimized version. At batch size 8, Flash Attention 2 is also 10% faster than Better Transformer, and at batch size 16, 25%.
+To put this into perspective, on an NVIDIA A100 and with a maximum number of tokens of 400, you can get 17 times the [throughput] (https://huggingface.co/blog/optimizing-bark#throughput) and still be 2 seconds faster than the unoptimized, non-batch version. 
+At batch size 8, on the same hardware, Flash Attention 2 is also 10% faster than Better Transformer, and at batch size 16, 25%.
+
 
 #### Combining optimization techniques
 
