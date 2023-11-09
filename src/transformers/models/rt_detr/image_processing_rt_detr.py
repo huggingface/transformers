@@ -21,7 +21,6 @@ import numpy as np
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     get_resize_output_image_size,
-    rescale,
     resize,
     to_channel_dimension_format,
 )
@@ -142,7 +141,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
             image, size=size, resample=resample, data_format=data_format, input_data_format=input_data_format, **kwargs
         )
         return image
-
 
     def preprocess(
         self,

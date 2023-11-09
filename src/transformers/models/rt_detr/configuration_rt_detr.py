@@ -17,7 +17,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-
+from ..timm_backbone import TimmBackboneConfig
 
 logger = logging.get_logger(__name__)
 
@@ -39,14 +39,8 @@ class RTDetrConfig(PretrainedConfig):
     Args:
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        backbone (`str`, *optional*, defaults to `"resnet50d"`):
-            Name of convolutional backbone to use.
-        out_indices (`List[int]`, *optional*, defaults to `[2, 3, 4]`):
-            List of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how many stages the
-            backbone has).
-        freeze_batch_norm_2d (`bool`, *optional*, defaults to `True`):
-            If True, all `BatchNorm2d` and `SyncBatchNorm` layers of the backbone will be replaced by
-            `FrozenBatchNorm2d`.
+        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
+            The configuration of the backbone in a dictionary or the config object of the backbone.
         in_channels (`List[int]`, *optional*, defaults to `[512, 1024, 2048]`):
             List of input channel sizes to be used in each block of the backbone's convolutional layers.
         feat_strides (`List[int]`, *optional*, defaults to `[8, 16, 32]`):
@@ -160,9 +154,7 @@ class RTDetrConfig(PretrainedConfig):
         # General
         initializer_range=0.02,
         # Backbone
-        backbone="resnet50d",
-        out_indices=[2, 3, 4],
-        freeze_batch_norm_2d=True,
+        backbone_config=None,
         # encoder HybridEncoder
         in_channels=[512, 1024, 2048],
         feat_strides=[8, 16, 32],
@@ -210,14 +202,27 @@ class RTDetrConfig(PretrainedConfig):
         eos_coefficient=0.1,
         **kwargs,
     ):
-        # num_labels: number of object categories, omitting the special no-object category
-        # eos_coef: relative classification weight applied to the no-object category
-
         self.initializer_range = initializer_range
+        
         # backbone
-        self.backbone = backbone
-        self.out_indices = out_indices
-        self.freeze_batch_norm_2d = freeze_batch_norm_2d
+        if backbone_config is None:
+            logger.info("Initializing the config with a `TimmBackbone` backbone.")
+            backbone_config = {
+                "backbone": "resnet50d",
+                "out_indices": [2, 3, 4],
+                "freeze_batch_norm_2d": True,
+                }
+            self.backbone_config = TimmBackboneConfig(**backbone_config)
+        elif isinstance(backbone_config, dict):
+            logger.info("Initializing the config with a `TimmBackbone` backbone.")
+            self.backbone_config = TimmBackboneConfig(**backbone_config)
+        elif isinstance(backbone_config, PretrainedConfig):
+            self.backbone_config = backbone_config
+        else:
+            raise ValueError(
+                f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
+            )
+        
         # encoder
         self.in_channels = in_channels
         self.feat_strides = feat_strides

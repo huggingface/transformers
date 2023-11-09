@@ -23,7 +23,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from transformers import TimmBackbone, TimmBackboneConfig
+from transformers import AutoBackbone
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -1515,9 +1515,9 @@ class HybridEncoder(RTDetrPreTrainedModel):
                 # flatten [batch, channel, height, width] to [batch, heightxwidth, channel]
                 src_flatten = proj_feats[enc_ind].flatten(2).permute(0, 2, 1)
                 if self.training or self.eval_size is None:
-                    pos_embed = self.build_2d_sincos_position_embedding(weight, height, self.hidden_dim, self.pe_temperature).to(
-                        src_flatten.device
-                    )
+                    pos_embed = self.build_2d_sincos_position_embedding(
+                        weight, height, self.hidden_dim, self.pe_temperature
+                    ).to(src_flatten.device)
                 else:
                     pos_embed = getattr(self, f"pos_embed{enc_ind}", None).to(src_flatten.device)
 
@@ -1559,16 +1559,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
     def __init__(self, config: RTDetrConfig):
         super().__init__(config)
 
-        # backbone
-        backbone_name = config.backbone
-        backbone_out_indices = config.out_indices
-        backbone_freeze_batch_norm_2d = config.freeze_batch_norm_2d
-        backbone_config = TimmBackboneConfig(
-            backbone=backbone_name,
-            out_indices=backbone_out_indices,
-            freeze_batch_norm_2d=backbone_freeze_batch_norm_2d,
-        )
-        self.backbone = TimmBackbone(backbone_config)
+        self.backbone = AutoBackbone.from_config(config.backbone_config)
         # enconder
         self.encoder = HybridEncoder(config)
         # decoder

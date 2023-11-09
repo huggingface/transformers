@@ -49,9 +49,7 @@ class RTDetrConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
         self.parent.assertTrue(hasattr(config, "initializer_range"))
-        self.parent.assertTrue(hasattr(config, "backbone"))
-        self.parent.assertTrue(hasattr(config, "out_indices"))
-        self.parent.assertTrue(hasattr(config, "freeze_batch_norm_2d"))
+        self.parent.assertTrue(hasattr(config, "backbone_config"))
         self.parent.assertTrue(hasattr(config, "in_channels"))
         self.parent.assertTrue(hasattr(config, "feat_strides"))
         self.parent.assertTrue(hasattr(config, "hidden_dim"))
@@ -105,9 +103,7 @@ class RTDetrModelTester:
         num_channels=3,
         is_training=True,
         initializer_range=0.02,
-        backbone="resnet50d",
-        out_indices=[2, 3, 4],
-        freeze_batch_norm_2d=True,
+        backbone_config=None,
         in_channels=[512, 1024, 2048],
         feat_strides=[8, 16, 32],
         hidden_dim=256,
@@ -157,9 +153,7 @@ class RTDetrModelTester:
         self.is_training = is_training
         self.parent = parent
         self.initializer_range = initializer_range
-        self.backbone = backbone
-        self.out_indices = out_indices
-        self.freeze_batch_norm_2d = freeze_batch_norm_2d
+        self.backbone_config = backbone_config
         self.in_channels = in_channels
         self.feat_strides = feat_strides
         self.hidden_dim = hidden_dim
@@ -224,9 +218,7 @@ class RTDetrModelTester:
     def get_config(self):
         return RTDetrConfig(
             initializer_range=self.initializer_range,
-            backbone=self.backbone,
-            out_indices=self.out_indices,
-            freeze_batch_norm_2d=self.freeze_batch_norm_2d,
+            backbone_config=self.backbone_config,
             in_channels=self.in_channels,
             feat_strides=self.feat_strides,
             hidden_dim=self.hidden_dim,
@@ -410,7 +402,8 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
         # verify post processor
         target_sizes = torch.tensor([image.size[::-1]])
         results = image_processor.post_process_object_detection(
-            outputs, threshold=0., target_sizes=target_sizes, use_focal_loss=model.config.use_focal_loss)
+            outputs, threshold=0.0, target_sizes=target_sizes, use_focal_loss=model.config.use_focal_loss
+        )
         # expecting 1 result per image in the batch
         self.assertEqual(len(results), batch_size)
         # result of the first image

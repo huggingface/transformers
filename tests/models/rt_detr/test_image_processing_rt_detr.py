@@ -83,7 +83,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def setUp(self):
         self.image_processor_tester = RTDetrImageProcessingTester()
-      
+
     @property
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()

@@ -305,6 +305,90 @@ replaces = {
     "backbone.res_layers.3.blocks.2.branch2c.norm.running_var": "model.backbone._backbone.layer4.2.bn3.running_var",
 }
 
+# This mapping is different from models trained in COCO (e.g. Detr)
+id2label = {
+    "0": "person",
+    "1": "bicycle",
+    "2": "car",
+    "3": "motorcycle",
+    "4": "airplane",
+    "5": "bus",
+    "6": "train",
+    "7": "truck",
+    "8": "boat",
+    "9": "traffic light",
+    "10": "fire hydrant",
+    "11": "stop sign",
+    "12": "parking meter",
+    "13": "bench",
+    "14": "bird",
+    "15": "cat",
+    "16": "dog",
+    "17": "horse",
+    "18": "sheep",
+    "19": "cow",
+    "20": "elephant",
+    "21": "bear",
+    "22": "zebra",
+    "23": "giraffe",
+    "24": "backpack",
+    "25": "umbrella",
+    "26": "handbag",
+    "27": "tie",
+    "28": "suitcase",
+    "29": "frisbee",
+    "30": "skis",
+    "31": "snowboard",
+    "32": "sports ball",
+    "33": "kite",
+    "34": "baseball bat",
+    "35": "baseball glove",
+    "36": "skateboard",
+    "37": "surfboard",
+    "38": "tennis racket",
+    "39": "bottle",
+    "40": "wine glass",
+    "41": "cup",
+    "42": "fork",
+    "43": "knife",
+    "44": "spoon",
+    "45": "bowl",
+    "46": "banana",
+    "47": "apple",
+    "48": "sandwich",
+    "49": "orange",
+    "50": "broccoli",
+    "51": "carrot",
+    "52": "hot dog",
+    "53": "pizza",
+    "54": "donut",
+    "55": "cake",
+    "56": "chair",
+    "57": "couch",
+    "58": "potted plant",
+    "59": "bed",
+    "60": "dining table",
+    "61": "toilet",
+    "62": "tv",
+    "63": "laptop",
+    "64": "mouse",
+    "65": "remote",
+    "66": "keyboard",
+    "67": "cell phone",
+    "68": "microwave",
+    "69": "oven",
+    "70": "toaster",
+    "71": "sink",
+    "72": "refrigerator",
+    "73": "book",
+    "74": "clock",
+    "75": "vase",
+    "76": "scissors",
+    "77": "teddy bear",
+    "78": "hair drier",
+    "79": "toothbrush"
+  }
+  
 expected_logits = {
     "rtdetr_r50vd_6x_coco_from_paddle.pth": torch.tensor(
         [-4.159348487854004, -4.703853607177734, -5.946484565734863, -5.562824249267578, -4.7707929611206055]
@@ -337,12 +421,8 @@ def get_sample_img():
 
 def update_config_values(config, checkpoint_name):
     config.num_labels = 91
-    repo_id = "huggingface/label-files"
-    filename = "coco-detection-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
-    id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
-    config.label2id = {v: k for k, v in id2label.items()}
+    config.label2id = {v: int(k) for k, v in id2label.items()}
 
     # Real values for rtdetr_r50vd_6x_coco_from_paddle.pth
     if checkpoint_name == "rtdetr_r50vd_6x_coco_from_paddle.pth":
@@ -421,8 +501,9 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     assert torch.allclose(output_logits[0, :3, :3], original_logits[0, :3, :3], atol=1e-4)
 
     if push_to_hub:
-        model.push_to_hub(repo_id=repo_id, commit_message="Add model")
-        image_processor.push_to_hub(repo_id=repo_id, commit_message="Add model")
+        config.push_to_hub(repo_id=repo_id, commit_message="Add config from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py")
+        model.push_to_hub(repo_id=repo_id, commit_message="Add model from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py")
+        image_processor.push_to_hub(repo_id=repo_id, commit_message="Add image processor from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py")
 
 
 if __name__ == "__main__":
