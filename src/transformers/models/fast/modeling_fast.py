@@ -81,26 +81,19 @@ class FASTConvLayer(nn.Module):
         out_channels,
         kernel_size=3,
         stride=1,
-        dilation=1,
-        groups=1,
         bias=False,
-        has_shuffle=False,
     ):
         super().__init__()
 
         self.kernel_size = kernel_size
         self.stride = stride
-        self.dilation = dilation
-        self.groups = groups
-        self.bias = bias
-        self.has_shuffle = has_shuffle
 
         padding = get_same_padding(self.kernel_size)
-        if isinstance(padding, int):
-            padding *= self.dilation
-        else:
-            padding[0] *= self.dilation
-            padding[1] *= self.dilation
+        # if isinstance(padding, int):
+        #     padding *= self.dilation
+        # else:
+        #     padding[0] *= self.dilation
+        #     padding[1] *= self.dilation
 
         self.conv = nn.Conv2d(
             in_channels,
@@ -108,9 +101,7 @@ class FASTConvLayer(nn.Module):
             kernel_size=kernel_size,
             stride=stride,
             padding=padding,
-            dilation=dilation,
-            groups=groups,
-            bias=bias,
+            bias=False,
         )
 
     def forward(self, hidden_states):
@@ -121,7 +112,7 @@ class FASTConvLayer(nn.Module):
             return hidden_states
         else:
             if not hasattr(self, "fused_conv"):
-                setattr(self, "fused_conv", self.fuse_conv_batch_norm(self.conv, nn.Identity()))
+                setattr(self, "fused_conv", self.conv)
             hidden_states = self.fused_conv(hidden_states)
             return hidden_states
 
@@ -141,19 +132,17 @@ class FASTConvLayer(nn.Module):
 
 
 class FASTRepConvLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1):
         super().__init__()
 
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
         self.stride = stride
-        self.dilation = dilation
-        self.groups = groups
 
-        padding = (int(((kernel_size[0] - 1) * dilation) / 2), int(((kernel_size[1] - 1) * dilation) / 2))
+        padding = (int((kernel_size[0] - 1) / 2), int((kernel_size[1] - 1) / 2))
 
-        self.nonlinearity = nn.ReLU(inplace=True)
+        self.activation = nn.ReLU(inplace=True)
 
         self.main_conv = nn.Conv2d(
             in_channels=in_channels,
@@ -161,14 +150,12 @@ class FASTRepConvLayer(nn.Module):
             kernel_size=kernel_size,
             stride=stride,
             padding=padding,
-            dilation=dilation,
-            groups=groups,
             bias=False,
         )
         self.main_batch_norm = nn.BatchNorm2d(num_features=out_channels)
 
-        ver_pad = (int(((kernel_size[0] - 1) * dilation) / 2), 0)
-        hor_pad = (0, int(((kernel_size[1] - 1) * dilation) / 2))
+        ver_pad = (int((kernel_size[0] - 1) / 2), 0)
+        hor_pad = (0, int((kernel_size[1] - 1) / 2))
 
         if kernel_size[1] != 1:
             self.vertical_conv = nn.Conv2d(
@@ -177,8 +164,6 @@ class FASTRepConvLayer(nn.Module):
                 kernel_size=(kernel_size[0], 1),
                 stride=stride,
                 padding=ver_pad,
-                dilation=dilation,
-                groups=groups,
                 bias=False,
             )
             self.vertical_batch_norm = nn.BatchNorm2d(num_features=out_channels)
@@ -192,8 +177,6 @@ class FASTRepConvLayer(nn.Module):
                 kernel_size=(1, kernel_size[1]),
                 stride=stride,
                 padding=hor_pad,
-                dilation=dilation,
-                groups=groups,
                 bias=False,
             )
             self.horizontal_batch_norm = nn.BatchNorm2d(num_features=out_channels)
@@ -228,17 +211,17 @@ class FASTRepConvLayer(nn.Module):
             else:
                 id_out = self.rbr_identity(hidden_states)
 
-            return self.nonlinearity(main_outputs + vertical_outputs + horizontal_outputs + id_out)
+            return self.activation(main_outputs + vertical_outputs + horizontal_outputs + id_out)
         else:
             if not hasattr(self, "fused_conv"):
                 self.prepare_for_eval()
-            return self.nonlinearity(self.fused_conv(hidden_states))
+            return self.activation(self.fused_conv(hidden_states))
 
     def _identity_to_conv(self, identity):
         if identity is None:
             return 0, 0
         if not hasattr(self, "id_tensor"):
-            input_dim = self.in_channels // self.groups
+            input_dim = self.in_channels
             kernel_value = np.zeros((self.in_channels, input_dim, 1, 1), dtype=np.float32)
             for i in range(self.in_channels):
                 kernel_value[i, i % input_dim, 0, 0] = 1
@@ -296,8 +279,6 @@ class FASTRepConvLayer(nn.Module):
             kernel_size=self.main_conv.kernel_size,
             stride=self.main_conv.stride,
             padding=self.main_conv.padding,
-            dilation=self.main_conv.dilation,
-            groups=self.main_conv.groups,
             bias=True,
         )
         self.fused_conv.weight.data = kernel
@@ -332,8 +313,6 @@ class FASTNeck(nn.Module):
                 config.neck_out_channels,
                 config.neck_kernel_size,
                 config.neck_stride,
-                config.neck_dilation,
-                config.neck_groups,
             )
         )
         self.num_layers = len(reduce_layer_configs)
@@ -366,8 +345,6 @@ class FASTHead(nn.Module):
             config.head_conv_out_channels,
             config.head_conv_kernel_size,
             config.head_conv_stride,
-            config.head_conv_dilation,
-            config.head_conv_groups,
         )
 
         self.final = FASTConvLayer(
@@ -375,10 +352,7 @@ class FASTHead(nn.Module):
             config.head_final_out_channels,
             config.head_final_kernel_size,
             config.head_final_stride,
-            config.head_final_dilation,
-            config.head_final_groups,
             config.head_final_bias,
-            config.head_final_has_shuffle,
         )
 
         self.pooling_size = config.head_pooling_size
