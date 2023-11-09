@@ -1,4 +1,4 @@
-<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -23,9 +23,8 @@ rendered properly in your Markdown viewer.
 Image segmentation models separate areas corresponding to different objects in an image. These models work by assigning a label to each pixel. There are several types of segmentation: semantic segmentation, instance segmentation, and panoptic segmentation.
 
 In this guide, we will:
-1. Take a look at different types of segmentation,
-2. Go through each of them to illustrate the differences in depth,
-3. Have an end-to-end fine-tuning example for semantic segmentation. 
+1. [Take a look at different types of segmentation](#Types-of-Segmentation),
+2. [Have an end-to-end fine-tuning example for semantic segmentation](#Fine-tuning-a-Model-for-Segmentation). 
 
 Before you begin, make sure you have all the necessary libraries installed:
 
@@ -40,6 +39,8 @@ We encourage you to log in to your Hugging Face account so you can upload and sh
 
 >>> notebook_login()
 ```
+
+## Types of Segmentation
 
 Semantic segmentation assigns a label or class to every single pixel in an image. Let's take a look at a semantic segmentation model output. It will assign the same class to every instance of an object it comes across in an image, for example, all cats will be labeled as "cat" instead of "cat-1", "cat-2".
 We can use transformers' image segmentation pipeline to quickly infer a semantic segmentation model. Let's take a look at the example image.
@@ -117,7 +118,7 @@ results = instance_segmentation(Image.open(image))
 results
 ```
 
-As you can see below, there are multiple cars classified, and there's no classification for pixels other than those that belong to car and person instances.
+As you can see below, there are multiple cars classified, and there's no classification for pixels other than pixels that belong to car and person instances.
 
 ```bash
 [{'score': 0.999944,
@@ -149,7 +150,7 @@ panoptic_segmentation = pipeline("image-segmentation", "facebook/mask2former-swi
 results = panoptic_segmentation(Image.open(image))
 results
 ```
-As you can see below, every pixel gets classified and there are multiple instances for car again.
+As you can see below, we have more classes. We will later illustrate to see that every pixel is classified into one of the classes.
 
 ```bash
 [{'score': 0.999981,
@@ -191,10 +192,12 @@ Seeing all types of segmentation, let's have a deep dive on fine-tuning a model 
 
 Common real-world applications of semantic segmentation include training self-driving cars to identify pedestrians and important traffic information, identifying cells and abnormalities in medical imagery, and monitoring environmental changes from satellite imagery.
 
+## Fine-tuning a Model for Segmentation
+
 We will now:
 
 1. Finetune [SegFormer](https://huggingface.co/docs/transformers/main/en/model_doc/segformer#segformer) on the [SceneParse150](https://huggingface.co/datasets/scene_parse_150) dataset.
-2. Use your finetuned model for inference.
+2. Use your fine-tuned model for inference.
 
 <Tip>
 The task illustrated in this tutorial is supported by the following model architectures:
@@ -221,7 +224,7 @@ We encourage you to log in to your Hugging Face account so you can upload and sh
 >>> notebook_login()
 ```
 
-## Load SceneParse150 dataset
+### Load SceneParse150 dataset
 
 Start by loading a smaller subset of the SceneParse150 dataset from the 🤗 Datasets library. This'll give you a chance to experiment and make sure everything works before spending more time training on the full dataset.
 
@@ -266,7 +269,7 @@ You'll also want to create a dictionary that maps a label id to a label class wh
 >>> num_labels = len(id2label)
 ```
 
-## Preprocess
+### Preprocess
 
 The next step is to load a SegFormer image processor to prepare the images and annotations for the model. Some datasets, like this one, use the zero-index as the background class. However, the background class isn't actually included in the 150 classes, so you'll need to set `reduce_labels=True` to subtract one from all the labels. The zero-index is replaced by `255` so it's ignored by SegFormer's loss function:
 
@@ -373,7 +376,7 @@ The transform is applied on the fly which is faster and consumes less disk space
 </tf>
 </frameworkcontent>
 
-## Evaluate
+### Evaluate
 
 Including a metric during training is often helpful for evaluating your model's performance. You can quickly load an evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [mean Intersection over Union](https://huggingface.co/spaces/evaluate-metric/accuracy) (IoU) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
 
@@ -458,7 +461,7 @@ logits first, and then reshaped to match the size of the labels before you can c
 
 Your `compute_metrics` function is ready to go now, and you'll return to it when you setup your training.
 
-## Train
+### Train
 <frameworkcontent>
 <pt>
 <Tip>
@@ -622,7 +625,7 @@ Congratulations! You have fine-tuned your model and shared it on the 🤗 Hub. Y
 </frameworkcontent>
 
 
-## Inference
+### Inference
 
 Great, now that you've finetuned a model, you can use it for inference!
 
@@ -639,43 +642,8 @@ Load an image for inference:
 
 <frameworkcontent>
 <pt>
-The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for image segmentation with your model, and pass your image to it:
 
-```py
->>> from transformers import pipeline
-
->>> segmenter = pipeline("image-segmentation", model="my_awesome_seg_model")
->>> segmenter(image)
-[{'score': None,
-  'label': 'wall',
-  'mask': <PIL.Image.Image image mode=L size=640x427 at 0x7FD5B2062690>},
- {'score': None,
-  'label': 'sky',
-  'mask': <PIL.Image.Image image mode=L size=640x427 at 0x7FD5B2062A50>},
- {'score': None,
-  'label': 'floor',
-  'mask': <PIL.Image.Image image mode=L size=640x427 at 0x7FD5B2062B50>},
- {'score': None,
-  'label': 'ceiling',
-  'mask': <PIL.Image.Image image mode=L size=640x427 at 0x7FD5B2062A10>},
- {'score': None,
-  'label': 'bed ',
-  'mask': <PIL.Image.Image image mode=L size=640x427 at 0x7FD5B2062E90>},
- {'score': None,
-  'label': 'windowpane',
-  'mask': <PIL.Image.Image image mode=L size=640x427 at 0x7FD5B2062390>},
- {'score': None,
-  'label': 'cabinet',
-  'mask': <PIL.Image.Image image mode=L size=640x427 at 0x7FD5B2062550>},
- {'score': None,
-  'label': 'chair',
-  'mask': <PIL.Image.Image image mode=L size=640x427 at 0x7FD5B2062D90>},
- {'score': None,
-  'label': 'armchair',
-  'mask': <PIL.Image.Image image mode=L size=640x427 at 0x7FD5B2062E10>}]
-```
-
-You can also manually replicate the results of the `pipeline` if you'd like. Process the image with an image processor and place the `pixel_values` on a GPU:
+We will now see how to infer without a pipeline. Process the image with an image processor and place the `pixel_values` on a GPU:
 
 ```py
 >>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # use GPU if available, otherwise use a CPU
