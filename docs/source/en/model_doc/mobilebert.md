@@ -37,7 +37,7 @@ natural language inference tasks of GLUE, MobileBERT achieves a GLUEscore o 77.7
 latency on a Pixel 4 phone. On the SQuAD v1.1/v2.0 question answering task, MobileBERT achieves a dev F1 score of
 90.0/79.2 (1.5/2.1 higher than BERT_BASE).*
 
-This model was contributed by [vshampor](https://huggingface.co/vshampor). The original code can be found [here](https://github.com/google-research/mobilebert).
+This model was contributed by [vshampor](https://huggingface.co/vshampor). The original code can be found [here](https://github.com/google-research/google-research/tree/master/mobilebert).
 
 ## Usage tips
 
