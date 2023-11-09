@@ -169,7 +169,7 @@ class Owlv2VisionConfig(PretrainedConfig):
             Number of channels in the input images.
         image_size (`int`, *optional*, defaults to 768):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
+        patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
