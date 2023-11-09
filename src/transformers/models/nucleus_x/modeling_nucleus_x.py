@@ -705,14 +705,6 @@ class NucleusXPreTrainedModel(PreTrainedModel):
                 if "fc1" in name or "fc2" in name or "out_proj" in name or "v_proj" in name:
                     p.data.div_(init_scale)
 
-        # TODO: in torchscale implementation, when using GLU, the normalization for
-        # subln is ignored completely. We might want to do the same.
-        if self.config.subln and isinstance(module, NucleusXMultiScaleRetention):
-            init_scale = math.sqrt(math.log(self.config.decoder_layers * 2))
-            for name, p in self.named_parameters():
-                if "out_proj" in name or "v_proj" in name:
-                    p.data.div_(init_scale)
-
 
 @dataclass
 class NucleusXOutputWithPast(ModelOutput):

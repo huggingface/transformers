@@ -102,9 +102,7 @@ class NucleusXConfig(PretrainedConfig):
         z_loss_coeff (`float`, *optional*, defaults to 0.0):
             coefficient for z-loss (Used in PaLM, https://arxiv.org/pdf/2204.02311.pdf)
         deepnorm (`bool`, *optional*, defaults to `False`):
-            DeepNorm (https://arxiv.org/abs/2203.00555). Disables `decoder_normalize_before` and `subln`.
-        subln (`bool`, *optional*, defaults to `True`):
-            SubLN (https://arxiv.org/abs/2210.06423). Enables `decoder_normalize_before` and disables `deepnorm`.
+            DeepNorm (https://arxiv.org/abs/2203.00555). Disables `decoder_normalize_before`.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         groupnorm_eps (`float`, *optional*, defaults to 1e-06):
@@ -161,7 +159,6 @@ class NucleusXConfig(PretrainedConfig):
         use_lm_decay: bool = False,
         z_loss_coeff: float = 0.0,
         deepnorm: bool = False,
-        subln: bool = True,
         rms_norm_eps: float = 1e-6,
         groupnorm_eps: float = 1e-6,
         tie_word_embeddings: bool = False,
@@ -190,17 +187,12 @@ class NucleusXConfig(PretrainedConfig):
         self.no_scale_embedding = no_scale_embedding
         self.rms_norm_embedding = rms_norm_embedding
         self.deepnorm = deepnorm
-        self.subln = subln
         self.rms_norm_eps = rms_norm_eps
         self.groupnorm_eps = groupnorm_eps
         self.z_loss_coeff = z_loss_coeff
 
         if self.deepnorm:
             self.decoder_normalize_before = False
-            self.subln = False
-        if self.subln:
-            self.decoder_normalize_before = True
-            self.deepnorm = False
 
         super().__init__(
             bos_token_id=bos_token_id,
