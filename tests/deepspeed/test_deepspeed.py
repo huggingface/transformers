@@ -48,7 +48,7 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.trainer_utils import get_last_checkpoint, set_seed
-from transformers.utils import SAFE_WEIGHTS_NAME, WEIGHTS_NAME, is_torch_bf16_gpu_available
+from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_gpu_available
 
 
 if is_torch_available():
