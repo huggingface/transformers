@@ -283,7 +283,7 @@ torch_and_tf_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
-        "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
+        "pip install -U -e --upgrade-strategy eager git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
     marker="is_pt_tf_cross_test",
     pytest_options={"rA": None, "durations": 0},
