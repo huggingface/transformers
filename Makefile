@@ -47,7 +47,8 @@ repo-consistency:
 # this target runs checks on all files
 
 quality:
-	ruff $(check_dirs) setup.py conftest.py
+	ruff check $(check_dirs) setup.py conftest.py
+	ruff format --check $(check_dirs) setup.py conftest.py --line-length 119
 	python utils/custom_init_isort.py --check_only
 	python utils/sort_auto_mappings.py --check_only
 	doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
@@ -64,7 +65,8 @@ extra_style_checks:
 # this target runs checks on all files and potentially modifies some of them
 
 style:
-	ruff $(check_dirs) setup.py conftest.py --fix
+	ruff check $(check_dirs) setup.py conftest.py --fix
+	ruff format $(check_dirs) setup.py conftest.py --line-length 119
 	${MAKE} autogenerate_code
 	${MAKE} extra_style_checks
 

@@ -1,10 +1,6 @@
-[tool.black]
-line-length = 119
-target-version = ['py37']
-
 [tool.ruff]
 # Never enforce `E501` (line length violations).
-ignore = ["C901", "E501", "E741"]
+ignore = ["C901", "E501", "E741", "F402", "F823" ]
 select = ["C", "E", "F", "I", "W"]
 line-length = 119
 

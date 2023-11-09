@@ -247,7 +247,11 @@ def stylify(code: str) -> str:
         filepath = Path(tmpdir) / "__init__.py"
         filepath.write_text(code)
         ruff_bin = find_ruff_bin()
-        os.spawnv(os.P_WAIT, ruff_bin, ["ruff format", f"{str(filepath)}","--fix", "--quiet", "--ignore","F821"])
+        os.spawnv(
+            os.P_WAIT,
+            ruff_bin,
+            ["ruff format", f"{str(filepath)}", "--line-length", "119", "--ignore", "F821"],  # "--fix", "--quiet"
+        )
         result = filepath.read_text()
     return result[len("class Bla:\n") :] if has_indent else result
 
