@@ -115,7 +115,7 @@ class NucleusXConfig(PretrainedConfig):
     >>> from transformers import NucleusXModel, NucleusXConfig
 
     >>> # Initializing a NucleusX-7B style configuration
-    >>> configuration = NucleusXConfig()
+    >>> configuration = NucleusXConfig(decoder_layers=2)  # only 2 layers for quick & small example
 
     >>> # Initializing a model from the NucleusX-7B style configuration
     >>> model = NucleusXModel(configuration)

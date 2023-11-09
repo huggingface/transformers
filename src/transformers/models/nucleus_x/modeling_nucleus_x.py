@@ -469,7 +469,7 @@ class NucleusXMultiScaleRetention(nn.Module):
         else:
             raise ValueError(f"forward_mode {forward_mode} not supported.")
 
-        # concaat heads
+        # concat heads
         dtype = retention_out.dtype
         # when elementwise_affine=False, apex.normalization.FusedRMSNorm may autocast to
         # fp32. We want it back to original dtype.
@@ -589,7 +589,13 @@ class NucleusXDecoderLayer(nn.Module):
 
         self.ffn_dim = config.decoder_ffn_embed_dim
 
-        self.ffn = self.build_ffn()
+        self.ffn = NucleusXGLU(
+            self.embed_dim,
+            self.ffn_dim,
+            self.config.activation_fn,
+            self.config.dropout,
+            self.config.activation_dropout,
+        )
 
         self.final_rms_norm = NucleusXRMSNorm(self.embed_dim, eps=config.rms_norm_eps)
 
@@ -597,15 +603,6 @@ class NucleusXDecoderLayer(nn.Module):
             self.alpha = math.pow(2.0 * config.decoder_layers, 0.25)
         else:
             self.alpha = 1.0
-
-    def build_ffn(self):
-        return NucleusXGLU(
-            self.embed_dim,
-            self.ffn_dim,
-            self.config.activation_fn,
-            self.config.dropout,
-            self.config.activation_dropout,
-        )
 
     def residual_connection(self, x, residual):
         return residual * self.alpha + x
