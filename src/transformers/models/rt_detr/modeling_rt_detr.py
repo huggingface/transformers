@@ -516,32 +516,25 @@ class RTDetrCSPRepLayer(nn.Module):
 
 
 class RTDetrMSDeformableAttention(nn.Module):
-    def __init__(
-        self,
-        embed_dim=256,
-        num_heads=8,
-        num_levels=4,
-        num_points=4,
-    ):
+    def __init__(self, config: RTDetrConfig):
         """
         Multi-Scale Deformable Attention Module
         """
         super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.num_levels = num_levels
-        self.num_points = num_points
-        self.total_points = num_heads * num_levels * num_points
-        self.head_dim = embed_dim // num_heads
-        if self.head_dim * num_heads != self.embed_dim:
+        
+        self.embed_dim = config.hidden_dim
+        self.num_heads = config.num_head
+        self.num_levels = config.num_levels
+        self.num_points = config.num_decoder_points
+        self.total_points = self.num_heads * self.num_levels * self.num_points
+        self.head_dim = self.embed_dim // self.num_heads
+        
+        if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError("Relation self.head_dim * num_heads == self.embed_dim does not apply")
-        self.sampling_offsets = nn.Linear(
-            embed_dim,
-            self.total_points * 2,
-        )
-        self.attention_weights = nn.Linear(embed_dim, self.total_points)
-        self.value_proj = nn.Linear(embed_dim, embed_dim)
-        self.output_proj = nn.Linear(embed_dim, embed_dim)
+        self.sampling_offsets = nn.Linear(self.embed_dim,self.total_points * 2)
+        self.attention_weights = nn.Linear(self.embed_dim, self.total_points)
+        self.value_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.output_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.ms_deformable_attn_core = deformable_attention_core_func
         self._reset_parameters()
 
@@ -614,10 +607,7 @@ class RTDetrTransformerDecoderLayer(nn.Module):
         )
         self.dropout1 = nn.Dropout(config.dropout)
         self.norm1 = nn.LayerNorm(config.hidden_dim, config.layer_norm_eps)
-        # cross attention
-        self.cross_attn = RTDetrMSDeformableAttention(
-            config.hidden_dim, config.num_head, config.num_levels, config.num_decoder_points
-        )
+        self.cross_attn = RTDetrMSDeformableAttention(config)
         self.dropout2 = nn.Dropout(config.dropout)
         self.norm2 = nn.LayerNorm(config.hidden_dim, config.layer_norm_eps)
         # ffn
