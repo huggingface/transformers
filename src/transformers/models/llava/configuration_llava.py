@@ -31,6 +31,7 @@ LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "shauray/Llava-Llama-2-7B-hf": "https://huggingface.co/shauray/Llava-Llama-2-7B-hf/resolve/main/config.json",
 }
 
+
 class LlavaVisionConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MptModel`]. It is used to instantiate a Mpt model
@@ -76,16 +77,16 @@ class LlavaVisionConfig(PretrainedConfig):
         n_heads: int = 32,
         n_layers: int = 32,
         use_cache: bool = True,
-        vocab_size: int = 50282,
+        vocab_size: int = 32000,
         projector: str = "Linear",
         hidden_size=1024,
         intermediate_size=4096,
         projection_dim=768,
-        proj_hidden_size = 4096,
+        proj_hidden_size=4096,
         num_hidden_layers=24,
         num_attention_heads=16,
         num_channels=3,
-        image_size=336,
+        image_size=224,
         patch_size=14,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
@@ -181,15 +182,15 @@ class LlavaConfig(PretrainedConfig):
 
     def __init__(self, text_config=None, vision_config=None, **kwargs):
         super().__init__(**kwargs)
-        
+
         if text_config is None:
             text_config = {}
             logger.info("vision_config is None. Initializing the LlavaVisionConfig with default values.")
-            
+
         if vision_config is None:
             vision_config = {}
             logger.info("vision_config is None. Initializing the LlavaVisionConfig with default values.")
-            
+
         text_model_type = text_config["model_type"] if "model_type" in text_config else "llama"
 
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
@@ -217,5 +218,3 @@ class LlavaConfig(PretrainedConfig):
             vision_config=vision_config.to_dict(),
             **kwargs,
         )
-
-

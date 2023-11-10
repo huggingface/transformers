@@ -25,26 +25,27 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ..auto import AutoModelForCausalLM
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput, BaseModelOutputWithPooling, BaseModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+    ModelOutput,
+    BaseModelOutputWithPooling,
+    BaseModelOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_llava import LlavaConfig, LlavaVisionConfig
 
 
-if is_flash_attn_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
-
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlavaConfig"
+
 
 @dataclass
 class LlavaModelOutput(ModelOutput):
@@ -310,6 +311,7 @@ class CLIPEncoderLayer(nn.Module):
 
         return outputs
 
+
 class CLIPEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -428,6 +430,7 @@ CLIP_VISION_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 class CLIPVisionTransformer(nn.Module):
     def __init__(self, config: LlavaVisionConfig):
         super().__init__()
@@ -512,6 +515,7 @@ class LlavaPreTrainedModel(PreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
+
     config_class = LlavaConfig
     base_model_prefix = "llava"
     supports_gradient_checkpointing = True
@@ -619,7 +623,6 @@ LLAVA_INPUTS_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAVA_START_DOCSTRING,
 )
-
 class LlavaVisionModel(LlavaPreTrainedModel):
     config_class = LlavaVisionConfig
     main_input_name = "pixel_values"
@@ -673,7 +676,8 @@ class LlavaVisionModel(LlavaPreTrainedModel):
             return_dict=return_dict,
         )
 
-class LlavaModel(LlavaPreTrainedModel): 
+
+class LlavaModel(LlavaPreTrainedModel):
     config_class = LlavaConfig
     main_input_name = "pixel_values"
 
@@ -691,7 +695,9 @@ class LlavaModel(LlavaPreTrainedModel):
 
             self.text_model.mm_projector = nn.Sequential(*modules)
         else:
-            self.text_model.mm_projector = nn.Linear(config.vision_config.mm_hidden_size, config.vision_config.proj_hidden_size)
+            self.text_model.mm_projector = nn.Linear(
+                config.vision_config.mm_hidden_size, config.vision_config.proj_hidden_size
+            )
 
         self.post_init()
 
@@ -941,7 +947,7 @@ class LlavaModel(LlavaPreTrainedModel):
         ```"""
 
         pixel_values = self.vision_model(pixel_values, output_hidden_states=True)
-        pixel_values = pixel_values.hidden_states[-2][:,1:]
+        pixel_values = pixel_values.hidden_states[-2][:, 1:]
 
         input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(
             input_ids, attention_mask, past_key_values, labels, pixel_values
@@ -957,12 +963,19 @@ class LlavaModel(LlavaPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        print("outtttttt", outputs)
 
-        if not return_dict:  
-            return tuple(v for v in [outputs.last_hidden_state,
-              outputs.past_key_values,
-              outputs.hidden_states,
-              outputs.attentions] if v is not None)
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    outputs.last_hidden_state,
+                    outputs.past_key_values,
+                    outputs.hidden_states,
+                    outputs.attentions,
+                ]
+                if v is not None
+            )
 
         return BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
@@ -970,6 +983,7 @@ class LlavaModel(LlavaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 class LlavaForCausalLM(LlavaPreTrainedModel):
     config_class = LlavaConfig
@@ -981,7 +995,6 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
 
     @add_start_docstrings_to_model_forward(LLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -1048,7 +1061,7 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            pixel_values = pixel_values,
+            pixel_values=pixel_values,
             return_dict=return_dict,
         )
 
@@ -1080,26 +1093,56 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
-    ):
-        if past_key_values:
-            input_ids = input_ids[:, -1:]
+    # def prepare_inputs_for_generation(
+    #    self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+    # ):
+    #    if past_key_values:
+    #        input_ids = input_ids[:, -1:]
 
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
+    # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+    #    if inputs_embeds is not None and past_key_values is None:
+    #        model_inputs = {"inputs_embeds": inputs_embeds}
+    #    else:
+    #        model_inputs = {"input_ids": input_ids}
 
-        model_inputs.update(
-            {
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-                "pixel_values": kwargs.get("pixel_values", None),
-            }
+    #    model_inputs.update(
+    #        {
+    #            "past_key_values": past_key_values,
+    #            "use_cache": kwargs.get("use_cache"),
+    #            "attention_mask": attention_mask,
+    #            "pixel_values": kwargs.get("pixel_values", None),
+    #        }
+    #    )
+    #    return model_inputs
+
+    @torch.no_grad()
+    def generate(
+        self,
+        pixel_values: torch.FloatTensor,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        **generate_kwargs,
+    ) -> torch.LongTensor:
+        """
+        Overrides `generate` function to be able to use the model as a conditional generator.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape (batch_size, num_channels, height, width)):
+                Input images to be processed.
+            input_ids (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
+                The sequence used as a prompt for the generation.
+            attention_mask (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
+                Mask to avoid performing attention on padding token indices
+
+        Returns:
+            captions (list): A list of strings of length batch_size * num_captions.
+        """
+
+        outputs = self.forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            pixel_values=pixel_values,
+            **generate_kwargs,
         )
-        return model_inputs
 
-
+        return outputs
