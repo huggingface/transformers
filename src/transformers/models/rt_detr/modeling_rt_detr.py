@@ -384,9 +384,7 @@ def deformable_attention_core_func(value, value_spatial_shapes, sampling_locatio
     # (batch_size, len_q, num_head, n_levels, n_points) -> (batch_size, num_head, len_q, n_levels, n_points)
     attention_weights = attention_weights.permute(0, 2, 1, 3, 4)
     # (batch_size, num_head, len_q, n_levels, n_points) -> (batch_size*num_head, 1, len_q, n_levels*n_points)
-    attention_weights = attention_weights.reshape(
-        batch_size * num_head, 1, len_q, n_levels * n_points
-    )
+    attention_weights = attention_weights.reshape(batch_size * num_head, 1, len_q, n_levels * n_points)
     output = (
         (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
         .sum(-1)
@@ -400,15 +398,15 @@ class RTDetrTransformerEncoderLayer(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
         self.normalize_before = config.normalize_before
-        
+
         self.self_attn = nn.MultiheadAttention(config.hidden_dim, config.num_head, config.dropout, batch_first=True)
 
         self.linear1 = nn.Linear(config.hidden_dim, config.dim_feedforward)
         self.dropout = nn.Dropout(config.dropout)
         self.linear2 = nn.Linear(config.dim_feedforward, config.hidden_dim)
 
-        self.norm1 = nn.LayerNorm(config.hidden_dim)
-        self.norm2 = nn.LayerNorm(config.hidden_dim)
+        self.norm1 = nn.LayerNorm(config.hidden_dim, config.layer_norm_eps)
+        self.norm2 = nn.LayerNorm(config.hidden_dim, config.layer_norm_eps)
         self.dropout1 = nn.Dropout(config.dropout)
         self.dropout2 = nn.Dropout(config.dropout)
         self.activation = ACT2CLS[config.enc_act]()
@@ -617,33 +615,28 @@ class RTDetrMSDeformableAttention(nn.Module):
 
 
 class RTDetrTransformerDecoderLayer(nn.Module):
-    def __init__(
-        self,
-        d_model=256,
-        n_head=8,
-        dim_feedforward=1024,
-        dropout=0.0,
-        activation="relu",
-        n_levels=4,
-        n_points=4,
-    ):
+    def __init__(self, config: RTDetrConfig):
         super().__init__()
 
         # self attention
-        self.self_attn = nn.MultiheadAttention(d_model, n_head, dropout=dropout, batch_first=True)
-        self.dropout1 = nn.Dropout(dropout)
-        self.norm1 = nn.LayerNorm(d_model)
+        self.self_attn = nn.MultiheadAttention(
+            config.hidden_dim, config.num_head, dropout=config.dropout, batch_first=True
+        )
+        self.dropout1 = nn.Dropout(config.dropout)
+        self.norm1 = nn.LayerNorm(config.hidden_dim, config.layer_norm_eps)
         # cross attention
-        self.cross_attn = RTDetrMSDeformableAttention(d_model, n_head, n_levels, n_points)
-        self.dropout2 = nn.Dropout(dropout)
-        self.norm2 = nn.LayerNorm(d_model)
+        self.cross_attn = RTDetrMSDeformableAttention(
+            config.hidden_dim, config.num_head, config.num_levels, config.num_decoder_points
+        )
+        self.dropout2 = nn.Dropout(config.dropout)
+        self.norm2 = nn.LayerNorm(config.hidden_dim, config.layer_norm_eps)
         # ffn
-        self.linear1 = nn.Linear(d_model, dim_feedforward)
-        self.activation = getattr(F, activation)
-        self.dropout3 = nn.Dropout(dropout)
-        self.linear2 = nn.Linear(dim_feedforward, d_model)
-        self.dropout4 = nn.Dropout(dropout)
-        self.norm3 = nn.LayerNorm(d_model)
+        self.linear1 = nn.Linear(config.hidden_dim, config.dim_feedforward)
+        self.activation = ACT2CLS[config.act_decoder]()
+        self.dropout3 = nn.Dropout(config.dropout)
+        self.linear2 = nn.Linear(config.dim_feedforward, config.hidden_dim)
+        self.dropout4 = nn.Dropout(config.dropout)
+        self.norm3 = nn.LayerNorm(config.hidden_dim, config.layer_norm_eps)
 
     def with_pos_embed(self, tensor, pos):
         return tensor if pos is None else tensor + pos
@@ -793,19 +786,14 @@ class RTDetrTransformer(nn.Module):
         self.num_denoising = config.num_denoising
         self.label_noise_ratio = config.label_noise_ratio
         self.box_noise_scale = config.box_noise_scale
-        dim_feedforward = config.dim_feedforward
-        dropout = config.dropout
-        activation = config.act_decoder
-        num_decoder_points = config.num_decoder_points
         eval_idx = config.eval_idx
 
         # backbone feature projection
         self.build_input_proj_layer(feat_channels)
 
         # Transformer module
-        decoder_layer = RTDetrTransformerDecoderLayer(
-            self.hidden_dim, self.num_head, dim_feedforward, dropout, activation, num_levels, num_decoder_points
-        )
+        decoder_layer = RTDetrTransformerDecoderLayer(config)
+
         self.decoder = TransformerDecoder(self.hidden_dim, decoder_layer, self.num_decoder_layers, eval_idx)
 
         # denoising part
@@ -822,9 +810,7 @@ class RTDetrTransformer(nn.Module):
         # encoder head
         self.enc_output = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim),
-            nn.LayerNorm(
-                self.hidden_dim,
-            ),
+            nn.LayerNorm(self.hidden_dim, config.layer_norm_eps),
         )
         self.enc_score_head = nn.Linear(self.hidden_dim, self.num_classes)
         self.enc_bbox_head = MLP(self.hidden_dim, self.hidden_dim, 4, num_layers=3)
