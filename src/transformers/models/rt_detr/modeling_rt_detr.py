@@ -480,11 +480,7 @@ class RepVggBlock(nn.Module):
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, x):
-        if hasattr(self, "conv"):
-            y = self.conv(x)
-        else:
-            y = self.conv1(x) + self.conv2(x)
-
+        y = self.conv1(x) + self.conv2(x)
         return self.activation(y)
 
 
