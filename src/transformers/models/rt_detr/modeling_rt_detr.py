@@ -253,6 +253,25 @@ def get_contrastive_denoising_training_group(
     label_noise_ratio=0.5,
     box_noise_scale=1.0,
 ):
+    """
+    Creates a contrastive denoising training group using ground-truth samples. It adds noise to labels and boxes.
+
+    Args:
+        targets (`List[dict]`): The target objects, each containing 'labels' and 'boxes' for objects in an image.
+        num_classes (`int`): Total number of classes in the dataset.
+        num_queries (`int`): Number of query slots in the transformer.
+        class_embed (`callable`): A function or a model layer to embed class labels.
+        num_denoising (`int`, *optional*, defaults to `100`): Number of denoising queries.
+        label_noise_ratio (`float`, *optional*, defaults to `0.5`): Ratio of noise applied to labels.
+        box_noise_scale (`float`, *optional*, defaults to `1.0`): Scale of noise applied to bounding boxes.
+    Returns:
+        A tuple containing:
+            input_query_class (`torch.FloatTensor`): Class queries with applied label noise.
+            input_query_bbox (`torch.FloatTensor`): Bounding box queries with applied box noise.
+            attn_mask (`torch.FloatTensor`): Attention mask for separating denoising and reconstruction queries.
+            dn_meta (`dict`): Metadata including denoising positive indices, number of groups, and split sizes.
+    """
+
     if num_denoising <= 0:
         return None, None, None, None
 
