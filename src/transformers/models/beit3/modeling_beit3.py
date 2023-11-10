@@ -103,9 +103,9 @@ BEIT3_MODEL = r"""
             more detail.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.            
+            tensors for more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.            
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 BEIT3_FOR_VISUAL_REASONING_INPUTS_DOCSTRING = r"""
@@ -129,7 +129,7 @@ BEIT3_FOR_VISUAL_REASONING_INPUTS_DOCSTRING = r"""
             more detail.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.                        
+            tensors for more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -187,7 +187,7 @@ BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
             more detail.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.            
+            tensors for more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -215,7 +215,7 @@ BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
             more detail.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.            
+            tensors for more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
