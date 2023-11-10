@@ -60,6 +60,7 @@ RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # A small positive value used to define the valid range for anchor coordinates.
 EPS = 1e-2
 
+
 @dataclass
 class RTDetrModelOutput(ModelOutput):
     """
@@ -422,7 +423,9 @@ class RTDetrTransformerEncoderLayer(nn.Module):
         super().__init__()
         self.normalize_before = config.normalize_before
 
-        self.self_attn = nn.MultiheadAttention(config.hidden_dim, config.num_attention_heads, config.dropout, batch_first=True)
+        self.self_attn = nn.MultiheadAttention(
+            config.hidden_dim, config.num_attention_heads, config.dropout, batch_first=True
+        )
 
         self.linear1 = nn.Linear(config.hidden_dim, config.dim_feedforward)
         self.dropout = nn.Dropout(config.dropout)
