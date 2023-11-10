@@ -62,6 +62,9 @@ USE_TF = os.environ.get("USE_TF", "AUTO").upper()
 USE_TORCH = os.environ.get("USE_TORCH", "AUTO").upper()
 USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
 
+# Try to run a native pytorch job in an environment with TorchXLA installed by setting this value to 0.
+USE_TORCH_XLA = os.environ.get("USE_TORCH_XLA", "1").upper()
+
 FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
 
 # `transformers` requires `torch>=1.11` but this variable is exposed publicly, and we can't simply remove it.
@@ -484,8 +487,11 @@ def is_g2p_en_available():
 @lru_cache()
 def is_torch_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
-    if not _torch_available:
+    if not _torch_available or USE_TORCH_XLA not in ENV_VARS_TRUE_VALUES:
         return False
+    import torch_xla.core.xla_model as xm
+    device = xm.xla_device()
+    xm.set_replication(device, [device])
     if importlib.util.find_spec("torch_xla") is not None:
         if check_device:
             # We need to check if `xla_device` can be found, will raise a RuntimeError if not
