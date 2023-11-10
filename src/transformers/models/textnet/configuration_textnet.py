@@ -95,19 +95,19 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import FastConfig, FastForSceneTextRecognition
+    >>> from transformers import TextNetConfig, TextNetBackbone
 
     >>> # Initializing a Fast Config
-    >>> configuration = FastConfig()
+    >>> configuration = TextNetConfig()
 
     >>> # Initializing a model (with random weights)
-    >>> model = FastForSceneTextRecognition(configuration)
+    >>> model = TextNetBackbone(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
     r"""
-    [Raghavan/fast_base_tt_800_finetune_ic17mlt](https://huggingface.co/Raghavan/fast_base_tt_800_finetune_ic17mlt)
+    [Raghavan/textnet-base](https://huggingface.co/Raghavan/textnet-base)
     """
     model_type = "textnet"
 
