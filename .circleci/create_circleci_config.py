@@ -405,7 +405,7 @@ examples_torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager -r examples/pytorch/_tests_requirements.txt",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
-    pytest_num_workers=6,
+    pytest_num_workers=1,
 )
 
 
@@ -612,15 +612,13 @@ def create_circleci_config(folder=None):
             fp.write(" ".join(extended_tests_to_run))
 
     example_file = os.path.join(folder, "examples_test_list.txt")
-    if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
-        with open(example_file, "r", encoding="utf-8") as f:
-            example_tests = f.read()
-        for job in EXAMPLES_TESTS:
-            framework = job.name.replace("examples_", "").replace("torch", "pytorch")
-            if True:
-                job.tests_to_run = [f"examples/{framework}"]
-            else:
-                job.tests_to_run = [f for f in example_tests.split(" ") if f.startswith(f"examples/{framework}")]
+
+    for job in EXAMPLES_TESTS:
+        framework = job.name.replace("examples_", "").replace("torch", "pytorch")
+        if True:
+            job.tests_to_run = [f"examples/{framework}"]
+        else:
+            job.tests_to_run = [f for f in example_tests.split(" ") if f.startswith(f"examples/{framework}")]
 
     doctest_file = os.path.join(folder, "doctest_list.txt")
     if os.path.exists(doctest_file):
