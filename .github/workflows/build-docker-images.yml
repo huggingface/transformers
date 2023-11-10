@@ -20,7 +20,7 @@ concurrency:
 jobs:
   latest-docker:
     name: "Latest PyTorch + TensorFlow [dev]"
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, intel-cpu, 8-cpu, ci]
     steps:
       - name: Cleanup disk
         run: |
@@ -52,7 +52,7 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}
+          tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}-test
       # Push CI images still need to be re-built daily
       -
         name: Build and push (for Push CI) in a daily basis
@@ -65,11 +65,11 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-all-latest-gpu-push-ci
+          tags: huggingface/transformers-all-latest-gpu-push-ci-test
 
   latest-torch-deepspeed-docker:
     name: "Latest PyTorch + DeepSpeed"
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, intel-cpu, 8-cpu, ci]
     steps:
       - name: Cleanup disk
         run: |
@@ -101,12 +101,12 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-pytorch-deepspeed-latest-gpu${{ inputs.image_postfix }}
+          tags: huggingface/transformers-pytorch-deepspeed-latest-gpu${{ inputs.image_postfix }}-test
 
   # Can't build 2 images in a single job `latest-torch-deepspeed-docker` (for `nvcr.io/nvidia`)
   latest-torch-deepspeed-docker-for-push-ci-daily-build:
     name: "Latest PyTorch + DeepSpeed (Push CI - Daily Build)"
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, intel-cpu, 8-cpu, ci]
     steps:
       - name: Cleanup disk
         run: |
@@ -142,13 +142,13 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-pytorch-deepspeed-latest-gpu-push-ci
+          tags: huggingface/transformers-pytorch-deepspeed-latest-gpu-push-ci-test
 
   doc-builder:
     name: "Doc builder"
     # Push CI doesn't need this image
     if: inputs.image_postfix != '-push-ci'
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, intel-cpu, 8-cpu, ci]
     steps:
       -
         name: Set up Docker Buildx
@@ -168,13 +168,13 @@ jobs:
         with:
           context: ./docker/transformers-doc-builder
           push: true
-          tags: huggingface/transformers-doc-builder
+          tags: huggingface/transformers-doc-builder-test
 
   latest-pytorch:
     name: "Latest PyTorch [dev]"
     # Push CI doesn't need this image
     if: inputs.image_postfix != '-push-ci'
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, intel-cpu, 8-cpu, ci]
     steps:
       - name: Cleanup disk
         run: |
@@ -206,7 +206,7 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-pytorch-gpu
+          tags: huggingface/transformers-pytorch-gpu-test
 
   latest-pytorch-amd:
     name: "Latest PyTorch (AMD) [dev]"
@@ -228,7 +228,7 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}
+          tags: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}-test
       # Push CI images still need to be re-built daily
       -
         name: Build and push (for Push CI) in a daily basis
@@ -241,13 +241,13 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-pytorch-amd-gpu-push-ci
+          tags: huggingface/transformers-pytorch-amd-gpu-push-ci-test
 
   latest-tensorflow:
     name: "Latest TensorFlow [dev]"
     # Push CI doesn't need this image
     if: inputs.image_postfix != '-push-ci'
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, intel-cpu, 8-cpu, ci]
     steps:
       -
         name: Set up Docker Buildx
@@ -269,4 +269,4 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-tensorflow-gpu
+          tags: huggingface/transformers-tensorflow-gpu-test
