@@ -42,8 +42,6 @@ class Beit3Config(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         encoder_normalize_before (`bool`, *optional*, defaults to `False`):
             Whether to normalize before the encoder block.
-        normalize_before (`bool`, *optional*, defaults to `False`):
-            Whether to normalize before (`True`) or after (`False`) passing through every Beit3 encoder layer
         activation_fn (`str`, *optional*, defaults to `"gelu"`):
             Activation function to apply within Mega encoder blocks. Choose one of `"silu"`, `"relu"`, `"linear"`,
             `"gelu"`, or `"gelu_accurate"`
@@ -97,7 +95,6 @@ class Beit3Config(PretrainedConfig):
         intermediate_size=3072,
         num_hidden_layers=12,
         encoder_normalize_before=False,
-        normalize_before=False,
         activation_fn="gelu",
         dropout=0.0,
         attention_dropout=0.0,
@@ -119,7 +116,6 @@ class Beit3Config(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
-        self.normalize_before = normalize_before
         self.encoder_normalize_before = encoder_normalize_before
         self.activation_fn = activation_fn
         self.dropout = dropout
