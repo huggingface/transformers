@@ -82,6 +82,11 @@ def check_config_docstrings_have_checkpoints():
         name = config_class.__name__
         if checkpoint is None and name not in CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK:
             configs_without_checkpoint.append(name)
+        else:
+            try:
+                config_class.from_pretrained(checkpoint)
+            except Exception as e:
+                configs_without_checkpoint.append(name)
 
     if len(configs_without_checkpoint) > 0:
         message = "\n".join(sorted(configs_without_checkpoint))
