@@ -695,7 +695,7 @@ class TransformerDecoder(nn.Module):
         return torch.stack(dec_out_bboxes), torch.stack(dec_out_logits)
 
 
-class MLP(nn.Module):
+class RTDetrMLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers, act="relu"):
         super().__init__()
         self.num_layers = num_layers
@@ -761,7 +761,7 @@ class RTDetrTransformer(nn.Module):
         # decoder embedding
         if self.learnt_init_query:
             self.tgt_embed = nn.Embedding(self.num_queries, self.hidden_dim)
-        self.query_pos_head = MLP(4, 2 * self.hidden_dim, self.hidden_dim, num_layers=2)
+        self.query_pos_head = RTDetrMLP(4, 2 * self.hidden_dim, self.hidden_dim, num_layers=2)
 
         # encoder head
         self.enc_output = nn.Sequential(
@@ -769,14 +769,14 @@ class RTDetrTransformer(nn.Module):
             nn.LayerNorm(self.hidden_dim, config.layer_norm_eps),
         )
         self.enc_score_head = nn.Linear(self.hidden_dim, self.num_classes)
-        self.enc_bbox_head = MLP(self.hidden_dim, self.hidden_dim, 4, num_layers=3)
+        self.enc_bbox_head = RTDetrMLP(self.hidden_dim, self.hidden_dim, 4, num_layers=3)
 
         # decoder head
         self.dec_score_head = nn.ModuleList(
             [nn.Linear(self.hidden_dim, self.num_classes) for _ in range(self.num_decoder_layers)]
         )
         self.dec_bbox_head = nn.ModuleList(
-            [MLP(self.hidden_dim, self.hidden_dim, 4, num_layers=3) for _ in range(self.num_decoder_layers)]
+            [RTDetrMLP(self.hidden_dim, self.hidden_dim, 4, num_layers=3) for _ in range(self.num_decoder_layers)]
         )
 
         # init encoder output anchors and valid_mask
