@@ -487,14 +487,6 @@ class RepVggBlock(nn.Module):
 
         return self.activation(y)
 
-    def convert_to_deploy(self):
-        if not hasattr(self, "conv"):
-            self.conv = nn.Conv2d(self.channels_in, self.channels_out, 3, 1, padding=1)
-
-        kernel, bias = self.get_equivalent_kernel_bias()
-        self.conv.weight.data = kernel
-        self.conv.bias.data = bias
-
     def get_equivalent_kernel_bias(self):
         kernel3x3, bias3x3 = self._fuse_bn_tensor(self.conv1)
         kernel1x1, bias1x1 = self._fuse_bn_tensor(self.conv2)
