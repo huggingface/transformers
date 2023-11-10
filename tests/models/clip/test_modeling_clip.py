@@ -22,6 +22,7 @@ import unittest
 
 import numpy as np
 import requests
+import pytest
 
 import transformers
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
@@ -32,6 +33,8 @@ from transformers.testing_utils import (
     require_vision,
     slow,
     torch_device,
+    require_flash_attn,
+    require_torch_gpu,
 )
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -740,6 +743,116 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = CLIPModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference(self):
+        import torch
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
+                )
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model.main_input_name][:1]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
+
+                pixel_values = inputs_dict["pixel_values"][:1]
+
+                outputs = model(input_ids=dummy_input, pixel_values=pixel_values, output_hidden_states=True)
+                outputs_fa = model_fa(input_ids=dummy_input, pixel_values=pixel_values, output_hidden_states=True)
+
+                text_logits = outputs.text_model_output.hidden_states[-1]
+                text_logits_fa = outputs_fa.text_model_output.hidden_states[-1]
+
+                vision_logits = outputs.vision_model_output.hidden_states[-1]
+                vision_logits_fa = outputs_fa.vision_model_output.hidden_states[-1]
+
+                # assert torch.allclose(text_logits_fa, text_logits)
+                assert torch.allclose(vision_logits_fa, vision_logits)
+
+                # check with inference + dropout
+                model.train()
+                _ = model_fa(pixel_values=pixel_values, input_ids=dummy_input)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference_padding_right(self):
+        import torch
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False)
+                model.to(torch_device)
+
+                dummy_input = inputs_dict[model.main_input_name][:1]
+                pixel_values = inputs_dict["pixel_values"][:1]
+                attention_mask = torch.tensor(
+                    [[0, 0, 0, 1, 1, 1, 1]], device=dummy_input.device, dtype=torch.long
+                )
+
+                outputs = model(dummy_input, pixel_values=pixel_values, output_hidden_states=True)
+                outputs_fa = model_fa(dummy_input, pixel_values=pixel_values, output_hidden_states=True)
+
+                text_logits = outputs.text_model_output.hidden_states[-1]
+                text_logits_fa = outputs_fa.text_model_output.hidden_states[-1]
+
+                vision_logits = outputs.vision_model_output.hidden_states[-1]
+                vision_logits_fa = outputs_fa.vision_model_output.hidden_states[-1]
+
+                # whisper FA2 needs very high tolerance
+                assert torch.allclose(text_logits_fa, text_logits)
+                assert torch.allclose(vision_logits_fa, vision_logits)
+
+                other_inputs = {
+                    "attention_mask": attention_mask,
+                    "pixel_values": pixel_values,
+                    "output_hidden_states": True,
+                }
+
+                outputs = model(dummy_input, **other_inputs)
+                outputs_fa = model_fa(dummy_input, **other_inputs)
+
+                text_logits = outputs.text_model_output.hidden_states[-1]
+                text_logits_fa = outputs_fa.text_model_output.hidden_states[-1]
+
+                vision_logits = outputs.vision_model_output.hidden_states[-1]
+                vision_logits_fa = outputs_fa.vision_model_output.hidden_states[-1]
+
+                # whisper FA2 needs very high tolerance
+                assert torch.allclose(text_logits_fa, text_logits)
+                assert torch.allclose(vision_logits_fa, vision_logits)
 
 
 # We will verify our results on an image of cute cats
