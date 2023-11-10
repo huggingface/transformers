@@ -2213,7 +2213,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
                 )
                 global_attention_mask = tf.cast(tf.fill(shape_list(input_ids), value=0), tf.int64)
             else:
-                logger.info("Initializing global attention on question tokens...")
+                logger.warning_once("Initializing global attention on question tokens...")
                 # put global attention on all tokens until `config.sep_token_id` is reached
                 sep_token_indices = tf.where(input_ids == self.config.sep_token_id)
                 sep_token_indices = tf.cast(sep_token_indices, dtype=tf.int64)
@@ -2341,7 +2341,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
             global_attention_mask = tf.cast(global_attention_mask, tf.int64)
 
         if global_attention_mask is None and input_ids is not None:
-            logger.info("Initializing global attention on CLS token...")
+            logger.warning_once("Initializing global attention on CLS token...")
             # global attention on cls token
             global_attention_mask = tf.zeros_like(input_ids)
             updates = tf.ones(shape_list(input_ids)[0], dtype=tf.int64)
