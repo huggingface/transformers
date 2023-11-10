@@ -530,7 +530,7 @@ class PatchTSTEncoderLayer(nn.Module):
         # Add & Norm of the sublayer 1
         self.dropout_path1 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
         if "batch" in config.norm.lower():
-            self.norm_sublayer1 = PatchTSTBatchNorm(config.d_model)
+            self.norm_sublayer1 = PatchTSTBatchNorm(config)
         else:
             self.norm_sublayer1 = nn.LayerNorm(config.d_model, eps=config.norm_eps)
 
@@ -538,7 +538,7 @@ class PatchTSTEncoderLayer(nn.Module):
         if self.channel_attention:
             self.dropout_path2 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
             if "batch" in config.norm.lower():
-                self.norm_sublayer2 = PatchTSTBatchNorm(config.d_model)
+                self.norm_sublayer2 = PatchTSTBatchNorm(config)
             else:
                 self.norm_sublayer2 = nn.LayerNorm(config.d_model, eps=config.norm_eps)
 
@@ -553,7 +553,7 @@ class PatchTSTEncoderLayer(nn.Module):
         # Add & Norm of sublayer 3
         self.dropout_path3 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
         if "batch" in config.norm.lower():
-            self.norm_sublayer3 = PatchTSTBatchNorm(config.d_model)
+            self.norm_sublayer3 = PatchTSTBatchNorm(config)
         else:
             self.norm_sublayer3 = nn.LayerNorm(config.d_model, eps=config.norm_eps)
 
@@ -1050,9 +1050,9 @@ class PatchTSTStdScaler(nn.Module):
 
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
-        self.dim = 1 if config.scaling_dim is None else config.scaling_dim
-        self.keepdim = True if config.keepdim is None else config.keepdim
-        self.minimum_scale = 1e-10 if config.minimum_scale is None else config.minimum_scale
+        self.dim = config.scaling_dim if hasattr(config, 'scaling_dim') else 1
+        self.keepdim = config.keepdim if hasattr(config, 'keepdim') else True
+        self.minimum_scale = config.minimum_scale if hasattr(config, 'minimum_scale') else 1e-10
 
     def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor
                 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -1084,10 +1084,11 @@ class PatchTSTMeanScaler(nn.Module):
     """
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
-        self.dim = 1 if config.scaling_dim is None else config.scaling_dim
-        self.keepdim = True if config.keepdim is None else config.keepdim
-        self.minimum_scale = 1e-10 if config.minimum_scale is None else config.minimum_scale
-        self.default_scale = config.default_scale if config.default_scale else None
+        self.dim = config.scaling_dim if hasattr(config, 'scaling_dim') else 1
+        self.keepdim = config.keepdim if hasattr(config, 'keepdim') else True
+        self.minimum_scale = config.minimum_scale if hasattr(config, 'minimum_scale') else 1e-10
+        self.default_scale = config.default_scale if hasattr(config, 'default_scale') else None
+
 
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
@@ -1138,8 +1139,8 @@ class PatchTSTNOPScaler(nn.Module):
 
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
-        self.dim = 1 if config.scaling_dim is None else config.scaling_dim
-        self.keepdim = True if config.keepdim is None else config.keepdim
+        self.dim = config.scaling_dim if hasattr(config, 'scaling_dim') else 1
+        self.keepdim = config.keepdim if hasattr(config, 'keepdim') else True
 
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor=None
@@ -1211,6 +1212,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_observed_mask: Optional[torch.Tensor] = None,
+        future_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
