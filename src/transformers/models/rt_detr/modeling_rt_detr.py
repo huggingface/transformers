@@ -521,17 +521,17 @@ class RTDetrMSDeformableAttention(nn.Module):
         Multi-Scale Deformable Attention Module
         """
         super().__init__()
-        
+
         self.embed_dim = config.hidden_dim
         self.num_heads = config.num_head
         self.num_levels = config.num_levels
         self.num_points = config.num_decoder_points
         self.total_points = self.num_heads * self.num_levels * self.num_points
         self.head_dim = self.embed_dim // self.num_heads
-        
+
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError("Relation self.head_dim * num_heads == self.embed_dim does not apply")
-        self.sampling_offsets = nn.Linear(self.embed_dim,self.total_points * 2)
+        self.sampling_offsets = nn.Linear(self.embed_dim, self.total_points * 2)
         self.attention_weights = nn.Linear(self.embed_dim, self.total_points)
         self.value_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.output_proj = nn.Linear(self.embed_dim, self.embed_dim)
