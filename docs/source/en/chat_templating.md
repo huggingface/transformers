@@ -69,7 +69,10 @@ user messages (but not assistant messages!). Mistral-instruct was trained with t
 
 As you can see in the example above, chat templates are easy to use. Simply build a list of messages, with `role`
 and `content` keys, and then pass it to the [`~PreTrainedTokenizer.apply_chat_template`] method. Once you do that,
-you'll get output that's ready to go! Here's an example, using the `Zephyr` assistant model:
+you'll get output that's ready to go! When using chat templates as input for model generation, it's also a good idea
+to use `add_generation_prompt=True` - see the "What are generation prompts?" section below. 
+
+Here's an example of preparing input for `model.generate()`, using the `Zephyr` assistant model:
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -88,7 +91,7 @@ messages = [
 tokenized_chat = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt")
 print(tokenizer.decode(tokenized_chat[0]))
 ```
-This will yield a string in the input format that Zephyr expects:
+This will yield a string in the input format that Zephyr expects. 
 ```
 <|system|>
 You are a friendly chatbot who always responds in the style of a pirate</s> 
@@ -106,13 +109,13 @@ print(tokenizer.decode(outputs[0]))
 
 This will yield:
 
-```
+```text
 <|system|>
 You are a friendly chatbot who always responds in the style of a pirate</s> 
 <|user|>
 How many helicopters can a human eat in one sitting?</s> 
 <|assistant|>
-assistant: Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all.
+Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all.
 ```
 
 Arr, 'twas easy after all!
@@ -136,7 +139,7 @@ messages = [
 print(pipe(messages))
 ```
 
-```
+```text
 Conversation id: 76d886a0-74bd-454e-9804-0467041a63dc
 system: You are a friendly chatbot who always responds in the style of a pirate
 user: How many helicopters can a human eat in one sitting?
@@ -223,7 +226,7 @@ dataset = dataset.map(lambda x: {"formatted_chat": tokenizer.apply_chat_template
 print(dataset['formatted_chat'][0])
 ```
 And we get:
-```
+```text
 <|user|>
 Which is bigger, the moon or the sun?</s>
 <|assistant|>
