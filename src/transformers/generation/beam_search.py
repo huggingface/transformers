@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import heapq
 from abc import ABC, abstractmethod
 from collections import UserDict
 from typing import Dict, List, Optional, Tuple, Union
@@ -917,7 +918,6 @@ class BeamHypotheses:
         self.max_length = max_length
         self.num_beams = num_beams
         self.beams = []
-        self.worst_score = 1e9
 
         if not isinstance(self.early_stopping, bool) and self.max_length is None:
             raise ValueError(
@@ -936,14 +936,10 @@ class BeamHypotheses:
         Add a new hypothesis to the list.
         """
         score = sum_logprobs / (hyp.shape[-1] ** self.length_penalty)
-        if len(self) < self.num_beams or score > self.worst_score:
-            self.beams.append((score, hyp, beam_indices))
-            if len(self) > self.num_beams:
-                sorted_next_scores = sorted([(s, idx) for idx, (s, _, _) in enumerate(self.beams)])
-                del self.beams[sorted_next_scores[0][1]]
-                self.worst_score = sorted_next_scores[1][0]
-            else:
-                self.worst_score = min(score, self.worst_score)
+        if len(self) < self.num_beams:
+            heapq.heappush(self.beams, (score, hyp, beam_indices))
+        else:
+            heapq.heappushpop(self.beams, (score, hyp, beam_indices))
 
     def is_done(self, best_sum_logprobs: float, cur_len: int) -> bool:
         """
@@ -957,12 +953,13 @@ class BeamHypotheses:
         # `True`: stop as soon as at least `num_beams` hypotheses are finished
         if self.early_stopping is True:
             return True
+        worst_score = self.beams[0][0]
         # `False`: heuristic -- compute best possible score from `cur_len`, even though it is not entirely accurate
         #  when `length_penalty` is positive. See the discussion below for more details.
         # https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
-        elif self.early_stopping is False:
+        if self.early_stopping is False:
             highest_attainable_score = best_sum_logprobs / cur_len**self.length_penalty
-            ret = self.worst_score >= highest_attainable_score
+            ret = worst_score >= highest_attainable_score
             return ret
         # `"never"`: compute the best possible score, depending on the signal of `length_penalty`
         else:
@@ -974,5 +971,5 @@ class BeamHypotheses:
             # the opposite logic applies here (max `highest_attainable_score` from `cur_len`)
             else:
                 highest_attainable_score = best_sum_logprobs / cur_len**self.length_penalty
-            ret = self.worst_score >= highest_attainable_score
+            ret = worst_score >= highest_attainable_score
             return ret
