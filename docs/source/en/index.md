@@ -217,6 +217,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                     [PEGASUS-X](model_doc/pegasus_x)                     |       ✅        |         ❌         |      ❌      |
 |                     [Perceiver](model_doc/perceiver)                     |       ✅        |         ❌         |      ❌      |
 |                     [Persimmon](model_doc/persimmon)                     |       ✅        |         ❌         |      ❌      |
+|                           [Phi](model_doc/phi)                           |       ✅        |         ❌         |      ❌      |
 |                       [PhoBERT](model_doc/phobert)                       |       ✅        |         ✅         |      ✅      |
 |                    [Pix2Struct](model_doc/pix2struct)                    |       ✅        |         ❌         |      ❌      |
 |                        [PLBart](model_doc/plbart)                        |       ✅        |         ❌         |      ❌      |

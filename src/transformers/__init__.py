@@ -497,6 +497,7 @@ _import_structure = {
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
+    "models.phi": ["PHI_PRETRAINED_CONFIG_ARCHIVE_MAP", "PhiConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2512,6 +2513,16 @@ else:
     )
     _import_structure["models.persimmon"].extend(
         ["PersimmonForCausalLM", "PersimmonForSequenceClassification", "PersimmonModel", "PersimmonPreTrainedModel"]
+    )
+    _import_structure["models.phi"].extend(
+        [
+            "PHI_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PhiForCausalLM",
+            "PhiForSequenceClassification",
+            "PhiForTokenClassification",
+            "PhiModel",
+            "PhiPreTrainedModel",
+        ]
     )
     _import_structure["models.pix2struct"].extend(
         [
@@ -4690,6 +4701,7 @@ if TYPE_CHECKING:
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.persimmon import PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP, PersimmonConfig
+    from .models.phi import PHI_PRETRAINED_CONFIG_ARCHIVE_MAP, PhiConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6405,6 +6417,14 @@ if TYPE_CHECKING:
             PersimmonForSequenceClassification,
             PersimmonModel,
             PersimmonPreTrainedModel,
+        )
+        from .models.phi import (
+            PHI_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PhiForCausalLM,
+            PhiForSequenceClassification,
+            PhiForTokenClassification,
+            PhiModel,
+            PhiPreTrainedModel,
         )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
