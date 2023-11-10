@@ -663,6 +663,8 @@
         title: CLIP
       - local: model_doc/clipseg
         title: CLIPSeg
+      - local: model_doc/clvp
+        title: CLVP
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deplot
