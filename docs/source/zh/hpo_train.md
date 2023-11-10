@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # 使用Trainer API进行超参数搜索
 
-🤗 Transformers库提供了一个优化过的[`Trainer`]类，用于训练🤗 Transformers模型，使得在不手动编写自己的训练循环的情况下更容易开始训练。[`Trainer`]提供了超参数搜索的API。本文档展示了如何在示例中启用它。 
+🤗 Transformers库提供了一个优化过的[`Trainer`]类，用于训练🤗 Transformers模型，相比于手动编写自己的训练循环，这更容易开始训练。[`Trainer`]提供了超参数搜索的API。本文档展示了如何在示例中启用它。 
 
 
 ## 超参数搜索后端
@@ -56,7 +56,7 @@ pip install optuna/sigopt/wandb/ray[tune]
 ...     }
 ```
 
-Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direction`参数，并定义自己的`compute_objective`以返回多个目标值。在`hyperparameter_search`中将返回Pareto前沿（`List[BestRun]`），您应该参考[test_trainer](https://github.com/huggingface/transformers/blob/main/tests/trainer/test_trainer.py)中的测试用例`TrainerHyperParameterMultiObjectOptunaIntegrationTest`。它类似于以下内容：
+Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direction`参数，并定义自己的`compute_objective`以返回多个目标值。在`hyperparameter_search`中将返回Pareto Front（`List[BestRun]`），您应该参考[test_trainer](https://github.com/huggingface/transformers/blob/main/tests/trainer/test_trainer.py)中的测试用例`TrainerHyperParameterMultiObjectOptunaIntegrationTest`。它类似于以下内容：
 
 ```py
 >>> best_trials = trainer.hyperparameter_search(
@@ -136,4 +136,4 @@ Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direc
 ```
 
 ## 针对DDP微调的超参数搜索
-目前，Optuna和Sigopt已启用针对DDP的超参数搜索。只有rank-zero进程会生成搜索试验并将参数传递给其他进程。
+目前，Optuna和Sigopt已启用针对DDP的超参数搜索。只有rank-zero进程会进行超参数搜索并将参数传递给其他进程。
