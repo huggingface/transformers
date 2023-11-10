@@ -59,7 +59,7 @@ that string will also be tokenized for us. To see a more complex template in act
 
 >>> tokenizer.use_default_system_prompt = False
 >>> tokenizer.apply_chat_template(chat, tokenize=False)
-"<s>[INST] Hello, how are you? [/INST] I'm doing great. How can I help you today? </s><s>[INST] I'd like to show off how chat templating works! [/INST]"
+"<s>[INST] Hello, how are you? [/INST]I'm doing great. How can I help you today?</s> [INST] I'd like to show off how chat templating works! [/INST]"
 ```
 
 Note that this time, the tokenizer has added the control tokens [INST] and [/INST] to indicate the start and end of 
