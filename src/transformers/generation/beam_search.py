@@ -16,7 +16,7 @@
 import heapq
 from abc import ABC, abstractmethod
 from collections import UserDict
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -908,10 +908,19 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         )
 
 
+class Beam(NamedTuple):
+    score: float
+    tokens: torch.LongTensor
+    beam_indices: Optional[torch.LongTensor]
+
+    def __lt__(self, other):
+        return self.score < other.score
+
+
 class BeamHypotheses:
     def __init__(self, num_beams: int, length_penalty: float, early_stopping: bool, max_length: Optional[int] = None):
         """
-        Initialize n-best list of hypotheses.
+        Initialize n-best min heap of hypotheses.
         """
         self.length_penalty = length_penalty
         self.early_stopping = early_stopping
@@ -927,24 +936,24 @@ class BeamHypotheses:
 
     def __len__(self):
         """
-        Number of hypotheses in the list.
+        Number of hypotheses in the min heap.
         """
         return len(self.beams)
 
     def add(self, hyp: torch.LongTensor, sum_logprobs: float, beam_indices: Optional[torch.LongTensor] = None):
         """
-        Add a new hypothesis to the list.
+        Add a new hypothesis to the min heap.
         """
         score = sum_logprobs / (hyp.shape[-1] ** self.length_penalty)
         if len(self) < self.num_beams:
-            heapq.heappush(self.beams, (score, hyp, beam_indices))
+            heapq.heappush(self.beams, Beam(score, hyp, beam_indices))
         else:
-            heapq.heappushpop(self.beams, (score, hyp, beam_indices))
+            heapq.heappushpop(self.beams, Beam(score, hyp, beam_indices))
 
     def is_done(self, best_sum_logprobs: float, cur_len: int) -> bool:
         """
         If there are enough hypotheses and that none of the hypotheses being generated can become better than the worst
-        one in the heap, then we are done with this sentence.
+        one in the min heap, then we are done with this sentence.
         """
 
         if len(self) < self.num_beams:
