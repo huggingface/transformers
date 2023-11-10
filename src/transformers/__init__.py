@@ -390,12 +390,12 @@ _import_structure = {
         "JukeboxTokenizer",
         "JukeboxVQVAEConfig",
     ],
-    "models.lagllama": ["LAGLLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LagLlamaConfig"],
     "models.kosmos2": [
         "KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Kosmos2Config",
         "Kosmos2Processor",
     ],
+    "models.lagllama": ["LAGLLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LagLlamaConfig"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.layoutlmv2": [
         "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2046,8 +2046,6 @@ else:
             "JukeboxVQVAE",
         ]
     )
-    _import_structure["models.lagllama"].extend(
-        ["LagLlamaForPrediction", "LagLlamaForSequenceClassification", "LagLlamaModel", "LagLlamaPreTrainedModel"]
     _import_structure["models.kosmos2"].extend(
         [
             "KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2055,6 +2053,10 @@ else:
             "Kosmos2Model",
             "Kosmos2PreTrainedModel",
         ]
+    )
+
+    _import_structure["models.lagllama"].extend(
+        ["LagLlamaForPrediction", "LagLlamaForSequenceClassification", "LagLlamaModel", "LagLlamaPreTrainedModel"]
     )
     _import_structure["models.layoutlm"].extend(
         [
@@ -4576,12 +4578,12 @@ if TYPE_CHECKING:
         JukeboxTokenizer,
         JukeboxVQVAEConfig,
     )
-    from .models.lagllama import LAGLLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LagLlamaConfig
     from .models.kosmos2 import (
         KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Kosmos2Config,
         Kosmos2Processor,
     )
+    from .models.lagllama import LAGLLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LagLlamaConfig
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.layoutlmv2 import (
         LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5999,16 +6001,17 @@ if TYPE_CHECKING:
             JukeboxPrior,
             JukeboxVQVAE,
         )
-        from .models.lagllama import (
-            LagLlamaForPrediction,
-            LagLlamaForSequenceClassification,
-            LagLlamaModel,
-            LagLlamaPreTrainedModel,
         from .models.kosmos2 import (
             KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Kosmos2ForConditionalGeneration,
             Kosmos2Model,
             Kosmos2PreTrainedModel,
+        )
+        from .models.lagllama import (
+            LagLlamaForPrediction,
+            LagLlamaForSequenceClassification,
+            LagLlamaModel,
+            LagLlamaPreTrainedModel,
         )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -39,9 +39,14 @@ class LagLlamaConfig(PretrainedConfig):
 
 
     Args:
+        distribution_output (`str`, *optional*, defaults to `"student_t"`): <fill_docstring>
+        loss (`str`, *optional*, defaults to `"nll"`): <fill_docstring>
         input_size (`int`, *optional*, defaults to 1):
             Vocabulary size of the LLaMA model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`LlamaModel`]
+        lags_sequence (`List`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`): <fill_docstring>
+        scaling (`str`, *optional*, defaults to `"mean"`): <fill_docstring>
+        num_parallel_samples (`int`, *optional*, defaults to 100): <fill_docstring>
         hidden_size (`int`, *optional*, defaults to 256):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 128):
@@ -58,11 +63,6 @@ class LagLlamaConfig(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
-        pretraining_tp (`int`, *optional*, defaults to `1`):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
-            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
-            issue](https://github.com/pytorch/pytorch/issues/76232).
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_context_length (`int`, *optional*, defaults to 2048):
@@ -70,11 +70,16 @@ class LagLlamaConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-12):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        pretraining_tp (`int`, *optional*, defaults to 1):
+            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
+            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
+            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
+            issue](https://github.com/pytorch/pytorch/issues/76232).
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
@@ -86,7 +91,6 @@ class LagLlamaConfig(PretrainedConfig):
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
 
-        Example:
 
     ```python
     >>> from transformers import LagLlamaModel, LagLlamaConfig
@@ -178,4 +182,4 @@ class LagLlamaConfig(PretrainedConfig):
                 f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")
+            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")

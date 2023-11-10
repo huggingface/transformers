@@ -4261,7 +4261,6 @@ class JukeboxVQVAE(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class LagLlamaForPrediction(metaclass=DummyObject):
 KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -4272,8 +4271,28 @@ class Kosmos2ForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class LagLlamaForSequenceClassification(metaclass=DummyObject):
 class Kosmos2Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Kosmos2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LagLlamaForPrediction(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LagLlamaForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -4288,7 +4307,6 @@ class LagLlamaModel(metaclass=DummyObject):
 
 
 class LagLlamaPreTrainedModel(metaclass=DummyObject):
-class Kosmos2PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
