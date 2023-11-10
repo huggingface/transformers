@@ -78,9 +78,8 @@ class RTDetrModelOutput(ModelOutput):
             possible padding). You can use [`~RTDetrImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized (absolute) bounding boxes.
         encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the encoder at the output of each
-            layer plus the initial embedding outputs.
+            Tuple of `torch.FloatTensor`, being one for the output of the embeddings (logits) + one for the boxes + one
+            containing the outputs of each layer.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -853,7 +852,7 @@ class RTDetrTransformer(nn.Module):
         level_start_index.pop()
 
         # prepare denoising training
-        if self.training and self.num_denoising > 0:
+        if self.training and self.num_denoising > 0 and targets is not None:
             denoising_class, denoising_bbox_unact, attn_mask, dn_meta = get_contrastive_denoising_training_group(
                 targets,
                 self.num_classes,
@@ -1562,15 +1561,19 @@ class RTDetrModel(RTDetrPreTrainedModel):
                 "reduced_loss_unscaled": reduced_loss_unscaled,
             }
 
-        encoder_states = () if output_hidden_states else encoder_outputs
+        encoder_states = encoder_outputs if output_hidden_states else ()
 
-        if not return_dict:
-            output = (logits, pred_boxes, encoder_states)
-            return ((loss, loss_dict) + output) if loss is not None else output
+        if return_dict:
+            return RTDetrModelOutput(
+                loss=loss,
+                loss_dict=loss_dict,
+                logits=logits,
+                pred_boxes=pred_boxes,
+                encoder_hidden_states=encoder_states,
+            )
 
-        return RTDetrModelOutput(
-            loss=loss, loss_dict=loss_dict, logits=logits, pred_boxes=pred_boxes, encoder_hidden_states=encoder_states
-        )
+        output = (logits, pred_boxes, encoder_states)
+        return ((loss, loss_dict) + output) if loss is not None else output
 
 
 class RTDetrHungarianMatcher(nn.Module):

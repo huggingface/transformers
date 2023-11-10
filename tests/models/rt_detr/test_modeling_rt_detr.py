@@ -298,9 +298,9 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_torchscript = False
     test_pruning = False
-    test_head_masking = False
     test_resize_embeddings = False
     has_attentions = False
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = RTDetrModelTester(self)
@@ -325,9 +325,22 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_is_small(self):
         pass
 
-    @unittest.skip(reason="RTDetr does not output any loss term in the forward pass")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+        encoder_hidden_states = outputs.encoder_hidden_states[0]
+        encoder_hidden_states.retain_grad()
+        outputs["logits"].flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(encoder_hidden_states.grad)
 
     def test_forward_signature(self):
         config = self.model_tester.get_config()
