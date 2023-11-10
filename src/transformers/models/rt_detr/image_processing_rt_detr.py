@@ -266,8 +266,8 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
             use_focal_loss (`bool` defaults to True):
-                Variable informing if the focal loss was used to predict the outputs. Depending on its value, a
-                different function is used to process the logits and obtain the scores.
+                Variable informing if the focal loss was used to predict the outputs. If `True`, a sigmoid is applied
+                to compute the scores of each detection, otherwise, a softmax function is used.
 
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
