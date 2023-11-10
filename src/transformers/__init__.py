@@ -256,6 +256,15 @@ _import_structure = {
         "CLIPSegTextConfig",
         "CLIPSegVisionConfig",
     ],
+    "models.clvp": [
+        "CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ClvpConfig",
+        "ClvpDecoderConfig",
+        "ClvpEncoderConfig",
+        "ClvpFeatureExtractor",
+        "ClvpProcessor",
+        "ClvpTokenizer",
+    ],
     "models.code_llama": [],
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
     "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
@@ -489,6 +498,7 @@ _import_structure = {
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
+    "models.phi": ["PHI_PRETRAINED_CONFIG_ARCHIVE_MAP", "PhiConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1457,6 +1467,17 @@ else:
             "CLIPSegPreTrainedModel",
             "CLIPSegTextModel",
             "CLIPSegVisionModel",
+        ]
+    )
+    _import_structure["models.clvp"].extend(
+        [
+            "CLVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ClvpDecoder",
+            "ClvpEncoder",
+            "ClvpForCausalLM",
+            "ClvpModel",
+            "ClvpModelForConditionalGeneration",
+            "ClvpPreTrainedModel",
         ]
     )
     _import_structure["models.codegen"].extend(
@@ -2497,6 +2518,16 @@ else:
     )
     _import_structure["models.persimmon"].extend(
         ["PersimmonForCausalLM", "PersimmonForSequenceClassification", "PersimmonModel", "PersimmonPreTrainedModel"]
+    )
+    _import_structure["models.phi"].extend(
+        [
+            "PHI_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PhiForCausalLM",
+            "PhiForSequenceClassification",
+            "PhiForTokenClassification",
+            "PhiModel",
+            "PhiPreTrainedModel",
+        ]
     )
     _import_structure["models.pix2struct"].extend(
         [
@@ -4451,6 +4482,15 @@ if TYPE_CHECKING:
         CLIPSegTextConfig,
         CLIPSegVisionConfig,
     )
+    from .models.clvp import (
+        CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ClvpConfig,
+        ClvpDecoderConfig,
+        ClvpEncoderConfig,
+        ClvpFeatureExtractor,
+        ClvpProcessor,
+        ClvpTokenizer,
+    )
     from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
     from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
@@ -4667,6 +4707,7 @@ if TYPE_CHECKING:
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.persimmon import PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP, PersimmonConfig
+    from .models.phi import PHI_PRETRAINED_CONFIG_ARCHIVE_MAP, PhiConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5521,6 +5562,15 @@ if TYPE_CHECKING:
             CLIPSegPreTrainedModel,
             CLIPSegTextModel,
             CLIPSegVisionModel,
+        )
+        from .models.clvp import (
+            CLVP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ClvpDecoder,
+            ClvpEncoder,
+            ClvpForCausalLM,
+            ClvpModel,
+            ClvpModelForConditionalGeneration,
+            ClvpPreTrainedModel,
         )
         from .models.codegen import (
             CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6379,6 +6429,14 @@ if TYPE_CHECKING:
             PersimmonForSequenceClassification,
             PersimmonModel,
             PersimmonPreTrainedModel,
+        )
+        from .models.phi import (
+            PHI_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PhiForCausalLM,
+            PhiForSequenceClassification,
+            PhiForTokenClassification,
+            PhiModel,
+            PhiPreTrainedModel,
         )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
