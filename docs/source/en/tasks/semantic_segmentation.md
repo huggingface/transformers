@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 <Youtube id="dKE8SIt9C-w"/>
 
-Image segmentation models separate areas corresponding to different objects in an image. These models work by assigning a label to each pixel. There are several types of segmentation: semantic segmentation, instance segmentation, and panoptic segmentation.
+Image segmentation models separate areas corresponding to different areas of interest in an image. These models work by assigning a label to each pixel. There are several types of segmentation: semantic segmentation, instance segmentation, and panoptic segmentation.
 
 In this guide, we will:
 1. [Take a look at different types of segmentation](#Types-of-Segmentation),
