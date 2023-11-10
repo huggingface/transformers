@@ -57,6 +57,8 @@ RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all RTDETR models at https://huggingface.co/models?filter=rt_detr
 ]
 
+# A small positive value used to define the valid range for anchor coordinates.
+EPS = 1e-2
 
 @dataclass
 class RTDetrModelOutput(ModelOutput):
@@ -733,7 +735,6 @@ class RTDetrTransformer(nn.Module):
         self.num_levels = config.num_levels
         self.num_classes = config.num_classes
         self.num_queries = config.num_queries
-        self.eps = config.eps
         self.num_decoder_layers = config.num_decoder_layers
         self.eval_spatial_size = config.eval_spatial_size
         self.aux_loss = config.aux_loss
@@ -817,7 +818,7 @@ class RTDetrTransformer(nn.Module):
             anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, h * w, 4))
 
         anchors = torch.concat(anchors, 1).to(device)
-        valid_mask = ((anchors > self.eps) * (anchors < 1 - self.eps)).all(-1, keepdim=True)
+        valid_mask = ((anchors > EPS) * (anchors < 1 - EPS)).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
         anchors = torch.where(valid_mask, anchors, torch.inf)
 

@@ -80,7 +80,6 @@ class RTDetrConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "learnt_init_query"))
         self.parent.assertTrue(hasattr(config, "eval_spatial_size"))
         self.parent.assertTrue(hasattr(config, "eval_idx"))
-        self.parent.assertTrue(hasattr(config, "eps"))
         self.parent.assertTrue(hasattr(config, "matcher_alpha"))
         self.parent.assertTrue(hasattr(config, "matcher_gamma"))
         self.parent.assertTrue(hasattr(config, "matcher_class_cost"))

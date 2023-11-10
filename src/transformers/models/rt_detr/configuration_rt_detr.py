@@ -105,8 +105,6 @@ class RTDetrConfig(PretrainedConfig):
             Height and width used during evaluation to generate the bounding box anchors.
         eval_idx (`int`, *optional*, defaults to -1):
             Id of the decoder layer used to obtain the logits and bounding boxes.
-        eps (`float`, *optional*, defaults to 0.01):
-            A small positive value used to define the valid range for anchor coordinates.
         matcher_alpha (`float`, *optional*, defaults to 0.25):
             Parameter alpha used by the Hungarian Matcher.
         matcher_gamma (`float`, *optional*, defaults to 2.0):
@@ -192,7 +190,6 @@ class RTDetrConfig(PretrainedConfig):
         learnt_init_query=False,
         eval_spatial_size=[640, 640],
         eval_idx=-1,
-        eps=1e-2,
         # Loss
         matcher_alpha=0.25,
         matcher_gamma=2.0,
@@ -262,7 +259,6 @@ class RTDetrConfig(PretrainedConfig):
         self.learnt_init_query = learnt_init_query
         self.eval_spatial_size = eval_spatial_size
         self.eval_idx = eval_idx
-        self.eps = eps
         self.aux_loss = aux_loss
         # Loss
         self.matcher_alpha = matcher_alpha
