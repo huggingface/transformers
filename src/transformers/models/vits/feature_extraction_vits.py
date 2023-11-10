@@ -16,7 +16,7 @@
 Feature extractor class for Vits
 """
 import copy
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Tuple
 
 import numpy as np
 
@@ -56,6 +56,17 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
             Size of the Fourier transform.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
+        return_attention_mask (`bool`, *optional*, defaults to `False`):
+            Whether to return the attention mask.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+            <Tip>
+
+            For Vits finetuning, `attention_mask` should always be passed for batched inference, to avoid subtle
+            bugs.
+
+            </Tip>
         max_wav_value (`float`, defaults to 32768.0):
             Maximum wav value. Used to normalize the input waveforms if `do_normalize=True` in the forward pass of this
             feature extractor.
@@ -95,7 +106,7 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         )
         self.max_wav_value = max_wav_value
 
-    def _torch_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
+    def _torch_extract_fbank_features(self, waveform: np.array) -> Tuple[torch.Tensor]:
         """
         Compute the log-mel spectrogram of the provided audio using the PyTorch STFT implementation.
         """
@@ -158,6 +169,12 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
             return_attention_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
@@ -170,20 +187,23 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
                 bugs.
 
                 </Tip>
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
+                Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                index) among:
 
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return Numpy `np.ndarray` objects.
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding length (see above).
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
                 pipeline.
-            padding_value (`float`, defaults to 0.0):
-                The value that is used to fill the padding values / vectors.
-            do_normalize (`bool`, *optional*, defaults to `False`):
+            do_normalize (`bool`, *optional*):
                 Whether or not to divide the input waveform by `self.max_wav_value`.
         """
 
