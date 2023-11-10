@@ -337,6 +337,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
     ]
 )
 
+
 # This is to make sure the transformers module imported is the one in the repo.
 transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 

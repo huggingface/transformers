@@ -255,15 +255,15 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def create_and_test_config_common_properties(self):
         return
 
-    @unittest.skip(reason="Bit does not output attentions")
+    @unittest.skip(reason="TextNet does not output attentions")
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip(reason="Bit does not use inputs_embeds")
+    @unittest.skip(reason="TextNet does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Bit does not support input and output embeddings")
+    @unittest.skip(reason="TextNet does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
@@ -317,7 +317,6 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             expected_num_stages = self.model_tester.num_stages - 1
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
 
-            # Bit's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [self.model_tester.image_size // 2, self.model_tester.image_size // 2],
@@ -348,7 +347,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 num_params < 3000000
             ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
 
-    @unittest.skip(reason="Bit does not use feedforward chunking")
+    @unittest.skip(reason="TextNet does not use feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 

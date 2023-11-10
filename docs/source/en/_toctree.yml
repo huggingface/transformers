@@ -537,8 +537,6 @@
         title: EfficientFormer
       - local: model_doc/efficientnet
         title: EfficientNet
-      - local: model_doc/fast
-        title: FAST
       - local: model_doc/focalnet
         title: FocalNet
       - local: model_doc/glpn

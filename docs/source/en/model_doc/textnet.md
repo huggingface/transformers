@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The TextNet model was proposed in [FAST: Faster Arbitrarily-Shaped Text Detector with Minimalist Kernel Representation](https://arxiv.org/abs/2111.02394) by Zhe Chen, Jiahao Wang, Wenhai Wang, Guo Chen, Enze Xie, Ping Luo, Tong Lu.
-TextNet was results of NAS for efficient text detection task.
+TextNet model was results of NAS for efficient text detection task. It is used in fast model as backbone.
 
 ## TextNetConfig
 
