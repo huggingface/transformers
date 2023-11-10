@@ -57,7 +57,7 @@ class RTDetrConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "num_attention_heads"))
         self.parent.assertTrue(hasattr(config, "dim_feedforward"))
         self.parent.assertTrue(hasattr(config, "dropout"))
-        self.parent.assertTrue(hasattr(config, "enc_act"))
+        self.parent.assertTrue(hasattr(config, "hidden_act_encoder"))
         self.parent.assertTrue(hasattr(config, "use_encoder_idx"))
         self.parent.assertTrue(hasattr(config, "num_encoder_layers"))
         self.parent.assertTrue(hasattr(config, "pe_temperature"))

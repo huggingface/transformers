@@ -427,7 +427,7 @@ class RTDetrTransformerEncoderLayer(nn.Module):
         self.norm2 = nn.LayerNorm(config.hidden_dim, config.layer_norm_eps)
         self.dropout1 = nn.Dropout(config.dropout)
         self.dropout2 = nn.Dropout(config.dropout)
-        self.activation = ACT2CLS[config.enc_act]()
+        self.activation = ACT2CLS[config.hidden_act_encoder]()
 
     @staticmethod
     def with_pos_embed(tensor, pos_embed):

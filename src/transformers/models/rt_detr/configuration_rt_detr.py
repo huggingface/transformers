@@ -168,7 +168,7 @@ class RTDetrConfig(PretrainedConfig):
         num_attention_heads=8,
         dim_feedforward=1024,
         dropout=0.0,
-        enc_act="gelu",
+        hidden_act_encoder="gelu",
         use_encoder_idx=[2],
         num_encoder_layers=1,
         pe_temperature=10000,
@@ -238,7 +238,7 @@ class RTDetrConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.dim_feedforward = dim_feedforward
         self.dropout = dropout
-        self.enc_act = enc_act
+        self.hidden_act_encoder = hidden_act_encoder
         self.use_encoder_idx = use_encoder_idx
         self.num_encoder_layers = num_encoder_layers
         self.pe_temperature = pe_temperature
