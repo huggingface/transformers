@@ -103,12 +103,14 @@ class BeamSearchTester:
         beam_scorer = self.prepare_beam_scorer(do_early_stopping=False)
         beam_hyp = beam_scorer._beam_hyps[0]
 
-        # add `num_beams + 1` beams to change worst_score
+        # add `num_beams + 1` beams to change the worst score
         for beam_idx in range(self.num_beams + 1):
             beam_hyp.add(input_ids[beam_idx], -10.0 + float(beam_idx))
 
         # -10.0 is removed => -9.0 is worst score
-        self.parent.assertAlmostEqual(beam_hyp.beams[0].score, -9.0 / (self.sequence_length**beam_hyp.length_penalty))
+        self.parent.assertAlmostEqual(
+            beam_hyp.beams[0].score, -9.0 / (self.sequence_length**beam_hyp.length_penalty)
+        )
 
         # -5.0 is better than worst score => should not be finished
         self.parent.assertFalse(beam_hyp.is_done(-5.0, self.sequence_length))
@@ -331,12 +333,14 @@ class ConstrainedBeamSearchTester:
         constrained_beam_scorer = self.prepare_constrained_beam_scorer(do_early_stopping=False)
         beam_hyp = constrained_beam_scorer._beam_hyps[0]
 
-        # add `num_beams + 1` beams to change worst_score
+        # add `num_beams + 1` beams to change the worst score
         for beam_idx in range(self.num_beams + 1):
             beam_hyp.add(input_ids[beam_idx], -10.0 + float(beam_idx))
 
         # -10.0 is removed => -9.0 is worst score
-        self.parent.assertAlmostEqual(beam_hyp.beams[0].score, -9.0 / (self.sequence_length**beam_hyp.length_penalty))
+        self.parent.assertAlmostEqual(
+            beam_hyp.beams[0].score, -9.0 / (self.sequence_length**beam_hyp.length_penalty)
+        )
 
         # -5.0 is better than worst score => should not be finished
         self.parent.assertFalse(beam_hyp.is_done(-5.0, self.sequence_length))
