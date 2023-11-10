@@ -445,17 +445,6 @@ class VitsModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             outputs = model(inputs)
 
-        # len -> 4
-        # len[0] -> 6
-        # shape[0][0] -> torch.Size([1, 125])
-        # len(outputs_disc[-1][0])
-        # 7
-        # len(outputs_disc[-1][0][0])
-        # 1
-        # outputs_disc[-1][0][0].shape
-        # torch.Size([1, 16, 32000])
-        # outputs_hf_disc[-1][0][0][0, 4, 250:275]
-
         self.assertEqual((len(outputs), len(outputs[0])), (2, 6))
         self.assertEqual(len(outputs[-1][0]), 7)
         self.assertEqual(outputs[0][0].shape, (1, 125))
