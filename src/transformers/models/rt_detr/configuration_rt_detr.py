@@ -56,7 +56,7 @@ class RTDetrConfig(PretrainedConfig):
             Dimension for feedforward network layer in transformer encoder and decoder.
         dropout (`float`, *optional*, defaults to 0.0):
             The ratio for all dropout layers.
-        enc_act (`str`, *optional*, defaults to `"gelu"`):
+        hidden_act_encoder (`str`, *optional*, defaults to `"gelu"`):
             Activation function of the encoder used in the `TransformerEncoderLayer`.
         use_encoder_idx (`List[int]`, *optional*, defaults to `[2]`):
             Indexes of the projected layers to be used in the encoder.
