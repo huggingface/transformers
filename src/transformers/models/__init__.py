@@ -46,6 +46,7 @@ from . import (
     clap,
     clip,
     clipseg,
+    clvp,
     code_llama,
     codegen,
     conditional_detr,
