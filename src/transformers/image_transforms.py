@@ -274,7 +274,7 @@ def get_resize_output_image_size(
 
 
 def resize(
-    image,
+    image: np.ndarray,
     size: Tuple[int, int],
     resample: "PILImageResampling" = None,
     reducing_gap: Optional[int] = None,
@@ -286,7 +286,7 @@ def resize(
     Resizes `image` to `(height, width)` specified by `size` using the PIL library.
 
     Args:
-        image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
+        image (`np.ndarray`):
             The image to resize.
         size (`Tuple[int, int]`):
             The size to use for resizing the image.

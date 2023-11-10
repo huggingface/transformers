@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.35.0.dev0"
+__version__ = "4.36.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -108,6 +108,7 @@ _import_structure = {
     "integrations": [
         "is_clearml_available",
         "is_comet_available",
+        "is_dvclive_available",
         "is_neptune_available",
         "is_optuna_available",
         "is_ray_available",
@@ -146,6 +147,7 @@ _import_structure = {
     "models.audio_spectrogram_transformer": [
         "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ASTConfig",
+        "ASTFeatureExtractor",
     ],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -254,6 +256,15 @@ _import_structure = {
         "CLIPSegTextConfig",
         "CLIPSegVisionConfig",
     ],
+    "models.clvp": [
+        "CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ClvpConfig",
+        "ClvpDecoderConfig",
+        "ClvpEncoderConfig",
+        "ClvpFeatureExtractor",
+        "ClvpProcessor",
+        "ClvpTokenizer",
+    ],
     "models.code_llama": [],
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
     "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
@@ -343,7 +354,7 @@ _import_structure = {
     "models.focalnet": ["FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FocalNetConfig"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
-    "models.fuyu": ["FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP", "FuyuConfig", "FuyuProcessor"],
+    "models.fuyu": ["FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP", "FuyuConfig"],
     "models.git": ["GIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "GitConfig", "GitProcessor", "GitVisionConfig"],
     "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
@@ -387,6 +398,11 @@ _import_structure = {
         "JukeboxPriorConfig",
         "JukeboxTokenizer",
         "JukeboxVQVAEConfig",
+    ],
+    "models.kosmos2": [
+        "KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Kosmos2Config",
+        "Kosmos2Processor",
     ],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.layoutlmv2": [
@@ -530,6 +546,7 @@ _import_structure = {
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
+        "Speech2TextFeatureExtractor",
         "Speech2TextProcessor",
     ],
     "models.speech_to_text_2": [
@@ -672,6 +689,7 @@ _import_structure = {
         "ImageToImagePipeline",
         "ImageToTextPipeline",
         "JsonPipelineDataFormat",
+        "MaskGenerationPipeline",
         "NerPipeline",
         "ObjectDetectionPipeline",
         "PipedPipelineDataFormat",
@@ -772,7 +790,7 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
-    "utils.quantization_config": ["BitsAndBytesConfig", "GPTQConfig"],
+    "utils.quantization_config": ["AwqConfig", "BitsAndBytesConfig", "GPTQConfig"],
 }
 
 # sentencepiece-backed objects
@@ -907,20 +925,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
 
-# Speech-specific objects
-try:
-    if not is_speech_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_speech_objects
-
-    _import_structure["utils.dummy_speech_objects"] = [
-        name for name in dir(dummy_speech_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
-    _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
-
 # Tensorflow-text-specific objects
 try:
     if not is_tensorflow_text_available():
@@ -981,7 +985,7 @@ else:
     _import_structure["models.efficientformer"].append("EfficientFormerImageProcessor")
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
-    _import_structure["models.fuyu"].append("FuyuImageProcessor")
+    _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
@@ -1461,6 +1465,17 @@ else:
             "CLIPSegPreTrainedModel",
             "CLIPSegTextModel",
             "CLIPSegVisionModel",
+        ]
+    )
+    _import_structure["models.clvp"].extend(
+        [
+            "CLVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ClvpDecoder",
+            "ClvpEncoder",
+            "ClvpForCausalLM",
+            "ClvpModel",
+            "ClvpModelForConditionalGeneration",
+            "ClvpPreTrainedModel",
         ]
     )
     _import_structure["models.codegen"].extend(
@@ -2048,6 +2063,14 @@ else:
             "JukeboxPreTrainedModel",
             "JukeboxPrior",
             "JukeboxVQVAE",
+        ]
+    )
+    _import_structure["models.kosmos2"].extend(
+        [
+            "KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Kosmos2ForConditionalGeneration",
+            "Kosmos2Model",
+            "Kosmos2PreTrainedModel",
         ]
     )
     _import_structure["models.layoutlm"].extend(
@@ -3076,6 +3099,7 @@ else:
         [
             "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "WhisperForAudioClassification",
+            "WhisperForCausalLM",
             "WhisperForConditionalGeneration",
             "WhisperModel",
             "WhisperPreTrainedModel",
@@ -3398,6 +3422,13 @@ else:
             "TFConvNextForImageClassification",
             "TFConvNextModel",
             "TFConvNextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.convnextv2"].extend(
+        [
+            "TFConvNextV2ForImageClassification",
+            "TFConvNextV2Model",
+            "TFConvNextV2PreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -4290,6 +4321,7 @@ if TYPE_CHECKING:
     from .integrations import (
         is_clearml_available,
         is_comet_available,
+        is_dvclive_available,
         is_neptune_available,
         is_optuna_available,
         is_ray_available,
@@ -4330,6 +4362,7 @@ if TYPE_CHECKING:
     from .models.audio_spectrogram_transformer import (
         AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ASTConfig,
+        ASTFeatureExtractor,
     )
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4433,6 +4466,15 @@ if TYPE_CHECKING:
         CLIPSegTextConfig,
         CLIPSegVisionConfig,
     )
+    from .models.clvp import (
+        CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ClvpConfig,
+        ClvpDecoderConfig,
+        ClvpEncoderConfig,
+        ClvpFeatureExtractor,
+        ClvpProcessor,
+        ClvpTokenizer,
+    )
     from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
     from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
@@ -4516,7 +4558,7 @@ if TYPE_CHECKING:
     from .models.focalnet import FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FocalNetConfig
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
-    from .models.fuyu import FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP, FuyuConfig, FuyuProcessor
+    from .models.fuyu import FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP, FuyuConfig
     from .models.git import GIT_PRETRAINED_CONFIG_ARCHIVE_MAP, GitConfig, GitProcessor, GitVisionConfig
     from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
@@ -4559,6 +4601,11 @@ if TYPE_CHECKING:
         JukeboxPriorConfig,
         JukeboxTokenizer,
         JukeboxVQVAEConfig,
+    )
+    from .models.kosmos2 import (
+        KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Kosmos2Config,
+        Kosmos2Processor,
     )
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.layoutlmv2 import (
@@ -4695,6 +4742,7 @@ if TYPE_CHECKING:
     from .models.speech_to_text import (
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Speech2TextConfig,
+        Speech2TextFeatureExtractor,
         Speech2TextProcessor,
     )
     from .models.speech_to_text_2 import (
@@ -4814,6 +4862,7 @@ if TYPE_CHECKING:
         ImageToImagePipeline,
         ImageToTextPipeline,
         JsonPipelineDataFormat,
+        MaskGenerationPipeline,
         NerPipeline,
         ObjectDetectionPipeline,
         PipedPipelineDataFormat,
@@ -4923,7 +4972,7 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import BitsAndBytesConfig, GPTQConfig
+    from .utils.quantization_config import AwqConfig, BitsAndBytesConfig, GPTQConfig
 
     try:
         if not is_sentencepiece_available():
@@ -5040,15 +5089,6 @@ if TYPE_CHECKING:
         from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
 
     try:
-        if not is_speech_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        from .utils.dummy_speech_objects import *
-    else:
-        from .models.audio_spectrogram_transformer import ASTFeatureExtractor
-        from .models.speech_to_text import Speech2TextFeatureExtractor
-
-    try:
         if not is_tensorflow_text_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
@@ -5089,7 +5129,7 @@ if TYPE_CHECKING:
         from .models.efficientformer import EfficientFormerImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
-        from .models.fuyu import FuyuImageProcessor
+        from .models.fuyu import FuyuImageProcessor, FuyuProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.idefics import IdeficsImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
@@ -5504,6 +5544,15 @@ if TYPE_CHECKING:
             CLIPSegPreTrainedModel,
             CLIPSegTextModel,
             CLIPSegVisionModel,
+        )
+        from .models.clvp import (
+            CLVP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ClvpDecoder,
+            ClvpEncoder,
+            ClvpForCausalLM,
+            ClvpModel,
+            ClvpModelForConditionalGeneration,
+            ClvpPreTrainedModel,
         )
         from .models.codegen import (
             CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5983,6 +6032,12 @@ if TYPE_CHECKING:
             JukeboxPreTrainedModel,
             JukeboxPrior,
             JukeboxVQVAE,
+        )
+        from .models.kosmos2 import (
+            KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Kosmos2ForConditionalGeneration,
+            Kosmos2Model,
+            Kosmos2PreTrainedModel,
         )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6819,6 +6874,7 @@ if TYPE_CHECKING:
         from .models.whisper import (
             WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
             WhisperForAudioClassification,
+            WhisperForCausalLM,
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,
@@ -7099,6 +7155,11 @@ if TYPE_CHECKING:
             TFConvBertPreTrainedModel,
         )
         from .models.convnext import TFConvNextForImageClassification, TFConvNextModel, TFConvNextPreTrainedModel
+        from .models.convnextv2 import (
+            TFConvNextV2ForImageClassification,
+            TFConvNextV2Model,
+            TFConvNextV2PreTrainedModel,
+        )
         from .models.ctrl import (
             TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFCTRLForSequenceClassification,

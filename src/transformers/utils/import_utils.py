@@ -73,7 +73,7 @@ _apex_available = _is_package_available("apex")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _flash_attn_2_available = _is_package_available("flash_attn") and version.parse(
     importlib.metadata.version("flash_attn")
-) >= version.parse("2.0.0")
+) >= version.parse("2.1.0")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -107,6 +107,8 @@ _onnx_available = _is_package_available("onnx")
 _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
 _auto_gptq_available = _is_package_available("auto_gptq")
+# `importlib.metadata.version` doesn't work with `awq`
+_auto_awq_available = importlib.util.find_spec("awq") is not None
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
@@ -303,26 +305,7 @@ def is_torch_bf16_gpu_available():
 
     import torch
 
-    # since currently no utility function is available we build our own.
-    # some bits come from https://github.com/pytorch/pytorch/blob/2289a12f21c54da93bf5d696e3f9aea83dd9c10d/torch/testing/_internal/common_cuda.py#L51
-    # with additional check for torch version
-    # to succeed: (torch is required to be >= 1.10 anyway)
-    # 1. the hardware needs to support bf16 (GPU arch >= Ampere, or CPU)
-    # 2. if using gpu, CUDA >= 11
-    # 3. torch.autocast exists
-    # XXX: one problem here is that it may give invalid results on mixed gpus setup, so it's
-    # really only correct for the 0th gpu (or currently set default device if different from 0)
-    if torch.cuda.is_available() and torch.version.cuda is not None:
-        if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
-            return False
-        if int(torch.version.cuda.split(".")[0]) < 11:
-            return False
-        if not hasattr(torch.cuda.amp, "autocast"):
-            return False
-    else:
-        return False
-
-    return True
+    return torch.cuda.is_available() and torch.cuda.is_bf16_supported()
 
 
 def is_torch_bf16_cpu_available():
@@ -673,6 +656,10 @@ def is_fsdp_available(min_version: str = "1.12.0"):
 
 def is_optimum_available():
     return _optimum_available
+
+
+def is_auto_awq_available():
+    return _auto_awq_available
 
 
 def is_auto_gptq_available():

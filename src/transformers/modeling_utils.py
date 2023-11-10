@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import collections
+import functools
 import gc
 import importlib.metadata
 import inspect
@@ -32,6 +33,7 @@ import torch
 from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, Identity
+from torch.utils.checkpoint import checkpoint
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -68,6 +70,7 @@ from .utils import (
     extract_commit_hash,
     has_file,
     is_accelerate_available,
+    is_auto_awq_available,
     is_auto_gptq_available,
     is_bitsandbytes_available,
     is_flash_attn_2_available,
@@ -88,7 +91,7 @@ from .utils.import_utils import (
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
 )
-from .utils.quantization_config import BitsAndBytesConfig, GPTQConfig, QuantizationMethod
+from .utils.quantization_config import AwqConfig, BitsAndBytesConfig, GPTQConfig, QuantizationMethod
 from .utils.versions import require_version_core
 
 
@@ -467,10 +470,6 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             raise OSError(
                 f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
                 "you save your model with the `save_pretrained` method."
-            )
-        elif metadata["format"] != "pt":
-            raise NotImplementedError(
-                f"Conversion from a {metadata['format']} safetensors archive to PyTorch is not implemented yet."
             )
         return safe_load_file(checkpoint_file)
     try:
@@ -1272,15 +1271,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if not is_flash_attn_2_available():
             raise ImportError(
-                "Flash Attention 2.0 is not available. Please refer to the documentation of https://github.com/Dao-AILab/flash-attention for"
-                " installing it."
+                "Flash Attention 2 is not available. Please refer to the documentation of https://github.com/Dao-AILab/flash-attention for"
+                " installing it. Make sure to have at least the version 2.1.0"
             )
         else:
             flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
-            is_flash_greater_than_2 = flash_attention_version > version.parse("2.0.0")
+            is_flash_greater_than_2 = flash_attention_version >= version.parse("2.1.0")
             if not is_flash_greater_than_2:
                 raise ValueError(
-                    f"You need flash_attn package version to be greater than 2.0. Make sure to have that version installed - detected version {flash_attention_version}"
+                    f"You need flash_attn package version to be greater or equal than 2.1. Make sure to have that version installed - detected version {flash_attention_version}"
                 )
 
         _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
@@ -1519,21 +1518,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Returns:
             `List[str]`: List of modules that should not be split
         """
-        if self._no_split_modules is None:
-            raise ValueError(
-                f"{self.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
-                "class needs to implement the `_no_split_modules` attribute."
-            )
-        _no_split_modules = set(self._no_split_modules)
-        for module in self.modules():
-            if isinstance(module, PreTrainedModel):
-                if module._no_split_modules is None:
-                    raise ValueError(
-                        f"{module.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
-                        "class needs to implement the `_no_split_modules` attribute."
-                    )
-                else:
-                    _no_split_modules = _no_split_modules | set(module._no_split_modules)
+        _no_split_modules = set()
+        modules_to_check = [self]
+        while len(modules_to_check) > 0:
+            module = modules_to_check.pop(-1)
+            # if the module does not appear in _no_split_modules, we also check the children
+            if module.__class__.__name__ not in _no_split_modules:
+                if isinstance(module, PreTrainedModel):
+                    if module._no_split_modules is None:
+                        raise ValueError(
+                            f"{module.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
+                            "class needs to implement the `_no_split_modules` attribute."
+                        )
+                    else:
+                        _no_split_modules = _no_split_modules | set(module._no_split_modules)
+                modules_to_check += list(module.children())
         return list(_no_split_modules)
 
     def resize_token_embeddings(
@@ -1848,16 +1847,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         self.base_model._prune_heads(heads_to_prune)
 
-    def gradient_checkpointing_enable(self):
+    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
         """
         Activates gradient checkpointing for the current model.
 
         Note that in other frameworks this feature can be referred to as "activation checkpointing" or "checkpoint
         activations".
+
+        We pass the `__call__` method of the modules instead of `forward` because `__call__` attaches all the hooks of
+        the module. https://discuss.pytorch.org/t/any-different-between-model-input-and-model-forward-input/3690/2
+
+        Args:
+            gradient_checkpointing_kwargs (dict, *optional*):
+                Additional keyword arguments passed along to the `torch.utils.checkpoint.checkpoint` function.
         """
         if not self.supports_gradient_checkpointing:
             raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
-        self.apply(partial(self._set_gradient_checkpointing, value=True))
+
+        if gradient_checkpointing_kwargs is None:
+            gradient_checkpointing_kwargs = {}
+
+        gradient_checkpointing_func = functools.partial(checkpoint, **gradient_checkpointing_kwargs)
+
+        self._set_gradient_checkpointing(enable=True, gradient_checkpointing_func=gradient_checkpointing_func)
 
         if getattr(self, "_hf_peft_config_loaded", False):
             # When using PEFT + gradient checkpointing + Trainer we need to make sure the input has requires_grad=True
@@ -1865,6 +1877,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # When training with PEFT, only LoRA layers will have requires grad set to True, but the output of frozen layers need to propagate
             # the gradients to make sure the gradient flows.
             self.enable_input_require_grads()
+
+    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
+        is_gradient_checkpointing_set = False
+
+        # Apply it on the top-level module in case the top-level modules supports it
+        # for example, LongT5Stack inherits from `PreTrainedModel`.
+        if hasattr(self, "gradient_checkpointing"):
+            self._gradient_checkpointing_func = gradient_checkpointing_func
+            self.gradient_checkpointing = enable
+            is_gradient_checkpointing_set = True
+
+        for module in self.modules():
+            if hasattr(module, "gradient_checkpointing"):
+                module._gradient_checkpointing_func = gradient_checkpointing_func
+                module.gradient_checkpointing = enable
+                is_gradient_checkpointing_set = True
+
+        if not is_gradient_checkpointing_set:
+            raise ValueError(
+                f"{self.__class__.__name__} is not compatible with gradient checkpointing. Make sure all the architecture support it by setting a boolean attribute"
+                " `gradient_checkpointing` to modules of the model that uses checkpointing."
+            )
 
     def gradient_checkpointing_disable(self):
         """
@@ -1874,7 +1908,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         activations".
         """
         if self.supports_gradient_checkpointing:
-            self.apply(partial(self._set_gradient_checkpointing, value=False))
+            self._set_gradient_checkpointing(enable=False)
 
         if getattr(self, "_hf_peft_config_loaded", False):
             self.disable_input_require_grads()
@@ -1897,7 +1931,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         save_function: Callable = torch.save,
         push_to_hub: bool = False,
         max_shard_size: Union[int, str] = "5GB",
-        safe_serialization: bool = False,
+        safe_serialization: bool = True,
         variant: Optional[str] = None,
         token: Optional[Union[str, bool]] = None,
         save_peft_format: bool = True,
@@ -1938,7 +1972,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 </Tip>
 
-            safe_serialization (`bool`, *optional*, defaults to `False`):
+            safe_serialization (`bool`, *optional*, defaults to `True`):
                 Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
             variant (`str`, *optional*):
                 If specified, weights are saved in the format pytorch_model.<variant>.bin.
@@ -1956,7 +1990,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(
@@ -2075,7 +2110,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
             for name, tensor in state_dict.items():
-                ptrs[id_tensor_storage(tensor)].append(name)
+                # Sometimes in the state_dict we have non-tensor objects.
+                # e.g. in bitsandbytes we have some `str` objects in the state_dict
+                if isinstance(tensor, torch.Tensor):
+                    ptrs[id_tensor_storage(tensor)].append(name)
+                else:
+                    # In the non-tensor case, fall back to the pointer of the object itself
+                    ptrs[id(tensor)].append(name)
 
             # These are all the pointers of shared tensors.
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
@@ -2527,7 +2568,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(
@@ -2639,6 +2681,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 quantization_config, "quant_method", QuantizationMethod.BITS_AND_BYTES
             )
 
+            if quantization_method_from_args == QuantizationMethod.AWQ:
+                raise ValueError(
+                    "You cannot pass an `AwqConfig` when loading a model as you can only use AWQ models"
+                    " for inference. To quantize transformers models with AWQ algorithm, please refer to our"
+                    " quantization docs: https://huggingface.co/docs/transformers/main_classes/quantization "
+                )
+
         if quantization_config is None and (load_in_8bit or load_in_4bit):
             quantization_method_from_args = QuantizationMethod.BITS_AND_BYTES
             quantization_config, kwargs = BitsAndBytesConfig.from_dict(
@@ -2697,8 +2746,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     " sure the weights are in PyTorch format."
                 )
 
-        from_pt = not (from_tf | from_flax)
-
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
@@ -2743,13 +2790,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.warning(
                 "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a "
                 "`quantization_config` attribute and has already quantized weights. However, loading attributes"
-                " (e.g. disable_exllama, use_cuda_fp16, max_input_length) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
+                " (e.g. use_exllama, exllama_config, use_cuda_fp16, max_input_length) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
             )
         if (
             quantization_method_from_args == QuantizationMethod.GPTQ
             or quantization_method_from_config == QuantizationMethod.GPTQ
         ):
-            if not torch.cuda.is_available():
+            gptq_supports_cpu = version.parse(importlib.metadata.version("auto-gptq")) > version.parse("0.4.2")
+            if not gptq_supports_cpu and not torch.cuda.is_available():
                 raise RuntimeError("GPU is required to quantize or run quantize model.")
             elif not (is_optimum_available() and is_auto_gptq_available()):
                 raise ImportError(
@@ -2769,8 +2817,37 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 torch_dtype = torch.float16
             else:
                 logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with GPTQ.")
+            quantizer = GPTQQuantizer.from_dict(quantization_config.to_dict_optimum())
+        elif quantization_method_from_config == QuantizationMethod.AWQ:
+            if not torch.cuda.is_available():
+                raise RuntimeError("GPU is required to run AWQ quantized model.")
 
-            quantizer = GPTQQuantizer.from_dict(quantization_config.to_dict())
+            if not is_auto_awq_available():
+                raise ImportError("Loading an AWQ quantized model requires auto-awq library (`pip install autoawq`)")
+
+            if not is_accelerate_available():
+                raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
+
+            if device_map is None:
+                logger.warning(
+                    "You have loaded an AWQ model on CPU and have a CUDA device available, make sure to set "
+                    "your model on a GPU device in order to run your model."
+                )
+            elif device_map is not None:
+                if isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
+                    raise ValueError(
+                        "You are attempting to load an AWQ model with a device_map that contains a CPU or disk device."
+                        " This is not supported. Please remove the CPU or disk device from the device_map."
+                    )
+
+            if torch_dtype is None:
+                torch_dtype = torch.float16
+            else:
+                logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with AWQ.")
+
+            # Force-set to `True` for more mem efficiency
+            if low_cpu_mem_usage is None:
+                low_cpu_mem_usage = True
 
         if (
             is_8bit_serializable
@@ -3063,6 +3140,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 _commit_hash=commit_hash,
             )
 
+        if (
+            is_safetensors_available()
+            and isinstance(resolved_archive_file, str)
+            and resolved_archive_file.endswith(".safetensors")
+        ):
+            with safe_open(resolved_archive_file, framework="pt") as f:
+                metadata = f.metadata()
+
+            if metadata.get("format") == "pt":
+                pass
+            elif metadata.get("format") == "tf":
+                from_tf = True
+                logger.info("A TensorFlow safetensors file is being loaded in a PyTorch model.")
+            elif metadata.get("format") == "flax":
+                from_flax = True
+                logger.info("A Flax safetensors file is being loaded in a PyTorch model.")
+            else:
+                raise ValueError(
+                    f"Incompatible safetensors file. File metadata is not ['pt', 'tf', 'flax'] but {metadata.get('format')}"
+                )
+
+        from_pt = not (from_tf | from_flax)
+
         # load pt weights early so that we know which dtype to init the model under
         if from_pt:
             if not is_sharded and state_dict is None:
@@ -3208,6 +3308,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if quantization_method_from_config == QuantizationMethod.GPTQ:
             model = quantizer.convert_model(model)
             model._is_quantized_training_enabled = True
+        elif quantization_method_from_config == QuantizationMethod.AWQ:
+            from .integrations import get_keys_to_not_convert, replace_with_awq_linear
+
+            modules_to_not_convert = get_keys_to_not_convert(model)
+
+            if quantization_config is None:
+                quantization_config = AwqConfig.from_dict(config.quantization_config)
+
+            model, has_been_replaced = replace_with_awq_linear(
+                model, quantization_config=quantization_config, modules_to_not_convert=modules_to_not_convert
+            )
+            model._is_quantized_training_enabled = False
+
+            if not has_been_replaced:
+                logger.warning(
+                    "You are loading an AWQ model but no linear modules were found in your model."
+                    " Please double check your model architecture, or submit an issue on github if you think this is"
+                    " a bug."
+                )
 
         if quantization_method_from_config is not None:
             model.quantization_method = quantization_method_from_config
@@ -3351,7 +3470,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # restore default dtype
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
-
             (
                 model,
                 missing_keys,
@@ -3426,7 +3544,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if cls.main_input_name != "input_ids":
                 raise RuntimeError("We can only quantize pure text model.")
             quantizer.quantize_model(model, quantization_config.tokenizer)
-            config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
+            config.quantization_config = GPTQConfig.from_dict_optimum(quantizer.to_dict())
             model._is_quantized_training_enabled = True
         if quantization_method_from_config == QuantizationMethod.GPTQ:
             model = quantizer.post_init_model(model)
@@ -4464,7 +4582,9 @@ def expand_device_map(device_map, param_names):
     """
     new_device_map = {}
     for module, device in device_map.items():
-        new_device_map.update({p: device for p in param_names if p == module or p.startswith(f"{module}.")})
+        new_device_map.update(
+            {p: device for p in param_names if p == module or p.startswith(f"{module}.") or module == ""}
+        )
     return new_device_map
 
 

@@ -384,15 +384,8 @@ class UniSpeechFeatureEncoder(nn.Module):
 
         for conv_layer in self.conv_layers:
             if self._requires_grad and self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(conv_layer),
+                hidden_states = self._gradient_checkpointing_func(
+                    conv_layer.__call__,
                     hidden_states,
                 )
             else:
@@ -439,12 +432,15 @@ class UniSpeechAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
+        is_causal: bool = False,
+        config: Optional[UniSpeechConfig] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.config = config
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -453,6 +449,7 @@ class UniSpeechAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
+        self.is_causal = is_causal
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -767,17 +764,11 @@ class UniSpeechEncoder(nn.Module):
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
+                    layer_outputs = self._gradient_checkpointing_func(
+                        layer.__call__,
                         hidden_states,
                         attention_mask,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = layer(
@@ -857,17 +848,11 @@ class UniSpeechEncoderStableLayerNorm(nn.Module):
                 # under deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
                 if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
+                    layer_outputs = self._gradient_checkpointing_func(
+                        layer.__call__,
                         hidden_states,
                         attention_mask,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = layer(
@@ -1038,10 +1023,6 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
         attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (UniSpeechEncoder, UniSpeechEncoderStableLayerNorm, UniSpeechFeatureEncoder)):
-            module.gradient_checkpointing = value
 
 
 UNISPEECH_START_DOCSTRING = r"""

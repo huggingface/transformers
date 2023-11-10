@@ -599,6 +599,10 @@ def launch_gradio_demo(tool_class: Tool):
 
 # TODO: Migrate to Accelerate for this once `PartialState.default_device` makes its way into a release.
 def get_default_device():
+    logger.warning(
+        "`get_default_device` is deprecated and will be replaced with `accelerate`'s `PartialState().default_device` "
+        "in version 4.36 of 🤗 Transformers. "
+    )
     if not is_torch_available():
         raise ImportError("Please install torch in order to use this tool.")
 
