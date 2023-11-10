@@ -1055,7 +1055,7 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
         return input_tensor.mean(dim=dim)
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeries->PatchTST
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeriesTransformer->PatchTST,TimeSeries->PatchTST
 class PatchTSTStdScaler(nn.Module):
     """
     Standardize features by calculating the mean and scaling along the first dimension, and then normalizes it by
@@ -1091,7 +1091,7 @@ class PatchTSTStdScaler(nn.Module):
         return (data - loc) / scale, loc, scale
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeries->PatchTST
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeriesTransformer->PatchTST,TimeSeries->PatchTST
 class PatchTSTMeanScaler(nn.Module):
     """
     Computes a scaling factor as the weighted average absolute value along the first dimension, and scales the data
@@ -1146,7 +1146,7 @@ class PatchTSTMeanScaler(nn.Module):
         return scaled_data, torch.zeros_like(scale), scale
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeries->PatchTST
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeriesTransformer->PatchTST,TimeSeries->PatchTST
 class PatchTSTNOPScaler(nn.Module):
     """
     Assigns a scaling factor equal to 1 along the first dimension, and therefore applies no scaling to the input data.
