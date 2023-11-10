@@ -116,6 +116,7 @@ In Multimodal tasks:
 - [Document Question Answering with LayoutLM](https://huggingface.co/impira/layoutlm-document-qa)
 - [Zero-shot Video Classification with X-CLIP](https://huggingface.co/docs/transformers/model_doc/xclip)
 
+
 ## 100 projects using Transformers
 
 Transformers is more than a toolkit to use pretrained models: it's a community of projects built around it and the
