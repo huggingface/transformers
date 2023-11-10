@@ -223,23 +223,23 @@ class PatchTSTBatchNorm(nn.Module):
         return output.transpose(1, 2)
 
 
-def positional_encoding(position_embedding_type, learned, q_len, d_model):
+def positional_encoding(positional_encoding_type, learned, q_len, d_model):
     # Positional encoding
-    if position_embedding_type is None:
-        # position_embedding_type = None and learned = False can be used to measure impact of positional encoding
+    if positional_encoding_type is None:
+        # positional_encoding_type = None and learned = False can be used to measure impact of positional encoding
         position_enc = torch.empty((q_len, d_model))
         nn.init.uniform_(position_enc, -0.02, 0.02)
         learned = False
-    elif position_embedding_type == "zeros":
+    elif positional_encoding_type == "zeros":
         position_enc = torch.empty((q_len, d_model))
         nn.init.uniform_(position_enc, -0.02, 0.02)
-    elif position_embedding_type == "normal":
+    elif positional_encoding_type == "normal":
         position_enc = torch.zeros((q_len, 1))
         nn.init.normal_(position_enc, mean=0.0, std=0.1)
-    elif position_embedding_type == "uniform":
+    elif positional_encoding_type == "uniform":
         position_enc = torch.zeros((q_len, 1))
         nn.init.uniform_(position_enc, a=0.0, b=0.1)
-    elif position_embedding_type == "sincos":
+    elif positional_encoding_type == "sincos":
         position_enc = torch.zeros(q_len, d_model)
         position = torch.arange(0, q_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model))
@@ -249,7 +249,7 @@ def positional_encoding(position_embedding_type, learned, q_len, d_model):
         position_enc = position_enc / (position_enc.std() * 10)
     else:
         raise ValueError(
-            f"{position_embedding_type} is not a valid positional encoder. Available types are 'normal', 'zeros', 'zero', uniform', 'sincos', None."
+            f"{positional_encoding_type} is not a valid positional encoder. Available types are 'normal', 'zeros', 'zero', uniform', 'sincos', None."
         )
     return nn.Parameter(position_enc, requires_grad=learned)
 
@@ -691,6 +691,41 @@ class PatchTSTEmbedding(nn.Module):
         return embeddings
 
 
+class PatchTSTPositionalEncoding(nn.Module):
+    """
+    Class for positional encoding
+    """
+    def __init__(self, config: PatchTSTConfig):
+        super().__init__()
+        self.use_cls_token = config.use_cls_token
+        if config.use_cls_token:
+            self.cls_token = nn.Parameter(torch.zeros(1, 1, 1, config.d_model))
+            num_patches = config.num_patches + 1
+        else:
+            num_patches = config.num_patches
+        # postional encoding
+        self.position_enc = positional_encoding(
+            config.positional_encoding_type, config.learn_pe, num_patches, config.d_model)
+        # Positional dropout
+        self.positional_dropout = (
+            nn.Dropout(config.positional_dropout) if config.positional_dropout > 0 else nn.Identity())
+
+    def forward(self, patch_input: torch.Tensor):
+        if self.use_cls_token:
+            # patch_input: [bs x num_channels x num_patches x d_model]
+            patch_input = self.positional_dropout(patch_input + self.position_enc[1:, :])
+            # append cls token where cls_token: [1 x 1 x 1 x d_model]
+            cls_token = self.cls_token + self.position_enc[:1, :]
+            # get the same copy of cls_token for all the samples in batch
+            cls_tokens = cls_token.expand(patch_input.shape[0], -1, -1)
+            # hidden_state: [bs x num_channels x (num_patches+1) x d_model]
+            hidden_state = torch.cat((cls_tokens, patch_input), dim=1)
+        else:
+            # hidden_state: [bs x num_channels x num_patches x d_model]
+            hidden_state = self.positional_dropout(patch_input + self.position_enc)
+        return hidden_state
+
+
 class PatchTSTEncoder(PatchTSTPreTrainedModel):
     """
     PatchTST Encoder
@@ -707,21 +742,8 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
 
         # Input embedding: projection of feature vectors onto a d-dim vector space
         self.embedder = PatchTSTEmbedding(config)
-
         # Positional encoding
-        if config.use_cls_token:
-            self.cls_token = nn.Parameter(torch.zeros(1, 1, 1, config.d_model))
-            self.position_enc = positional_encoding(
-                config.positional_encoding, config.learn_pe, config.num_patches + 1, config.d_model
-            )
-        else:
-            self.position_enc = positional_encoding(
-                config.positional_encoding, config.learn_pe, config.num_patches, config.d_model)
-
-        # Positional dropout
-        self.positional_dropout = (
-            nn.Dropout(config.positional_dropout) if config.positional_dropout > 0 else nn.Identity())
-
+        self.positional_encoder = PatchTSTPositionalEncoding(config)
         # Encoder
         self.layers = nn.ModuleList([PatchTSTEncoderLayer(config) for i in range(config.encoder_layers)])
 
@@ -749,35 +771,22 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
 
         # Input embedding
         patch_input = self.embedder(patch_input)
-
-        if self.use_cls_token:
-            # x: [bs x num_channels x num_patches x d_model]
-            patch_input = self.positional_dropout(patch_input + self.position_enc[1:, :])
-            # append cls token
-            cls_token = self.cls_token + self.position_enc[:1, :]  # cls_token: [1 x 1 x 1 x d_model]
-            cls_tokens = cls_token.expand(patch_input.shape[0], -1, -1)  # get the same copy for all the batch samples
-            # x: [bs x num_channels x (num_patches+1) x d_model]
-            hidden_state = torch.cat((cls_tokens, patch_input), dim=1)
-        else:
-            # x: [bs x num_channels x num_patches x d_model]
-            hidden_state = self.positional_dropout(patch_input + self.position_enc)
+        # Positional encoding
+        hidden_state = self.positional_encoder(patch_input)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_state,)
 
-            layer_outputs = encoder_layer(hidden_state=hidden_state,
-                output_attentions=output_attentions)
-            # get hidden state
-            hidden_state = layer_outputs[0]  # hidden_states: [bs x num_channels x num_patches x d_model]
+            layer_outputs = encoder_layer(hidden_state=hidden_state, output_attentions=output_attentions)
+            # get hidden state. hidden_state shape is [bs x num_channels x num_patches x d_model]
             # or [bs x num_channels x (num_patches+1) x d_model] if use cls_token
-            # append layer attention
+            hidden_state = layer_outputs[0]
+            # append attention matrix at each layer
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
-
         # return past_values, hidden_states
         return BaseModelOutput(last_hidden_state=hidden_state, hidden_states=encoder_states, attentions=all_attentions)
 
