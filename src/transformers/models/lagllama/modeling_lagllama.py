@@ -1121,6 +1121,13 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
             )
             position_ids = position_ids.unsqueeze(0)
 
+        if past_observed_values is None:
+            past_observed_values = torch.ones((batch_size, past_values_seq_length), dtype=torch.bool, device=device)
+
+        if inputs_embeds is None:
+            transformer_inputs, loc, scale = self.prepare_input(past_values, past_observed_values)
+            inputs_embeds = self.embed_inputs(transformer_inputs)
+
         if getattr(self.config, "_flash_attn_2_enabled", False):
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
@@ -1129,12 +1136,6 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
             attention_mask = _prepare_4d_causal_attention_mask(
                 attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
             )
-
-        if past_observed_values is None:
-            past_observed_values = torch.ones((batch_size, past_values_seq_length), dtype=torch.bool, device=device)
-        if inputs_embeds is None:
-            transformer_inputs, loc, scale = self.prepare_input(past_values, past_observed_values)
-            inputs_embeds = self.embed_inputs(transformer_inputs)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1401,13 +1402,14 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
     def generate(
         self,
         past_values: torch.Tensor,
+        prediction_length: int,
         **model_kwargs,
     ):
         repeated_past_values = past_values.repeat_interleave(self.config.num_parallel_samples, 0)
 
         # greedy decoding
         future_samples = []
-        for k in range(self.config.prediction_length):
+        for k in range(prediction_length):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(repeated_past_values, **model_kwargs)
 
