@@ -455,21 +455,18 @@ class RTDetrTransformerEncoderLayer(nn.Module):
         return src
 
 
-class TransformerEncoder(nn.Module):
-    def __init__(self, encoder_layer, num_layers, norm=None):
+class RTDetrTransformerEncoder(nn.Module):
+    def __init__(self, config: RTDetrConfig):
         super().__init__()
-        self.layers = nn.ModuleList([copy.deepcopy(encoder_layer) for _ in range(num_layers)])
+        
+        num_layers = config.num_encoder_layers
+        self.layers = nn.ModuleList([RTDetrTransformerEncoderLayer(config) for _ in range(num_layers)])
         self.num_layers = num_layers
-        self.norm = norm
 
     def forward(self, src, src_mask=None, pos_embed=None) -> torch.Tensor:
         output = src
         for layer in self.layers:
             output = layer(output, src_mask=src_mask, pos_embed=pos_embed)
-
-        if self.norm is not None:
-            output = self.norm(output)
-
         return output
 
 
@@ -1384,7 +1381,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
 
 class RTDetrHybridEncoder(RTDetrPreTrainedModel):
     """
-    Decoder consists of a projection layer, a set of `TransformerEncoder`, a top-down Feature Pyramid Network (FPN) and
+    Decoder consists of a projection layer, a set of `RTDetrTransformerEncoder`, a top-down Feature Pyramid Network (FPN) and
     a bottom-up Path Aggregation Network (PAN). More details on the paper: https://arxiv.org/abs/2304.08069
 
     Args:
@@ -1415,11 +1412,9 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
             )
 
         # encoder transformer
-        encoder_layer = RTDetrTransformerEncoderLayer(config)
         self.encoder = nn.ModuleList(
-            [TransformerEncoder(config) for _ in range(len(self.use_encoder_idx))]
+            [RTDetrTransformerEncoder(config) for _ in range(len(self.use_encoder_idx))]
         )
-
         # top-down fpn
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
