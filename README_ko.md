@@ -132,7 +132,6 @@ limitations under the License.
 ```
 
 다음은 TensorFlow 버전입니다:
-
 ```python
 >>> from transformers import AutoTokenizer, TFAutoModel
 
@@ -472,7 +471,6 @@ Flax, PyTorch, TensorFlow 설치 페이지에서 이들을 conda로 설치하는
 ## 인용
 
 🤗 Transformers 라이브러리를 인용하고 싶다면, 이 [논문](https://www.aclweb.org/anthology/2020.emnlp-demos.6/)을 인용해 주세요:
-
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",

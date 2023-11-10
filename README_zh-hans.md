@@ -157,7 +157,6 @@ checkpoint: 检查点
 ```
 
 这里是等效的 TensorFlow 代码：
-
 ```python
 >>> from transformers import AutoTokenizer, TFAutoModel
 
@@ -496,7 +495,6 @@ conda install -c huggingface transformers
 ## 引用
 
 我们已将此库的[论文](https://www.aclweb.org/anthology/2020.emnlp-demos.6/)正式发表，如果你使用了 🤗 Transformers 库，请引用:
-
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",

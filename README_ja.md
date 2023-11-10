@@ -554,7 +554,6 @@ Flax、PyTorch、TensorFlowをcondaでインストールする方法は、それ
 ## 引用
 
 🤗 トランスフォーマーライブラリに引用できる[論文](https://www.aclweb.org/anthology/2020.emnlp-demos.6/)が出来ました:
-
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",

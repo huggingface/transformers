@@ -79,28 +79,28 @@ Puedes probar la mayoría de nuestros modelos directamente en sus páginas desde
 
 Aquí hay algunos ejemplos:
 
- En procesamiento del lenguaje natural:
-* [Terminación de palabras enmascaradas con BERT](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
-* [Reconocimiento del nombre de la entidad con Electra](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
-* [Generación de texto con GPT-2](https://huggingface.co/gpt2?text=A+long+time+ago%2C+)
-* [Inferencia del lenguaje natural con RoBERTa](https://huggingface.co/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
-* [Resumen con BART](https://huggingface.co/facebook/bart-large-cnn?text=The+tower+is+324+metres+%281%2C063+ft%29+tall%2C+about+the+same+height+as+an+81-storey+building%2C+and+the+tallest+structure+in+Paris.+Its+base+is+square%2C+measuring+125+metres+%28410+ft%29+on+each+side.+During+its+construction%2C+the+Eiffel+Tower+surpassed+the+Washington+Monument+to+become+the+tallest+man-made+structure+in+the+world%2C+a+title+it+held+for+41+years+until+the+Chrysler+Building+in+New+York+City+was+finished+in+1930.+It+was+the+first+structure+to+reach+a+height+of+300+metres.+Due+to+the+addition+of+a+broadcasting+aerial+at+the+top+of+the+tower+in+1957%2C+it+is+now+taller+than+the+Chrysler+Building+by+5.2+metres+%2817+ft%29.+Excluding+transmitters%2C+the+Eiffel+Tower+is+the+second+tallest+free-standing+structure+in+France+after+the+Millau+Viaduct)
-* [Responder a preguntas con DistilBERT](https://huggingface.co/distilbert-base-uncased-distilled-squad?text=Which+name+is+also+used+to+describe+the+Amazon+rainforest+in+English%3F&context=The+Amazon+rainforest+%28Portuguese%3A+Floresta+Amaz%C3%B4nica+or+Amaz%C3%B4nia%3B+Spanish%3A+Selva+Amaz%C3%B3nica%2C+Amazon%C3%ADa+or+usually+Amazonia%3B+French%3A+For%C3%AAt+amazonienne%3B+Dutch%3A+Amazoneregenwoud%29%2C+also+known+in+English+as+Amazonia+or+the+Amazon+Jungle%2C+is+a+moist+broadleaf+forest+that+covers+most+of+the+Amazon+basin+of+South+America.+This+basin+encompasses+7%2C000%2C000+square+kilometres+%282%2C700%2C000+sq+mi%29%2C+of+which+5%2C500%2C000+square+kilometres+%282%2C100%2C000+sq+mi%29+are+covered+by+the+rainforest.+This+region+includes+territory+belonging+to+nine+nations.+The+majority+of+the+forest+is+contained+within+Brazil%2C+with+60%25+of+the+rainforest%2C+followed+by+Peru+with+13%25%2C+Colombia+with+10%25%2C+and+with+minor+amounts+in+Venezuela%2C+Ecuador%2C+Bolivia%2C+Guyana%2C+Suriname+and+French+Guiana.+States+or+departments+in+four+nations+contain+%22Amazonas%22+in+their+names.+The+Amazon+represents+over+half+of+the+planet%27s+remaining+rainforests%2C+and+comprises+the+largest+and+most+biodiverse+tract+of+tropical+rainforest+in+the+world%2C+with+an+estimated+390+billion+individual+trees+divided+into+16%2C000+species)
-* [Traducción con T5](https://huggingface.co/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
+En procesamiento del lenguaje natural:
+- [Terminación de palabras enmascaradas con BERT](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
+- [Reconocimiento del nombre de la entidad con Electra](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
+- [Generación de texto con GPT-2](https://huggingface.co/gpt2?text=A+long+time+ago%2C+)
+- [Inferencia del lenguaje natural con RoBERTa](https://huggingface.co/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
+- [Resumen con BART](https://huggingface.co/facebook/bart-large-cnn?text=The+tower+is+324+metres+%281%2C063+ft%29+tall%2C+about+the+same+height+as+an+81-storey+building%2C+and+the+tallest+structure+in+Paris.+Its+base+is+square%2C+measuring+125+metres+%28410+ft%29+on+each+side.+During+its+construction%2C+the+Eiffel+Tower+surpassed+the+Washington+Monument+to+become+the+tallest+man-made+structure+in+the+world%2C+a+title+it+held+for+41+years+until+the+Chrysler+Building+in+New+York+City+was+finished+in+1930.+It+was+the+first+structure+to+reach+a+height+of+300+metres.+Due+to+the+addition+of+a+broadcasting+aerial+at+the+top+of+the+tower+in+1957%2C+it+is+now+taller+than+the+Chrysler+Building+by+5.2+metres+%2817+ft%29.+Excluding+transmitters%2C+the+Eiffel+Tower+is+the+second+tallest+free-standing+structure+in+France+after+the+Millau+Viaduct)
+- [Responder a preguntas con DistilBERT](https://huggingface.co/distilbert-base-uncased-distilled-squad?text=Which+name+is+also+used+to+describe+the+Amazon+rainforest+in+English%3F&context=The+Amazon+rainforest+%28Portuguese%3A+Floresta+Amaz%C3%B4nica+or+Amaz%C3%B4nia%3B+Spanish%3A+Selva+Amaz%C3%B3nica%2C+Amazon%C3%ADa+or+usually+Amazonia%3B+French%3A+For%C3%AAt+amazonienne%3B+Dutch%3A+Amazoneregenwoud%29%2C+also+known+in+English+as+Amazonia+or+the+Amazon+Jungle%2C+is+a+moist+broadleaf+forest+that+covers+most+of+the+Amazon+basin+of+South+America.+This+basin+encompasses+7%2C000%2C000+square+kilometres+%282%2C700%2C000+sq+mi%29%2C+of+which+5%2C500%2C000+square+kilometres+%282%2C100%2C000+sq+mi%29+are+covered+by+the+rainforest.+This+region+includes+territory+belonging+to+nine+nations.+The+majority+of+the+forest+is+contained+within+Brazil%2C+with+60%25+of+the+rainforest%2C+followed+by+Peru+with+13%25%2C+Colombia+with+10%25%2C+and+with+minor+amounts+in+Venezuela%2C+Ecuador%2C+Bolivia%2C+Guyana%2C+Suriname+and+French+Guiana.+States+or+departments+in+four+nations+contain+%22Amazonas%22+in+their+names.+The+Amazon+represents+over+half+of+the+planet%27s+remaining+rainforests%2C+and+comprises+the+largest+and+most+biodiverse+tract+of+tropical+rainforest+in+the+world%2C+with+an+estimated+390+billion+individual+trees+divided+into+16%2C000+species)
+- [Traducción con T5](https://huggingface.co/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
 
 En visión de ordenador:
-* [Clasificación de imágenes con ViT](https://huggingface.co/google/vit-base-patch16-224)
-* [Detección de objetos con DETR](https://huggingface.co/facebook/detr-resnet-50)
-* [Segmentación semántica con SegFormer](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
-* [Segmentación panóptica con DETR](https://huggingface.co/facebook/detr-resnet-50-panoptic)
-* [Segmentación Universal con OneFormer (Segmentación Semántica, de Instancia y Panóptica con un solo modelo)](https://huggingface.co/shi-labs/oneformer_ade20k_dinat_large)
+- [Clasificación de imágenes con ViT](https://huggingface.co/google/vit-base-patch16-224)
+- [Detección de objetos con DETR](https://huggingface.co/facebook/detr-resnet-50)
+- [Segmentación semántica con SegFormer](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
+- [Segmentación panóptica con DETR](https://huggingface.co/facebook/detr-resnet-50-panoptic)
+- [Segmentación Universal con OneFormer (Segmentación Semántica, de Instancia y Panóptica con un solo modelo)](https://huggingface.co/shi-labs/oneformer_ade20k_dinat_large)
 
 En Audio:
-* [Reconocimiento de voz automático con Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base-960h)
-* [Detección de palabras clave con Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks)
+- [Reconocimiento de voz automático con Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base-960h)
+- [Detección de palabras clave con Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks)
 
 En tareas multimodales:
-* [Respuesta visual a preguntas con ViLT](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
+- [Respuesta visual a preguntas con ViLT](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
 
 **[Escribe con Transformer](https://transformer.huggingface.co)**, construido por el equipo de Hugging Face, es la demostración oficial de las capacidades de generación de texto de este repositorio.
 
@@ -179,7 +179,6 @@ Además de `pipeline`, para descargar y usar cualquiera de los modelos previamen
 ```
 
 Y aquí está el código equivalente para TensorFlow:
-
 ```python
 >>> from transformers import AutoTokenizer, TFAutoModel
 
@@ -197,25 +196,25 @@ El modelo en si es un [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.h
 ## ¿Por qué debo usar transformers?
 
 1. Modelos de última generación fáciles de usar:
-    * Alto rendimiento en comprensión y generación de lenguaje natural, visión artificial y tareas de audio.
-    * Baja barrera de entrada para educadores y profesionales.
-    * Pocas abstracciones de cara al usuario con solo tres clases para aprender.
-    * Una API unificada para usar todos nuestros modelos preentrenados.
+    - Alto rendimiento en comprensión y generación de lenguaje natural, visión artificial y tareas de audio.
+    - Baja barrera de entrada para educadores y profesionales.
+    - Pocas abstracciones de cara al usuario con solo tres clases para aprender.
+    - Una API unificada para usar todos nuestros modelos preentrenados.
 
 1. Menores costes de cómputo, menor huella de carbono:
-    * Los investigadores pueden compartir modelos entrenados en lugar de siempre volver a entrenar.
-    * Los profesionales pueden reducir el tiempo de cómputo y los costos de producción.
-    * Docenas de arquitecturas con más de 60 000 modelos preentrenados en todas las modalidades.
+    - Los investigadores pueden compartir modelos entrenados en lugar de siempre volver a entrenar.
+    - Los profesionales pueden reducir el tiempo de cómputo y los costos de producción.
+    - Docenas de arquitecturas con más de 60 000 modelos preentrenados en todas las modalidades.
 
 1. Elija el marco adecuado para cada parte de la vida útil de un modelo:
-    * Entrene modelos de última generación en 3 líneas de código.
-    * Mueva un solo modelo entre los marcos TF2.0/PyTorch/JAX a voluntad.
-    * Elija sin problemas el marco adecuado para la formación, la evaluación y la producción.
+    - Entrene modelos de última generación en 3 líneas de código.
+    - Mueva un solo modelo entre los marcos TF2.0/PyTorch/JAX a voluntad.
+    - Elija sin problemas el marco adecuado para la formación, la evaluación y la producción.
 
 1. Personalice fácilmente un modelo o un ejemplo según sus necesidades:
-    * Proporcionamos ejemplos de cada arquitectura para reproducir los resultados publicados por sus autores originales..
-    * Los internos del modelo están expuestos lo más consistentemente posible..
-    * Los archivos modelo se pueden usar independientemente de la biblioteca para experimentos rápidos.
+    - Proporcionamos ejemplos de cada arquitectura para reproducir los resultados publicados por sus autores originales..
+    - Los internos del modelo están expuestos lo más consistentemente posible..
+    - Los archivos modelo se pueden usar independientemente de la biblioteca para experimentos rápidos.
 
 ## ¿Por qué no debería usar transformers?
 
@@ -506,6 +505,7 @@ Para comprobar si cada modelo tiene una implementación en Flax, PyTorch o Tenso
 
 Estas implementaciones se han probado en varios conjuntos de datos (consulte los scripts de ejemplo) y deberían coincidir con el rendimiento de las implementaciones originales. Puede encontrar más detalles sobre el rendimiento en la sección Examples de la [documentación](https://github.com/huggingface/transformers/tree/main/examples).
 
+
 ## Aprender más
 
 | Sección | Descripción |
@@ -520,9 +520,7 @@ Estas implementaciones se han probado en varios conjuntos de datos (consulte los
 
 ## Citación
 
-Ahora nosotros tenemos un [papel](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) que puedes citar para la librería de  🤗 Transformers:
-
-```bibtex
+Ahora nosotros tenemos un [papel](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) que puedes citar para la librería de  🤗 Transformers:```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
     author = "Thomas Wolf and Lysandre Debut and Victor Sanh and Julien Chaumond and Clement Delangue and Anthony Moi and Pierric Cistac and Tim Rault and Rémi Louf and Morgan Funtowicz and Joe Davison and Sam Shleifer and Patrick von Platen and Clara Ma and Yacine Jernite and Julien Plu and Canwen Xu and Teven Le Scao and Sylvain Gugger and Mariama Drame and Quentin Lhoest and Alexander M. Rush",

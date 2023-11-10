@@ -210,7 +210,6 @@ Além do `pipeline`, para baixar e usar qualquer um dos modelos pré-treinados e
 ```
 
 E aqui está o código equivalente para TensorFlow:
-
 ```python
 >>> from transformers import AutoTokenizer, TFAutoModel
 
@@ -549,8 +548,7 @@ Essas implementações foram testadas em vários conjuntos de dados (veja os scr
 
 ## Citação
 
-Agora temos um [artigo](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) que você pode citar para a biblioteca 🤗 Transformers:
-```bibtex
+Agora temos um [artigo](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) que você pode citar para a biblioteca 🤗 Transformers:```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
     author = "Thomas Wolf and Lysandre Debut and Victor Sanh and Julien Chaumond and Clement Delangue and Anthony Moi and Pierric Cistac and Tim Rault and Rémi Louf and Morgan Funtowicz and Joe Davison and Sam Shleifer and Patrick von Platen and Clara Ma and Yacine Jernite and Julien Plu and Canwen Xu and Teven Le Scao and Sylvain Gugger and Mariama Drame and Quentin Lhoest and Alexander M. Rush",
