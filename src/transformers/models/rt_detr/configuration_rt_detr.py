@@ -45,7 +45,7 @@ class RTDetrConfig(PretrainedConfig):
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone in a dictionary or the config object of the backbone.
         in_channels (`List[int]`, *optional*, defaults to `[512, 1024, 2048]`):
-            List of input channel sizes to be used in each block of the backbone's convolutional layers.
+            List of channel sizes output by the backbone and used by the encoder's convolutional layers.
         feat_strides (`List[int]`, *optional*, defaults to `[8, 16, 32]`):
             Strides used in each feature map.
         hidden_dim (`int`, *optional*, defaults to 256):
