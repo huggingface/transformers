@@ -37,7 +37,11 @@ which has the best average performance and obtains the best results for three ou
 extensive evaluation, including several standard baselines and recently proposed, multilingual Transformer-based
 models.*
 
-Examples of use:
+This model was contributed by [rmroczkowski](https://huggingface.co/rmroczkowski). The original code can be found
+[here](https://github.com/allegro/HerBERT).
+
+
+## Usage example
 
 ```python
 >>> from transformers import HerbertTokenizer, RobertaModel
@@ -56,9 +60,12 @@ Examples of use:
 >>> model = AutoModel.from_pretrained("allegro/herbert-klej-cased-v1")
 ```
 
-This model was contributed by [rmroczkowski](https://huggingface.co/rmroczkowski). The original code can be found
-[here](https://github.com/allegro/HerBERT).
+<Tip>
 
+Herbert implementation is the same as `BERT` except for the tokenization method. Refer to [BERT documentation](bert) 
+for API reference and examples.  
+
+</Tip>
 
 ## HerbertTokenizer
 

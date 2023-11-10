@@ -797,7 +797,7 @@ class PushToHubMixin:
         token: Optional[Union[bool, str]] = None,
         max_shard_size: Optional[Union[int, str]] = "5GB",
         create_pr: bool = False,
-        safe_serialization: bool = False,
+        safe_serialization: bool = True,
         revision: str = None,
         commit_description: str = None,
         **deprecated_kwargs,
@@ -827,7 +827,7 @@ class PushToHubMixin:
                 Google Colab instances without any CPU OOM issues.
             create_pr (`bool`, *optional*, defaults to `False`):
                 Whether or not to create a PR with the uploaded files or directly commit.
-            safe_serialization (`bool`, *optional*, defaults to `False`):
+            safe_serialization (`bool`, *optional*, defaults to `True`):
                 Whether or not to convert the model weights in safetensors format for safer serialization.
             revision (`str`, *optional*):
                 Branch to push the uploaded files to.

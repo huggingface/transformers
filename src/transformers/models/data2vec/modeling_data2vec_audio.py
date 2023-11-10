@@ -330,12 +330,15 @@ class Data2VecAudioAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
+        is_causal: bool = False,
+        config: Optional[Data2VecAudioConfig] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.config = config
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -344,6 +347,7 @@ class Data2VecAudioAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
+        self.is_causal = is_causal
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -786,12 +790,11 @@ DATA2VEC_AUDIO_INPUTS_DOCSTRING = r"""
 
             <Tip warning={true}>
 
-            `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-            True`. For all models whose processor has `config.return_attention_mask == False`, such as
-            [data2vec-audio-base](https://huggingface.co/facebook/data2vec-audio-base-960h), `attention_mask` should
-            **not** be passed to avoid degraded performance when doing batched inference. For such models
-            `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware that these
-            models also yield slightly different results depending on whether `input_values` is padded or not.
+            `attention_mask` should be passed if the corresponding processor has `config.return_attention_mask ==
+            True`, which is the case for all pre-trained Data2Vec Audio models. Be aware that that even with
+            `attention_mask`, zero-padded inputs will have slightly different outputs compared to non-padded inputs
+            because there are more than one convolutional layer in the positional encodings. For a more detailed
+            explanation, see [here](https://github.com/huggingface/transformers/issues/25621#issuecomment-1713759349).
 
             </Tip>
 

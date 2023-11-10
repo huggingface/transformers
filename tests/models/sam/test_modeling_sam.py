@@ -22,7 +22,7 @@ import unittest
 import requests
 
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig, pipeline
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -421,6 +421,18 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     @unittest.skip(reason="SamModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
@@ -466,7 +478,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_inference_mask_generation_no_point(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -760,9 +772,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_allclose(iou_scores, EXPECTED_IOU, atol=1e-4, rtol=1e-4)
 
     def test_dummy_pipeline_generation(self):
-        generator = pipeline(
-            "mask-generation", model="facebook/sam-vit-base", device=0 if torch.cuda.is_available() else -1
-        )
+        generator = pipeline("mask-generation", model="facebook/sam-vit-base", device=torch_device)
         raw_image = prepare_image()
 
         _ = generator(raw_image, points_per_batch=64)
