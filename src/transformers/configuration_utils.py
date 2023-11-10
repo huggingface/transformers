@@ -22,7 +22,7 @@ import os
 import re
 import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union
-
+from huggingface_hub.utils._validators import HFValidationError
 from packaging import version
 
 from . import __version__
@@ -693,6 +693,8 @@ class PretrainedConfig(PushToHubMixin):
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
                 raise
+            except HFValidationError:
+                raise HFValidationError(" Cannot be found")
             except Exception:
                 # For any other exception, we throw a generic error.
                 raise EnvironmentError(
