@@ -50,7 +50,7 @@ class RTDetrConfig(PretrainedConfig):
             Strides used in each feature map.
         hidden_dim (`int`, *optional*, defaults to 256):
             Dimension for hidden states in transformer encoder and decoder.
-        num_head (`int`, *optional*, defaults to 8):
+        num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the transformer encoder and decoder.
         dim_feedforward (`int`, *optional*, defaults to 1024):
             Dimension for feedforward network layer in transformer encoder and decoder.
