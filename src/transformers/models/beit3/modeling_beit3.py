@@ -140,6 +140,9 @@ BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -159,6 +162,11 @@ BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
+        attention_mask (`torch.LongTensor` of shape `({0})`):
+            Padding mask for input tokens , of same shape as `input_ids`
+
+            - 1 indicates the token is **not masked**,
+            - 0 indicates the token is **masked**.
         language_masked_pos (`torch.LongTensor` of shape `({0})`):
             language_masked_pos for denoting tokens for captioning
 
@@ -193,6 +201,9 @@ BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -290,7 +301,6 @@ class Beit3MLP(nn.Module):
 class Beit3MultiwayFeedForwardNetwork(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dim = 1
         self.text = Beit3FeedForwardNetwork(config)
         self.image = Beit3FeedForwardNetwork(config)
 
@@ -301,11 +311,11 @@ class Beit3MultiwayFeedForwardNetwork(nn.Module):
             return self.text(hidden_states)
         image_hidden, text_hidden = torch.split(
             hidden_states,
-            [split_position, hidden_states.size(self.dim) - split_position],
-            dim=self.dim,
+            [split_position, hidden_states.size(1) - split_position],
+            dim=1,
         )
         image_out, text_out = self.image(image_hidden), self.text(text_hidden)
-        return torch.cat([image_out, text_out], dim=self.dim)
+        return torch.cat([image_out, text_out], dim=1)
 
 
 class Beit3AttentionLinear(nn.Module):
@@ -557,9 +567,9 @@ class Beit3PreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-class Beit3FeedForwardNetwork(Beit3PreTrainedModel):
+class Beit3FeedForwardNetwork(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.embed_dim = config.hidden_size
         self.activation_fn = get_activation(config.activation_fn)
         self.activation_dropout = nn.Dropout(config.activation_dropout)
@@ -584,23 +594,20 @@ class Beit3FeedForwardNetwork(Beit3PreTrainedModel):
         return hidden_states
 
 
-class Beit3EncoderLayer(Beit3PreTrainedModel):
+class Beit3EncoderLayer(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = Beit3MultiheadAttention(config)
         self.self_attn_layer_norm = Beit3LayerNorm(config)
         self.dropout_module = nn.Dropout(config.dropout)
 
-        self.normalize_before = config.normalize_before
+        self.normalize_before = config.sub_layernorm
         self.ffn_dim = config.intermediate_size
 
         self.ffn = Beit3MultiwayFeedForwardNetwork(config)
         self.final_layer_norm = Beit3LayerNorm(config)
         self.alpha = 1.0
-
-    def residual_connection(self, hidden_states, residual):
-        return residual * self.alpha + hidden_states
 
     def forward(
         self,
@@ -635,13 +642,13 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
             hidden_states = output[0]
         hidden_states = self.dropout_module(hidden_states)
 
-        hidden_states = self.residual_connection(hidden_states, residual)
+        hidden_states = residual * self.alpha + hidden_states
 
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states, split_position=split_position)
         hidden_states = self.ffn(hidden_states, split_position=split_position)
 
-        hidden_states = self.residual_connection(hidden_states, residual)
+        hidden_states = residual * self.alpha + hidden_states
         if not self.normalize_before:
             hidden_states = self.final_layer_norm(hidden_states, split_position=split_position)
         if output_attentions:
@@ -658,9 +665,8 @@ class Beit3Encoder(nn.Module):
         self.embed_positions = Beit3PositionEmbeddings(config)
 
         self.layers = nn.ModuleList([Beit3EncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.num_layers = len(self.layers)
 
-        self.fc_norm = Beit3LayerNorm(config) if config.normalize_before and config.encoder_normalize_before else None
+        self.fc_norm = Beit3LayerNorm(config) if config.sub_layernorm and config.encoder_normalize_before else None
 
         self.gradient_checkpointing = False
 
@@ -1144,7 +1150,9 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         >>> inputs = processor(text=["This is photo of a dog"], images=image, return_tensors="pt")
 
         >>> language_masked_pos = torch.zeros_like(inputs.input_ids)
+        >>> # Mask the language_masked_pos on position of dog token (token to be filled)
         >>> language_masked_pos[:, 6] = 1
+        >>> # Set the token to be filled with the special token id 64001
         >>> inputs.input_ids[:, 6] = 64001
         >>> output = model(
         ...     input_ids=inputs.input_ids,
@@ -1328,6 +1336,7 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         )
 
 
+# Copied from transformers.models.clip.modeling_clip.contrastive_loss
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 

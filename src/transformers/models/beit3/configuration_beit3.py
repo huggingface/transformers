@@ -137,6 +137,3 @@ class Beit3Config(PretrainedConfig):
 
         self.logit_scale_init_value = logit_scale_init_value
         self.layer_norm_eps = layer_norm_eps
-        if self.sub_layernorm:
-            self.normalize_before = True
-            self.deepnorm = False

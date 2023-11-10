@@ -19,7 +19,7 @@ Tasks](https://arxiv.org/abs/2208.10442) by Wenhui Wang, Hangbo Bao, Li Dong, Jo
 Kriti Aggarwal, Owais Khan Mohammed, Saksham Singhal, Subhojit Som, Furu Wei.
 
 BEiT-3 is a general-purpose multimodal foundation model that excels in both vision and vision-language tasks. It
-utilizes  [Multiway transformers] (https://arxiv.org/abs/2208.10442) for deep fusion and modality-specific encoding,
+utilizes [Multiway transformers](https://arxiv.org/abs/2208.10442) for deep fusion and modality-specific encoding,
 and unifies masked modeling on images, texts, and image-text pairs, achieving top performance on multiple benchmarks.
 
 The abstract from the paper is the following:
@@ -39,34 +39,29 @@ The original code can be found [here](https://github.com/microsoft/unilm/tree/ma
 
 ## Examples
 
-    Here is a sample usage:
-    
-    ```python
-    >>> from transformers import Beit3ForImagesAndTextClassification, Beit3Processor
-    >>> from PIL import Image
-    >>> import requests
-    >>> import torch
+Here is a sample of Beit3 model for ImageClassification
 
-    >>> model = Beit3ForImagesAndTextClassification.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
+```python
+>>> from transformers import Beit3Processor, Beit3ForImageClassification
+>>> from PIL import Image
+>>> import requests
 
-    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    >>> image = Image.open(requests.get(url, stream=True).raw)
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg" # Image of a couch with remotes and cats
+>>> image = Image.open(requests.get(url, stream=True).raw)
 
-    >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
-    >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
+>>> processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
+>>> model = Beit3ForImageClassification.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
 
-    >>> pixel_values = torch.cat(
-    ...     (torch.tensor(input["pixel_values"]).unsqueeze(1), torch.tensor(input["pixel_values"]).unsqueeze(1)),
-    ...     dim=1,
-    ... )
+>>> inputs = processor(images=image, return_tensors="pt")
 
-    >>> # forward pass
-    >>> output = model(
-    ...     input_ids=torch.tensor(input["input_ids"]),
-    ...     pixel_values=pixel_values,
-    ...     attention_mask=torch.ones(input["input_ids"].shape),
-    ... )
-    ```"""
+>>> # forward pass
+>>> outputs = model(**inputs)
+
+>>> predicted_class_idx = outputs.logits.argmax(-1).item()
+>>> predicted_class = model.config.id2label[predicted_class_idx]
+>>> print("Predicted class:", predicted_class)
+Predicted class: remote control, remote
+```
 
 ## Beit3Config
 
