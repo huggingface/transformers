@@ -502,8 +502,9 @@ class _BaseAutoModelClass:
                 if token is not None:
                     adapter_kwargs["token"] = token
 
+            revision = adapter_kwargs.pop("revision", hub_kwargs.get("revision"))
             maybe_adapter_path = find_adapter_config_file(
-                pretrained_model_name_or_path, _commit_hash=commit_hash, **adapter_kwargs
+                pretrained_model_name_or_path, _commit_hash=commit_hash, revision=revision, **adapter_kwargs
             )
 
             if maybe_adapter_path is not None:
