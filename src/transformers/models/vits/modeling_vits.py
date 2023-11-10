@@ -902,13 +902,6 @@ class VitsResidualCouplingBlock(nn.Module):
 
             cond_layer = torch.nn.Conv1d(speaker_embedding_size, 2 * hidden_size * num_layers, 1)
             flow.wavenet.cond_layer = nn.utils.weight_norm(cond_layer, name="weight")
-            nn.init.kaiming_normal_(flow.wavenet.cond_layer.weight)
-            if flow.wavenet.cond_layer.bias is not None:
-                k = math.sqrt(
-                    flow.wavenet.cond_layer.groups
-                    / (flow.wavenet.cond_layer.in_channels * flow.wavenet.cond_layer.kernel_size[0])
-                )
-                nn.init.uniform_(flow.wavenet.cond_layer.bias, a=-k, b=k)
 
 
 class VitsDilatedDepthSeparableConv(nn.Module):
@@ -1055,10 +1048,6 @@ class VitsStochasticDurationPredictor(nn.Module):
 
     def resize_speaker_embeddings(self, speaker_embedding_size):
         self.cond = nn.Conv1d(speaker_embedding_size, self.filter_channels, 1)
-        nn.init.kaiming_normal_(self.cond.weight)
-        if self.cond.bias is not None:
-            k = math.sqrt(self.cond.groups / (self.cond.in_channels * self.cond.kernel_size[0]))
-            nn.init.uniform_(self.cond.bias, a=-k, b=k)
 
     def forward(self, inputs, padding_mask, global_conditioning=None, durations=None, reverse=False, noise_scale=1.0):
         inputs = torch.detach(inputs)
@@ -1157,10 +1146,6 @@ class VitsDurationPredictor(nn.Module):
 
     def resize_speaker_embeddings(self, speaker_embedding_size):
         self.cond = nn.Conv1d(speaker_embedding_size, self.hidden_size, 1)
-        nn.init.kaiming_normal_(self.cond)
-        if self.cond.bias is not None:
-            k = math.sqrt(self.cond.groups / (self.cond.in_channels * self.cond.kernel_size[0]))
-            nn.init.uniform_(self.cond.bias, a=-k, b=k)
 
     def forward(self, inputs, padding_mask, global_conditioning=None):
         inputs = torch.detach(inputs)
@@ -1921,9 +1906,17 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
 
         # then take care of sub-models
         self.flow.resize_speaker_embeddings(speaker_embedding_size)
+        for flow in self.flow.flows:
+            self._init_weights(flow.wavenet.cond_layer)
+        
         self.decoder.resize_speaker_embedding(speaker_embedding_size)
+        self._init_weights(self.decoder.cond)
+    
         self.duration_predictor.resize_speaker_embeddings(speaker_embedding_size)
+        self._init_weights(self.duration_predictor.cond)
+        
         self.posterior_encoder.resize_speaker_embeddings(speaker_embedding_size)
+        self._init_weights(self.posterior_encoder.wavenet.cond_layer)
 
         self.config.num_speakers = new_num_speakers
         self.config.speaker_embedding_size = speaker_embedding_size
