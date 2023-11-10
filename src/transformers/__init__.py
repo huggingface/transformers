@@ -256,6 +256,15 @@ _import_structure = {
         "CLIPSegTextConfig",
         "CLIPSegVisionConfig",
     ],
+    "models.clvp": [
+        "CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ClvpConfig",
+        "ClvpDecoderConfig",
+        "ClvpEncoderConfig",
+        "ClvpFeatureExtractor",
+        "ClvpProcessor",
+        "ClvpTokenizer",
+    ],
     "models.code_llama": [],
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
     "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
@@ -1456,6 +1465,17 @@ else:
             "CLIPSegPreTrainedModel",
             "CLIPSegTextModel",
             "CLIPSegVisionModel",
+        ]
+    )
+    _import_structure["models.clvp"].extend(
+        [
+            "CLVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ClvpDecoder",
+            "ClvpEncoder",
+            "ClvpForCausalLM",
+            "ClvpModel",
+            "ClvpModelForConditionalGeneration",
+            "ClvpPreTrainedModel",
         ]
     )
     _import_structure["models.codegen"].extend(
@@ -4446,6 +4466,15 @@ if TYPE_CHECKING:
         CLIPSegTextConfig,
         CLIPSegVisionConfig,
     )
+    from .models.clvp import (
+        CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ClvpConfig,
+        ClvpDecoderConfig,
+        ClvpEncoderConfig,
+        ClvpFeatureExtractor,
+        ClvpProcessor,
+        ClvpTokenizer,
+    )
     from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
     from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
@@ -5515,6 +5544,15 @@ if TYPE_CHECKING:
             CLIPSegPreTrainedModel,
             CLIPSegTextModel,
             CLIPSegVisionModel,
+        )
+        from .models.clvp import (
+            CLVP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ClvpDecoder,
+            ClvpEncoder,
+            ClvpForCausalLM,
+            ClvpModel,
+            ClvpModelForConditionalGeneration,
+            ClvpPreTrainedModel,
         )
         from .models.codegen import (
             CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
