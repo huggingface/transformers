@@ -111,7 +111,6 @@ Now create a batch of examples using [`DataCollatorWithPadding`]. It's more effi
 >>> from transformers import DataCollatorWithPadding
 
 >>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-
 ```
 </pt>
 <tf>
@@ -120,7 +119,6 @@ Now create a batch of examples using [`DataCollatorWithPadding`]. It's more effi
 
 >>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
 ```
-
 </tf>
 </frameworkcontent>
 
@@ -219,7 +217,6 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-
 </pt>
 <tf>
 <Tip>
@@ -371,7 +368,6 @@ Get the class with the highest probability, and use the model's `id2label` mappi
 >>> model.config.id2label[predicted_class_id]
 'POSITIVE'
 ```
-
 </pt>
 <tf>
 Tokenize the text and return TensorFlow tensors:
@@ -399,6 +395,5 @@ Get the class with the highest probability, and use the model's `id2label` mappi
 >>> model.config.id2label[predicted_class_id]
 'POSITIVE'
 ```
-
 </tf>
 </frameworkcontent>
