@@ -134,14 +134,15 @@ def slice_segments(hidden_states, ids_str, segment_size=4):
     Args:
         hidden_states (`torch.Tensor` of shape `(batch_size, channels, seq_len)`):
             The input tensor to be sliced alongside the `seq_len` dimension.
-        ids_str (`torch.Tensor` of shape `(batch_size,)`): 
+        ids_str (`torch.Tensor` of shape `(batch_size,)`):
             A 1D tensor containing the starting indices for each segment.
         segment_size (`int`, defaults to 4):
             The size of each segment to slice
     Returns:
-        output (`torch.Tensor` of shape `(batch_size, channels, segment_size)`): A tensor containing the sliced segments.
+        output (`torch.Tensor` of shape `(batch_size, channels, segment_size)`): A tensor containing the sliced
+        segments.
     """
-    
+
     batch_size, channels, _ = hidden_states.shape
     # 1d tensor containing the indices to keep
     indices = torch.arange(segment_size).to(ids_str.device)
@@ -149,10 +150,10 @@ def slice_segments(hidden_states, ids_str, segment_size=4):
     indices = indices.view(1, 1, -1).expand(batch_size, channels, -1)
     # offset indices with ids_str
     indices = indices + ids_str.view(-1, 1, 1)
-    
+
     # gather indices
     output = torch.gather(hidden_states, dim=2, index=indices)
-    
+
     return output
 
 
@@ -163,12 +164,14 @@ def rand_slice_segments(hidden_states, sample_lengths=None, segment_size=4):
     Args:
         hidden_states (`torch.Tensor` of shape `(batch_size, channels, seq_len)`):
             The input tensor to be sliced alongside the `seq_len` dimension.
-        sample_lengths (`torch.Tensor` of shape `(batch_size,)`, *optional*): 
-            A 1D tensor containing the sequence length of each sample of the batch. Will defaults to `seq_len` if not provided.
+        sample_lengths (`torch.Tensor` of shape `(batch_size,)`, *optional*):
+            A 1D tensor containing the sequence length of each sample of the batch. Will defaults to `seq_len` if not
+            provided.
         segment_size (`int`, defaults to 4):
             The size of each segment to slice
     Returns:
-        output (`torch.Tensor` of shape `(batch_size, channels, segment_size)`): A tensor containing the sliced segments.
+        output (`torch.Tensor` of shape `(batch_size, channels, segment_size)`): A tensor containing the sliced
+        segments.
     """
     batch_size, _, seq_len = hidden_states.size()
     if sample_lengths is None:
@@ -186,7 +189,7 @@ def monotonic_align_max_path(log_likelihoods, mask):
     Args:
         log_likelihoods (`torch.Tensor` of shape `(batch_size, text_length, latent_variable_length)`):
             The log-likelihood matrix for each sample of the batch.
-        mask (`torch.Tensor` of shape `(batch_size, text_length, latent_variable_length)`, *optional*): 
+        mask (`torch.Tensor` of shape `(batch_size, text_length, latent_variable_length)`, *optional*):
             The padding mask.
     Returns:
         path (`torch.Tensor` of shape `(batch_size, text_length, latent_variable_length)`): The most likely alignement.
@@ -224,7 +227,9 @@ def monotonic_align_max_path(log_likelihoods, mask):
 
         for y in range(text_length_max - 1, -1, -1):
             path[batch_id, y, index] = 1
-            if index != 0 and (index == y or log_likelihoods[batch_id, y - 1, index] < log_likelihoods[batch_id, y - 1, index - 1]):
+            if index != 0 and (
+                index == y or log_likelihoods[batch_id, y - 1, index] < log_likelihoods[batch_id, y - 1, index - 1]
+            ):
                 index = index - 1
     return path
 

@@ -16,7 +16,7 @@
 Feature extractor class for Vits
 """
 import copy
-from typing import Any, Dict, List, Optional, Union, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -63,10 +63,10 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
 
             <Tip>
 
-            For Vits finetuning, `attention_mask` should always be passed for batched inference, to avoid subtle
-            bugs.
+            For Vits finetuning, `attention_mask` should always be passed for batched inference, to avoid subtle bugs.
 
             </Tip>
+
         max_wav_value (`float`, defaults to 32768.0):
             Maximum wav value. Used to normalize the input waveforms if `do_normalize=True` in the forward pass of this
             feature extractor.
@@ -187,6 +187,7 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
                 bugs.
 
                 </Tip>
+
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
