@@ -873,7 +873,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         # 2. English-only Whisper does not accept the language argument
         with self.assertRaisesRegex(
             ValueError,
-            "Cannot specify `task` or `langauge` for an English-only model. If the model is intended to be multilingual, "
+            "Cannot specify `task` or `language` for an English-only model. If the model is intended to be multilingual, "
             "pass `is_multilingual=True` to generate, or update the generation config.",
         ):
             _ = speech_recognizer(filename, generate_kwargs={"language": "en"})
