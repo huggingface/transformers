@@ -405,7 +405,7 @@ examples_torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager -r examples/pytorch/_tests_requirements.txt",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
-    pytest_num_workers=1,
+    pytest_num_workers=6,
 )
 
 
