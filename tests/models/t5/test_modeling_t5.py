@@ -50,6 +50,7 @@ if is_torch_available():
         ByT5Tokenizer,
         T5EncoderModel,
         T5ForConditionalGeneration,
+        T5ForEncoderBasedSequenceClassification,
         T5ForQuestionAnswering,
         T5ForSequenceClassification,
         T5Model,
@@ -1031,6 +1032,139 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
+
+
+class T5ForEncoderBasedSequenceClassificationModelTester:
+    def __init__(
+        self,
+        parent,
+        vocab_size=99,
+        batch_size=13,
+        encoder_seq_length=7,
+        seq_length=1,
+        # For common tests
+        use_attention_mask=True,
+        hidden_size=32,
+        num_hidden_layers=1,
+        num_attention_heads=4,
+        d_ff=37,
+        relative_attention_num_buckets=8,
+        is_training=False,
+        dropout_rate=0.1,
+        initializer_factor=0.002,
+        is_encoder_decoder=True,
+        eos_token_id=1,
+        pad_token_id=0,
+        scope=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.encoder_seq_length = encoder_seq_length
+        # For common tests
+        self.seq_length = seq_length
+        self.use_attention_mask = use_attention_mask
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.d_ff = d_ff
+        self.relative_attention_num_buckets = relative_attention_num_buckets
+        self.dropout_rate = dropout_rate
+        self.initializer_factor = initializer_factor
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.is_encoder_decoder = is_encoder_decoder
+        self.scope = None
+        self.is_training = is_training
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
+
+        attention_mask = None
+        if self.use_attention_mask:
+            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
+
+        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], vocab_size=1)
+
+        config = T5Config(
+            vocab_size=self.vocab_size,
+            d_model=self.hidden_size,
+            d_ff=self.d_ff,
+            d_kv=self.hidden_size // self.num_attention_heads,
+            num_layers=self.num_hidden_layers,
+            num_heads=self.num_attention_heads,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            dropout_rate=self.dropout_rate,
+            initializer_factor=self.initializer_factor,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.pad_token_id,
+            pad_token_id=self.pad_token_id,
+            is_encoder_decoder=self.is_encoder_decoder,
+        )
+
+        return (
+            config,
+            input_ids,
+            attention_mask,
+            decoder_input_ids,
+        )
+
+    def create_and_check_model(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        decoder_input_ids,
+    ):
+        model = T5ForEncoderBasedSequenceClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+        )
+        logits = result.logits
+
+        self.parent.assertEqual(logits.size(), (self.batch_size, self.seq_length, config.num_labels))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            attention_mask,
+            decoder_input_ids,
+        ) = config_and_inputs
+
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "decoder_input_ids": decoder_input_ids,
+        }
+        return config, inputs_dict
+
+
+class T5ForEncoderBasedSequenceClassificationModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (T5ForEncoderBasedSequenceClassification,) if is_torch_available() else ()
+    test_pruning = False
+    test_resize_embeddings = False
+    test_model_parallel = False
+    fx_compatible = False
+    is_encoder_decoder = True
+    test_inputs_embeds = True
+    all_parallelizable_model_classes = ()
+
+    def setUp(self):
+        self.model_tester = T5ForEncoderBasedSequenceClassificationModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
 
 def use_task_specific_params(model, task):

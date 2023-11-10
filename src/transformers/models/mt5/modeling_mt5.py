@@ -762,7 +762,6 @@ class MT5ClassificationHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel with T5->MT5, t5->mt5
 class MT5PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained

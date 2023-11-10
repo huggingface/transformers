@@ -50,7 +50,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_t5"] = [
-        "T5ForEncoderBasedSequenceClassification",
         "T5_PRETRAINED_MODEL_ARCHIVE_LIST",
         "T5EncoderModel",
         "T5ForConditionalGeneration",
@@ -59,6 +58,7 @@ else:
         "load_tf_weights_in_t5",
         "T5ForQuestionAnswering",
         "T5ForSequenceClassification",
+        "T5ForEncoderBasedSequenceClassification",
     ]
 
 try:

@@ -7354,6 +7354,13 @@ class T5ForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class T5ForEncoderBasedSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class T5ForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
