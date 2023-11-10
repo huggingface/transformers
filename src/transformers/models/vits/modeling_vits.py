@@ -1908,13 +1908,13 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         self.flow.resize_speaker_embeddings(speaker_embedding_size)
         for flow in self.flow.flows:
             self._init_weights(flow.wavenet.cond_layer)
-        
+
         self.decoder.resize_speaker_embedding(speaker_embedding_size)
         self._init_weights(self.decoder.cond)
-    
+
         self.duration_predictor.resize_speaker_embeddings(speaker_embedding_size)
         self._init_weights(self.duration_predictor.cond)
-        
+
         self.posterior_encoder.resize_speaker_embeddings(speaker_embedding_size)
         self._init_weights(self.posterior_encoder.wavenet.cond_layer)
 
