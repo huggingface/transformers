@@ -373,7 +373,10 @@ class RTDetrConvNormLayer(nn.Module):
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, x):
-        return self.activation(self.norm(self.conv(x)))
+        x = self.conv(x)
+        x = self.norm(x)
+        x = self.activation(x)
+        return x
 
 
 def bias_init_with_prob(prior_prob=0.01):
