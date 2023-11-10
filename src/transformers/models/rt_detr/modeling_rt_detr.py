@@ -532,26 +532,6 @@ class RTDetrMSDeformableAttention(nn.Module):
         self.value_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.output_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.ms_deformable_attn_core = deformable_attention_core_func
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        # sampling_offsets
-        nn.init.constant_(self.sampling_offsets.weight, 0)
-        thetas = torch.arange(self.num_heads, dtype=torch.float32) * (2.0 * math.pi / self.num_heads)
-        grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-        grid_init = grid_init / grid_init.abs().max(-1, keepdim=True).values
-        grid_init = grid_init.reshape(self.num_heads, 1, 1, 2).tile([1, self.num_levels, self.num_points, 1])
-        scaling = torch.arange(1, self.num_points + 1, dtype=torch.float32).reshape(1, 1, -1, 1)
-        grid_init *= scaling
-        self.sampling_offsets.bias.data[...] = grid_init.flatten()
-        # attention_weights
-        nn.init.constant_(self.attention_weights.weight, 0)
-        nn.init.constant_(self.attention_weights.bias, 0)
-        # proj
-        nn.init.xavier_uniform_(self.value_proj.weight)
-        nn.init.constant_(self.value_proj.bias, 0)
-        nn.init.xavier_uniform_(self.output_proj.weight)
-        nn.init.constant_(self.output_proj.bias, 0)
 
     def forward(self, query, reference_points, value, value_spatial_shapes, value_mask=None):
         bs, len_q = query.shape[:2]
@@ -802,26 +782,6 @@ class RTDetrTransformer(nn.Module):
         # init encoder output anchors and valid_mask
         if self.eval_spatial_size:
             self.anchors, self.valid_mask = self.generate_anchors()
-
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        bias = bias_init_with_prob(0.01)
-
-        nn.init.constant_(self.enc_score_head.bias, bias)
-        nn.init.constant_(self.enc_bbox_head.layers[-1].weight, 0)
-        nn.init.constant_(self.enc_bbox_head.layers[-1].bias, 0)
-
-        for cls_, reg_ in zip(self.dec_score_head, self.dec_bbox_head):
-            nn.init.constant_(cls_.bias, bias)
-            nn.init.constant_(reg_.layers[-1].weight, 0)
-            nn.init.constant_(reg_.layers[-1].bias, 0)
-
-        nn.init.xavier_uniform_(self.enc_output[0].weight)
-        if self.learnt_init_query:
-            nn.init.xavier_uniform_(self.tgt_embed.weight)
-        nn.init.xavier_uniform_(self.query_pos_head.layers[0].weight)
-        nn.init.xavier_uniform_(self.query_pos_head.layers[1].weight)
 
     def build_input_proj_layer(self, feat_channels):
         self.input_proj = nn.ModuleList()
@@ -1388,17 +1348,6 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
                 RTDetrConvNormLayer(self.hidden_dim, self.hidden_dim, 3, 2, activation=act_encoder)
             )
             self.pan_blocks.append(RTDetrCSPRepLayer(config))
-
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        if self.eval_size:
-            for idx in self.use_encoder_idx:
-                stride = self.feat_strides[idx]
-                pos_embed = self.build_2d_sincos_position_embedding(
-                    self.eval_size[1] // stride, self.eval_size[0] // stride, self.hidden_dim, self.pe_temperature
-                )
-                setattr(self, f"pos_embed{idx}", pos_embed)
 
     @staticmethod
     def build_2d_sincos_position_embedding(w, h, embed_dim=256, temperature=10000.0):
