@@ -52,7 +52,7 @@ class PatchTSTConfig(PretrainedConfig):
             error "mse".
         patch_length (`int`, *optional*, defaults to 1):
             Define the patch length of the patchification process.
-        stride (`int`, *optional*, defaults to 1):
+        patch_stride (`int`, *optional*, defaults to 1):
             define the stride of the patchification process.
         encoder_layers (`int`, *optional*, defaults to 3):
             Number of encoder layers.
@@ -163,7 +163,7 @@ class PatchTSTConfig(PretrainedConfig):
         loss: str = "mse",
         # PatchTST arguments
         patch_length: int = 1,
-        stride: int = 1,
+        patch_stride: int = 1,
         # Transformer architecture configuration
         encoder_layers: int = 3,
         d_model: int = 64,
@@ -239,7 +239,7 @@ class PatchTSTConfig(PretrainedConfig):
 
         # PatchTST parameters
         self.patch_length = patch_length
-        self.stride = stride
+        self.patch_stride = patch_stride
         self.num_patches = self._num_patches()
 
         # Mask pretraining
@@ -271,4 +271,4 @@ class PatchTSTConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
     def _num_patches(self):
-        return (max(self.context_length, self.patch_length) - self.patch_length) // self.stride + 1
+        return (max(self.context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1

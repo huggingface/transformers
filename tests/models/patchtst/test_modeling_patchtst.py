@@ -56,7 +56,7 @@ class PatchTSTModelTester:
         prediction_length=7,
         context_length=14,
         patch_length=5,
-        stride=5,
+        patch_stride=5,
         num_input_channels=1,
         num_time_features=1,
         is_training=True,
@@ -78,7 +78,7 @@ class PatchTSTModelTester:
         self.prediction_length = prediction_length
         self.context_length = context_length
         self.patch_length = patch_length
-        self.stride = stride
+        self.patch_stride = patch_stride
         self.num_input_channels = num_input_channels
         self.num_time_features = num_time_features
         self.lags_sequence = lags_sequence
@@ -95,13 +95,13 @@ class PatchTSTModelTester:
         self.num_targets = num_targets
         self.num_output_channels = num_output_channels
         self.distil = distil
-        self.num_patches = (max(self.context_length, self.patch_length) - self.patch_length) // self.stride + 1
+        self.num_patches = (max(self.context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
 
     def get_config(self):
         return PatchTSTConfig(
             prediction_length=self.prediction_length,
             patch_length=self.patch_length,
-            stride=self.stride,
+            patch_stride=self.patch_stride,
             num_input_channels=self.num_input_channels,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -321,7 +321,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             output = model(past_values=batch["past_values"].to(torch_device)).prediction_output
         num_patch = (
             max(model.config.context_length, model.config.patch_length) - model.config.patch_length
-        ) // model.config.stride + 1
+        ) // model.config.patch_stride + 1
         expected_shape = torch.Size([64, model.config.num_input_channels, num_patch, model.config.patch_length])
         self.assertEqual(output.shape, expected_shape)
 

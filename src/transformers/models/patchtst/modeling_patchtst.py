@@ -406,7 +406,7 @@ class PatchTSTPatchify(nn.Module):
 
         self.sequence_length = config.context_length
         self.patch_length = config.patch_length
-        self.stride = config.stride
+        self.patch_stride = config.patch_stride
 
         if self.sequence_length <= self.patch_length:
             raise ValueError(
@@ -414,8 +414,8 @@ class PatchTSTPatchify(nn.Module):
             )
 
         # get the number of patches
-        num_patches = (max(self.sequence_length, self.patch_length) - self.patch_length) // self.stride + 1
-        new_sequence_length = self.patch_length + self.stride * (num_patches - 1)
+        num_patches = (max(self.sequence_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
+        new_sequence_length = self.patch_length + self.patch_stride * (num_patches - 1)
         self.sequence_start = self.sequence_length - new_sequence_length
 
     def forward(self, past_values: torch.Tensor):
@@ -436,7 +436,7 @@ class PatchTSTPatchify(nn.Module):
         output = past_values[:, self.sequence_start :, :]
         # output: [bs x num_patches x num_input_channels x patch_length]
         output = output.unfold(
-            dimension=-2, size=self.patch_length, step=self.stride)
+            dimension=-2, size=self.patch_length, step=self.patch_stride)
         # output: [bs x num_input_channels x num_patches x patch_length]
         output = output.transpose(-2, -3).contiguous()
         return output
