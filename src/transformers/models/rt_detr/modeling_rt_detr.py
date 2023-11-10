@@ -1417,10 +1417,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
         # encoder transformer
         encoder_layer = RTDetrTransformerEncoderLayer(config)
         self.encoder = nn.ModuleList(
-            [
-                TransformerEncoder(copy.deepcopy(encoder_layer), self.num_encoder_layers)
-                for _ in range(len(self.use_encoder_idx))
-            ]
+            [TransformerEncoder(config) for _ in range(len(self.use_encoder_idx))]
         )
 
         # top-down fpn
