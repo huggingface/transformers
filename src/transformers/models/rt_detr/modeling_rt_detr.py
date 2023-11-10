@@ -266,10 +266,10 @@ def get_contrastive_denoising_training_group(
         box_noise_scale (`float`, *optional*, defaults to `1.0`): Scale of noise applied to bounding boxes.
     Returns:
         A tuple containing:
-            input_query_class (`torch.FloatTensor`): Class queries with applied label noise.
-            input_query_bbox (`torch.FloatTensor`): Bounding box queries with applied box noise.
-            attn_mask (`torch.FloatTensor`): Attention mask for separating denoising and reconstruction queries.
-            dn_meta (`dict`): Metadata including denoising positive indices, number of groups, and split sizes.
+            input_query_class (`torch.FloatTensor`): Class queries with applied label noise. input_query_bbox
+            (`torch.FloatTensor`): Bounding box queries with applied box noise. attn_mask (`torch.FloatTensor`):
+            Attention mask for separating denoising and reconstruction queries. dn_meta (`dict`): Metadata including
+            denoising positive indices, number of groups, and split sizes.
     """
 
     if num_denoising <= 0:
@@ -458,7 +458,7 @@ class RTDetrTransformerEncoderLayer(nn.Module):
 class RTDetrTransformerEncoder(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
-        
+
         num_layers = config.num_encoder_layers
         self.layers = nn.ModuleList([RTDetrTransformerEncoderLayer(config) for _ in range(num_layers)])
         self.num_layers = num_layers
@@ -486,30 +486,6 @@ class RepVggBlock(nn.Module):
             y = self.conv1(x) + self.conv2(x)
 
         return self.activation(y)
-
-    def get_equivalent_kernel_bias(self):
-        kernel3x3, bias3x3 = self._fuse_bn_tensor(self.conv1)
-        kernel1x1, bias1x1 = self._fuse_bn_tensor(self.conv2)
-        return kernel3x3 + self._pad_1x1_to_3x3_tensor(kernel1x1), bias3x3 + bias1x1
-
-    def _pad_1x1_to_3x3_tensor(self, kernel1x1):
-        if kernel1x1 is None:
-            return 0
-        else:
-            return F.pad(kernel1x1, [1, 1, 1, 1])
-
-    def _fuse_bn_tensor(self, branch: RTDetrConvNormLayer):
-        if branch is None:
-            return 0, 0
-        kernel = branch.conv.weight
-        running_mean = branch.norm.running_mean
-        running_var = branch.norm.running_var
-        gamma = branch.norm.weight
-        beta = branch.norm.bias
-        eps = branch.norm.eps
-        std = (running_var + eps).sqrt()
-        t = (gamma / std).reshape(-1, 1, 1, 1)
-        return kernel * t, beta - running_mean * gamma / std
 
 
 class RTDetrCSPRepLayer(nn.Module):
@@ -1373,8 +1349,8 @@ class RTDetrPreTrainedModel(PreTrainedModel):
 
 class RTDetrHybridEncoder(RTDetrPreTrainedModel):
     """
-    Decoder consists of a projection layer, a set of `RTDetrTransformerEncoder`, a top-down Feature Pyramid Network (FPN) and
-    a bottom-up Path Aggregation Network (PAN). More details on the paper: https://arxiv.org/abs/2304.08069
+    Decoder consists of a projection layer, a set of `RTDetrTransformerEncoder`, a top-down Feature Pyramid Network
+    (FPN) and a bottom-up Path Aggregation Network (PAN). More details on the paper: https://arxiv.org/abs/2304.08069
 
     Args:
         config: RTDetrConfig
@@ -1404,9 +1380,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
             )
 
         # encoder transformer
-        self.encoder = nn.ModuleList(
-            [RTDetrTransformerEncoder(config) for _ in range(len(self.use_encoder_idx))]
-        )
+        self.encoder = nn.ModuleList([RTDetrTransformerEncoder(config) for _ in range(len(self.use_encoder_idx))])
         # top-down fpn
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
