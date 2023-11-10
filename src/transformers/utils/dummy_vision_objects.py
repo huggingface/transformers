@@ -198,13 +198,6 @@ class EfficientNetImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class FastImageProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class FlavaFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 

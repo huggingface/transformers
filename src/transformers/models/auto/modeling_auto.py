@@ -95,7 +95,10 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ernie_m", "ErnieMModel"),
         ("esm", "EsmModel"),
         ("falcon", "FalconModel"),
+<<<<<<< HEAD
         ("fastspeech2_conformer", "FastSpeech2ConformerModel"),
+=======
+>>>>>>> ae576e088 (Remove all the references of fast model)
         ("flaubert", "FlaubertModel"),
         ("flava", "FlavaModel"),
         ("fnet", "FNetModel"),
