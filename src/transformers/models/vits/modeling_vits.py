@@ -570,7 +570,7 @@ class HifiGanDiscriminatorScaleResidualBlock(nn.Module):
         return hidden_states, fmap
 
 
-class HifiGanDiscriminatorPeriodResidualBlock(nn.Module):
+class VitsHifiGanDiscriminatorPeriodResidualBlock(nn.Module):
     def __init__(self, discriminator_period_channels, period, kernel_size=5, stride=3, leaky_relu_slope=0.1):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
@@ -1778,7 +1778,7 @@ class VitsDiscriminator(VitsPreTrainedModel):
 
         self.discriminators.extend(
             [
-                HifiGanDiscriminatorPeriodResidualBlock(
+                VitsHifiGanDiscriminatorPeriodResidualBlock(
                     config.discriminator_period_channels,
                     period,
                     config.discriminator_kernel_size,
