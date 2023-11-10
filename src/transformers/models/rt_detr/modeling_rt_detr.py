@@ -417,7 +417,7 @@ class RTDetrTransformerEncoderLayer(nn.Module):
         super().__init__()
         self.normalize_before = config.normalize_before
 
-        self.self_attn = nn.MultiheadAttention(config.hidden_dim, config.num_head, config.dropout, batch_first=True)
+        self.self_attn = nn.MultiheadAttention(config.hidden_dim, config.num_attention_heads, config.dropout, batch_first=True)
 
         self.linear1 = nn.Linear(config.hidden_dim, config.dim_feedforward)
         self.dropout = nn.Dropout(config.dropout)
@@ -518,7 +518,7 @@ class RTDetrMSDeformableAttention(nn.Module):
         super().__init__()
 
         self.embed_dim = config.hidden_dim
-        self.num_heads = config.num_head
+        self.num_heads = config.num_attention_heads
         self.num_levels = config.num_levels
         self.num_points = config.num_decoder_points
         self.total_points = self.num_heads * self.num_levels * self.num_points
@@ -578,7 +578,7 @@ class RTDetrTransformerDecoderLayer(nn.Module):
 
         # self attention
         self.self_attn = nn.MultiheadAttention(
-            config.hidden_dim, config.num_head, dropout=config.dropout, batch_first=True
+            config.hidden_dim, config.num_attention_heads, dropout=config.dropout, batch_first=True
         )
         self.dropout1 = nn.Dropout(config.dropout)
         self.norm1 = nn.LayerNorm(config.hidden_dim, config.layer_norm_eps)
@@ -728,7 +728,7 @@ class RTDetrTransformer(nn.Module):
             feat_strides.append(feat_strides[-1] * 2)
 
         self.hidden_dim = config.hidden_dim
-        self.num_head = config.num_head
+        self.num_head = config.num_attention_heads
         self.feat_strides = config.feat_strides
         self.num_levels = config.num_levels
         self.num_classes = config.num_classes

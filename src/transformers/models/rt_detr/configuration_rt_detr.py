@@ -165,7 +165,7 @@ class RTDetrConfig(PretrainedConfig):
         in_channels=[512, 1024, 2048],
         feat_strides=[8, 16, 32],
         hidden_dim=256,
-        num_head=8,
+        num_attention_heads=8,
         dim_feedforward=1024,
         dropout=0.0,
         enc_act="gelu",
@@ -235,7 +235,7 @@ class RTDetrConfig(PretrainedConfig):
         self.in_channels = in_channels
         self.feat_strides = feat_strides
         self.hidden_dim = hidden_dim
-        self.num_head = num_head
+        self.num_attention_heads = num_attention_heads
         self.dim_feedforward = dim_feedforward
         self.dropout = dropout
         self.enc_act = enc_act

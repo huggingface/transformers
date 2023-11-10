@@ -54,7 +54,7 @@ class RTDetrConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "in_channels"))
         self.parent.assertTrue(hasattr(config, "feat_strides"))
         self.parent.assertTrue(hasattr(config, "hidden_dim"))
-        self.parent.assertTrue(hasattr(config, "num_head"))
+        self.parent.assertTrue(hasattr(config, "num_attention_heads"))
         self.parent.assertTrue(hasattr(config, "dim_feedforward"))
         self.parent.assertTrue(hasattr(config, "dropout"))
         self.parent.assertTrue(hasattr(config, "enc_act"))
