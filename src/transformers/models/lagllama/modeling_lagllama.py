@@ -1428,7 +1428,7 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
 
         return SampleTSPredictionOutput(
             sequences=concat_future_samples.reshape(
-                (-1, self.config.num_parallel_samples, self.config.prediction_length) + self.target_shape,
+                (-1, self.config.num_parallel_samples, prediction_length) + self.target_shape,
             )
         )
 
