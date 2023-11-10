@@ -527,7 +527,7 @@ class VitsPosteriorEncoder(nn.Module):
             nn.init.uniform_(self.wavenet.cond_layer.bias, a=-k, b=k)
 
 
-class HifiGanDiscriminatorScaleResidualBlock(nn.Module):
+class VitsHifiGanDiscriminatorScaleResidualBlock(nn.Module):
     def __init__(self, discriminator_scale_channels, leaky_relu_slope=0.1):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
@@ -1773,7 +1773,7 @@ class VitsDiscriminator(VitsPreTrainedModel):
         super().__init__(config)
 
         self.discriminators = nn.ModuleList(
-            [HifiGanDiscriminatorScaleResidualBlock(config.discriminator_scale_channels, config.leaky_relu_slope)]
+            [VitsHifiGanDiscriminatorScaleResidualBlock(config.discriminator_scale_channels, config.leaky_relu_slope)]
         )
 
         self.discriminators.extend(
