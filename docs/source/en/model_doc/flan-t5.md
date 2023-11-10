@@ -48,6 +48,10 @@ Google has released the following variants:
 
 - [google/flan-t5-xxl](https://huggingface.co/google/flan-t5-xxl).
 
-One can refer to [T5's documentation page](t5) for all tips, code examples and notebooks. As well as the FLAN-T5 model card for more details regarding training and evaluation of the model.
-
 The original checkpoints can be found [here](https://github.com/google-research/t5x/blob/main/docs/models.md#flan-t5-checkpoints).
+
+<Tip>
+
+Refer to [T5's documentation page](t5) for all API reference, code examples and notebooks. For more details regarding training and evaluation of the FLAN-T5, refer to the model card.
+
+</Tip>
