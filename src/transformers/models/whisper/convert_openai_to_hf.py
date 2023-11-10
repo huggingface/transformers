@@ -15,6 +15,8 @@
 # limitations under the License.
 
 import argparse
+import base64
+import gzip
 import hashlib
 import io
 import json
@@ -22,8 +24,9 @@ import os
 import tempfile
 import urllib
 import warnings
-from typing import Any
+from typing import Any, Optional, Tuple
 
+import numpy as np
 import torch
 from torch import nn
 from tqdm import tqdm
@@ -54,13 +57,44 @@ _MODELS = {
     "large-v3": "https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt",
 }
 
+_ALIGNMENT_HEADS = {
+    "tiny.en": b"ABzY8J1N>@0{>%R00Bk>$p{7v037`oCl~+#00",
+    "tiny": b"ABzY8bu8Lr0{>%RKn9Fp%m@SkK7Kt=7ytkO",
+    "base.en": b"ABzY8;40c<0{>%RzzG;p*o+Vo09|#PsxSZm00",
+    "base": b"ABzY8KQ!870{>%RzyTQH3`Q^yNP!>##QT-<FaQ7m",
+    "small.en": b"ABzY8>?_)10{>%RpeA61k&I|OI3I$65C{;;pbCHh0B{qLQ;+}v00",
+    "small": b"ABzY8DmU6=0{>%Rpa?J`kvJ6qF(V^F86#Xh7JUGMK}P<N0000",
+    "medium.en": b"ABzY8usPae0{>%R7<zz_OvQ{)4kMa0BMw6u5rT}kRKX;$NfYBv00*Hl@qhsU00",
+    "medium": b"ABzY8B0Jh+0{>%R7}kK1fFL7w6%<-Pf*t^=N)Qr&0RR9",
+    "large-v1": b"ABzY8r9j$a0{>%R7#4sLmoOs{s)o3~84-RPdcFk!JR<kSfC2yj",
+    "large-v2": b"ABzY8zd+h!0{>%R7=D0pU<_bnWW*tkYAhobTNnu$jnkEkXqp)j;w1Tzk)UH3X%SZd&fFZ2fC2yj",
+    "large-v3": b"ABzY8gWO1E0{>%R7(9S+Kn!D~%ngiGaR?*L!iJG9p-nab0JQ=-{D1-g00",
+    "large": b"ABzY8r9j$a0{>%R7#4sLmoOs{s)o3~84-RPdcFk!JR<kSfC2yj",
+}
+
 _TOKENIZERS = {
     "multilingual": "https://raw.githubusercontent.com/openai/whisper/main/whisper/assets/multilingual.tiktoken",
     "english": "https://raw.githubusercontent.com/openai/whisper/main/whisper/assets/gpt2.tiktoken",
 }
 
 
-def _get_generation_config(is_multilingual: bool, num_languages: int = 100) -> GenerationConfig:
+def _alignment_head_indices(
+    alignment_heads: bytes,
+    n_text_layer: int,
+    n_text_head: int,
+) -> list[tuple[int, int]]:
+    arr = np.frombuffer(gzip.decompress(base64.b85decode(alignment_heads)), dtype=bool)
+    mask = arr.reshape(n_text_layer, n_text_head)
+    return [(int(i), int(j)) for i, j in zip(*np.where(mask))]
+
+
+def _get_generation_config(
+    n_text_layer: int,
+    n_text_head: int,
+    is_multilingual: bool,
+    num_languages: int = 100,
+    openai_version: Optional[str] = None,
+) -> GenerationConfig:
     """
     Loads the appropriate generation config from HF repo
     """
@@ -71,7 +105,20 @@ def _get_generation_config(is_multilingual: bool, num_languages: int = 100) -> G
     else:
         repo = "openai/whisper-large-v3"
 
-    return GenerationConfig.from_pretrained(repo)
+    gen_cfg = GenerationConfig.from_pretrained(repo)
+    if openai_version is not None:
+        gen_cfg.alignment_heads = _alignment_head_indices(_ALIGNMENT_HEADS[openai_version], n_text_layer, n_text_head)
+    else:
+        gen_cfg.alignment_heads = None
+        warnings.warn(
+            "Alignment heads have not been included in the generation config, since they are available "
+            "only for the original OpenAI checkpoints."
+            "If you want to use word-level timestamps with a custom version of Whisper,"
+            "see https://github.com/openai/whisper/blob/main/notebooks/Multilingual_ASR.ipynb"
+            "for the example of how to produce word-level timestamps manually."
+        )
+
+    return gen_cfg
 
 
 def remove_ignore_keys_(state_dict):
@@ -163,12 +210,17 @@ def _download(url: str, root: str) -> Any:
     return torch.load(io.BytesIO(model_bytes))
 
 
-def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path) -> WhisperForConditionalGeneration:
+def convert_openai_whisper_to_tfms(
+    checkpoint_path, pytorch_dump_folder_path
+) -> Tuple[WhisperForConditionalGeneration, bool, int]:
     if ".pt" not in checkpoint_path:
         root = os.path.dirname(pytorch_dump_folder_path) or "."
         original_checkpoint = _download(_MODELS[checkpoint_path], root)
+        openai_version = checkpoint_path
     else:
         original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        openai_version = None
+
     dimensions = original_checkpoint["dims"]
     state_dict = original_checkpoint["model_state_dict"]
     proj_out_weights = state_dict["decoder.token_embedding.weight"]
@@ -207,7 +259,19 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path) ->
     else:
         model.proj_out.weight.data = proj_out_weights
 
-    return model
+    # determine those parameters from a model checkpoint as Whisper repo does
+    is_multilingual = model.config.vocab_size >= 51865
+    num_languages = model.config.vocab_size - 51765 - int(is_multilingual)
+
+    model.generation_config = _get_generation_config(
+        model.config.decoder_layers,
+        model.config.decoder_attention_heads,
+        is_multilingual,
+        num_languages,
+        openai_version,
+    )
+
+    return model, is_multilingual, num_languages
 
 
 # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
@@ -299,7 +363,9 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    model = convert_openai_whisper_to_tfms(args.checkpoint_path, args.pytorch_dump_folder_path)
+    model, is_multilingual, num_languages = convert_openai_whisper_to_tfms(
+        args.checkpoint_path, args.pytorch_dump_folder_path
+    )
 
     if args.convert_preprocessor:
         try:
@@ -310,10 +376,6 @@ if __name__ == "__main__":
         else:
             from tiktoken.load import load_tiktoken_bpe
 
-            # determine those parameters from a model checkpoint as Whisper repo does
-            is_multilingual = model.config.vocab_size >= 51865
-            num_languages = model.config.vocab_size - 51765 - int(is_multilingual)
-
             tokenizer = convert_tiktoken_to_hf(is_multilingual, num_languages)
             feature_extractor = WhisperFeatureExtractor(
                 feature_size=model.config.num_mel_bins,
@@ -321,8 +383,5 @@ if __name__ == "__main__":
             )
             processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
             processor.save_pretrained(args.pytorch_dump_folder_path)
-
-            # Set the proper generation config for the model
-            model.generation_config = _get_generation_config(is_multilingual, num_languages)
 
     model.save_pretrained(args.pytorch_dump_folder_path)
