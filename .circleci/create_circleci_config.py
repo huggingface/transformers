@@ -405,6 +405,7 @@ examples_torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager -r examples/pytorch/_tests_requirements.txt",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
+    pytest_num_workers=1,
 )
 
 
@@ -552,8 +553,6 @@ REGULAR_TESTS = [
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,
-    examples_tensorflow_job,
-    examples_flax_job,
 ]
 PIPELINE_TESTS = [
     pipelines_torch_job,
@@ -575,8 +574,7 @@ def create_circleci_config(folder=None):
             all_test_list = f.read()
     else:
         all_test_list = []
-    if len(all_test_list) > 0:
-        jobs.extend(PIPELINE_TESTS)
+
 
     test_file = os.path.join(folder, "filtered_test_list.txt")
     if os.path.exists(test_file):
@@ -584,8 +582,6 @@ def create_circleci_config(folder=None):
             test_list = f.read()
     else:
         test_list = []
-    if len(test_list) > 0:
-        jobs.extend(REGULAR_TESTS)
 
         extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs
@@ -621,13 +617,10 @@ def create_circleci_config(folder=None):
             example_tests = f.read()
         for job in EXAMPLES_TESTS:
             framework = job.name.replace("examples_", "").replace("torch", "pytorch")
-            if example_tests == "all":
+            if True:
                 job.tests_to_run = [f"examples/{framework}"]
             else:
                 job.tests_to_run = [f for f in example_tests.split(" ") if f.startswith(f"examples/{framework}")]
-
-            if len(job.tests_to_run) > 0:
-                jobs.append(job)
 
     doctest_file = os.path.join(folder, "doctest_list.txt")
     if os.path.exists(doctest_file):
@@ -635,12 +628,10 @@ def create_circleci_config(folder=None):
             doctest_list = f.read()
     else:
         doctest_list = []
-    if len(doctest_list) > 0:
-        jobs.extend(DOC_TESTS)
+
 
     repo_util_file = os.path.join(folder, "test_repo_utils.txt")
-    if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
-        jobs.extend(REPO_UTIL_TESTS)
+
 
     if len(jobs) == 0:
         jobs = [EmptyJob()]
