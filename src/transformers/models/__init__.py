@@ -90,6 +90,7 @@ from . import (
     fsmt,
     funnel,
     fuyu,
+    tomato,
     git,
     glpn,
     gpt2,
