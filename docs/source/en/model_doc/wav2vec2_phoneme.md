@@ -31,7 +31,13 @@ mapping phonemes of the training languages to the target language using articula
 this simple method significantly outperforms prior work which introduced task-specific architectures and used only part
 of a monolingually pretrained model.*
 
-Tips:
+Relevant checkpoints can be found under https://huggingface.co/models?other=phoneme-recognition.
+
+This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten)
+
+The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/fairseq/models/wav2vec).
+
+## Usage tips
 
 - Wav2Vec2Phoneme uses the exact same architecture as Wav2Vec2
 - Wav2Vec2Phoneme is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
@@ -39,17 +45,16 @@ Tips:
   decoded using [`Wav2Vec2PhonemeCTCTokenizer`].
 - Wav2Vec2Phoneme can be fine-tuned on multiple language at once and decode unseen languages in a single forward pass
   to a sequence of phonemes
-- By default the model outputs a sequence of phonemes. In order to transform the phonemes to a sequence of words one
+- By default, the model outputs a sequence of phonemes. In order to transform the phonemes to a sequence of words one
   should make use of a dictionary and language model.
 
-Relevant checkpoints can be found under https://huggingface.co/models?other=phoneme-recognition.
 
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten)
+<Tip>
 
-The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/fairseq/models/wav2vec).
+Wav2Vec2Phoneme's architecture is based on the Wav2Vec2 model, for API reference, check out [`Wav2Vec2`](wav2vec2)'s documentation page 
+except for the tokenizer.
 
-Wav2Vec2Phoneme's architecture is based on the Wav2Vec2 model, so one can refer to [`Wav2Vec2`]'s documentation page except for the tokenizer.
-
+</Tip>
 
 ## Wav2Vec2PhonemeCTCTokenizer
 

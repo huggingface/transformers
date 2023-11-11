@@ -37,7 +37,9 @@ state-of-the-art results on five well-known datasets: Open Entity (entity typing
 CoNLL-2003 (named entity recognition), ReCoRD (cloze-style question answering), and SQuAD 1.1 (extractive question
 answering).*
 
-Tips:
+This model was contributed by [ikuyamada](https://huggingface.co/ikuyamada) and [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/studio-ousia/luke).
+
+## Usage tips
 
 - This implementation is the same as [`RobertaModel`] with the addition of entity embeddings as well
   as an entity-aware self-attention mechanism, which improves performance on tasks involving reasoning about entities.
@@ -75,13 +77,7 @@ Tips:
   head models by specifying `task="entity_classification"`, `task="entity_pair_classification"`, or
   `task="entity_span_classification"`. Please refer to the example code of each head models.
 
-  A demo notebook on how to fine-tune [`LukeForEntityPairClassification`] for relation
-  classification can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/LUKE).
-
-  There are also 3 notebooks available, which showcase how you can reproduce the results as reported in the paper with
-  the HuggingFace implementation of LUKE. They can be found [here](https://github.com/studio-ousia/luke/tree/master/notebooks).
-
-Example:
+Usage example:
 
 ```python
 >>> from transformers import LukeTokenizer, LukeModel, LukeForEntityPairClassification
@@ -119,10 +115,10 @@ Example:
 >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
 ```
 
-This model was contributed by [ikuyamada](https://huggingface.co/ikuyamada) and [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/studio-ousia/luke).
+## Resources
 
-## Documentation resources
-
+- [A demo notebook on how to fine-tune [`LukeForEntityPairClassification`] for relation classification](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/LUKE)
+- [Notebooks showcasing how you to reproduce the results as reported in the paper with the HuggingFace implementation of LUKE](https://github.com/studio-ousia/luke/tree/master/notebooks)
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
 - [Question answering task guide](../tasks/question_answering)
