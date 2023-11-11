@@ -1859,7 +1859,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         padding_len = (attention_window - seq_len % attention_window) % attention_window
 
         if padding_len > 0:
-            logger.info(
+            logger.warning_once(
                 f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
                 f"`config.attention_window`: {attention_window}"
             )
