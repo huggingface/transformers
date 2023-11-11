@@ -649,6 +649,14 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
             self.tf_mask_tokens = tf.function(self.tf_mask_tokens, jit_compile=True)
 
+        if not self.mlm and self.tokenizer.pad_token_id == self.tokenizer.eos_token_id:
+            warnings.warn(
+                "The pad_token_id and eos_token_id values of this tokenizer are identical. "
+                "If you are planning for multi-turn training, "
+                "it can result in the model continuously generating questions and answers without interruption. "
+                "To avoid this, set the pad_token_id to a different value."
+            )
+
     @staticmethod
     def tf_bernoulli(shape, probability):
         import tensorflow as tf
