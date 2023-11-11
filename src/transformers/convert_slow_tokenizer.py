@@ -974,7 +974,7 @@ class UdopConverter(SpmConverter):
         vocab += [("<loc_{}>".format(i), 0.0) for i in range(num_loc_extra_ids - 1, -1, -1)]
 
         num_other_extra_ids = self.original_tokenizer._other_extra_ids
-        vocab += [("<other_0{}>".format(i), 0.0) for i in range(num_other_extra_ids - 1, -1, -1)]
+        vocab += [("<other_{}>".format(i), 0.0) for i in range(num_other_extra_ids - 1, -1, -1)]
 
         return vocab
 

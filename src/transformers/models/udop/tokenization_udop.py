@@ -341,7 +341,7 @@ class UdopTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return self.sp_model.get_piece_size()
+        return len(self.sp_model)
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_vocab
     def get_vocab(self):
