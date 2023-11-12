@@ -1057,8 +1057,8 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         past_target: torch.Tensor,
         past_observed_values: torch.Tensor,
     ):
-        # calculate loc and scale from all but the very last past target
-        _, loc, scale = self.scaler(past_target[..., :-1], past_observed_values[..., :-1])
+        # calculate loc and scale
+        _, loc, scale = self.scaler(past_target, past_observed_values)
 
         scaled_past_target = (past_target - loc) / scale
         input = scaled_past_target[..., max(self.config.lags_sequence) :]
@@ -1356,7 +1356,12 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
             scale=scale,
         )
 
-    def prepare_inputs_for_generation(self, inputs_embeds, past_key_values=None, attention_mask=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, past_values, past_key_values=None, attention_mask=None, past_observed_values=None, **kwargs
+    ):
+        transformer_inputs, loc, scale = self.model.prepare_input(past_values, past_observed_values)
+        inputs_embeds = self.model.embed_inputs(transformer_inputs)
+
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
 
@@ -1381,6 +1386,8 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
             "past_key_values": past_key_values,
             "use_cache": kwargs.get("use_cache"),
             "attention_mask": attention_mask,
+            "loc": loc,
+            "scale": scale,
         }
 
         return model_inputs
@@ -1411,21 +1418,19 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
 
         # greedy decoding
         future_samples = []
-        for k in range(prediction_length):
+        for _ in range(prediction_length):
             # prepare model inputs
-            transformer_inputs, loc, scale = self.model.prepare_input(
-                repeated_past_values, repeated_past_observed_values
+            model_inputs = self.prepare_inputs_for_generation(
+                repeated_past_values, past_observed_values=repeated_past_observed_values, **model_kwargs
             )
-            inputs_embeds = self.model.embed_inputs(transformer_inputs)
-            model_inputs = self.prepare_inputs_for_generation(inputs_embeds, **model_kwargs)
-            model_inputs["loc"] = loc
-            model_inputs["scale"] = scale
 
             outputs = self(**model_inputs, return_dict=True)
             model_inputs["past_key_values"] = outputs.past_key_values
             params = outputs.params
 
-            distr = self.output_distribution(params, loc=loc, scale=scale, trailing_n=1)
+            distr = self.output_distribution(
+                params, loc=model_inputs["loc"], scale=model_inputs["scale"], trailing_n=1
+            )
             sample = distr.sample()
             future_samples.append(sample)
 
