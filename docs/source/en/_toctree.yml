@@ -216,6 +216,8 @@
       title: Agents and Tools
     - local: model_doc/auto
       title: Auto Classes
+    - local: model_doc/backbones
+      title: Backbones
     - local: main_classes/callback
       title: Callbacks
     - local: main_classes/configuration
