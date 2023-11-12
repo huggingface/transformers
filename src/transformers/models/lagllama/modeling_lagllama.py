@@ -1357,7 +1357,7 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, past_values, past_key_values=None, attention_mask=None, past_observed_values=None, **kwargs
+        self, past_values, past_observed_values, past_key_values=None, attention_mask=None, **kwargs
     ):
         transformer_inputs, loc, scale = self.model.prepare_input(past_values, past_observed_values)
         inputs_embeds = self.model.embed_inputs(transformer_inputs)
