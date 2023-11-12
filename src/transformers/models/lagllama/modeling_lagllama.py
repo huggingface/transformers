@@ -1107,24 +1107,21 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         else:
             raise ValueError("You have to specify either past_values or inputs_embeds")
 
-        seq_length_with_past = seq_length
         past_key_values_length = 0
-
         if past_key_values is not None:
             past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
 
         if position_ids is None:
-            device = past_values.device if past_values is not None else device
             position_ids = torch.arange(
                 past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
             )
             position_ids = position_ids.unsqueeze(0)
 
-        if past_observed_values is None:
-            past_observed_values = torch.ones((batch_size, past_values_seq_length), dtype=torch.bool, device=device)
-
         if inputs_embeds is None:
+            if past_observed_values is None:
+                past_observed_values = torch.ones(
+                    (batch_size, past_values_seq_length), dtype=torch.bool, device=device
+                )
             transformer_inputs, loc, scale = self.prepare_input(past_values, past_observed_values)
             inputs_embeds = self.embed_inputs(transformer_inputs)
 
@@ -1359,11 +1356,16 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
             scale=scale,
         )
 
-    def prepare_inputs_for_generation(
-        self, past_values, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
-    ):
-        if past_key_values:
-            past_values = past_values[:, -1:]
+    def prepare_inputs_for_generation(self, inputs_embeds, past_key_values=None, attention_mask=None, **kwargs):
+        if past_key_values is not None:
+            past_length = past_key_values[0][0].shape[2]
+
+            if inputs_embeds.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                remove_prefix_length = inputs_embeds.shape[1] - 1
+
+            inputs_embeds = inputs_embeds[:, remove_prefix_length:]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
@@ -1371,22 +1373,16 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
+                position_ids = position_ids[:, -inputs_embeds.shape[1] :]
 
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"past_values": past_values}
+        model_inputs = {
+            "inputs_embeds": inputs_embeds,
+            "position_ids": position_ids,
+            "past_key_values": past_key_values,
+            "use_cache": kwargs.get("use_cache"),
+            "attention_mask": attention_mask,
+        }
 
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-            }
-        )
         return model_inputs
 
     @staticmethod
@@ -1403,19 +1399,30 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
         self,
         past_values: torch.Tensor,
         prediction_length: int,
+        past_observed_values: Optional[torch.Tensor] = None,
         **model_kwargs,
     ):
+        batch_size, past_values_seq_length = past_values.shape
         repeated_past_values = past_values.repeat_interleave(self.config.num_parallel_samples, 0)
+        device = past_values.device
+        if past_observed_values is None:
+            past_observed_values = torch.ones((batch_size, past_values_seq_length), dtype=torch.bool, device=device)
+        repeated_past_observed_values = past_observed_values.repeat_interleave(self.config.num_parallel_samples, 0)
 
         # greedy decoding
         future_samples = []
         for k in range(prediction_length):
             # prepare model inputs
-            model_inputs = self.prepare_inputs_for_generation(repeated_past_values, **model_kwargs)
+            transformer_inputs, loc, scale = self.model.prepare_input(
+                repeated_past_values, repeated_past_observed_values
+            )
+            inputs_embeds = self.model.embed_inputs(transformer_inputs)
+            model_inputs = self.prepare_inputs_for_generation(inputs_embeds, **model_kwargs)
+            model_inputs["loc"] = loc
+            model_inputs["scale"] = scale
 
             outputs = self(**model_inputs, return_dict=True)
-            loc = outputs.loc
-            scale = outputs.scale
+            model_inputs["past_key_values"] = outputs.past_key_values
             params = outputs.params
 
             distr = self.output_distribution(params, loc=loc, scale=scale, trailing_n=1)
@@ -1423,6 +1430,7 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
             future_samples.append(sample)
 
             repeated_past_values = torch.cat((repeated_past_values, sample), dim=1)
+            repeated_past_observed_values = torch.cat((repeated_past_observed_values, torch.ones_like(sample)), dim=1)
 
         concat_future_samples = torch.cat(future_samples, dim=1)
 
