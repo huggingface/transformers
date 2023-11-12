@@ -1312,12 +1312,12 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        hidden_states = outputs[0]
-        loc = outputs[-2]
-        scale = outputs[-1]
+        hidden_states = outputs.last_hidden_state
+        loc = outputs.loc
+        scale = outputs.scale
         # params of the chosen distribution
         params = self.parameter_projection(hidden_states)
 
@@ -1386,11 +1386,9 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
             "past_key_values": past_key_values,
             "use_cache": kwargs.get("use_cache"),
             "attention_mask": attention_mask,
-            "loc": loc,
-            "scale": scale,
         }
 
-        return model_inputs
+        return model_inputs, loc, scale
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
@@ -1420,7 +1418,7 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
         future_samples = []
         for _ in range(prediction_length):
             # prepare model inputs
-            model_inputs = self.prepare_inputs_for_generation(
+            model_inputs, loc, scale = self.prepare_inputs_for_generation(
                 repeated_past_values, past_observed_values=repeated_past_observed_values, **model_kwargs
             )
 
@@ -1428,9 +1426,7 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
             model_inputs["past_key_values"] = outputs.past_key_values
             params = outputs.params
 
-            distr = self.output_distribution(
-                params, loc=model_inputs["loc"], scale=model_inputs["scale"], trailing_n=1
-            )
+            distr = self.output_distribution(params, loc=loc, scale=scale, trailing_n=1)
             sample = distr.sample()
             future_samples.append(sample)
 
