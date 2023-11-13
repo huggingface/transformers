@@ -334,7 +334,9 @@ def get_contrastive_denoising_training_group(
 
 
 class RTDetrConvNormLayer(nn.Module):
-    def __init__(self, config, channels_in, channels_out, kernel_size, stride, padding=None, bias=False, activation=None):
+    def __init__(
+        self, config, channels_in, channels_out, kernel_size, stride, padding=None, bias=False, activation=None
+    ):
         super().__init__()
         self.conv = nn.Conv2d(
             channels_in,
@@ -481,7 +483,9 @@ class RTDetrCSPRepLayer(nn.Module):
         self.conv2 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, bias=None, activation=activation)
         self.bottlenecks = nn.Sequential(*[RTDetrRepVggBlock(config) for _ in range(num_blocks)])
         if hidden_channels != out_channels:
-            self.conv3 = RTDetrConvNormLayer(config, hidden_channels, out_channels, 1, 1, bias=None, activation=activation)
+            self.conv3 = RTDetrConvNormLayer(
+                config, hidden_channels, out_channels, 1, 1, bias=None, activation=activation
+            )
         else:
             self.conv3 = nn.Identity()
 
@@ -512,7 +516,6 @@ class RTDetrMSDeformableAttention(nn.Module):
         self.attention_weights = nn.Linear(self.embed_dim, self.total_points)
         self.value_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.output_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.ms_deformable_attn_core = deformable_attention_core_func
 
     def forward(self, query, reference_points, value, value_spatial_shapes, value_mask=None):
         bs, len_q = query.shape[:2]
@@ -549,7 +552,7 @@ class RTDetrMSDeformableAttention(nn.Module):
                 "Last dim of reference_points must be 2 or 4, but get {} instead.".format(reference_points.shape[-1])
             )
 
-        output = self.ms_deformable_attn_core(value, value_spatial_shapes, sampling_locations, attention_weights)
+        output = deformable_attention_core_func(value, value_spatial_shapes, sampling_locations, attention_weights)
         output = self.output_proj(output)
         return output
 
@@ -1306,7 +1309,8 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
         for in_channel in self.in_channels:
             self.input_proj.append(
                 nn.Sequential(
-                    nn.Conv2d(in_channel, self.hidden_dim, kernel_size=1, bias=False), nn.BatchNorm2d(self.hidden_dim, config.batch_norm_eps)
+                    nn.Conv2d(in_channel, self.hidden_dim, kernel_size=1, bias=False),
+                    nn.BatchNorm2d(self.hidden_dim, config.batch_norm_eps),
                 )
             )
 

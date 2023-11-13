@@ -212,7 +212,7 @@ class RTDetrConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
-        
+
         # backbone
         if backbone_config is None:
             logger.info("Initializing the config with a `TimmBackbone` backbone.")
