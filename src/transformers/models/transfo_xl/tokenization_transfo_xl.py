@@ -154,7 +154,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             token instead.
         eos_token (`str`, *optional*, defaults to `"<eos>"`):
             The end of sequence token.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<formula>"]`):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `['<formula>']`):
             A list of additional special tokens (for the HuggingFace functionality).
         language (`str`, *optional*, defaults to `"en"`):
             The language of this tokenizer (used for mose preprocessing).

@@ -273,6 +273,40 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(expected_tokens, output_rust[1])
         self.assertEqual(expected_indices, output_rust[2])
 
+    def test_basic_normalizer(self):
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        input_str = "Hola güey!"
+        expected_output_normalize = "hola güey "
+        expected_output_diacritics = "hola guey "
+
+        # tokenizer tests
+        encoded_input = tokenizer(input_str).input_ids
+        decoded_output = tokenizer.decode(encoded_input, skip_special_tokens=True, basic_normalize=False)
+        self.assertEqual(decoded_output, input_str)
+
+        decoded_output_normalize = tokenizer.decode(encoded_input, skip_special_tokens=True, basic_normalize=True)
+        self.assertEqual(decoded_output_normalize, expected_output_normalize)
+
+        decoded_output_diacritics = tokenizer.decode(
+            encoded_input, skip_special_tokens=True, basic_normalize=True, remove_diacritics=True
+        )
+        self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
+
+        # fast tokenizer tests
+        encoded_input = rust_tokenizer(input_str).input_ids
+        decoded_output = rust_tokenizer.decode(encoded_input, skip_special_tokens=True, basic_normalize=False)
+        self.assertEqual(decoded_output, input_str)
+
+        decoded_output_normalize = rust_tokenizer.decode(encoded_input, skip_special_tokens=True, basic_normalize=True)
+        self.assertEqual(decoded_output_normalize, expected_output_normalize)
+
+        decoded_output_diacritics = rust_tokenizer.decode(
+            encoded_input, skip_special_tokens=True, basic_normalize=True, remove_diacritics=True
+        )
+        self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
+
 
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     checkpoint_name = "openai/whisper-small.en"
@@ -342,7 +376,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     def test_vocab_size(self):
         self.assertEqual(self.tokenizer.vocab_size, 50257)
 
-    # Copied from transformers.tests.speech_to_test.test_tokenization_speech_to_text.py
+    # Copied from tests.models.speech_to_text.test_tokenization_speech_to_text.SpeechToTextTokenizerMultilinguialTest.test_tokenizer_decode_ignores_language_codes
     def test_tokenizer_decode_ignores_language_codes(self):
         self.assertIn(ES_CODE, self.tokenizer.all_special_ids)
         generated_ids = [ES_CODE, 4, 1601, 47, 7647, 2]

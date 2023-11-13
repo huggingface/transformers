@@ -60,12 +60,12 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
     This uses notably ByteFallback and no normalization.
 
-    ```
-    from transformers import LlamaTokenizerFast
+    ```python
+    >>> from transformers import LlamaTokenizerFast
 
-    tokenizer = LlamaTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
-    tokenizer.encode("Hello this is a test")
-    >>> [1, 15043, 445, 338, 263, 1243]
+    >>> tokenizer = LlamaTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
+    >>> tokenizer.encode("Hello this is a test")
+    [1, 15043, 445, 338, 263, 1243]
     ```
 
     If you want to change the `bos_token` or the `eos_token`, make sure to specify them when initializing the model, or
@@ -78,26 +78,28 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        tokenizer_file (`str`):
+        tokenizer_file (`str`, *optional*):
             [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
             contains everything needed to load the tokenizer.
-
-        clean_up_tokenization_spaces (`str`, *optional*, defaults to `False`):
-            Wether to cleanup spaces after decoding, cleanup consists in removing potential artifacts like extra
-            spaces.
-
-        bos_token (`str`, *optional*, defaults to `"<s>"`):
-            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-
-        eos_token (`str`, *optional*, defaults to `"</s>"`):
-            The end of sequence token.
-
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
+            extra spaces.
+        unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
+        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<s>"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
+        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"</s>"`):
+            The end of sequence token.
+        add_bos_token (`bool`, *optional*, defaults to `True`):
+            Whether or not to add an `bos_token` at the start of sequences.
+        add_eos_token (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an `eos_token` at the end of sequences.
+        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
+            Whether or not the default system prompt for Llama should be used.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -116,7 +118,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         add_bos_token=True,
         add_eos_token=False,
-        use_default_system_prompt=True,
+        use_default_system_prompt=False,
         **kwargs,
     ):
         super().__init__(
@@ -126,6 +128,8 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            add_bos_token=add_bos_token,
+            add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
             **kwargs,
         )
@@ -145,12 +149,16 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         """
         bos = self.bos_token
         bos_token_id = self.bos_token_id
+        if bos is None and self.add_bos_token:
+            raise ValueError("add_bos_token = True but bos_token = None")
 
         eos = self.eos_token
         eos_token_id = self.eos_token_id
+        if eos is None and self.add_eos_token:
+            raise ValueError("add_eos_token = True but eos_token = None")
 
-        single = f"{(bos+':0 ') * self.add_bos_token}$A:0{(' '+eos+':0') if self.add_eos_token else ''}"
-        pair = f"{single}{(' '+bos+':1') * self.add_bos_token} $B:1{(' '+eos+':1') if self.add_eos_token else ''}"
+        single = f"{(bos+':0 ') if self.add_bos_token else ''}$A:0{(' '+eos+':0') if self.add_eos_token else ''}"
+        pair = f"{single}{(' '+bos+':1') if self.add_bos_token else ''} $B:1{(' '+eos+':1') if self.add_eos_token else ''}"
 
         special_tokens = []
         if self.add_bos_token:
@@ -211,10 +219,19 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
         The output should look something like:
 
-        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos> <bos>[INST] Prompt [/INST] Answer <eos>
+        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos><bos>[INST] Prompt [/INST] Answer <eos>
         <bos>[INST] Prompt [/INST]
-        """
 
+        The reference for this chat template is [this code
+        snippet](https://github.com/facebookresearch/llama/blob/556949fdfb72da27c2f4a40b7f0e4cf0b8153a28/llama/generation.py#L320-L362)
+        in the original repository.
+        """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
         template = (
             "{% if messages[0]['role'] == 'system' %}"
             "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
@@ -249,3 +266,16 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         template = template.replace("DEFAULT_SYSTEM_MESSAGE", default_message)
 
         return template
+
+    # TODO ArthurZ let's rely on the template processor instead, refactor all fast tokenizers
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.build_inputs_with_special_tokens
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        bos_token_id = [self.bos_token_id] if self.add_bos_token else []
+        eos_token_id = [self.eos_token_id] if self.add_eos_token else []
+
+        output = bos_token_id + token_ids_0 + eos_token_id
+
+        if token_ids_1 is not None:
+            output = output + bos_token_id + token_ids_1 + eos_token_id
+
+        return output

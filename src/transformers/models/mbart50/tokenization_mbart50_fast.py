@@ -127,7 +127,7 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
+        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", []) or []
         kwargs["additional_special_tokens"] += [
             code for code in FAIRSEQ_LANGUAGE_CODES if code not in kwargs["additional_special_tokens"]
         ]

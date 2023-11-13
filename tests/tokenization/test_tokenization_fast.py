@@ -58,6 +58,18 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
     def test_encode_decode_with_spaces(self):
         pass
 
+    @unittest.skip(
+        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+    )
+    def test_added_tokens_serialization(self):
+        pass
+
+    @unittest.skip(
+        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+    )
+    def test_additional_special_tokens_serialization(self):
+        pass
+
     def test_pretrained_model_lists(self):
         # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any
         # model

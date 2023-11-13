@@ -25,7 +25,7 @@ Callbacks are "read only" pieces of code, apart from the [`TrainerControl`] obje
 cannot change anything in the training loop. For customizations that require changes in the training loop, you should
 subclass [`Trainer`] and override the methods you need (see [trainer](trainer) for examples).
 
-By default a [`Trainer`] will use the following callbacks:
+By default, `TrainingArguments.report_to` is set to `"all"`, so a [`Trainer`] will use the following callbacks.
 
 - [`DefaultFlowCallback`] which handles the default behavior for logging, saving and evaluation.
 - [`PrinterCallback`] or [`ProgressCallback`] to display progress and print the
@@ -44,6 +44,9 @@ By default a [`Trainer`] will use the following callbacks:
 - [`~integrations.ClearMLCallback`] if [clearml](https://github.com/allegroai/clearml) is installed.
 - [`~integrations.DagsHubCallback`] if [dagshub](https://dagshub.com/) is installed.
 - [`~integrations.FlyteCallback`] if [flyte](https://flyte.org/) is installed.
+- [`~integrations.DVCLiveCallback`] if [dvclive](https://dvc.org/doc/dvclive) is installed.
+
+If a package is installed but you don't wish to use the accompanying integration, you can change `TrainingArguments.report_to` to a list of just those integrations you want to use (e.g. `["azure_ml", "wandb"]`). 
 
 The main class that implements callbacks is [`TrainerCallback`]. It gets the
 [`TrainingArguments`] used to instantiate the [`Trainer`], can access that
@@ -85,6 +88,9 @@ Here is the list of the available [`TrainerCallback`] in the library:
 [[autodoc]] integrations.DagsHubCallback
 
 [[autodoc]] integrations.FlyteCallback
+
+[[autodoc]] integrations.DVCLiveCallback
+    - setup
 
 ## TrainerCallback
 
