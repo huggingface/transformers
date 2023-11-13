@@ -871,14 +871,14 @@ class RTDetrTransformer(nn.Module):
 
         # decoder
         out_bboxes, out_logits = self.decoder(
-            target,
-            init_ref_points_unact,
-            feat_flatten,
-            spatial_shapes,
-            level_start_index,
-            self.dec_bbox_head,
-            self.dec_score_head,
-            self.query_pos_head,
+            target=target,
+            ref_points_unact=init_ref_points_unact,
+            memory=feat_flatten,
+            memory_spatial_shapes=spatial_shapes,
+            memory_level_start_index=level_start_index,
+            bbox_head=self.dec_bbox_head,
+            score_head=self.dec_score_head,
+            query_pos_head=self.query_pos_head,
             attn_mask=attn_mask,
         )
 
