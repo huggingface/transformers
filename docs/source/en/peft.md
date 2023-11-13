@@ -214,7 +214,7 @@ You can also fine-tune additional trainable adapters on top of a model that has 
 
 ```py
 from transformers import AutoModelForCausalLM, OPTForCausalLM, AutoTokenizer
-from peft import PeftConfig
+from peft import LoraConfig
 
 model_id = "facebook/opt-350m"
 model = AutoModelForCausalLM.from_pretrained(model_id)
