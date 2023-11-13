@@ -209,7 +209,7 @@ As you can see, the model correctly identified two named entities from the given
 #### Translation
 
 ```py
-model_name = "gpt2"
+>>> model_name = "gpt2"
 
 >>> from transformers import TFAutoModel
 
