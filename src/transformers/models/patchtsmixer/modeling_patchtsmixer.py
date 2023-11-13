@@ -167,7 +167,7 @@ class PatchTSMixerNormLayer(nn.Module):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
 
-        self.config = config
+        self.norm_mlp = config.norm_mlp
 
         if "batch" in config.norm_mlp.lower():
             self.norm = PatchTSMixerBatchNorm(config)
@@ -182,7 +182,7 @@ class PatchTSMixerNormLayer(nn.Module):
         Returns:
             `torch.Tensor` of shape `((batch_size, num_channels, num_patches, num_features))`
         """
-        if "batch" in self.config.norm_mlp.lower():
+        if "batch" in self.norm_mlp.lower():
             # reshape the data
             inputs_reshaped = torch.reshape(
                 inputs,
@@ -243,7 +243,7 @@ class PatchTSMixerChannelFeatureMixerBlock(nn.Module):
         super().__init__()
 
         self.norm = PatchTSMixerNormLayer(config)
-        self.config = config
+        self.gated_attn = config.gated_attn
         self.mlp = PatchTSMixerMLP(
             config.num_input_channels, config.num_input_channels, config.expansion_factor, config.dropout
         )
@@ -266,7 +266,7 @@ class PatchTSMixerChannelFeatureMixerBlock(nn.Module):
 
         inputs = inputs.permute(0, 3, 2, 1)
 
-        if self.config.gated_attn:
+        if self.gated_attn:
             inputs = self.gating_block(inputs)
 
         inputs = self.mlp(inputs)
@@ -444,7 +444,9 @@ class PatchMixerBlock(nn.Module):
         super().__init__()
 
         self.norm = PatchTSMixerNormLayer(config)
-        self.config = config
+
+        self.self_attn = config.self_attn
+        self.gated_attn = config.gated_attn
 
         self.mlp = PatchTSMixerMLP(config.num_patches, config.num_patches, config.expansion_factor, config.dropout)
 
@@ -471,7 +473,7 @@ class PatchMixerBlock(nn.Module):
 
         hidden_state = self.norm(hidden_state)
 
-        if self.config.self_attn:
+        if self.self_attn:
             batch_size, n_vars, num_patches, num_features = hidden_state.shape
             hidden_state_reshaped = hidden_state.reshape(batch_size * n_vars, num_patches, num_features)
 
@@ -482,13 +484,13 @@ class PatchMixerBlock(nn.Module):
         hidden_state = hidden_state.transpose(2, 3)
         hidden_state = self.mlp(hidden_state)
 
-        if self.config.gated_attn:
+        if self.gated_attn:
             hidden_state = self.gating_block(hidden_state)
 
         # Transpose back
         hidden_state = hidden_state.transpose(2, 3)
 
-        if self.config.self_attn:
+        if self.self_attn:
             hidden_state = self.norm_attn(hidden_state + x_attn)
 
         out = hidden_state + residual
@@ -508,7 +510,9 @@ class FeatureMixerBlock(nn.Module):
         super().__init__()
 
         self.norm = PatchTSMixerNormLayer(config)
-        self.config = config
+
+        self.gated_attn = config.gated_attn
+
         self.mlp = PatchTSMixerMLP(config.num_features, config.num_features, config.expansion_factor, config.dropout)
 
         if config.gated_attn:
@@ -527,7 +531,7 @@ class FeatureMixerBlock(nn.Module):
         hidden = self.norm(hidden)
         hidden = self.mlp(hidden)
 
-        if self.config.gated_attn:
+        if self.gated_attn:
             hidden = self.gating_block(hidden)
 
         out = hidden + residual
@@ -550,7 +554,8 @@ class PatchTSMixerLayer(nn.Module):
         self.patch_mixer = PatchMixerBlock(config=config)
         self.feature_mixer = FeatureMixerBlock(config=config)
 
-        self.config = config
+        self.mode = config.mode
+
         if config.mode == "mix_channel":
             self.channel_feature_mixer = PatchTSMixerChannelFeatureMixerBlock(config=config)
 
@@ -563,7 +568,7 @@ class PatchTSMixerLayer(nn.Module):
         Returns:
             `torch.Tensor`: Transformed tensor.
         """
-        if self.config.mode == "mix_channel":
+        if self.mode == "mix_channel":
             hidden = self.channel_feature_mixer(hidden)
 
         hidden = self.patch_mixer(hidden)
@@ -626,10 +631,10 @@ class PatchTSMixerForecastHead(nn.Module):
     ):
         super().__init__()
 
-        self.config = config
+        self.forecast_channel_indices = config.forecast_channel_indices
 
-        if self.config.forecast_channel_indices is not None:
-            self.config.forecast_channel_indices.sort()
+        if self.forecast_channel_indices is not None:
+            self.forecast_channel_indices.sort()
 
         self.dropout_layer = nn.Dropout(config.head_dropout)
         if distribution_output is None:
@@ -662,11 +667,11 @@ class PatchTSMixerForecastHead(nn.Module):
         else:
             forecast = forecast.transpose(-1, -2)  # [batch_size x forecast_len x n_vars]
 
-        if self.config.forecast_channel_indices is not None:
+        if self.forecast_channel_indices is not None:
             if isinstance(forecast, tuple):
-                forecast = tuple(z[..., self.config.forecast_channel_indices] for z in forecast)
+                forecast = tuple(z[..., self.forecast_channel_indices] for z in forecast)
             else:
-                forecast = forecast[..., self.config.forecast_channel_indices]  # [batch_size x forecast_len x n_vars]
+                forecast = forecast[..., self.forecast_channel_indices]  # [batch_size x forecast_len x n_vars]
 
         return forecast
 
@@ -686,7 +691,8 @@ class PatchTSMixerLinearHead(nn.Module):
     ):
         super().__init__()
 
-        self.config = config
+        self.head_aggregation = config.head_aggregation
+        self.output_range = config.output_range
 
         if config.head_aggregation is None:
             mul_factor = config.num_patches
@@ -722,13 +728,13 @@ class PatchTSMixerLinearHead(nn.Module):
 
         # batch_size x num_features x num_patch or batch_size x n_vars x num_features x num_patch
         hidden_features = hidden_features.transpose(-1, -2)
-        if self.config.head_aggregation == "use_last":
+        if self.head_aggregation == "use_last":
             # batch_size x num_features (flatten) or # batch_size x n_vars x num_features (common_channel)
             hidden_features = hidden_features[..., -1]
-        elif self.config.head_aggregation == "max_pool":
+        elif self.head_aggregation == "max_pool":
             # batch_size x n_vars x num_features or batch_size x num_features
             hidden_features = hidden_features.max(dim=-1).values
-        elif self.config.head_aggregation == "avg_pool":
+        elif self.head_aggregation == "avg_pool":
             # batch_size x n_vars x num_features or batch_size x num_features
             hidden_features = hidden_features.mean(dim=-1)
 
@@ -737,10 +743,9 @@ class PatchTSMixerLinearHead(nn.Module):
         hidden_features = self.dropout(hidden_features)
         hidden_features = self.projection(hidden_features)  # batch_size x num_targets
 
-        if (self.distribution_output is None) and (self.config.output_range is not None):
+        if (self.distribution_output is None) and (self.output_range is not None):
             hidden_features = (
-                torch.sigmoid(hidden_features) * (self.config.output_range[1] - self.config.output_range[0])
-                + self.config.output_range[0]
+                torch.sigmoid(hidden_features) * (self.output_range[1] - self.output_range[0]) + self.output_range[0]
             )
         return hidden_features
 
@@ -1276,7 +1281,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
 
-        self.config = config
+        self.use_return_dict = config.use_return_dict
 
         self.use_positional_encoding = config.use_positional_encoding
 
@@ -1326,7 +1331,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         # past_values: [batch_size  x n_vars x num_patches x patch_length]
         # return: [batch_size x n_vars x num_patches x num_features]
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.use_return_dict
 
         patches = self.patcher(
             past_values
@@ -1387,6 +1392,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig, mask_input: bool = False):
         super().__init__(config)
 
+        self.use_return_dict = config.use_return_dict
         self.encoder = PatchTSMixerEncoder(config)
         self.patching = PatchTSMixerPatchify(config)
 
@@ -1425,7 +1431,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         Returns:
 
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.use_return_dict
 
         mask = None
         if observed_mask is None:
@@ -1513,7 +1519,9 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
             config=config,
         )
         self.masked_loss = config.masked_loss
-        self.config = config
+
+        self.use_return_dict = config.use_return_dict
+        self.masked_loss = config.masked_loss
 
         # Initialize weights and apply final processing
         if config.post_init:
@@ -1541,9 +1549,9 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         Returns:
 
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.use_return_dict
 
-        if self.config.masked_loss is True:
+        if self.masked_loss is True:
             loss = torch.nn.MSELoss(reduction="none")
         else:
             loss = torch.nn.MSELoss(reduction="mean")
@@ -1692,7 +1700,10 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
-        self.config = config
+        self.loss = config.loss
+        self.use_return_dict = config.use_return_dict
+        self.forecast_channel_indices = config.forecast_channel_indices
+        self.num_parallel_samples = config.num_parallel_samples
 
         if config.loss == "mse":
             self.distribution_output = None
@@ -1753,14 +1764,14 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         Returns:
 
         """
-        if self.config.loss == "mse":
+        if self.loss == "mse":
             loss = nn.MSELoss(reduction="mean")
-        elif self.config.loss == "nll":
+        elif self.loss == "nll":
             loss = nll
         else:
             raise ValueError("Invalid loss function: Allowed values: mse and nll")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.use_return_dict
 
         # past_values: tensor [batch_size x context_length x num_input_channels]
         model_output = self.model(
@@ -1777,27 +1788,27 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         )  # tensor [batch_size x forecast_len x num_input_channels]
 
         loss_val = None
-        if self.config.forecast_channel_indices is not None:
+        if self.forecast_channel_indices is not None:
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(
                     y_hat,
-                    loc=model_output.loc[..., self.config.forecast_channel_indices],
-                    scale=model_output.scale[..., self.config.forecast_channel_indices],
+                    loc=model_output.loc[..., self.forecast_channel_indices],
+                    scale=model_output.scale[..., self.forecast_channel_indices],
                 )
                 if target_values is not None and return_loss is True:
                     loss_val = loss(
                         distribution,
-                        target_values[..., self.config.forecast_channel_indices],
+                        target_values[..., self.forecast_channel_indices],
                     )
                     # take average of the loss
                     loss_val = weighted_average(loss_val)
             else:
                 y_hat = (
-                    y_hat * model_output.scale[..., self.config.forecast_channel_indices]
-                    + model_output.loc[..., self.config.forecast_channel_indices]
+                    y_hat * model_output.scale[..., self.forecast_channel_indices]
+                    + model_output.loc[..., self.forecast_channel_indices]
                 )
                 if target_values is not None and return_loss is True:
-                    loss_val = loss(y_hat, target_values[..., self.config.forecast_channel_indices])
+                    loss_val = loss(y_hat, target_values[..., self.forecast_channel_indices])
         else:
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(
@@ -1811,9 +1822,9 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                 if target_values is not None and return_loss is True:
                     loss_val = loss(y_hat, target_values)
 
-        if self.config.forecast_channel_indices is not None:
-            loc = model_output.loc[..., self.config.forecast_channel_indices]
-            scale = model_output.scale[..., self.config.forecast_channel_indices]
+        if self.forecast_channel_indices is not None:
+            loc = model_output.loc[..., self.forecast_channel_indices]
+            scale = model_output.scale[..., self.forecast_channel_indices]
         else:
             loc = model_output.loc
             scale = model_output.scale
@@ -1864,7 +1875,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             number of samples, prediction_length, num_input_channels)`.
         """
         # get number of samples
-        num_parallel_samples = self.config.num_parallel_samples
+        num_parallel_samples = self.num_parallel_samples
 
         # get model output
         outputs = self(
@@ -1929,7 +1940,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         self.head = PatchTSMixerLinearHead(
             config=config,
         )
-
+        self.use_return_dict = config.use_return_dict
         if config.scaling in ["std", "mean", True]:
             self.inject_scale = InjectScalerStatistics4D(
                 num_features=config.num_features, num_patches=config.num_patches
@@ -1975,7 +1986,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
 
         loss = torch.nn.CrossEntropyLoss()
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.use_return_dict
 
         model_output = self.model(
             past_values,
@@ -2056,7 +2067,13 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         super().__init__(config)
 
         self.model = PatchTSMixerModel(config)
-        self.config = config
+
+        self.loss = config.loss
+        self.distribution_output = config.distribution_output
+
+        self.use_return_dict = config.use_return_dict
+        self.num_parallel_samples = config.num_parallel_samples
+
         if config.loss == "mse":
             self.distribution_output = None
         else:
@@ -2119,14 +2136,14 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
 
         """
 
-        if self.config.loss == "mse":
+        if self.loss == "mse":
             loss = nn.MSELoss(reduction="mean")
-        elif self.config.loss == "nll":
+        elif self.loss == "nll":
             loss = nll
         else:
             raise ValueError("Invalid loss function: Allowed values: mse and nll")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.use_return_dict
         model_output = self.model(
             past_values,
             output_hidden_states=output_hidden_states,
@@ -2146,7 +2163,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
 
         if target_values is not None and return_loss is True:
             if self.distribution_output:
-                if self.config.distribution_output == "negative_binomial" and torch.any(target_values < 0):
+                if self.distribution_output == "negative_binomial" and torch.any(target_values < 0):
                     raise Exception("target_values cannot be negative for negative_binomial distribution.")
                 distribution = self.distribution_output.distribution(y_hat)
                 loss_val = loss(distribution, target_values)
@@ -2191,7 +2208,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             number of samples, num_targets)`.
         """
         # get number of samples
-        num_parallel_samples = self.config.num_parallel_samples
+        num_parallel_samples = self.num_parallel_samples
 
         # get model output
         outputs = self(
