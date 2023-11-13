@@ -14,7 +14,7 @@
 # limitations under the License.
 """ PatchTSMixer model configuration"""
 
-from typing import Optional, Union, List
+from typing import List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -50,8 +50,8 @@ class PatchTSMixerConfig(PretrainedConfig):
         num_parallel_samples (`int`, *optional*, defaults to 100):
             The number of samples to generate in parallel for probablistic forecast.
         num_features (`int`, *optional*, defaults to 8):
-            Hidden dimension of the model. Recommended to set it as a multiple of patch_length (i.e. 2-5X of patch_len).
-            Larger value indicates more complex model.
+            Hidden dimension of the model. Recommended to set it as a multiple of patch_length (i.e. 2-5X of
+            patch_len). Larger value indicates more complex model.
         expansion_factor (`int`, *optional*, defaults to 2):
             Expansion factor to use inside MLP. Recommended range is 2-5. Larger value indicates more complex model.
         num_layers (`int`, *optional*, defaults to 3):
@@ -106,8 +106,8 @@ class PatchTSMixerConfig(PretrainedConfig):
         forecast_mask_patches (`list`, *optional*, defaults to `[2, 3]`):
             List of patch lengths to mask in the end of the data, when `mask_type` is `forecast`.
         forecast_mask_ratios (`list`, *optional*, defaults to `[1, 1]`):
-            List of weights to use for each patch length for forecast masking. For Example, if `forecast_mask_patches` is [2,3]
-            and `forecast_mask_ratios` is [1,1], then equal weights to both patch lengths.
+            List of weights to use for each patch length for forecast masking. For Example, if `forecast_mask_patches`
+            is [2,3] and `forecast_mask_ratios` is [1,1], then equal weights to both patch lengths.
         mask_value (`float`, *optional*, defaults to `0.0`):
             Mask value to use.
         masked_loss (`bool`, *optional*, defaults to `True`):
