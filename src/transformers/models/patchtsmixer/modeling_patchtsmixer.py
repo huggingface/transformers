@@ -2018,7 +2018,6 @@ class PatchTSMixerForRegressionOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
 
 
-
 class InjectScalerStatistics4D(nn.Module):
     def __init__(self, num_features: int, num_patches: int, expansion: int = 2):
         super().__init__()
@@ -2057,6 +2056,7 @@ class InjectScalerStatistics4D(nn.Module):
         inputs = self.inverse_trans_compression(inputs)  # [batch_size x channels x num_patch x num_features]
 
         return inputs
+
 
 class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
     r"""
