@@ -676,13 +676,12 @@ class RTDetrMLP(nn.Module):
 
 
 class RTDetrTransformer(nn.Module):
-
     def __init__(self, config: RTDetrConfig):
         super().__init__()
 
         position_embed_type = config.position_embed_type
         feat_channels = config.feat_channels
-        feat_strides = config.feat_strides
+        feat_strides = config.feat_strides[:]
         num_levels = config.num_levels
 
         if position_embed_type not in ["sine", "learned"]:
@@ -691,6 +690,9 @@ class RTDetrTransformer(nn.Module):
             raise ValueError("len(feat_channels) must be less than or equal to num_levels")
         if len(feat_strides) != len(feat_channels):
             raise ValueError("len(feat_strides) must be equal to len(feat_channels)")
+
+        # Extends feat_strides list to match the number of levels (num_levels), ensuring that feat_strides has an entry for each level
+        # Each added subsequent stride has twice the size of the last one.
         for _ in range(num_levels - len(feat_strides)):
             feat_strides.append(feat_strides[-1] * 2)
 
