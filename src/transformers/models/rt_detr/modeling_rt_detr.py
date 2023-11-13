@@ -451,7 +451,7 @@ class RTDetrTransformerEncoder(nn.Module):
         return output
 
 
-class RepVggBlock(nn.Module):
+class RTDetrRepVggBlock(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
 
@@ -479,7 +479,7 @@ class RTDetrCSPRepLayer(nn.Module):
         hidden_channels = int(out_channels * config.expansion)
         self.conv1 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, bias=None, activation=activation)
         self.conv2 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, bias=None, activation=activation)
-        self.bottlenecks = nn.Sequential(*[RepVggBlock(config) for _ in range(num_blocks)])
+        self.bottlenecks = nn.Sequential(*[RTDetrRepVggBlock(config) for _ in range(num_blocks)])
         if hidden_channels != out_channels:
             self.conv3 = RTDetrConvNormLayer(config, hidden_channels, out_channels, 1, 1, bias=None, activation=activation)
         else:
