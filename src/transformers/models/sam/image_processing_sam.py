@@ -366,6 +366,8 @@ class SamImageProcessor(BaseImageProcessor):
             if input_data_format is None:
                 input_data_format = infer_channel_dimension_format(segmentation_map, num_channels=1)
 
+        original_size = get_image_size(segmentation_map, channel_dim=input_data_format)
+
         segmentation_map = self._preprocess(
             image=segmentation_map,
             do_resize=do_resize,
@@ -383,7 +385,7 @@ class SamImageProcessor(BaseImageProcessor):
             segmentation_map = segmentation_map.squeeze(0)
         segmentation_map = segmentation_map.astype(np.int64)
 
-        return segmentation_map
+        return segmentation_map, original_size
 
     def preprocess(
         self,
@@ -545,14 +547,7 @@ class SamImageProcessor(BaseImageProcessor):
         }
 
         if segmentation_maps is not None:
-            # masks should start out the same size as input images
-            original_mask_sizes = [get_image_size(mask, channel_dim=input_data_format) for mask in segmentation_maps]
-            assert all(
-                original_im_size == original_mask_size
-                for original_im_size, original_mask_size in zip(original_sizes, original_mask_sizes)
-            ), "Segmentation maps should be the same size (h, w) as input images."
-
-            segmentation_maps = zip(
+            segmentation_maps, original_mask_sizes = zip(
                 *(
                     self._preprocess_mask(
                         segmentation_map=mask,
@@ -565,6 +560,12 @@ class SamImageProcessor(BaseImageProcessor):
                     for mask in segmentation_maps
                 )
             )
+
+            # masks should start out the same size as input images
+            assert all(
+                original_im_size == original_mask_size
+                for original_im_size, original_mask_size in zip(original_sizes, original_mask_sizes)
+            ), "Segmentation maps should be the same size as input images."
 
             data["labels"] = segmentation_maps
 
