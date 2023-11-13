@@ -676,7 +676,6 @@ class RTDetrMLP(nn.Module):
 
 
 class RTDetrTransformer(nn.Module):
-    __share__ = ["num_classes"]
 
     def __init__(self, config: RTDetrConfig):
         super().__init__()
