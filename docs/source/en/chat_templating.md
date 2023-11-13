@@ -57,7 +57,6 @@ that string will also be tokenized for us. To see a more complex template in act
 ...   {"role": "user", "content": "I'd like to show off how chat templating works!"},
 ... ]
 
->>> tokenizer.use_default_system_prompt = False
 >>> tokenizer.apply_chat_template(chat, tokenize=False)
 "<s>[INST] Hello, how are you? [/INST]I'm doing great. How can I help you today?</s> [INST] I'd like to show off how chat templating works! [/INST]"
 ```
