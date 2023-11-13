@@ -627,7 +627,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("roberta-prelayernorm", "RoBERTa-PreLayerNorm"),
         ("roc_bert", "RoCBert"),
         ("roformer", "RoFormer"),
-        ("rt_detr", "RTDetr"),
+        ("rt_detr", "RT-DETR"),
         ("rwkv", "RWKV"),
         ("sam", "SAM"),
         ("seamless_m4t", "SeamlessM4T"),
