@@ -281,30 +281,18 @@ You can modify the model's configuration class to change how a model is built. T
 
 Start by importing [`AutoConfig`], and then load the pretrained model you want to modify. Within [`AutoConfig.from_pretrained`], you can specify the attribute you want to change, such as the number of attention heads:
 
-```py
->>> from transformers import AutoConfig
 
->>> my_config = AutoConfig.from_pretrained("distilbert-base-uncased", n_heads=12)
-```
 
 <frameworkcontent>
 <pt>
 Create a model from your custom configuration with [`AutoModel.from_config`]:
 
-```py
->>> from transformers import AutoModel
 
->>> my_model = AutoModel.from_config(my_config)
-```
 </pt>
 <tf>
 Create a model from your custom configuration with [`TFAutoModel.from_config`]:
 
-```py
->>> from transformers import TFAutoModel
 
->>> my_model = TFAutoModel.from_config(my_config)
-```
 </tf>
 </frameworkcontent>
 
