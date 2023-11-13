@@ -208,17 +208,27 @@ def box_iou(boxes1, boxes2):
     return iou, union
 
 
-def box_cxcywh_to_xyxy(box):
-    x_center, y_center, w, h = box.unbind(-1)
-    b = [(x_center - 0.5 * w), (y_center - 0.5 * h), (x_center + 0.5 * w), (y_center + 0.5 * h)]
+# Copied from transformers.models.detr.image_processing_detr._center_to_corners_format_torch -> center_to_corners_format_torch
+def center_to_corners_format_torch(bboxes_center: "torch.Tensor") -> "torch.Tensor":
+    center_x, center_y, width, height = bboxes_center.unbind(-1)
+    bbox_corners = torch.stack(
+        # top left x, top left y, bottom right x, bottom right y
+        [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)],
+        dim=-1,
+    )
+    return bbox_corners
+
+
+# Copied from transformers.models.detr.image_processing_detr._corners_to_center_format_torch -> corners_to_center_format_torch
+def corners_to_center_format_torch(bboxes_corners: "torch.Tensor") -> "torch.Tensor":
+    top_left_x, top_left_y, bottom_right_x, bottom_right_y = bboxes_corners.unbind(-1)
+    b = [
+        (top_left_x + bottom_right_x) / 2,  # center x
+        (top_left_y + bottom_right_y) / 2,  # center y
+        (bottom_right_x - top_left_x),  # width
+        (bottom_right_y - top_left_y),  # height
+    ]
     return torch.stack(b, dim=-1)
-
-
-def box_xyxy_to_cxcywh(box):
-    x, y, x_end, y_end = box.unbind(-1)
-    b = [(x + x_end) / 2, (y + y_end) / 2, (x_end - x), (y_end - y)]
-    return torch.stack(b, dim=-1)
-
 
 def get_contrastive_denoising_training_group(
     targets,
@@ -296,7 +306,7 @@ def get_contrastive_denoising_training_group(
         input_query_class = torch.where(mask & pad_gt_mask, new_label, input_query_class)
 
     if box_noise_scale > 0:
-        known_bbox = box_cxcywh_to_xyxy(input_query_bbox)
+        known_bbox = center_to_corners_format_torch(input_query_bbox)
         diff = torch.tile(input_query_bbox[..., 2:] * 0.5, [1, 1, 2]) * box_noise_scale
         rand_sign = torch.randint_like(input_query_bbox, 0, 2) * 2.0 - 1.0
         rand_part = torch.rand_like(input_query_bbox)
@@ -304,7 +314,7 @@ def get_contrastive_denoising_training_group(
         rand_part *= rand_sign
         known_bbox += rand_part * diff
         known_bbox.clip_(min=0.0, max=1.0)
-        input_query_bbox = box_xyxy_to_cxcywh(known_bbox)
+        input_query_bbox = corners_to_center_format_torch(known_bbox)
         input_query_bbox = inverse_sigmoid(input_query_bbox)
 
     input_query_class = class_embed(input_query_class)
@@ -1030,7 +1040,7 @@ class RTDetrLoss(nn.Module):
 
         src_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
-        ious, _ = box_iou(box_cxcywh_to_xyxy(src_boxes), box_cxcywh_to_xyxy(target_boxes))
+        ious, _ = box_iou(center_to_corners_format_torch(src_boxes), center_to_corners_format_torch(target_boxes))
         ious = torch.diag(ious).detach()
 
         src_logits = outputs["logits"]
@@ -1105,7 +1115,7 @@ class RTDetrLoss(nn.Module):
         losses["loss_bbox"] = loss_bbox.sum() / num_boxes
 
         loss_giou = 1 - torch.diag(
-            generalized_box_iou(box_cxcywh_to_xyxy(src_boxes), box_cxcywh_to_xyxy(target_boxes))
+            generalized_box_iou(center_to_corners_format_torch(src_boxes), center_to_corners_format_torch(target_boxes))
         )
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
@@ -1668,7 +1678,7 @@ class RTDetrHungarianMatcher(nn.Module):
         # Compute the L1 cost between boxes
         cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
         # Compute the giou cost betwen boxes
-        cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
+        cost_giou = -generalized_box_iou(center_to_corners_format_torch(out_bbox), center_to_corners_format_torch(tgt_bbox))
         # Compute the final cost matrix
         final_cost = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
         final_cost = final_cost.view(bs, num_queries, -1).cpu()
