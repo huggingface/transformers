@@ -38,6 +38,8 @@ class PatchTSMixerConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        > Time series specific configuration
+
         context_length (`int`, *optional*, defaults to 32):
             The context/history length for the input sequence.
         patch_len (`int`, *optional*, defaults to 8): <fill_docstring>
@@ -48,6 +50,9 @@ class PatchTSMixerConfig(PretrainedConfig):
             non-overlapping patches.
         num_parallel_samples (`int`, *optional*, defaults to 100):
             The number of samples to generate in parallel for probablistic forecast.
+
+        > General model configuration
+
         num_features (`int`, *optional*, defaults to 8):
             Hidden dimension of the model. Recommended to set it as a multiple of patch_length (i.e. 2-5X of
             patch_len). Larger value indicates more complex model.
@@ -97,11 +102,17 @@ class PatchTSMixerConfig(PretrainedConfig):
             `PyTorch`. Setting it to `False` performs `PyTorch` weight initialization.
         norm_eps (`float`, *optional*, defaults to 1e-05):
             A value added to the denominator for numerical stability of normalization.
+
+        > Pretrain model configuration
+
         mask_type (`str`, *optional*, defaults to `"random"`):
             Type of masking to use for Masked Pretraining mode. Allowed values are "random", "forecast". In Random
             masking, points are maskes random. In Forecast masking, Points are masked towards the end.
         random_mask_ratio (`float`, *optional*, defaults to 0.5):
             Masking ratio to use when `mask_type` is `random`. Higher value indicates more masking.
+
+        > Forecast head configuration
+
         forecast_mask_patches (`list`, *optional*, defaults to `[2, 3]`):
             List of patch lengths to mask in the end of the data, when `mask_type` is `forecast`.
         forecast_mask_ratios (`list`, *optional*, defaults to `[1, 1]`):
@@ -116,6 +127,9 @@ class PatchTSMixerConfig(PretrainedConfig):
             across channels.
         unmasked_channel_indices (`list`, *optional*):
             Channels that are not masked during pretraining.
+
+        > General head configuration
+
         head_dropout (`float`, *optional*, defaults to 0.2):
             The dropout probability the `PatchTSMixer` head.
         distribution_output (`string`, *optional*, defaults to `"student_t"`):
@@ -126,6 +140,9 @@ class PatchTSMixerConfig(PretrainedConfig):
         forecast_channel_indices (`list`, *optional*):
             List of channel indices to forecast. If None, forecast all channels. Target data is expected to have all
             channels and we explitly filter the channels in prediction and target before loss computation.
+
+        > Classification/Regression configuration
+
         num_targets (`int`, *optional*, defaults to 3):
             Number of targets (dimensionality of the regressed variable) for a regression task.
         output_range (`list`, *optional*):
