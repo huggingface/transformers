@@ -38,19 +38,19 @@ class PatchTSMixerConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        seq_len (`int`, *optional*, defaults to 32):
+        context_length (`int`, *optional*, defaults to 32):
             The context/history length for the input sequence.
-        patch_len (`int`, *optional*, defaults to 8):
-            The patch length for the `PatchTSMixer` model. Try to set it as a divisor of `seq_len`.
+        patch_length (`int`, *optional*, defaults to 8):
+            The patch length for the `PatchTSMixer` model. Try to set it as a divisor of `context_length`.
         num_input_channels (`int`, *optional*, defaults to 1):
             Number of input variates. For Univariate, set it to 1.
-        stride (`int`, *optional*, defaults to 8):
-            Determines the overlap between two consecutive patches. Set it to patch_len (or greater), if we want
+        patch_stride (`int`, *optional*, defaults to 8):
+            Determines the overlap between two consecutive patches. Set it to patch_length (or greater), if we want
             non-overlapping patches.
         num_parallel_samples (`int`, *optional*, defaults to 100):
             The number of samples to generate in parallel for probablistic forecast.
         num_features (`int`, *optional*, defaults to 8):
-            Hidden dimension of the model. Recommended to set it as a multiple of patch_len (i.e. 2-5X of patch_len).
+            Hidden dimension of the model. Recommended to set it as a multiple of patch_length (i.e. 2-5X of patch_len).
             Larger value indicates more complex model.
         expansion_factor (`int`, *optional*, defaults to 2):
             Expansion factor to use inside MLP. Recommended range is 2-5. Larger value indicates more complex model.
@@ -154,10 +154,10 @@ class PatchTSMixerConfig(PretrainedConfig):
     def __init__(
         self,
         # Time series specific configuration
-        seq_len: int = 32,
+        context_length: int = 32,
         patch_len: int = 8,
         num_input_channels: int = 1,
-        stride: int = 8,
+        patch_stride: int = 8,
         num_parallel_samples: int = 100,
         # General model configuration
         num_features: int = 8,
@@ -199,9 +199,9 @@ class PatchTSMixerConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.num_input_channels = num_input_channels
-        self.seq_len = seq_len
-        self.patch_len = patch_len
-        self.stride = stride
+        self.context_length = context_length
+        self.patch_length = patch_len
+        self.patch_stride = patch_stride
         self.num_features = num_features
         self.expansion_factor = expansion_factor
         self.num_layers = num_layers
@@ -211,7 +211,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.norm_mlp = norm_mlp
         self.scaling = scaling
         self.head_dropout = head_dropout
-        self.num_patches = (max(seq_len, patch_len) - patch_len) // stride + 1
+        self.num_patches = (max(context_length, patch_len) - patch_len) // patch_stride + 1
         self.mask_type = mask_type
         self.mask_ratio = mask_ratio
         self.mask_patches = mask_patches

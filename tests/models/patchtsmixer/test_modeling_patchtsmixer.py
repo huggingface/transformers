@@ -61,10 +61,10 @@ if is_torch_available():
 class PatchTSMixerModelTester:
     def __init__(
         self,
-        seq_len: int = 32,
-        patch_len: int = 8,
+        context_length: int = 32,
+        patch_length: int = 8,
         num_input_channels: int = 3,
-        stride: int = 8,
+        patch_stride: int = 8,
         # num_features: int = 128,
         hidden_size: int = 8,
         # num_layers: int = 8,
@@ -103,9 +103,9 @@ class PatchTSMixerModelTester:
         num_parallel_samples=4,
     ):
         self.num_input_channels = num_input_channels
-        self.seq_len = seq_len
-        self.patch_len = patch_len
-        self.stride = stride
+        self.context_length = context_length
+        self.patch_length = patch_length
+        self.patch_stride = patch_stride
         # self.num_features = num_features
         self.hidden_size = hidden_size
         self.expansion_factor = expansion_factor
@@ -147,9 +147,9 @@ class PatchTSMixerModelTester:
     def get_config(self):
         config_ = PatchTSMixerConfig(
             num_input_channels=self.num_input_channels,
-            seq_len=self.seq_len,
-            patch_len=self.patch_len,
-            stride=self.stride,
+            context_length=self.context_length,
+            patch_length=self.patch_length,
+            patch_stride=self.patch_stride,
             # num_features = self.num_features,
             num_features=self.hidden_size,
             expansion_factor=self.expansion_factor,
@@ -183,10 +183,10 @@ class PatchTSMixerModelTester:
         return config_
 
     def prepare_patchtsmixer_inputs_dict(self, config):
-        _past_length = config.seq_len
-        # bs, n_vars, num_patch, patch_len
+        _past_length = config.context_length
+        # bs, n_vars, num_patch, patch_length
 
-        # [bs x seq_len x n_vars]
+        # [bs x context_length x n_vars]
         past_values = floats_tensor([self.batch_size, _past_length, self.num_input_channels])
 
         target_values = floats_tensor([self.batch_size, config.forecast_len, self.num_input_channels])
@@ -461,9 +461,9 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             output = model(past_values=batch["past_values"].to(torch_device)).prediction_logits
         num_patch = (
-            max(model.config.seq_len, model.config.patch_len) - model.config.patch_len
-        ) // model.config.stride + 1
-        expected_shape = torch.Size([1024, model.config.num_input_channels, num_patch, model.config.patch_len])
+            max(model.config.context_length, model.config.patch_length) - model.config.patch_length
+        ) // model.config.patch_stride + 1
+        expected_shape = torch.Size([1024, model.config.num_input_channels, num_patch, model.config.patch_length])
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
@@ -512,10 +512,10 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         """Setup method: Called once before test-cases execution"""
         cls.params = {}
         cls.params.update(
-            seq_len=32,
-            patch_len=8,
+            context_length=32,
+            patch_length=8,
             num_input_channels=3,
-            stride=8,
+            patch_stride=8,
             num_features=4,
             expansion_factor=2,
             num_layers=3,
@@ -547,17 +547,17 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         )
 
         cls.num_patches = (
-            max(cls.params["seq_len"], cls.params["patch_len"]) - cls.params["patch_len"]
-        ) // cls.params["stride"] + 1
+            max(cls.params["context_length"], cls.params["patch_length"]) - cls.params["patch_length"]
+        ) // cls.params["patch_stride"] + 1
 
         # batch_size = 32
         batch_size = 2
 
-        int(cls.params["forecast_len"] / cls.params["patch_len"])
+        int(cls.params["forecast_len"] / cls.params["patch_length"])
 
         cls.data = torch.rand(
             batch_size,
-            cls.params["seq_len"],
+            cls.params["context_length"],
             cls.params["num_input_channels"],
         )
 
@@ -565,7 +565,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             batch_size,
             cls.params["num_input_channels"],
             cls.num_patches,
-            cls.params["patch_len"],
+            cls.params["patch_length"],
         )
 
         cls.enc_output = torch.rand(
@@ -588,7 +588,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             batch_size,
             cls.params["num_input_channels"],
             cls.num_patches,
-            cls.params["patch_len"],
+            cls.params["patch_length"],
         )
 
         cls.correct_forecast_output = torch.rand(
