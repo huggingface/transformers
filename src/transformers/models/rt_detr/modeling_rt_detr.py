@@ -698,7 +698,7 @@ class RTDetrTransformer(nn.Module):
 
         self.hidden_dim = config.hidden_dim
         self.num_head = config.num_attention_heads
-        self.feat_strides = config.feat_strides
+        self.feat_strides = feat_strides
         self.num_levels = config.num_levels
         self.num_classes = config.num_classes
         self.num_queries = config.num_queries
