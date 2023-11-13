@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch RT_DETR model."""
+""" PyTorch RT-DETR model."""
 import copy
 import math
 from collections import OrderedDict
@@ -559,7 +559,7 @@ class RTDetrMSDeformableAttention(nn.Module):
             )
         else:
             raise ValueError(
-                "Last dim of reference_points must be 2 or 4, but get {} instead.".format(reference_points.shape[-1])
+                "Last dim of reference_points must be 2 or 4, but got {} instead.".format(reference_points.shape[-1])
             )
 
         output = deformable_attention_core_func(value, value_spatial_shapes, sampling_locations, attention_weights)
