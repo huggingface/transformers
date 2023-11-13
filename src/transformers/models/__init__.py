@@ -162,6 +162,7 @@ from . import (
     pegasus_x,
     perceiver,
     persimmon,
+    phi,
     phobert,
     pix2struct,
     plbart,
