@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# RTDetr
+# RT-DETR
 
 ## Overview
 
