@@ -37,14 +37,14 @@ for a check that will fix all inconsistencies automatically (used by `make fix-c
 """
 
 import argparse
+import asyncio
 import glob
 import os
 import re
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple
-
-from ruff.__main__ import find_ruff_bin
 
 from transformers.utils import direct_transformers_import
 
@@ -226,22 +226,17 @@ def get_indent(code: str) -> str:
         return re.search(r"^(\s*)\S", lines[idx]).groups()[0]
     return ""
 
-import asyncio
-import subprocess
-import tempfile
-from pathlib import Path
 
-async def run_ruff(filepath, line_length = 119):
+async def run_ruff(filepath, line_length=119):
     command = f"ruff format {filepath} --line-length {line_length}"
-    process = await asyncio.create_subprocess_shell(
-        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
+    process = await asyncio.create_subprocess_shell(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = await process.communicate()
     return stdout, stderr
 
-def stylify(code: str, name = "") -> str:
+
+def stylify(code: str, name="") -> str:
     """
-    Applies the ruff part of our `make style` command to some code.
+    Applies the ruff part of our `make style` command to some code. This formats the code using `ruff format`.
     As `ruff` does not provide a python api this cannot be done on the fly.
 
     Args:
@@ -261,12 +256,6 @@ def stylify(code: str, name = "") -> str:
         filepath.write_text(code)
         loop = asyncio.get_event_loop()
         stdout, stderr = loop.run_until_complete(run_ruff(filepath))
-
-        if stdout:
-            print(f"ruff stdout: {stdout.decode()}")
-        if stderr:
-            print(f"ruff stderr: {stderr.decode()}")
-
         result = filepath.read_text()
     return result[len("class Bla:\n") :] if has_indent else result
 
