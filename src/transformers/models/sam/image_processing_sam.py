@@ -75,8 +75,8 @@ class SamImageProcessor(BaseImageProcessor):
             `preprocess` method.
         mask_size (`dict`, *optional*, defaults to `{"longest_edge": 256}`):
             Size of the output segmentation map after resizing. Resizes the longest edge of the image to match
-            `size["longest_edge"]` while maintaining the aspect ratio. Can be overridden by the `mask_size` parameter in the
-            `preprocess` method.
+            `size["longest_edge"]` while maintaining the aspect ratio. Can be overridden by the `mask_size` parameter
+            in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
@@ -104,8 +104,8 @@ class SamImageProcessor(BaseImageProcessor):
             Size of the output image after padding. Can be overridden by the `pad_size` parameter in the `preprocess`
             method.
         mask_pad_size (`dict`, *optional*, defaults to `{"height": 256, "width": 256}`):
-            Size of the output segmentation map after padding. Can be overridden by the `mask_pad_size` parameter in the `preprocess`
-            method.
+            Size of the output segmentation map after padding. Can be overridden by the `mask_pad_size` parameter in
+            the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
     """
@@ -302,7 +302,7 @@ class SamImageProcessor(BaseImageProcessor):
         do_convert_rgb: Optional[bool] = None,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> Tuple(np.ndarray, Tuple(int, int), Tuple(int, int)):
+    ) -> Tuple[np.ndarray, Tuple[int, int], Tuple[int, int]]:
         image = to_numpy_array(image)
 
         # PIL RGBA images are converted to RGB
@@ -442,8 +442,8 @@ class SamImageProcessor(BaseImageProcessor):
                 Controls the size of the padding applied to the image. The image is padded to `pad_size["height"]` and
                 `pad_size["width"]` if `do_pad` is set to `True`.
             mask_pad_size (`Dict[str, int]`, *optional*, defaults to `self.mask_pad_size`):
-                Controls the size of the padding applied to the segmentation map. The image is padded to `mask_pad_size["height"]` and
-                `mask_pad_size["width"]` if `do_pad` is set to `True`.
+                Controls the size of the padding applied to the segmentation map. The image is padded to
+                `mask_pad_size["height"]` and `mask_pad_size["width"]` if `do_pad` is set to `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
             return_tensors (`str` or `TensorType`, *optional*):
