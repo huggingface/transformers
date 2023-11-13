@@ -1428,7 +1428,7 @@ RT_DETR_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     """
-    RT_DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further
+    RT-DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further
     decoded into scores and classes.
     """,
     RT_DETR_START_DOCSTRING,
