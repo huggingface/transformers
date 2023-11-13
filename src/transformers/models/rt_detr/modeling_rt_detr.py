@@ -688,9 +688,9 @@ class RTDetrTransformer(nn.Module):
         if position_embed_type not in ["sine", "learned"]:
             raise ValueError(f"position_embed_type not supported {position_embed_type}")
         if len(feat_channels) > num_levels:
-            raise ValueError("relation feat_channels <= num_levels does not apply")
+            raise ValueError("len(feat_channels) must be less than or equal to num_levels")
         if len(feat_strides) != len(feat_channels):
-            raise ValueError("relation len(feat_strides) == len(feat_channels) does not apply")
+            raise ValueError("len(feat_strides) must be equal to len(feat_channels)")
         for _ in range(num_levels - len(feat_strides)):
             feat_strides.append(feat_strides[-1] * 2)
 
