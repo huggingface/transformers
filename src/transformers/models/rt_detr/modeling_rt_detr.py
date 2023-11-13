@@ -863,7 +863,6 @@ class RTDetrTransformer(nn.Module):
             target = self.tgt_embed.weight.unsqueeze(0).tile([batch_size, 1, 1])
         else:
             target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
-            target = target.detach()
 
         if denoising_class is not None:
             target = torch.concat([denoising_class, target], 1)
