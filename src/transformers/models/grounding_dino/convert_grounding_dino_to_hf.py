@@ -29,6 +29,7 @@ from transformers import (
     GroundingDINOForObjectDetection,
     GroundingDINOImageProcessor,
     GroundingDINOProcessor,
+    SwinConfig,
 )
 
 
@@ -37,8 +38,6 @@ IMAGENET_STD = [0.229, 0.224, 0.225]
 
 
 def get_grounding_dino_config(model_name):
-    config = GroundingDINOConfig()
-
     if "tiny" in model_name:
         window_size = 7
         embed_dim = 96
@@ -54,12 +53,16 @@ def get_grounding_dino_config(model_name):
     else:
         raise ValueError("Model not supported, only supports base and large variants")
 
-    config.backbone_config.window_size = window_size
-    config.backbone_config.image_size = image_size
-    config.backbone_config.embed_dim = embed_dim
-    config.backbone_config.depths = depths
-    config.backbone_config.num_heads = num_heads
-    config.backbone_config.out_indices = [2, 3, 4]
+    backbone_config = SwinConfig(
+        window_size=window_size,
+        image_size=image_size,
+        embed_dim=embed_dim,
+        depths=depths,
+        num_heads=num_heads,
+        out_indices=[2, 3, 4],
+    )
+
+    config = GroundingDINOConfig(backbone_config=backbone_config)
 
     return config
 

@@ -160,16 +160,10 @@ class GroundingDINOConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
-            API.
-        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `{'model_type': 'swin'}`):
-            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
-            case it will default to `ResNetConfig()`.
+        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
+            The configuration of the backbone model.
         text_backbone_config (`str`, *optional*, defaults to `"bert-base-uncased"`):
             The configuration of the text backbone model. Should be a bert-like config.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
         num_queries (`int`, *optional*, defaults to 900):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
             [`GroundingDINOModel`] can detect in a single image.
@@ -202,15 +196,6 @@ class GroundingDINOConfig(PretrainedConfig):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
-        backbone (`str`, *optional*, defaults to `"swin"`):
-            Name of convolutional backbone to use in case `use_timm_backbone` = `True`. Supports any convolutional
-            backbone from the timm package. For a list of all available models, see [this
-            page](https://rwightman.github.io/pytorch-image-models/#load-a-pretrained-model).
-        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
-            Whether to use pretrained weights for the backbone. Only supported when `use_timm_backbone` = `True`.
-        dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
-            `use_timm_backbone` = `True`.
         num_feature_levels (`int`, *optional*, defaults to 4):
             The number of input feature levels.
         encoder_n_points (`int`, *optional*, defaults to 4):
@@ -278,10 +263,8 @@ class GroundingDINOConfig(PretrainedConfig):
 
     def __init__(
         self,
-        use_timm_backbone=False,
-        backbone_config={"model_type": "swin"},
+        backbone_config=None,
         text_backbone_config=None,
-        num_channels=3,
         num_queries=900,
         encoder_layers=6,
         encoder_ffn_dim=2048,
@@ -297,9 +280,6 @@ class GroundingDINOConfig(PretrainedConfig):
         activation_dropout=0.0,
         auxiliary_loss=False,
         position_embedding_type="sine",
-        backbone="swin",
-        use_pretrained_backbone=True,
-        dilation=False,
         num_feature_levels=4,
         encoder_n_points=4,
         decoder_n_points=4,
@@ -324,20 +304,14 @@ class GroundingDINOConfig(PretrainedConfig):
         init_std=0.02,
         **kwargs,
     ):
-        if backbone_config is not None and use_timm_backbone:
-            raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
-
-        if not use_timm_backbone:
-            if backbone_config is None:
-                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-            elif isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
-        self.use_timm_backbone = use_timm_backbone
+        if backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+            backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage2", "stage3", "stage4"])
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.get("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
         self.backbone_config = backbone_config
-        self.num_channels = num_channels
         self.num_queries = num_queries
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -352,9 +326,6 @@ class GroundingDINOConfig(PretrainedConfig):
         self.activation_function = activation_function
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.dilation = dilation
         # deformable attributes
         self.num_feature_levels = num_feature_levels
         self.encoder_n_points = encoder_n_points

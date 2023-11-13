@@ -33,7 +33,6 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
-    is_timm_available,
     is_torch_cuda_available,
     is_vision_available,
     replace_return_docstrings,
@@ -119,9 +118,6 @@ class MultiScaleDeformableAttentionFunction(Function):
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
-
-if is_timm_available():
-    from timm import create_model
 
 logger = logging.get_logger(__name__)
 
@@ -422,58 +418,34 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrConvEncoder with DeformableDetr->GroundingDINO
 class GroundingDINOConvEncoder(nn.Module):
     """
-    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
+    Convolutional backbone using the AutoBackbone API.
 
     nn.BatchNorm2d layers are replaced by GroundingDINOFrozenBatchNorm2d as defined above.
-
     """
 
     def __init__(self, config):
         super().__init__()
 
         self.config = config
-
-        if config.use_timm_backbone:
-            requires_backends(self, ["timm"])
-            kwargs = {}
-            if config.dilation:
-                kwargs["output_stride"] = 16
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                out_indices=(2, 3, 4) if config.num_feature_levels > 1 else (4,),
-                in_chans=config.num_channels,
-                **kwargs,
-            )
-        else:
-            backbone = AutoBackbone.from_config(config.backbone_config)
+        backbone = AutoBackbone.from_config(config.backbone_config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = (
-            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
-        )
+        self.intermediate_channel_sizes = self.model.channels
 
-        backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
+        backbone_model_type = config.backbone_config.model_type
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if config.use_timm_backbone:
-                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                        parameter.requires_grad_(False)
-                else:
-                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
-                        parameter.requires_grad_(False)
+                if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                    parameter.requires_grad_(False)
 
-    # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->GroundingDINO
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:
