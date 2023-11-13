@@ -334,7 +334,7 @@ def get_contrastive_denoising_training_group(
 
 
 class RTDetrConvNormLayer(nn.Module):
-    def __init__(self, channels_in, channels_out, kernel_size, stride, padding=None, bias=False, activation=None):
+    def __init__(self, config, channels_in, channels_out, kernel_size, stride, padding=None, bias=False, activation=None):
         super().__init__()
         self.conv = nn.Conv2d(
             channels_in,
@@ -344,7 +344,7 @@ class RTDetrConvNormLayer(nn.Module):
             padding=(kernel_size - 1) // 2 if padding is None else padding,
             bias=bias,
         )
-        self.norm = nn.BatchNorm2d(channels_out)
+        self.norm = nn.BatchNorm2d(channels_out, config.batch_norm_eps)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, x):
@@ -458,8 +458,8 @@ class RepVggBlock(nn.Module):
         channels_in = int(config.hidden_dim * config.expansion)
         channels_out = int(config.hidden_dim * config.expansion)
         activation = config.act_encoder
-        self.conv1 = RTDetrConvNormLayer(channels_in, channels_out, 3, 1, padding=1, activation=None)
-        self.conv2 = RTDetrConvNormLayer(channels_in, channels_out, 1, 1, padding=0, activation=None)
+        self.conv1 = RTDetrConvNormLayer(config, channels_in, channels_out, 3, 1, padding=1)
+        self.conv2 = RTDetrConvNormLayer(config, channels_in, channels_out, 1, 1, padding=0)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, x):
@@ -477,11 +477,11 @@ class RTDetrCSPRepLayer(nn.Module):
         activation = config.act_encoder
 
         hidden_channels = int(out_channels * config.expansion)
-        self.conv1 = RTDetrConvNormLayer(in_channels, hidden_channels, 1, 1, bias=None, activation=activation)
-        self.conv2 = RTDetrConvNormLayer(in_channels, hidden_channels, 1, 1, bias=None, activation=activation)
+        self.conv1 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, bias=None, activation=activation)
+        self.conv2 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, bias=None, activation=activation)
         self.bottlenecks = nn.Sequential(*[RepVggBlock(config) for _ in range(num_blocks)])
         if hidden_channels != out_channels:
-            self.conv3 = RTDetrConvNormLayer(hidden_channels, out_channels, 1, 1, bias=None, activation=activation)
+            self.conv3 = RTDetrConvNormLayer(config, hidden_channels, out_channels, 1, 1, bias=None, activation=activation)
         else:
             self.conv3 = nn.Identity()
 
@@ -692,7 +692,7 @@ class RTDetrMLP(nn.Module):
 class RTDetrTransformer(nn.Module):
     __share__ = ["num_classes"]
 
-    def __init__(self, config):
+    def __init__(self, config: RTDetrConfig):
         super().__init__()
 
         position_embed_type = config.position_embed_type
@@ -725,7 +725,7 @@ class RTDetrTransformer(nn.Module):
         eval_idx = config.eval_idx
 
         # backbone feature projection
-        self.build_input_proj_layer(feat_channels)
+        self.build_input_proj_layer(config)
 
         # Transformer module
         decoder_layer = RTDetrTransformerDecoderLayer(config)
@@ -763,11 +763,12 @@ class RTDetrTransformer(nn.Module):
         if self.eval_spatial_size:
             self.anchors, self.valid_mask = self.generate_anchors()
 
-    def build_input_proj_layer(self, feat_channels):
+    def build_input_proj_layer(self, config):
+        feat_channels = config.feat_channels
         self.input_proj = nn.ModuleList()
         for in_channels in feat_channels:
             conv = nn.Conv2d(in_channels, self.hidden_dim, 1, bias=False)
-            norm = nn.BatchNorm2d(self.hidden_dim)
+            norm = nn.BatchNorm2d(self.hidden_dim, config.batch_norm_eps)
             layer = [("conv", conv), ("norm", norm)]
             sequential_layer = nn.Sequential(OrderedDict(layer))
             self.input_proj.append(sequential_layer)
@@ -776,7 +777,7 @@ class RTDetrTransformer(nn.Module):
 
         for _ in range(self.num_levels - len(feat_channels)):
             conv = nn.Conv2d(in_channels, self.hidden_dim, 3, 2, padding=1, bias=False)
-            norm = nn.BatchNorm2d(self.hidden_dim)
+            norm = nn.BatchNorm2d(self.hidden_dim, config.batch_norm_eps)
             layer = [("conv", conv), ("norm", norm)]
             self.input_proj.append(nn.Sequential(OrderedDict(layer)))
             in_channels = self.hidden_dim
@@ -1305,7 +1306,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
         for in_channel in self.in_channels:
             self.input_proj.append(
                 nn.Sequential(
-                    nn.Conv2d(in_channel, self.hidden_dim, kernel_size=1, bias=False), nn.BatchNorm2d(self.hidden_dim)
+                    nn.Conv2d(in_channel, self.hidden_dim, kernel_size=1, bias=False), nn.BatchNorm2d(self.hidden_dim, config.batch_norm_eps)
                 )
             )
 
@@ -1316,7 +1317,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
         self.fpn_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1, 0, -1):
             self.lateral_convs.append(
-                RTDetrConvNormLayer(self.hidden_dim, self.hidden_dim, 1, 1, activation=act_encoder)
+                RTDetrConvNormLayer(config, self.hidden_dim, self.hidden_dim, 1, 1, activation=act_encoder)
             )
             self.fpn_blocks.append(RTDetrCSPRepLayer(config))
 
@@ -1325,7 +1326,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
         self.pan_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1):
             self.downsample_convs.append(
-                RTDetrConvNormLayer(self.hidden_dim, self.hidden_dim, 3, 2, activation=act_encoder)
+                RTDetrConvNormLayer(config, self.hidden_dim, self.hidden_dim, 3, 2, activation=act_encoder)
             )
             self.pan_blocks.append(RTDetrCSPRepLayer(config))
 

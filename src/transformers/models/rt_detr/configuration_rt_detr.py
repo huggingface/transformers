@@ -42,6 +42,8 @@ class RTDetrConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
+        batch_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the batch normalization layers.
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone in a dictionary or the config object of the backbone.
         in_channels (`List[int]`, *optional*, defaults to `[512, 1024, 2048]`):
@@ -157,6 +159,7 @@ class RTDetrConfig(PretrainedConfig):
         self,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
+        batch_norm_eps=1e-5,
         # backbone
         backbone_config=None,
         # encoder HybridEncoder
@@ -208,7 +211,8 @@ class RTDetrConfig(PretrainedConfig):
     ):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-
+        self.batch_norm_eps = batch_norm_eps
+        
         # backbone
         if backbone_config is None:
             logger.info("Initializing the config with a `TimmBackbone` backbone.")
