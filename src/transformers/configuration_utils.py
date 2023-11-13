@@ -694,7 +694,7 @@ class PretrainedConfig(PushToHubMixin):
                 # the original exception.
                 raise
             except HFValidationError:
-                raise HFValidationError(" Cannot be found")
+                raise HFValidationError("Incorrect local_path_or_model_id: '/runpod-volume/Mistralic-7B-1-AWQ'. Please provide either the path to a local folder or the repo_id of a model on the Hub.")
             except Exception:
                 # For any other exception, we throw a generic error.
                 raise EnvironmentError(
