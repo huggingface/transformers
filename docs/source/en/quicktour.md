@@ -107,6 +107,7 @@ The [`pipeline`] can accommodate any model from the [Hub](https://huggingface.co
 
 ```py
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
+>>> model_name = "distilbert-base-uncased"
 ```
 
 <frameworkcontent>
