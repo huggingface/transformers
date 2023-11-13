@@ -179,7 +179,7 @@ class PeftAdapterMixin:
 
             peft_config = PeftConfig.from_pretrained(
                 peft_model_id,
-                use_auth_token=token,
+                token=token,
                 **adapter_kwargs,
             )
 
@@ -190,7 +190,7 @@ class PeftAdapterMixin:
             self._hf_peft_config_loaded = True
 
         if peft_model_id is not None:
-            adapter_state_dict = load_peft_weights(peft_model_id, use_auth_token=token, **adapter_kwargs)
+            adapter_state_dict = load_peft_weights(peft_model_id, token=token, **adapter_kwargs)
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
         processed_adapter_state_dict = {}
