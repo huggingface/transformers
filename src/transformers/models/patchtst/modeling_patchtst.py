@@ -331,10 +331,10 @@ def forecast_masking(
         inputs (`torch.Tensor`):
             Input of shape `(bs, num_channels, num_patch, patch_len)` or `(bs, tsg1, tag2, num_channels, num_patch,
             patch_len)`
-        forecast_mask_patches (`list`): [2, 4]
-            List of patch lengths to mask in the end of the data.
-        forecast_mask_ratios (`list`, *optional*): [0.7, 0.3]
-            List of weights to use for each patch length. For Ex. if forecast_mask_patches is [5,4] and
+        forecast_mask_patches (`list`):
+            List of patch lengths to mask at the end of the data e.g. [2, 4].
+        forecast_mask_ratios (`list`, *optional*):
+            List of weights to use for each patch length. For example if forecast_mask_patches is [5,4] and
             forecast_mask_ratios is [1,1], then equal weights to both patch lengths.
         unmasked_channel_indices (`list`, *optional*):
             Control Variable channel indices. These channels will not be masked.
