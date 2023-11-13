@@ -248,10 +248,9 @@ def stylify(code: str) -> str:
         filepath = Path(tmpdir) / "__init__.py"
         filepath.write_text(code)
         ruff_bin = find_ruff_bin()
-        os.spawnv(os.P_WAIT,ruff_bin,["ruff check", f"{str(filepath)}", "--fix","--line-length", "119", "--ignore", "F821"])
-        os.spawnv(os.P_WAIT,ruff_bin,["ruff format", f"{str(filepath)}", "--line-length", "119", "--ignore", "F821"])
+        os.spawnv(os.P_WAIT, ruff_bin, ["ruff format", f"{str(filepath)}", "--line-length", "150", "--ignore", "F821"])
+        os.spawnv(os.P_WAIT, ruff_bin, ["ruff format", f"{str(filepath)}", "--line-length", "119", "--ignore", "F821"])
         result = filepath.read_text()
-    return result
     return result[len("class Bla:\n") :] if has_indent else result
 
 
@@ -361,7 +360,6 @@ def is_copy_consistent(filename: str, overwrite: bool = False) -> Optional[List[
                 if option.strip() == "all-casing":
                     theoretical_code = re.sub(obj1.lower(), obj2.lower(), theoretical_code)
                     theoretical_code = re.sub(obj1.upper(), obj2.upper(), theoretical_code)
-
             theoretical_code = stylify(theoretical_code)
 
         # Test for a diff and act accordingly.

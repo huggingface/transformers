@@ -73,7 +73,7 @@ def whitespace_tokenize(text):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BertTokenizer with bert-base-cased->YituTech/conv-bert-base, ConvBertTokenizer->BertTokenizer, BERT->ConvBERT
-class BertTokenizer(PreTrainedTokenizer):
+class ConvBertTokenizer(PreTrainedTokenizer):
     r"""
     Construct a ConvBERT tokenizer. Based on WordPiece.
 

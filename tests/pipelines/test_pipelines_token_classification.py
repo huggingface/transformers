@@ -560,7 +560,18 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             },
             {
                 # fmt: off
-                "scores": np.array([0, 0, 0, 0, 0, 0.9986497163772583, 0, 0, ]),
+                "scores": np.array(
+                    [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0.9986497163772583,
+                        0,
+                        0,
+                    ]
+                ),
                 # fmt: on
                 "index": 7,
                 "word": "UN",
