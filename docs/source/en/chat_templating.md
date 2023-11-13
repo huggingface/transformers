@@ -78,7 +78,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 checkpoint = "HuggingFaceH4/zephyr-7b-beta"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-model = AutoModelForCausalLM.from_pretrained(checkpoint)
+model = AutoModelForCausalLM.from_pretrained(checkpoint)  # You may want to use bfloat16 and/or move to GPU here
 
 messages = [
     {
@@ -232,7 +232,7 @@ Which is bigger, the moon or the sun?</s>
 The sun.</s>
 ```
 
-From here, just continue training like you would with a standard language modelling task.
+From here, just continue training like you would with a standard language modelling task, using the `formatted_chat` column.
 
 ## Advanced: How do chat templates work?
 
