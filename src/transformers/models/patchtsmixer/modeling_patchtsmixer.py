@@ -172,7 +172,7 @@ class PatchTSMixerNormLayer(nn.Module):
         if "batch" in config.norm_mlp.lower():
             self.norm = PatchTSMixerBatchNorm(config)
         else:
-            self.norm = nn.LayerNorm(config.num_features)
+            self.norm = nn.LayerNorm(config.num_features, eps=config.norm_eps)
 
     def forward(self, inputs: torch.Tensor):
         """
