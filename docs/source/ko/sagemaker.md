@@ -26,4 +26,3 @@ rendered properly in your Markdown viewer.
 
 - [Train Hugging Face models on Amazon SageMaker with the SageMaker Python SDK](https://huggingface.co/docs/sagemaker/train)
 - [Deploy Hugging Face models to Amazon SageMaker with the SageMaker Python SDK](https://huggingface.co/docs/sagemaker/inference)
-- [Frequently Asked Questions](https://huggingface.co/docs/sagemaker/faq)

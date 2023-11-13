@@ -121,6 +121,7 @@ else:
                     "CLIPTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("clvp", ("ClvpTokenizer", None)),
             (
                 "code_llama",
                 (
@@ -181,6 +182,13 @@ else:
             ("idefics", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("instructblip", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("jukebox", ("JukeboxTokenizer", None)),
+            (
+                "kosmos-2",
+                (
+                    "XLMRobertaTokenizer" if is_sentencepiece_available() else None,
+                    "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv3", ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None)),
@@ -299,6 +307,7 @@ else:
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("phi", ("CodeGenTokenizer", "CodeGenTokenizerFast" if is_tokenizers_available() else None)),
             ("phobert", ("PhobertTokenizer", None)),
             ("pix2struct", ("T5Tokenizer", "T5TokenizerFast" if is_tokenizers_available() else None)),
             ("plbart", ("PLBartTokenizer" if is_sentencepiece_available() else None, None)),

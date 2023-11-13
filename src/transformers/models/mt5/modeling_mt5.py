@@ -997,17 +997,12 @@ class MT5Stack(MT5PreTrainedModel):
             if not self.is_decoder:
                 raise ValueError(f"`use_cache` can only be set to `True` if {self} is used as a decoder")
 
-        if attention_mask is None:
-            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
-        if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
-            encoder_seq_length = encoder_hidden_states.shape[1]
-            encoder_attention_mask = torch.ones(
-                batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
-            )
-
         # initialize past_key_values with `None` if past does not exist
         if past_key_values is None:
             past_key_values = [None] * len(self.block)
+
+        if attention_mask is None:
+            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -1019,7 +1014,9 @@ class MT5Stack(MT5PreTrainedModel):
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
+                encoder_attention_mask = torch.ones(
+                    encoder_hidden_shape, device=inputs_embeds.device, dtype=torch.long
+                )
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None

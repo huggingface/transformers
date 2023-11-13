@@ -150,6 +150,8 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.tokenizers_list = [
             (self.rust_tokenizer_class, "hf-internal-testing/llama-code-tokenizer", {}),
             (self.tokenizer_class, "hf-internal-testing/llama-code-tokenizer", {}),
+            (self.tokenizer_class, "codellama/CodeLlama-34b-Instruct-hf", {}),
+            (self.rust_tokenizer_class, "codellama/CodeLlama-34b-Instruct-hf", {}),
         ]
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
