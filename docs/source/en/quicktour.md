@@ -364,36 +364,19 @@ All models are a standard [`tf.keras.Model`](https://www.tensorflow.org/api_docs
 
 2. Load a preprocessing class like a tokenizer, image processor, feature extractor, or processor:
 
-   ```py
-   >>> from transformers import AutoTokenizer
 
-   >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-   ```
 
 3. Create a function to tokenize the dataset:
 
-   ```py
-   >>> def tokenize_dataset(dataset):
-   ...     return tokenizer(dataset["text"])  # doctest: +SKIP
-   ```
+
 
 4. Apply the tokenizer over the entire dataset with [`~datasets.Dataset.map`] and then pass the dataset and tokenizer to [`~TFPreTrainedModel.prepare_tf_dataset`]. You can also change the batch size and shuffle the dataset here if you'd like:
 
-   ```py
-   >>> dataset = dataset.map(tokenize_dataset)  # doctest: +SKIP
-   >>> tf_dataset = model.prepare_tf_dataset(
-   ...     dataset["train"], batch_size=16, shuffle=True, tokenizer=tokenizer
-   ... )  # doctest: +SKIP
-   ```
+
 
 5. When you're ready, you can call `compile` and `fit` to start training. Note that Transformers models all have a default task-relevant loss function, so you don't need to specify one unless you want to:
 
-   ```py
-   >>> from tensorflow.keras.optimizers import Adam
 
-   >>> model.compile(optimizer=Adam(3e-5))  # No loss argument!
-   >>> model.fit(tf_dataset)  # doctest: +SKIP
-   ```
 
 ## What's next?
 
