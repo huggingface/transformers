@@ -3,4 +3,6 @@ LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-RUN apt update
+RUN df
+
+# RUN apt update
