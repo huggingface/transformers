@@ -123,7 +123,9 @@ Use [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pre
 <tf>
 Use [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and it's associated tokenizer (more on an `TFAutoClass` in the next section):
 
-
+```py
+>>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+```
 </tf>
 </frameworkcontent>
 
