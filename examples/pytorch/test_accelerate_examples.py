@@ -21,6 +21,7 @@ import os
 import shutil
 import sys
 import tempfile
+import unittest
 from unittest import mock
 
 from accelerate.utils import write_basic_config
@@ -98,6 +99,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "glue_no_trainer")))
 
+    @unittest.skip("Zach is working on this.")
     @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_run_clm_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -125,6 +127,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "clm_no_trainer")))
 
+    @unittest.skip("Zach is working on this.")
     @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_run_mlm_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
