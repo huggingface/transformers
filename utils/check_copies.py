@@ -232,6 +232,7 @@ async def run_ruff(filepath):
     process = await asyncio.create_subprocess_exec(*command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     await process.communicate()
 
+
 def stylify(code: str) -> str:
     """
     Applies the ruff part of our `make style` command to some code. This formats the code using `ruff format`.
