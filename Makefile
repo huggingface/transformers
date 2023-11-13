@@ -59,14 +59,14 @@ quality:
 extra_style_checks:
 	python utils/custom_init_isort.py
 	python utils/sort_auto_mappings.py
-	doc-builder style src/transformers docs/source --max_len 119 --path_to_docs docs/source
+	# doc-builder style src/transformers docs/source --max_len 119 --path_to_docs docs/source
 	python utils/check_doc_toc.py --fix_and_overwrite
 
 # this target runs checks on all files and potentially modifies some of them
 
 style:
 	ruff check $(check_dirs) setup.py conftest.py --fix
-	ruff format $(check_dirs) setup.py conftest.py --line-length 119
+	ruff format $(check_dirs) setup.py conftest.py --config pyproject.toml
 	${MAKE} autogenerate_code
 	${MAKE} extra_style_checks
 

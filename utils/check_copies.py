@@ -227,8 +227,8 @@ def get_indent(code: str) -> str:
     return ""
 
 
-async def run_ruff(filepath, line_length=119):
-    command = f"ruff format {filepath} --line-length {line_length}"
+async def run_ruff(filepath):
+    command = f"ruff format {filepath} --config pyproject.toml"
     process = await asyncio.create_subprocess_shell(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = await process.communicate()
     return stdout, stderr
@@ -255,7 +255,7 @@ def stylify(code: str, name="") -> str:
         filepath = Path(tmpdir) / "__init__.py"
         filepath.write_text(code)
         loop = asyncio.get_event_loop()
-        stdout, stderr = loop.run_until_complete(run_ruff(filepath))
+        loop.run_until_complete(run_ruff(filepath))
         result = filepath.read_text()
     return result[len("class Bla:\n") :] if has_indent else result
 

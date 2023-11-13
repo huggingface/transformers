@@ -1445,10 +1445,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         ```python
         >>> import torch
         >>> from transformers import AutoFeatureExtractor, Wav2Vec2ConformerForPreTraining
-        >>> from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
-        ...     _compute_mask_indices,
-        ...     _sample_negative_indices,
-        ... )
+        >>> from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import _compute_mask_indices, _sample_negative_indices
         >>> from datasets import load_dataset
 
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")

@@ -3,6 +3,7 @@
 ignore = ["C901", "E501", "E741", "F402", "F823" ]
 select = ["C", "E", "F", "I", "W"]
 line-length = 119
+indent-width = 4
 
 # Ignore import violations in all `__init__.py` files.
 [tool.ruff.per-file-ignores]
