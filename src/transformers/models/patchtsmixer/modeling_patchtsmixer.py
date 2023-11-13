@@ -206,15 +206,13 @@ class PatchTSMixerNormLayer(nn.Module):
 
 
 class PatchTSMixerMLP(nn.Module):
-    def __init__(self, in_features, out_features, expansion_factor, dropout, last_dropout=True):
+    def __init__(self, in_features, out_features, config):
         super().__init__()
-        num_hidden = in_features * expansion_factor
+        num_hidden = in_features * config.expansion_factor
         self.fc1 = nn.Linear(in_features, num_hidden)
-        self.dropout1 = nn.Dropout(dropout)
+        self.dropout1 = nn.Dropout(config.dropout)
         self.fc2 = nn.Linear(num_hidden, out_features)
-        self.last_dropout = last_dropout
-        if last_dropout:
-            self.dropout2 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(config.dropout)
 
     def forward(self, inputs: torch.Tensor):
         """
@@ -226,8 +224,7 @@ class PatchTSMixerMLP(nn.Module):
         """
         inputs = self.dropout1(nn.functional.gelu(self.fc1(inputs)))
         inputs = self.fc2(inputs)
-        if self.last_dropout:
-            inputs = self.dropout2(inputs)
+        inputs = self.dropout2(inputs)
         return inputs
 
 
@@ -245,7 +242,9 @@ class PatchTSMixerChannelFeatureMixerBlock(nn.Module):
         self.norm = PatchTSMixerNormLayer(config)
         self.gated_attn = config.gated_attn
         self.mlp = PatchTSMixerMLP(
-            config.num_input_channels, config.num_input_channels, config.expansion_factor, config.dropout
+            in_features=config.num_input_channels,
+            out_features=config.num_input_channels,
+            config=config,
         )
 
         if config.gated_attn:
@@ -448,7 +447,7 @@ class PatchMixerBlock(nn.Module):
         self.self_attn = config.self_attn
         self.gated_attn = config.gated_attn
 
-        self.mlp = PatchTSMixerMLP(config.num_patches, config.num_patches, config.expansion_factor, config.dropout)
+        self.mlp = PatchTSMixerMLP(in_features=config.num_patches, out_features=config.num_patches, config=config)
 
         if config.gated_attn:
             self.gating_block = PatchTSMixerGatedAttention(in_size=config.num_patches, out_size=config.num_patches)
@@ -513,7 +512,11 @@ class FeatureMixerBlock(nn.Module):
 
         self.gated_attn = config.gated_attn
 
-        self.mlp = PatchTSMixerMLP(config.num_features, config.num_features, config.expansion_factor, config.dropout)
+        self.mlp = PatchTSMixerMLP(
+            in_features=config.num_features,
+            out_features=config.num_features,
+            config=config,
+        )
 
         if config.gated_attn:
             self.gating_block = PatchTSMixerGatedAttention(in_size=config.num_features, out_size=config.num_features)
