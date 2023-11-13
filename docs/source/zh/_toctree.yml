@@ -49,6 +49,10 @@
     title: 实例化大模型
   - local: debugging
     title: 问题定位及解决
+  - local: tf_xla
+    title: TensorFlow模型的XLA集成
+  - local: perf_torch_compile
+    title: 使用 `torch.compile()` 优化推理
   title: 性能和可扩展性
 - sections:
   - local: task_summary
