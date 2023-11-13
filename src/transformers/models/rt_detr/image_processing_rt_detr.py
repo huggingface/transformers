@@ -89,7 +89,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -117,15 +116,6 @@ class RTDetrImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None
-        size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             size = get_resize_output_image_size(
                 image, size["shortest_edge"], size["longest_edge"], input_data_format=input_data_format
