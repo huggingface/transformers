@@ -531,22 +531,22 @@ class RTDetrMSDeformableAttention(nn.Module):
         if value_mask is not None:
             value_mask = value_mask.astype(value.dtype).unsqueeze(-1)
             value *= value_mask
-        value = value.reshape(bs, len_v, self.num_heads, self.head_dim)
+        value = value.reshape(batch_size, len_v, self.num_heads, self.head_dim)
         sampling_offsets = self.sampling_offsets(query).reshape(
-            bs, len_q, self.num_heads, self.num_levels, self.num_points, 2
+            batch_size, query_length, self.num_heads, self.num_levels, self.num_points, 2
         )
         attention_weights = self.attention_weights(query).reshape(
-            bs, len_q, self.num_heads, self.num_levels * self.num_points
+            batch_size, query_length, self.num_heads, self.num_levels * self.num_points
         )
         attention_weights = F.softmax(attention_weights, dim=-1).reshape(
-            bs, len_q, self.num_heads, self.num_levels, self.num_points
+            batch_size, query_length, self.num_heads, self.num_levels, self.num_points
         )
 
         if reference_points.shape[-1] == 2:
             offset_normalizer = torch.tensor(value_spatial_shapes)
             offset_normalizer = offset_normalizer.flip([1]).reshape(1, 1, 1, self.num_levels, 1, 2)
             sampling_locations = (
-                reference_points.reshape(bs, len_q, 1, self.num_levels, 1, 2) + sampling_offsets / offset_normalizer
+                reference_points.reshape(batch_size, query_length, 1, self.num_levels, 1, 2) + sampling_offsets / offset_normalizer
             )
         elif reference_points.shape[-1] == 4:
             sampling_locations = (
