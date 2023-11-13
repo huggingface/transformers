@@ -66,6 +66,19 @@ else:
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
+
+logger = logging.get_logger(__name__)
+
+_CONFIG_FOR_DOC = "GroundingDINOConfig"
+_CHECKPOINT_FOR_DOC = "idea-research/grounding-dino-tiny"
+
+GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "idea-research/grounding-dino-tiny",
+    # See all Grounding DINO models at https://huggingface.co/models?filter=grounding-dino
+]
+
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
 class MultiScaleDeformableAttentionFunction(Function):
@@ -114,20 +127,6 @@ class MultiScaleDeformableAttentionFunction(Function):
         )
 
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
-
-
-if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
-
-logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "GroundingDINOConfig"
-_CHECKPOINT_FOR_DOC = "idea-research/grounding-dino-tiny"
-
-GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "idea-research/grounding-dino-tiny",
-    # See all Grounding DINO models at https://huggingface.co/models?filter=grounding-dino
-]
 
 
 @dataclass
