@@ -135,6 +135,7 @@ Use [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the p
 Specify the model and tokenizer in the [`pipeline`], and now you can apply the `classifier` on French text:
 
 ```py
+>>> from transformers import pipeline
 >>> classifier = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
 >>> classifier("Nous sommes très heureux de vous présenter la bibliothèque 🤗 Transformers.")
 [{'label': '5 stars', 'score': 0.7273}]
