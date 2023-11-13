@@ -3519,7 +3519,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 pass
 
-        if quantization_config.quant_method == QuantizationMethod.AWQ and quantization_config.fuse_modules:
+        if (
+            quantization_config is not None
+            and quantization_config.quant_method == QuantizationMethod.AWQ
+            and quantization_config.fuse_modules
+        ):
             model = fuse_awq_modules(model, quantization_config)
 
         # Dispatch model with hooks on all devices if necessary
