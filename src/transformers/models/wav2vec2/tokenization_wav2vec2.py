@@ -626,8 +626,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         ...     }
         ...     for d in outputs.word_offsets
         ... ]
-        >>> # compare word offsets with audio `common_voice_en_100038.mp3` online on the dataset viewer:
-        >>> # https://huggingface.co/datasets/common_voice/viewer/en/train
+        >>> # compare word offsets with audio `en_train_0/common_voice_en_19121553.mp3` online on the dataset viewer:
+        >>> # https://huggingface.co/datasets/mozilla-foundation/common_voice_11_0/viewer/en
         >>> word_offsets[:3]
         [{'word': 'THE', 'start_time': 0.7, 'end_time': 0.78}, {'word': 'TRICK', 'start_time': 0.88, 'end_time': 1.08}, {'word': 'APPEARS', 'start_time': 1.2, 'end_time': 1.64}]
         ```"""

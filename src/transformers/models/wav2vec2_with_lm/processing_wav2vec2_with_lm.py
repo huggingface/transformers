@@ -561,8 +561,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         ...     }
         ...     for d in outputs.word_offsets
         ... ]
-        >>> # compare word offsets with audio `common_voice_en_100038.mp3` online on the dataset viewer:
-        >>> # https://huggingface.co/datasets/common_voice/viewer/en/train
+        >>> # compare word offsets with audio `en_train_0/common_voice_en_19121553.mp3` online on the dataset viewer:
+        >>> # https://huggingface.co/datasets/mozilla-foundation/common_voice_11_0/viewer/en
         >>> word_offsets[:4]
         [{'word': 'THE', 'start_time': 0.68, 'end_time': 0.78}, {'word': 'TRACK', 'start_time': 0.88, 'end_time': 1.1}, {'word': 'APPEARS', 'start_time': 1.18, 'end_time': 1.66}, {'word': 'ON', 'start_time': 1.86, 'end_time': 1.92}]
         ```"""
