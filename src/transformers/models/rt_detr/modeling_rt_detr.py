@@ -427,8 +427,8 @@ class RTDetrTransformerEncoderLayer(nn.Module):
         residual = src
         if self.normalize_before:
             src = self.norm1(src)
-        q = k = self.with_pos_embed(src, pos_embed)
-        src, _ = self.self_attn(q, k, value=src, attn_mask=src_mask)
+        query = key = self.with_pos_embed(src, pos_embed)
+        src, _ = self.self_attn(query, key, value=src, attn_mask=src_mask)
 
         src = residual + self.dropout1(src)
         if not self.normalize_before:
