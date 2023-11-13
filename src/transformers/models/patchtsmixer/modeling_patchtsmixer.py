@@ -139,11 +139,9 @@ class PatchTSMixerBatchNorm(nn.Module):
         d_model (`int`): model dimension
     """
 
-    def __init__(self, d_model):
+    def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
-        self.d_model = d_model
-        self.transpose = PatchTSMixerTranspose(1, 2)
-        self.batchnorm = nn.BatchNorm1d(self.d_model)
+        self.batchnorm = nn.BatchNorm1d(config.d_model, eps=config.norm_eps)
 
     def forward(self, inputs: torch.Tensor):
         """
@@ -151,12 +149,11 @@ class PatchTSMixerBatchNorm(nn.Module):
             inputs (`torch.Tensor` of shape `(batch_size, sequence_length, d_model)`):
                 input for Batch norm calculation
         Returns:
-            `torch.Tensor`: tensor
+            `torch.Tensor` of shape `(batch_size, sequence_length, d_model)`
         """
-        output = self.transpose(inputs)  # output: (batch_size, d_model, sequence_length)
+        output = inputs.transpose(1, 2)  # output: (batch_size, d_model, sequence_length)
         output = self.batchnorm(output)
-        output = self.transpose(output)  # output: (batch_size, sequence_length, d_model)
-        return output
+        return output.transpose(1, 2)
 
 
 class PatchTSMixerNormLayer(nn.Module):
@@ -173,7 +170,7 @@ class PatchTSMixerNormLayer(nn.Module):
         self.config = config
 
         if "batch" in config.norm_mlp.lower():
-            self.norm = PatchTSMixerBatchNorm(config.num_features)
+            self.norm = PatchTSMixerBatchNorm(config)
         else:
             self.norm = nn.LayerNorm(config.num_features)
 
@@ -1029,7 +1026,7 @@ class PatchTSMixerMasking(nn.Module):
     Class to perform random or forecast masking.
 
     Parameters:
-        config (`PatchTSTConfig`): model config
+        config (`PatchTSMixerConfig`): model config
 
     Returns:
         x_mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`)

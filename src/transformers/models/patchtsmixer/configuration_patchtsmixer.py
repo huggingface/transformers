@@ -96,6 +96,8 @@ class PatchTSMixerConfig(PretrainedConfig):
         post_init (`bool`, *optional*, defaults to `False`):
             Whether to use custom weight initialization from `transformers` library, or the default initialization in
             `PyTorch`. Setting it to `False` performs `PyTorch` weight initialization.
+        norm_eps (`float`, *optional*, defaults to 1e-05):
+            A value added to the denominator for numerical stability of normalization.
         mask_type (`str`, *optional*, defaults to `"random"`):
             Type of masking to use for Masked Pretraining mode. Allowed values are "random", "forecast". In Random
             masking, points are maskes random. In Forecast masking, Points are masked towards the end.
@@ -179,6 +181,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         init_std: float = 0.02,
         seed_number: Optional[int] = None,
         post_init: bool = False,
+        norm_eps: float = 1e-5,
         # Pretrain model configuration
         mask_type: str = "random",
         random_mask_ratio=0.5,
@@ -240,5 +243,6 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.loss = loss
         self.num_parallel_samples = num_parallel_samples
         self.unmasked_channel_indices = unmasked_channel_indices
+        self.norm_eps = norm_eps
 
         super().__init__(**kwargs)
