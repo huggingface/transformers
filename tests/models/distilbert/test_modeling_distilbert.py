@@ -16,7 +16,7 @@ import os
 import tempfile
 import unittest
 
-from pytest import mark
+import pytest
 
 from transformers import DistilBertConfig, is_torch_available
 from transformers.testing_utils import require_flash_attn, require_torch, require_torch_accelerator, slow, torch_device
@@ -290,7 +290,7 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     # Because DistilBertForMultipleChoice requires inputs with different shapes we need to override this test.
     @require_flash_attn
     @require_torch_accelerator
-    @mark.flash_attn_test
+    @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference(self):
         import torch
@@ -344,7 +344,7 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     # Because DistilBertForMultipleChoice requires inputs with different shapes we need to override this test.
     @require_flash_attn
     @require_torch_accelerator
-    @mark.flash_attn_test
+    @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_padding_right(self):
         import torch
