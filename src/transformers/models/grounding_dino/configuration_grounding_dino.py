@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 SenseTime and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 IDEA Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -72,9 +72,6 @@ class GroundingDINOTextPrenetConfig(PretrainedConfig):
             [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
@@ -109,7 +106,6 @@ class GroundingDINOTextPrenetConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         pad_token_id=0,
         position_embedding_type="absolute",
-        use_cache=True,
         init_std=0.02,
         **kwargs,
     ):
@@ -127,7 +123,6 @@ class GroundingDINOTextPrenetConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
-        self.use_cache = use_cache
         self.init_std = init_std
 
     @classmethod
@@ -162,8 +157,8 @@ class GroundingDINOConfig(PretrainedConfig):
     Args:
         backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model.
-        text_backbone_config (`str`, *optional*, defaults to `"bert-base-uncased"`):
-            The configuration of the text backbone model. Should be a bert-like config.
+        text_backbone_config (`str`, *optional*, defaults to `GroundingDINOTextPrenetConfig()`):
+            The configuration of the text backbone model. Should be a BERT-like config.
         num_queries (`int`, *optional*, defaults to 900):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
             [`GroundingDINOModel`] can detect in a single image.

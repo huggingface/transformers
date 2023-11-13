@@ -14,7 +14,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -23,7 +23,6 @@ _import_structure = {
         "GroundingDINOConfig",
         "GroundingDINOTextPrenetConfig",
     ],
-    "image_processing_grounding_dino": ["GroundingDINOImageProcessor"],
     "processing_grounding_dino": ["GroundingDINOProcessor"],
 }
 
@@ -40,6 +39,14 @@ else:
         "GroundingDINOPreTrainedModel",
     ]
 
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_grounding_dino"] = ["GroundingDINOImageProcessor"]
+
 
 if TYPE_CHECKING:
     from .configuration_grounding_dino import (
@@ -47,7 +54,6 @@ if TYPE_CHECKING:
         GroundingDINOConfig,
         GroundingDINOTextPrenetConfig,
     )
-    from .image_processing_grounding_dino import GroundingDINOImageProcessor
     from .processing_grounding_dino import GroundingDINOProcessor
 
     try:
@@ -62,6 +68,14 @@ if TYPE_CHECKING:
             GroundingDINOModel,
             GroundingDINOPreTrainedModel,
         )
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_grounding_dino import GroundingDINOImageProcessor
 
 else:
     import sys
