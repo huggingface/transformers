@@ -70,15 +70,7 @@ they use different pipelines.
 
 Run inference with decoder-only models with the `text-generation` pipeline:
 
-```py
->>> model_name = "gpt2"
 
->>> from transformers import TFAutoModel
-
->>> # model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
->>> _ = TFAutoModel.from_pretrained(model_name)
-
-```
 
 
 ```python
@@ -142,6 +134,16 @@ Next, let's load the model with the appropriate pipeline (`"text-generation"`):
 ...     torch_dtype=torch.bfloat16,
 ...     device_map="auto",
 ... )
+```
+
+```py
+>>> model_name = "gpt2"
+
+>>> from transformers import TFAutoModel
+
+>>> # model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
+>>> _ = TFAutoModel.from_pretrained(model_name)
+
 ```
 
 <Tip>
