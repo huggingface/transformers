@@ -226,8 +226,20 @@ def get_indent(code: str) -> str:
         return re.search(r"^(\s*)\S", lines[idx]).groups()[0]
     return ""
 
+import asyncio
+import subprocess
+import tempfile
+from pathlib import Path
 
-def stylify(code: str) -> str:
+async def run_ruff(filepath, line_length = 119):
+    command = f"ruff format {filepath} --line-length {line_length}"
+    process = await asyncio.create_subprocess_shell(
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    stdout, stderr = await process.communicate()
+    return stdout, stderr
+
+def stylify(code: str, name = "") -> str:
     """
     Applies the ruff part of our `make style` command to some code.
     As `ruff` does not provide a python api this cannot be done on the fly.
@@ -247,9 +259,14 @@ def stylify(code: str) -> str:
     with tempfile.TemporaryDirectory() as tmpdir:
         filepath = Path(tmpdir) / "__init__.py"
         filepath.write_text(code)
-        ruff_bin = find_ruff_bin()
-        os.spawnv(os.P_WAIT, ruff_bin, ["ruff format", f"{str(filepath)}", "--line-length", "150", "--ignore", "F821"])
-        os.spawnv(os.P_WAIT, ruff_bin, ["ruff format", f"{str(filepath)}", "--line-length", "119", "--ignore", "F821"])
+        loop = asyncio.get_event_loop()
+        stdout, stderr = loop.run_until_complete(run_ruff(filepath))
+
+        if stdout:
+            print(f"ruff stdout: {stdout.decode()}")
+        if stderr:
+            print(f"ruff stderr: {stderr.decode()}")
+
         result = filepath.read_text()
     return result[len("class Bla:\n") :] if has_indent else result
 
