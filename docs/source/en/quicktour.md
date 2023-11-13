@@ -107,7 +107,7 @@ The [`pipeline`] can accommodate any model from the [Hub](https://huggingface.co
 
 ```py
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
->>> # model_name = "distilbert-base-uncased"
+>>> model_name = "distilbert-base-uncased"
 ```
 
 <frameworkcontent>
@@ -122,7 +122,7 @@ Use [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the p
 ```py
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
->>> # model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
+>>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
 
 ```
 </tf>
