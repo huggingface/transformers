@@ -32,7 +32,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
-    is_torchvision_available,
     logging,
     replace_return_docstrings,
     requires_backends,
@@ -42,9 +41,6 @@ from .configuration_rt_detr import RTDetrConfig
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
-
-if is_torchvision_available():
-    from torchvision.ops.misc import FrozenBatchNorm2d
 
 logger = logging.get_logger(__name__)
 
@@ -1281,7 +1277,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initalize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d, FrozenBatchNorm2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
