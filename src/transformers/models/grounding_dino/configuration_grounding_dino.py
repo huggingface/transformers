@@ -236,6 +236,7 @@ class GroundingDINOConfig(PretrainedConfig):
             The temperature for Sine Positional Embedding that is used together with vision backbone.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+
     Examples:
 
     ```python
