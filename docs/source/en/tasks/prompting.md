@@ -119,6 +119,17 @@ pip install -q transformers accelerate
 
 Next, let's load the model with the appropriate pipeline (`"text-generation"`): 
 
+```py
+>>> model_name = "gpt2"
+
+>>> from transformers import TFAutoModel
+
+>>> # model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
+>>> _ = TFAutoModel.from_pretrained(model_name)
+
+```
+
+
 ```python
 >>> from transformers import pipeline, AutoTokenizer
 >>> import torch
@@ -136,15 +147,7 @@ Next, let's load the model with the appropriate pipeline (`"text-generation"`):
 ... )
 ```
 
-```py
->>> model_name = "gpt2"
 
->>> from transformers import TFAutoModel
-
->>> # model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
->>> _ = TFAutoModel.from_pretrained(model_name)
-
-```
 
 <Tip>
 
