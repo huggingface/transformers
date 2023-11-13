@@ -2018,6 +2018,46 @@ class PatchTSMixerForRegressionOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
 
 
+
+class InjectScalerStatistics4D(nn.Module):
+    def __init__(self, num_features: int, num_patches: int, expansion: int = 2):
+        super().__init__()
+
+        self.inverse_trans_expansion = nn.Linear(num_features + 2, expansion * num_features)
+        self.inverse_trans_compression = nn.Linear(expansion * num_features, num_features)
+        self.map_scale_expansion = nn.Linear(2, 2 * expansion)
+        self.map_scale_compression = nn.Linear(2 * expansion, 2)
+        self.num_patches = num_patches
+
+    def forward(self, inputs: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor):
+        """
+        Args:
+            inputs (`torch.Tensor` of shape `(batch_size, num_input_channels, num_patch, num_features)`)
+            loc (`torch.Tensor` of shape `(batch_size, 1, num_input_channels)`)
+            scale (`torch.Tensor` of shape `(batch_size, 1, num_input_channels)`)
+        Returns:
+            `torch.Tensor` of shape `(batch_size, num_input_channels, num_patch, num_features)`
+        """
+
+        mean = loc.transpose(-1, -2)  # [batch_size x n_channels x 1 ]
+        mean = mean.unsqueeze(-2)  # [batch_size x n_channels x 1 x 1]
+        mean = mean.repeat(1, 1, self.num_patches, 1)  # [batch_size x n_channels x num_patch x 1]
+
+        stdev = scale.transpose(-1, -2)  # [batch_size x n_channels x 1 ]
+        stdev = stdev.unsqueeze(-2)  # [batch_size x n_channels x 1 x 1]
+        stdev = stdev.repeat(1, 1, self.num_patches, 1)  # [batch_size x n_channels x num_patch x 1]
+
+        concat_stats = torch.cat([mean, stdev], dim=-1)  # [batch_size x n_channels x num_patch x 2]
+
+        concat_stats = self.map_scale_expansion(concat_stats)  # [batch_size x n_channels x num_patch x (2*expansion)]
+        concat_stats = self.map_scale_compression(concat_stats)  # [batch_size x n_channels x num_patch x 2]
+
+        inputs = torch.cat([inputs, concat_stats], dim=-1)  # [batch_size x channels x num_patch x num_features+2]
+        inputs = self.inverse_trans_expansion(inputs)  # [batch_size x channels x num_patch x (expansion*num_features)]
+        inputs = self.inverse_trans_compression(inputs)  # [batch_size x channels x num_patch x num_features]
+
+        return inputs
+
 class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
     r"""
     `PatchTSMixer` for regression application.
