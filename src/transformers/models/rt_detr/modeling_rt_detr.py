@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch RT-DETR model."""
-import copy
 import math
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -117,6 +116,7 @@ def _max_by_axis(the_list):
         for index, item in enumerate(sublist):
             maxes[index] = max(maxes[index], item)
     return maxes
+
 
 # Copied from transformers.models.detr.modeling_detr.nested_tensor_from_tensor_list
 def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
@@ -225,6 +225,7 @@ def corners_to_center_format_torch(bboxes_corners: "torch.Tensor") -> "torch.Ten
         (bottom_right_y - top_left_y),  # height
     ]
     return torch.stack(b, dim=-1)
+
 
 def get_contrastive_denoising_training_group(
     targets,
@@ -546,7 +547,8 @@ class RTDetrMSDeformableAttention(nn.Module):
             offset_normalizer = torch.tensor(value_spatial_shapes)
             offset_normalizer = offset_normalizer.flip([1]).reshape(1, 1, 1, self.num_levels, 1, 2)
             sampling_locations = (
-                reference_points.reshape(batch_size, query_length, 1, self.num_levels, 1, 2) + sampling_offsets / offset_normalizer
+                reference_points.reshape(batch_size, query_length, 1, self.num_levels, 1, 2)
+                + sampling_offsets / offset_normalizer
             )
         elif reference_points.shape[-1] == 4:
             sampling_locations = (
@@ -626,7 +628,7 @@ class RTDetrTransformerDecoder(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
         self.layers = nn.ModuleList([RTDetrTransformerDecoderLayer(config) for _ in range(config.num_decoder_layers)])
-        self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.num_decoder_layers + config.eval_idx 
+        self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.num_decoder_layers + config.eval_idx
 
     def forward(
         self,
@@ -676,7 +678,7 @@ class RTDetrTransformerDecoder(nn.Module):
                 break
 
             ref_points = inter_ref_bbox
-            ref_points_detach = inter_ref_bbox.detach() if self.training else inter_ref_bbox
+            ref_points_detach = inter_ref_bbox
 
         return torch.stack(dec_out_bboxes), torch.stack(dec_out_logits)
 
@@ -728,7 +730,6 @@ class RTDetrTransformer(nn.Module):
         self.num_denoising = config.num_denoising
         self.label_noise_ratio = config.label_noise_ratio
         self.box_noise_scale = config.box_noise_scale
-        eval_idx = config.eval_idx
 
         # backbone feature projection
         self.build_input_proj_layer(config)
@@ -1106,7 +1107,9 @@ class RTDetrLoss(nn.Module):
         losses["loss_bbox"] = loss_bbox.sum() / num_boxes
 
         loss_giou = 1 - torch.diag(
-            generalized_box_iou(center_to_corners_format_torch(src_boxes), center_to_corners_format_torch(target_boxes))
+            generalized_box_iou(
+                center_to_corners_format_torch(src_boxes), center_to_corners_format_torch(target_boxes)
+            )
         )
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
@@ -1669,7 +1672,9 @@ class RTDetrHungarianMatcher(nn.Module):
         # Compute the L1 cost between boxes
         cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
         # Compute the giou cost betwen boxes
-        cost_giou = -generalized_box_iou(center_to_corners_format_torch(out_bbox), center_to_corners_format_torch(tgt_bbox))
+        cost_giou = -generalized_box_iou(
+            center_to_corners_format_torch(out_bbox), center_to_corners_format_torch(tgt_bbox)
+        )
         # Compute the final cost matrix
         final_cost = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
         final_cost = final_cost.view(bs, num_queries, -1).cpu()
