@@ -572,7 +572,7 @@ class TFModelPushToHubTester(unittest.TestCase):
         logging.set_verbosity_info()
         logger = logging.get_logger("transformers.utils.hub")
         with CaptureLogger(logger) as cl:
-            model.push_to_hub("test-model-tf", use_auth_token=self._token)
+            model.push_to_hub("test-model-tf", token=self._token)
         logging.set_verbosity_warning()
         # Check the model card was created and uploaded.
         self.assertIn("Uploading the following files to __DUMMY_TRANSFORMERS_USER__/test-model-tf", cl.out)
@@ -590,7 +590,7 @@ class TFModelPushToHubTester(unittest.TestCase):
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, repo_id="test-model-tf", push_to_hub=True, use_auth_token=self._token)
+            model.save_pretrained(tmp_dir, repo_id="test-model-tf", push_to_hub=True, token=self._token)
 
         new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
         models_equal = True
@@ -638,7 +638,7 @@ class TFModelPushToHubTester(unittest.TestCase):
         # Make sure model is properly initialized
         model.build()
 
-        model.push_to_hub("valid_org/test-model-tf-org", use_auth_token=self._token)
+        model.push_to_hub("valid_org/test-model-tf-org", token=self._token)
 
         new_model = TFBertModel.from_pretrained("valid_org/test-model-tf-org")
         models_equal = True
@@ -653,9 +653,7 @@ class TFModelPushToHubTester(unittest.TestCase):
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(
-                tmp_dir, push_to_hub=True, use_auth_token=self._token, repo_id="valid_org/test-model-tf-org"
-            )
+            model.save_pretrained(tmp_dir, push_to_hub=True, token=self._token, repo_id="valid_org/test-model-tf-org")
 
         new_model = TFBertModel.from_pretrained("valid_org/test-model-tf-org")
         models_equal = True
