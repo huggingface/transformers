@@ -107,29 +107,28 @@ class TomatoConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=262144,
+        vocab_size=32000,
         hidden_size=4096,
-        intermediate_size=16384,
-        num_hidden_layers=36,
-        num_attention_heads=64,
-        hidden_act="relu2",
-        max_position_embeddings=16384,
+        intermediate_size=11008,
+        num_hidden_layers=32,
+        num_attention_heads=32,
+        num_key_value_heads=32,
+        hidden_act="silu",
+        max_position_embeddings=11008,
         image_size=300,
         patch_size=30,
         num_channels=3,
         initializer_range=0.02,
-        layer_norm_eps=1e-5,
+        rms_norm_eps=1e-6,
         use_cache=True,
         tie_word_embeddings=False,
-        rope_theta=25000.0,
+        rope_theta=10000.0,
         rope_scaling=None,
-        qk_layernorm=True,
-        hidden_dropout=0.0,
-        attention_dropout=0.0,
-        partial_rotary_factor=0.5,
         pad_token_id=None,
         bos_token_id=1,
         eos_token_id=2,
+        pretraining_tp=1,
+        attention_bias=False,
         text_config=None,
         **kwargs,
     ):
@@ -141,23 +140,22 @@ class TomatoConfig(PretrainedConfig):
                 "intermediate_size": intermediate_size,
                 "num_hidden_layers": num_hidden_layers,
                 "num_attention_heads": num_attention_heads,
+                "num_key_value_heads": num_key_value_heads,
                 "hidden_act": hidden_act,
                 "initializer_range": initializer_range,
-                "layer_norm_eps": layer_norm_eps,
+                "rms_norm_eps": rms_norm_eps,
                 "use_cache": use_cache,
                 "rope_theta": rope_theta,
                 "rope_scaling": rope_scaling,
-                "qk_layernorm": qk_layernorm,
-                "hidden_dropout": hidden_dropout,
-                "attention_dropout": attention_dropout,
-                "partial_rotary_factor": partial_rotary_factor,
                 "pad_token_id": pad_token_id,
                 "bos_token_id": bos_token_id,
                 "eos_token_id": eos_token_id,
                 "tie_word_embeddings": tie_word_embeddings,
+                "pretraining_tp": pretraining_tp,
+                "attention_bias": attention_bias,
             }
             logger.info("text_config is None. initializing the text model with default values.")
-        text_model_type = text_config["model_type"] if "model_type" in text_config else "persimmon"
+        text_model_type = text_config["model_type"] if "model_type" in text_config else "llama"
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         self.vocab_size = vocab_size
@@ -169,16 +167,16 @@ class TomatoConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
+        self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
-        self.qk_layernorm = qk_layernorm
-        self.hidden_dropout = hidden_dropout
-        self.attention_dropout = attention_dropout
-        self.partial_rotary_factor = partial_rotary_factor
+        self.pretraining_tp = pretraining_tp
+        self.attention_bias = attention_bias
+
         self._rope_scaling_validation()
 
         super().__init__(

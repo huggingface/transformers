@@ -152,7 +152,8 @@ class TomatoForCausalLM(TomatoPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.language_model = LlamaForCausalLM(config.text_config)
-
+        # self.language_model = LlamaForCausalLM.from_pretrained("deepseek-ai/deepseek-coder-6.7b-base", torch_dtype=config.text_config.torch_dtype)
+        
         self.vision_embed_tokens = nn.Linear(
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size
         )

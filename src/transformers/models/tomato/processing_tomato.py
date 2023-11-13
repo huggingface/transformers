@@ -239,9 +239,7 @@ def _tokenize_prompts_with_image_and_batch(
     prompts_tokens = transformed_prompt_tokens
 
     if add_BOS:
-        bos_token = tokenizer.vocab["<s>"]
-    else:
-        bos_token = tokenizer.vocab["|ENDOFTEXT|"]
+        bos_token = tokenizer.bos_token_id
     prompts_tokens = [[[bos_token] + x for x in prompt_seq] for prompt_seq in prompts_tokens]
     if add_beginning_of_answer_token:
         boa = tokenizer.vocab[BEGINNING_OF_ANSWER_STRING]
@@ -409,7 +407,7 @@ class TomatoProcessor(ProcessorMixin):
             max_tokens_to_generate=self.max_tokens_to_generate,
             max_position_embeddings=self.max_position_embeddings,
             add_BOS=True,
-            add_beginning_of_answer_token=True,
+            add_beginning_of_answer_token=False, # changed from Fuyu, TBC
         )
         image_padded_unpacked_tokens = construct_full_unpacked_stream(
             num_real_text_tokens=prompts_length,
@@ -545,8 +543,8 @@ class TomatoProcessor(ProcessorMixin):
 
         # --- Use self.tokenizer to get the ids of special tokens to insert into image ids ---
 
-        image_placeholder_id = self.tokenizer("|SPEAKER|", add_special_tokens=False)["input_ids"][1]
-        image_newline_id = self.tokenizer("𝓝", add_special_tokens=False)["input_ids"][1]
+        image_placeholder_id = self.tokenizer("<|SPEAKER|>", add_special_tokens=False)["input_ids"][0] # add both tokens to tokenizer.json
+        image_newline_id = self.tokenizer("<|NEWLINE|>", add_special_tokens=False)["input_ids"][0]
         tensor_batch_images = torch.stack([img[0] for img in batch_images]).unsqueeze(1)
 
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
