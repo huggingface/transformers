@@ -68,7 +68,7 @@ class PatchTSTConfig(PretrainedConfig):
             Dimension of the "intermediate" (often named feed-forward) layer in encoder.
         norm (`str` , *optional*, defaults to `"BatchNorm"`):
             Normalization at each Transformer layer. Can be `"BatchNorm"` or `"LayerNorm"`.
-        norm_eps (`float`, *optional*, defaults to 1e-5):
+        norm_eps (`float`, *optional*, defaults to 1e-05):
             A value added to the denominator for numerical stability of normalization.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for the attention probabilities.

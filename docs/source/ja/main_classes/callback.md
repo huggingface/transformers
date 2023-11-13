@@ -45,6 +45,7 @@ rendered properly in your Markdown viewer.
 - [`~integrations.ClearMLCallback`] [clearml](https://github.com/allegroai/clearml) がインストールされている場合。
 - [`~integrations.DagsHubCallback`] [dagshub](https://dagshub.com/) がインストールされている場合。
 - [`~integrations.FlyteCallback`] [flyte](https://flyte.org/) がインストールされている場合。
+- [`~integrations.DVCLiveCallback`] [dvclive](https://www.dvc.org/doc/dvclive) がインストールされている場合。
 
 パッケージがインストールされているが、付随する統合を使用したくない場合は、`TrainingArguments.report_to` を、使用したい統合のみのリストに変更できます (例: `["azure_ml", "wandb"]`) 。
 
@@ -87,6 +88,9 @@ rendered properly in your Markdown viewer.
 [[autodoc]] integrations.DagsHubCallback
 
 [[autodoc]] integrations.FlyteCallback
+
+[[autodoc]] integrations.DVCLiveCallback
+    - setup
 
 ## TrainerCallback
 
