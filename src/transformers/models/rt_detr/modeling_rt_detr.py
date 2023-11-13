@@ -599,7 +599,7 @@ class RTDetrTransformerDecoderLayer(nn.Module):
         query_pos_embed=None,
     ):
         # self attention
-        q = k = self.with_pos_embed(target, query_pos_embed)
+        query = keys = self.with_pos_embed(target, query_pos_embed)
 
         attention_res, _ = self.self_attn(q, k, value=target, attn_mask=attn_mask)
         target = target + self.dropout1(attention_res)
