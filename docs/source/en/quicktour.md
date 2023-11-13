@@ -125,6 +125,9 @@ Use [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the p
 
 ```py
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+
+>>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
+
 ```
 </tf>
 </frameworkcontent>
