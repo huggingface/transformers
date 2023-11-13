@@ -2021,6 +2021,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "You are calling `save_pretrained` on a 4-bit converted model. This is currently not supported"
             )
 
+        if (
+            getattr(self.config, "quantization_config", None) is not None
+            and self.config.quantization_config.quant_method == QuantizationMethod.AWQ
+            and self.config.quantization_config.is_using_fused_modules
+        ):
+            raise ValueError("You cannot save an AWQ model that uses fused modules!")
+
         if "save_config" in kwargs:
             warnings.warn(
                 "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
@@ -3522,7 +3529,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if (
             quantization_config is not None
             and quantization_config.quant_method == QuantizationMethod.AWQ
-            and quantization_config.fuse_modules
+            and quantization_config.is_using_fused_modules
         ):
             model = fuse_awq_modules(model, quantization_config)
 

@@ -599,3 +599,7 @@ class AwqConfig(QuantizationConfigMixin):
             major, minor = compute_capability
             if major < 8:
                 raise ValueError("LLM-AWQ backend is only supported on GPUs with compute capability >= 8.0")
+
+    @property
+    def is_using_fused_modules(self):
+        return self.fuse_modules or (self.fusing_mapping is not None and len(self.fusing_mapping) > 0)
