@@ -195,6 +195,9 @@ class TrainingArguments:
 
         prediction_loss_only (`bool`, *optional*, defaults to `False`):
             When performing evaluation and generating predictions, only returns the loss.
+        eval_logits_to_cpu (`bool`, *optional*, defaults to `False`):
+            Whether or not to move the evaluation logits to the CPU. If `True`, they will be moved to the CPU during 
+            evaluation loop. This typically avoid OOM errors with large models when compute_metrics function is provided.
         per_device_train_batch_size (`int`, *optional*, defaults to 8):
             The batch size per GPU/XPU/TPU/MPS/NPU core/CPU for training.
         per_device_eval_batch_size (`int`, *optional*, defaults to 8):
@@ -669,7 +672,10 @@ class TrainingArguments:
         default=False,
         metadata={"help": "When performing evaluation and predictions, only returns the loss."},
     )
-
+    eval_logits_to_cpu: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to move the logits to CPU during evaluation. This can save some GPU memory."},
+    )
     per_device_train_batch_size: int = field(
         default=8, metadata={"help": "Batch size per GPU/TPU/MPS/NPU core/CPU for training."}
     )
