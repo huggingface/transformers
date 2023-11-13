@@ -4560,6 +4560,7 @@ if TYPE_CHECKING:
         EncodecFeatureExtractor,
     )
     from .models.encoder_decoder import EncoderDecoderConfig
+    from .models.enct5 import ENCT5_PRETRAINED_CONFIG_ARCHIVE_MAP, EncT5Config
     from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
     from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer

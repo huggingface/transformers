@@ -33,7 +33,7 @@ else:
     _import_structure["modeling_enct5"] = [
         "ENCT5_PRETRAINED_MODEL_ARCHIVE_LIST",
         "EncT5ForSequenceClassification",
-        "EncT5PretrainedModel"
+        "EncT5PretrainedModel",
     ]
 
 

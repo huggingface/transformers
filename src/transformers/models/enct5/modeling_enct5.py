@@ -17,7 +17,6 @@
 
 import copy
 import math
-import os
 import warnings
 from typing import List, Optional, Tuple, Union
 
@@ -29,9 +28,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
-    Seq2SeqLMOutput,
     Seq2SeqModelOutput,
-    Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -41,7 +38,6 @@ from ...utils import (
     DUMMY_MASK,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torch_fx_proxy,
     logging,
     replace_return_docstrings,
 )
@@ -118,6 +114,7 @@ DEPARALLELIZE_DOCSTRING = r"""
     model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
     ```
 """
+
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->EncT5
 class EncT5LayerNorm(nn.Module):
@@ -728,6 +725,8 @@ class EncT5PreTrainedModel(PreTrainedModel):
             module.decoder_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, EncT5ClassificationHead):
             module.out_proj.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
+                module.out_proj.bias.data.zero_()
         elif isinstance(module, EncT5MultiLabelClassificationHead):
             module.weights.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             module.biases.data.zero_()
@@ -1055,6 +1054,7 @@ class EncT5Stack(EncT5PreTrainedModel):
 
 
 EncT5_INPUTS_DOCSTRING = ""
+
 
 @add_start_docstrings(
     "The bare T5 Model transformer outputting raw hidden-states without any specific head on top.",
@@ -1384,7 +1384,12 @@ num_heads)`.
 )
 class EncT5ForSequenceClassification(EncT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
-    _tied_weights_keys = ["transformer.encoder.embed_tokens.weight", "transformer.decoder.embed_tokens.weight"]
+    _tied_weights_keys = [
+        "transformer.shared.weight",
+        "decoder_embeddings.weight",
+        "transformer.encoder.embed_tokens.weight",
+        "transformer.decoder.embed_tokens.weight",
+    ]
 
     def __init__(self, config: EncT5Config):
         super().__init__(config)
