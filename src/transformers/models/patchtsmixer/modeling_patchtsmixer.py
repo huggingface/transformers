@@ -1101,8 +1101,8 @@ class PatchTSMixerMasking(nn.Module):
         return masked_input, mask
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeriesTransformer->PatchTST,TimeSeries->PatchTST
-class PatchTSTStdScaler(nn.Module):
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeriesTransformer->PatchTSMixer,TimeSeries->PatchTSMixer
+class PatchTSMixerStdScaler(nn.Module):
     """
     Standardize features by calculating the mean and scaling along some given dimension `dim`, and then normalizes it
     by subtracting from the mean and dividing by the standard deviation.
@@ -1135,8 +1135,8 @@ class PatchTSTStdScaler(nn.Module):
         return (data - loc) / scale, loc, scale
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeriesTransformer->PatchTST,TimeSeries->PatchTST
-class PatchTSTMeanScaler(nn.Module):
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeriesTransformer->PatchTSMixer,TimeSeries->PatchTSMixer
+class PatchTSMixerMeanScaler(nn.Module):
     """
     Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
     accordingly.
@@ -1193,8 +1193,8 @@ class PatchTSTMeanScaler(nn.Module):
         return scaled_data, torch.zeros_like(scale), scale
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeriesTransformer->PatchTST,TimeSeries->PatchTST
-class PatchTSTNOPScaler(nn.Module):
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeriesTransformer->PatchTSMixer,TimeSeries->PatchTSMixer
+class PatchTSMixerNOPScaler(nn.Module):
     """
     Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
 
