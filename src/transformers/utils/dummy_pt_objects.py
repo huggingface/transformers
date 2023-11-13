@@ -6026,9 +6026,15 @@ class OwlViTVisionModel(metaclass=DummyObject):
 
 
 PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
+PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 class PatchTSMixerForClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+class PatchTSTForClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -6040,6 +6046,11 @@ class PatchTSMixerForForecasting(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+class PatchTSTForPrediction(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class PatchTSMixerForPretraining(metaclass=DummyObject):
@@ -6047,9 +6058,20 @@ class PatchTSMixerForPretraining(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+class PatchTSTForPretraining(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class PatchTSMixerForRegression(metaclass=DummyObject):
+        _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+class PatchTSTForRegression(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -6057,6 +6079,11 @@ class PatchTSMixerForRegression(metaclass=DummyObject):
 
 
 class PatchTSMixerModel(metaclass=DummyObject):
+        _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+class PatchTSTModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -6064,6 +6091,12 @@ class PatchTSMixerModel(metaclass=DummyObject):
 
 
 class PatchTSMixerPreTrainedModel(metaclass=DummyObject):
+        _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+class PatchTSTPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

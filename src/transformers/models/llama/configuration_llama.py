@@ -95,7 +95,8 @@ class LlamaConfig(PretrainedConfig):
             experimental feature, subject to breaking API changes in future versions.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
-
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
 
     ```python
     >>> from transformers import LlamaModel, LlamaConfig
@@ -133,6 +134,7 @@ class LlamaConfig(PretrainedConfig):
         rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
+        attention_dropout=0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -156,6 +158,7 @@ class LlamaConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self._rope_scaling_validation()
         self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
 
         super().__init__(
             pad_token_id=pad_token_id,

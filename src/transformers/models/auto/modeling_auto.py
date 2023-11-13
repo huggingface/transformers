@@ -158,6 +158,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("owlv2", "Owlv2Model"),
         ("owlvit", "OwlViTModel"),
         ("patchtsmixer", "PatchTSMixerModel"),
+        ("patchtst", "PatchTSTModel"),
         ("pegasus", "PegasusModel"),
         ("pegasus_x", "PegasusXModel"),
         ("perceiver", "PerceiverModel"),
@@ -1134,12 +1135,14 @@ MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         ("patchtsmixer", "PatchTSMixerForClassification"),
+        ("patchtst", "PatchTSTForClassification"),
     ]
 )
 
 MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING_NAMES = OrderedDict(
     [
         ("patchtsmixer", "PatchTSMixerForRegression"),
+        ("patchtst", "PatchTSTForRegression"),
     ]
 )
 

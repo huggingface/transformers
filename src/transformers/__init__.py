@@ -493,10 +493,6 @@ _import_structure = {
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
     ],
-    "models.patchtsmixer": [
-        "PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "PatchTSMixerConfig",
-    ],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
@@ -2489,17 +2485,6 @@ else:
             "OwlViTPreTrainedModel",
             "OwlViTTextModel",
             "OwlViTVisionModel",
-        ]
-    )
-    _import_structure["models.patchtsmixer"].extend(
-        [
-            "PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "PatchTSMixerForClassification",
-            "PatchTSMixerForForecasting",
-            "PatchTSMixerForPretraining",
-            "PatchTSMixerForRegression",
-            "PatchTSMixerModel",
-            "PatchTSMixerPreTrainedModel",
         ]
     )
     _import_structure["models.pegasus"].extend(
@@ -4714,10 +4699,6 @@ if TYPE_CHECKING:
         OwlViTTextConfig,
         OwlViTVisionConfig,
     )
-    from .models.patchtsmixer import (
-        PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        PatchTSMixerConfig,
-    )
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
@@ -6409,15 +6390,6 @@ if TYPE_CHECKING:
             OwlViTPreTrainedModel,
             OwlViTTextModel,
             OwlViTVisionModel,
-        )
-        from .models.patchtsmixer import (
-            PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PatchTSMixerForClassification,
-            PatchTSMixerForForecasting,
-            PatchTSMixerForPretraining,
-            PatchTSMixerForRegression,
-            PatchTSMixerModel,
-            PatchTSMixerPreTrainedModel,
         )
         from .models.pegasus import (
             PegasusForCausalLM,
