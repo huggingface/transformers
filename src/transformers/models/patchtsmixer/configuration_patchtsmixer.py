@@ -40,8 +40,7 @@ class PatchTSMixerConfig(PretrainedConfig):
     Args:
         context_length (`int`, *optional*, defaults to 32):
             The context/history length for the input sequence.
-        patch_length (`int`, *optional*, defaults to 8):
-            The patch length for the `PatchTSMixer` model. Try to set it as a divisor of `context_length`.
+        patch_len (`int`, *optional*, defaults to 8): <fill_docstring>
         num_input_channels (`int`, *optional*, defaults to 1):
             Number of input variates. For Univariate, set it to 1.
         patch_stride (`int`, *optional*, defaults to 8):
@@ -112,11 +111,11 @@ class PatchTSMixerConfig(PretrainedConfig):
             Mask value to use.
         masked_loss (`bool`, *optional*, defaults to `True`):
             Whether to compute pretraining loss only at the masked portions, or on the entire output.
-        unmasked_channel_indices (`list`, *optional*):
-            Channels that are not masked during pretraining.
         channel_consistent_masking (`bool`, *optional*, defaults to `True`):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
             across channels.
+        unmasked_channel_indices (`list`, *optional*):
+            Channels that are not masked during pretraining.
         head_dropout (`float`, *optional*, defaults to 0.2):
             The dropout probability the `PatchTSMixer` head.
         distribution_output (`string`, *optional*, defaults to `"student_t"`):
