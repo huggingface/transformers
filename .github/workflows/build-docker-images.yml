@@ -23,11 +23,11 @@ jobs:
     runs-on: [self-hosted, docker-gpu, amd-gpu, single-gpu, mi210]
     steps:
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v2.0.0
       - name: Check out code
-        uses: actions/checkout@v3.0.2
+        uses: actions/checkout@v3
       - name: Login to DockerHub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v2.0.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
