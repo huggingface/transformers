@@ -121,12 +121,12 @@ Use [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pre
 Use [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and it's associated tokenizer (more on an `TFAutoClass` in the next section):
 
 ```py
->>> 1 == 1
->>> # import tensorflow as tf
->>> # from transformers import AutoTokenizer, TFAutoModelForSequenceClassification, TFAutoModel
+
+
+>>> from transformers import TFAutoModel
 
 >>> # model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
->>> # model = TFAutoModel.from_pretrained(model_name)
+>>> model = TFAutoModel.from_pretrained(model_name)
 
 ```
 </tf>
