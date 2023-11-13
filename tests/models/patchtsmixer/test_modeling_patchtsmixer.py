@@ -905,18 +905,6 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         )
         self.forecast_full_module(params)
 
-    # def test_forecast_full(self):
-    #     config = PatchTSMixerConfig(**self.__class__.params)
-    #     mdl = PatchTSMixerForForecasting(config)
-    #     output = mdl(self.__class__.data, target_values=self.__class__.correct_forecast_output)
-    #     self.assertEqual(
-    #         output.prediction_logits.shape, self.__class__.correct_forecast_output.shape
-    #     )
-    #     self.assertEqual(
-    #         output.last_hidden_state.shape, self.__class__.enc_output.shape
-    #     )
-    #     self.assertEqual(output.loss.item()<100,True)
-
     def test_classification_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
         head = PatchTSMixerLinearHead(
