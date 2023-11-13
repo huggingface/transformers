@@ -1101,71 +1101,70 @@ class PatchTSMixerMasking(nn.Module):
         return masked_input, mask
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeriesTransformer->PatchTSMixer,TimeSeries->PatchTSMixer
+# TODO: add copied from after PatchTST merge
 class PatchTSMixerStdScaler(nn.Module):
     """
-    Standardize features by calculating the mean and scaling along some given dimension `dim`, and then normalizes it
-    by subtracting from the mean and dividing by the standard deviation.
-
-    Args:
-        dim (`int`):
-            Dimension along which to calculate the mean and standard deviation.
-        keepdim (`bool`, *optional*, defaults to `False`):
-            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
-        minimum_scale (`float`, *optional*, defaults to 1e-5):
-            Default scale that is used for elements that are constantly zero along dimension `dim`.
+    Standardize features by calculating the mean and scaling along the first dimension, and then normalizes it by
+    subtracting from the mean and dividing by the standard deviation.
     """
 
-    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-5):
+    def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
-        if not dim > 0:
-            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
-        self.dim = dim
-        self.keepdim = keepdim
-        self.minimum_scale = minimum_scale
+        self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
+        self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
+        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
 
-    @torch.no_grad()
-    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        denominator = weights.sum(self.dim, keepdim=self.keepdim)
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Parameters:
+            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                input for Batch norm calculation
+            observed_indicator (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                Calculating the scale on the observed indicator.
+        Returns:
+            tuple of `torch.Tensor` of shapes
+                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
+                `(batch_size, 1, num_input_channels)`)
+        """
+        denominator = observed_indicator.sum(self.dim, keepdim=self.keepdim)
         denominator = denominator.clamp_min(1.0)
-        loc = (data * weights).sum(self.dim, keepdim=self.keepdim) / denominator
+        loc = (data * observed_indicator).sum(self.dim, keepdim=self.keepdim) / denominator
 
-        variance = (((data - loc) * weights) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
+        variance = (((data - loc) * observed_indicator) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
         scale = torch.sqrt(variance + self.minimum_scale)
         return (data - loc) / scale, loc, scale
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeriesTransformer->PatchTSMixer,TimeSeries->PatchTSMixer
+# TODO: add copied from after PatchTST merge
 class PatchTSMixerMeanScaler(nn.Module):
     """
-    Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
+    Computes a scaling factor as the weighted average absolute value along the first dimension, and scales the data
     accordingly.
-
-    Args:
-        dim (`int`):
-            Dimension along which to compute the scale.
-        keepdim (`bool`, *optional*, defaults to `False`):
-            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
-        default_scale (`float`, *optional*, defaults to `None`):
-            Default scale that is used for elements that are constantly zero. If `None`, we use the scale of the batch.
-        minimum_scale (`float`, *optional*, defaults to 1e-10):
-            Default minimum possible scale that is used for any item.
     """
 
-    def __init__(
-        self, dim: int = -1, keepdim: bool = True, default_scale: Optional[float] = None, minimum_scale: float = 1e-10
-    ):
+    def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
-        self.dim = dim
-        self.keepdim = keepdim
-        self.minimum_scale = minimum_scale
-        self.default_scale = default_scale
+        self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
+        self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
+        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
+        self.default_scale = config.default_scale if hasattr(config, "default_scale") else None
 
-    @torch.no_grad()
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # shape: (N, [C], T=1)
+        """
+        Parameters:
+            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                input for Batch norm calculation
+            observed_indicator (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                Calculating the scale on the observed indicator.
+        Returns:
+            tuple of `torch.Tensor` of shapes
+                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
+                `(batch_size, 1, num_input_channels)`)
+        """
         ts_sum = (data * observed_indicator).abs().sum(self.dim, keepdim=True)
         num_observed = observed_indicator.sum(self.dim, keepdim=True)
 
@@ -1193,69 +1192,32 @@ class PatchTSMixerMeanScaler(nn.Module):
         return scaled_data, torch.zeros_like(scale), scale
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeriesTransformer->PatchTSMixer,TimeSeries->PatchTSMixer
+# TODO: add copied from after PatchTST merge
 class PatchTSMixerNOPScaler(nn.Module):
     """
-    Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
-
-    Args:
-        dim (`int`):
-            Dimension along which to compute the scale.
-        keepdim (`bool`, *optional*, defaults to `False`):
-            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+    Assigns a scaling factor equal to 1 along the first dimension, and therefore applies no scaling to the input data.
     """
 
-    def __init__(self, dim: int, keepdim: bool = False):
+    def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
-        self.dim = dim
-        self.keepdim = keepdim
+        self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
+        self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
 
     def forward(
-        self, data: torch.Tensor, observed_indicator: torch.Tensor
+        self, data: torch.Tensor, observed_indicator: torch.Tensor = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Parameters:
+            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                input for Batch norm calculation
+        Returns:
+            tuple of `torch.Tensor` of shapes
+                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
+                `(batch_size, 1, num_input_channels)`)
+        """
         scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
         loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
         return data, loc, scale
-
-
-class InjectScalerStatistics4D(nn.Module):
-    def __init__(self, num_features: int, num_patches: int, expansion: int = 2):
-        super().__init__()
-
-        self.inverse_trans_expansion = nn.Linear(num_features + 2, expansion * num_features)
-        self.inverse_trans_compression = nn.Linear(expansion * num_features, num_features)
-        self.map_scale_expansion = nn.Linear(2, 2 * expansion)
-        self.map_scale_compression = nn.Linear(2 * expansion, 2)
-        self.num_patches = num_patches
-
-    def forward(self, inputs: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor):
-        """
-        Args:
-            inputs (`torch.Tensor` of shape `(batch_size, num_input_channels, num_patch, num_features)`)
-            loc (`torch.Tensor` of shape `(batch_size, 1, num_input_channels)`)
-            scale (`torch.Tensor` of shape `(batch_size, 1, num_input_channels)`)
-        Returns:
-            `torch.Tensor` of shape `(batch_size, num_input_channels, num_patch, num_features)`
-        """
-
-        mean = loc.transpose(-1, -2)  # [batch_size x n_channels x 1 ]
-        mean = mean.unsqueeze(-2)  # [batch_size x n_channels x 1 x 1]
-        mean = mean.repeat(1, 1, self.num_patches, 1)  # [batch_size x n_channels x num_patch x 1]
-
-        stdev = scale.transpose(-1, -2)  # [batch_size x n_channels x 1 ]
-        stdev = stdev.unsqueeze(-2)  # [batch_size x n_channels x 1 x 1]
-        stdev = stdev.repeat(1, 1, self.num_patches, 1)  # [batch_size x n_channels x num_patch x 1]
-
-        concat_stats = torch.cat([mean, stdev], dim=-1)  # [batch_size x n_channels x num_patch x 2]
-
-        concat_stats = self.map_scale_expansion(concat_stats)  # [batch_size x n_channels x num_patch x (2*expansion)]
-        concat_stats = self.map_scale_compression(concat_stats)  # [batch_size x n_channels x num_patch x 2]
-
-        inputs = torch.cat([inputs, concat_stats], dim=-1)  # [batch_size x channels x num_patch x num_features+2]
-        inputs = self.inverse_trans_expansion(inputs)  # [batch_size x channels x num_patch x (expansion*num_features)]
-        inputs = self.inverse_trans_compression(inputs)  # [batch_size x channels x num_patch x num_features]
-
-        return inputs
 
 
 @dataclass
