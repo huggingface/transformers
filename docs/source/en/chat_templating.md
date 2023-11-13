@@ -91,7 +91,7 @@ tokenized_chat = tokenizer.apply_chat_template(messages, tokenize=True, add_gene
 print(tokenizer.decode(tokenized_chat[0]))
 ```
 This will yield a string in the input format that Zephyr expects. 
-```
+```text
 <|system|>
 You are a friendly chatbot who always responds in the style of a pirate</s> 
 <|user|>
@@ -385,7 +385,7 @@ tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set a
 This template wraps each message in `<|im_start|>` and `<|im_end|>` tokens, and simply writes the role as a string, which
 allows for flexibility in the roles you train with. The output looks like this:
 
-```
+```text
 <|im_start|>system
 You are a helpful chatbot that will do its best not to say anything so stupid that people tweet about it.<|im_end|>
 <|im_start|>user
