@@ -256,8 +256,8 @@ class Owlv2VisionConfig(PretrainedConfig):
 class Owlv2Config(PretrainedConfig):
     r"""
     [`Owlv2Config`] is the configuration class to store the configuration of an [`Owlv2Model`]. It is used to
-    instantiate an OWLv2 model according to the specified arguments, defining the text model and vision model configs.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the OWLv2
+    instantiate an OWLv2 model according to the specified arguments, defining the text model and vision model
+    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the OWLv2
     [google/owlv2-base-patch16](https://huggingface.co/google/owlv2-base-patch16) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
