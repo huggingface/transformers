@@ -1150,9 +1150,7 @@ class T5ForEncoderBasedSequenceClassificationModelTest(ModelTesterMixin, unittes
     test_pruning = False
     test_resize_embeddings = False
     test_model_parallel = False
-    fx_compatible = False
     is_encoder_decoder = True
-    test_inputs_embeds = True
     all_parallelizable_model_classes = ()
 
     def setUp(self):

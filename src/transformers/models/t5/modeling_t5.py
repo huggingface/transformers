@@ -2348,7 +2348,7 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
 )
 class T5ForEncoderBasedSequenceClassification(T5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
-    _tied_weights_keys = ['transformer.encoder.embed_tokens.weight', 'transformer.decoder.embed_tokens.weight']
+    _tied_weights_keys = ["transformer.encoder.embed_tokens.weight", "transformer.decoder.embed_tokens.weight"]
 
     def __init__(self, config: T5Config):
         super().__init__(config)
@@ -2417,7 +2417,7 @@ class T5ForEncoderBasedSequenceClassification(T5PreTrainedModel):
         batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        if decoder_input_ids is None:
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
             if self.config.problem_type == "multi_label_classification":
                 decoder_input_ids = torch.arange(end=self.config.num_labels, device=device, dtype=torch.long)
                 decoder_input_ids = decoder_input_ids.repeat(batch_size, 1)  # Shape: (batch_size, num_labels)
