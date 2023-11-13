@@ -885,10 +885,21 @@ class LagLlamaPreTrainedModel(PreTrainedModel):
 
 LAGLLAMA_INPUTS_DOCSTRING = r"""
     Args:
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
+        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length + max(lags_sequence))` or `(batch_size, sequence_length + max(lags_sequence), input_size)`):
+            Past values of the time series, that serve as context in order to predict the future. The sequence size of
+            this tensor must be larger than the `max(lags_sequence)` of the model, since the model will use the larger
+            size to construct lag features, i.e. additional values from the past which are added in order to serve as
+            "extra context".
+
+            For multivariate time series, the `input_size` > 1 dimension is required and corresponds to the number of
+            variates in the time series per time step.
+        past_observed_mask (`torch.BoolTensor` of shape `(batch_size,  + max(lags_sequence))` or `(batch_size,  + max(lags_sequence), input_size)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected in
+            `[0, 1]`:
+
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -900,7 +911,7 @@ LAGLLAMA_INPUTS_DOCSTRING = r"""
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            If `past_key_values` is used, optionally only the last `inputs_embeds` have to be input (see
             `past_key_values`).
 
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
@@ -922,9 +933,13 @@ LAGLLAMA_INPUTS_DOCSTRING = r"""
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            If `past_key_values` are used, the user can optionally input only the last `inputs_embeds` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            `inputs_embeds` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Optionally, instead of passing `past_values` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `past_values` into associated vectors than the
+            model's internal mechanism of creating lags features.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -1079,8 +1094,6 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        loc: Optional[torch.FloatTensor] = None,
-        scale: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1094,7 +1107,7 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
+        # retrieve past_values and inputs_embeds
         if past_values is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both past_values and inputs_embeds at the same time")
         elif past_values is not None:
@@ -1104,6 +1117,8 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         elif inputs_embeds is not None:
             batch_size, seq_length, _ = inputs_embeds.shape
             device = inputs_embeds.device
+            loc = None
+            scale = None
         else:
             raise ValueError("You have to specify either past_values or inputs_embeds")
 
@@ -1270,10 +1285,14 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
     ) -> Union[Tuple, CausalTSOutputWithPast]:
         r"""
         Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+            loc: (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
+                Location parameter of the distribution.
+            scale (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
+                Scale parameter of the distribution.
+            future_values (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`):
+                Future values of the time series, that serve as targets for the model to predict.
+            future_observed_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, sequence_length)`):
+                Boolean mask to indicate which `future_values` were observed and which were missing.
 
         Returns:
 
@@ -1307,8 +1326,6 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            loc=loc,
-            scale=scale,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1316,8 +1333,8 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
         )
 
         hidden_states = outputs.last_hidden_state
-        loc = outputs.loc
-        scale = outputs.scale
+        loc = loc if outputs.loc is None else outputs.loc
+        scale = scale if outputs.scale is None else outputs.scale
         # params of the chosen distribution
         params = self.parameter_projection(hidden_states)
 
