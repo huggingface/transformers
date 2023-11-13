@@ -32,7 +32,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       - name: Build and push
-        uses: docker/build-push-action@v3.1.0
+        uses: docker/build-push-action@v3.0.2
         with:
           context: ./docker/transformers-pytorch-amd-gpu
           build-args: |
@@ -45,7 +45,7 @@ jobs:
         # This condition allows `schedule` events, or `push` events that trigger this workflow NOT via `workflow_call`.
         # The later case is useful for manual image building for debugging purpose. Use another tag in this case!
         if: inputs.image_postfix != '-push-ci'
-        uses: docker/build-push-action@v3.1.0
+        uses: docker/build-push-action@v3.0.2
         with:
           context: ./docker/transformers-pytorch-amd-gpu
           build-args: |
