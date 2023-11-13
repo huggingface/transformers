@@ -307,7 +307,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         do_resize=False,
         do_rescale=False,
         do_pad=True,
-        size_divisibility=14,
+        size_divisor=14,
         do_normalize=True,
         image_mean=(123.675, 116.28, 103.53),
         image_std=(58.395, 57.12, 57.375),
@@ -335,8 +335,6 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
             expected_slice = torch.tensor(
                 [[3.3576, 3.4741, 3.4345], [3.4324, 3.5012, 3.2775], [3.2560, 3.3563, 3.2354]]
             )
-        # else:
-        #     raise NotImplementedError("Model not yet supported")
 
         assert predicted_depth.shape == torch.Size(expected_shape)
         assert torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-5)

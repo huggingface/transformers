@@ -102,7 +102,7 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "do_rescale"))
         self.assertTrue(hasattr(image_processing, "rescale_factor"))
         self.assertTrue(hasattr(image_processing, "do_pad"))
-        self.assertTrue(hasattr(image_processing, "size_divisibility"))
+        self.assertTrue(hasattr(image_processing, "size_divisor"))
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
@@ -116,13 +116,13 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image = np.random.randn(3, 249, 491)
 
         # test individual method
-        image = image_processing.pad_image(image, size_divisibility=4)
+        image = image_processing.pad_image(image, size_divisor=4)
         self.assertTrue(image.shape[1] % 4 == 0)
         self.assertTrue(image.shape[2] % 4 == 0)
 
         # test by calling
         pixel_values = image_processing.preprocess(
-            image, do_rescale=False, do_resize=False, do_pad=True, size_divisibility=4, return_tensors="pt"
+            image, do_rescale=False, do_resize=False, do_pad=True, size_divisor=4, return_tensors="pt"
         ).pixel_values
         self.assertTrue(pixel_values.shape[2] % 4 == 0)
         self.assertTrue(pixel_values.shape[3] % 4 == 0)
