@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 "AWQ (Activation aware Weight Quantization) integration file"
+from ..activations import ACT2FN
 from ..utils import is_auto_awq_available, is_torch_available
 from ..utils.quantization_config import AwqBackendPackingMethod, AWQLinearVersion
 
@@ -19,6 +20,22 @@ from ..utils.quantization_config import AwqBackendPackingMethod, AWQLinearVersio
 if is_torch_available():
     import torch
     import torch.nn as nn
+
+
+AWQ_FUSED_MAPPINGS = {
+    "mistral": {
+        "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
+        "mlp": ["gate_proj", "up_proj", "down_proj"],
+        "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
+        "use_alibi": False,
+    },
+    "llama": {
+        "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
+        "mlp": ["gate_proj", "up_proj", "down_proj"],
+        "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
+        "use_alibi": False,
+    },
+}
 
 
 def replace_with_awq_linear(
@@ -105,22 +122,55 @@ def replace_with_awq_linear(
     return model, has_been_replaced
 
 
+def get_fusing_mapping(model, quantization_config):
+    """
+    Returns the fusing mapping given the quantization config and the model
+
+    Args:
+        model (`~PreTrainedModel`):
+            The model to fuse - note this model should have been converted into AWQ format beforehand.
+        quantization_config (`~transformers.quantization_config.AWQConfig`):
+            The quantization configuration to use.
+    """
+    # Always default to `quantization_config.fusing_mapping`
+    if quantization_config.fusing_mapping is not None:
+        current_fused_mapping = quantization_config.fusing_mapping
+    elif model.config.model_type in AWQ_FUSED_MAPPINGS:
+        current_fused_mapping = AWQ_FUSED_MAPPINGS[model.config.model_type]
+
+        # Handle hidden_size, num_attention_heads, num_key_value_heads on our own.
+        hidden_size = model.config.hidden_size
+        num_attention_heads = model.config.num_attention_heads
+        num_key_value_heads = getattr(model.config, "num_key_value_heads", num_attention_heads)
+
+        current_fused_mapping["hidden_size"] = hidden_size
+        current_fused_mapping["num_attention_heads"] = num_attention_heads
+        current_fused_mapping["num_key_value_heads"] = num_key_value_heads
+        current_fused_mapping["max_seq_len"] = quantization_config.fuse_max_seq_len
+    else:
+        raise ValueError(
+            "Fusing mapping not found either on the quantization config or the supported `AWQ_FUSED_MAPPINGS`. Please pass a `fused_mapping` argument"
+            " in the `quantization_config` or raise an issue on transformers https://github.com/huggingface/transformers to add its support."
+        )
+    return current_fused_mapping
+
+
 def fuse_awq_modules(model, quantization_config):
     """
     Optionally fuse some modules in the model to speedup inference.
 
     Args:
-        model (`~transformers.PreTrainedModel`):
+        model (`~PreTrainedModel`):
             The model to fuse - note this model should have been converted into AWQ format beforehand.
         quantization_config (`~transformers.quantization_config.AWQConfig`):
             The quantization configuration to use.
     """
     backend = quantization_config.backend
-    fusing_mapping = quantization_config.fusing_mapping
+    fusing_mapping = get_fusing_mapping(model, quantization_config)
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
         from awq.modules.fused.attn import QuantAttentionFused
-        from awq.modules.fused.mlp import QuantLlamaMLP
+        from awq.modules.fused.mlp import QuantFusedMLP
         from awq.modules.fused.norm import FasterTransformerRMSNorm
         from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
     else:
@@ -143,7 +193,8 @@ def fuse_awq_modules(model, quantization_config):
             down_proj = getattr(module, fusing_mapping["mlp"][2])
 
             previous_device = gate_proj.qweight.device
-            new_module = QuantLlamaMLP(gate_proj, down_proj, up_proj)
+            activation_fn = ACT2FN[model.config.hidden_act]
+            new_module = QuantFusedMLP(gate_proj, down_proj, up_proj, activation_fn)
 
             parent_name, child_name = name.rsplit(".", 1)
             parent = model.get_submodule(parent_name)

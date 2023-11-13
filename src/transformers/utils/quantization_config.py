@@ -543,6 +543,12 @@ class AwqConfig(QuantizationConfigMixin):
         backend (`AwqBackendPackingMethod`, *optional*, defaults to `AwqBackendPackingMethod.AUTOAWQ`):
             The quantization backend. Some models might be quantized using `llm-awq` backend. This is useful for users
             that quantize their own models using `llm-awq` library.
+        fuse_modules (`bool`, *optional*, defaults to `False`):
+            Whether to fuse attention and mlp layers together for faster inference
+        fuse_max_seq_len (`int`, *optional*, defaults to `None`):
+            The Maximum sequence length to generate when using fusing.
+        fusing_mapping (`dict`, *optional*, default to `None`):
+            Overwrite the natively supported fusing scheme with the one specified by the users.
     """
 
     def __init__(
@@ -552,6 +558,8 @@ class AwqConfig(QuantizationConfigMixin):
         zero_point: bool = True,
         version: AWQLinearVersion = AWQLinearVersion.GEMM,
         backend: AwqBackendPackingMethod = AwqBackendPackingMethod.AUTOAWQ,
+        fuse_modules: Optional[bool] = False,
+        fuse_max_seq_len: Optional[int] = None,
         fusing_mapping: Optional[dict] = None,
         **kwargs,
     ):
@@ -562,6 +570,8 @@ class AwqConfig(QuantizationConfigMixin):
         self.zero_point = zero_point
         self.version = version
         self.backend = backend
+        self.fuse_modules = fuse_modules
+        self.fuse_max_seq_len = fuse_max_seq_len
         self.fusing_mapping = fusing_mapping
 
         self.post_init()
