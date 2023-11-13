@@ -79,6 +79,7 @@ from . import (
     electra,
     encodec,
     encoder_decoder,
+    enct5,
     ernie,
     ernie_m,
     esm,

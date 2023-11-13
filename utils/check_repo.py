@@ -66,6 +66,8 @@ PRIVATE_MODELS = [
     "T5Stack",
     "MT5Stack",
     "UMT5Stack",
+    "EncT5Stack",
+    "EncT5Model",
     "Pop2PianoStack",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",

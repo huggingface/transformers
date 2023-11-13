@@ -334,6 +334,7 @@ _import_structure = {
         "EncodecFeatureExtractor",
     ],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
+    "models.enct5": ["ENCT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "EncT5Config"],
     "models.ernie": [
         "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ErnieConfig",
@@ -1775,6 +1776,13 @@ else:
         ]
     )
     _import_structure["models.encoder_decoder"].append("EncoderDecoderModel")
+    _import_structure["models.enct5"].extend(
+        [
+            "ENCT5_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "EncT5ForSequenceClassification",
+            "EncT5PreTrainedModel",
+        ]
+    )
     _import_structure["models.ernie"].extend(
         [
             "ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST",
