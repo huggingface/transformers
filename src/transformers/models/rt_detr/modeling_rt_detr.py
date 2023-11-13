@@ -524,7 +524,7 @@ class RTDetrMSDeformableAttention(nn.Module):
         self.output_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def forward(self, query, reference_points, value, value_spatial_shapes, value_mask=None):
-        bs, len_q = query.shape[:2]
+        batch_size, query_length = query.shape[:2]
         len_v = value.shape[1]
         value = self.value_proj(value)
 
