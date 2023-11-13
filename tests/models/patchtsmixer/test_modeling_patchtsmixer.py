@@ -77,9 +77,9 @@ class PatchTSMixerModelTester:
         swin_hier: int = 0,
         # masking related
         mask_type: str = "random",
-        mask_ratio=0.5,
+        random_mask_ratio=0.5,
         mask_patches: list = [2, 3],
-        mask_patch_ratios: list = [1, 1],
+        forecast_mask_ratios: list = [1, 1],
         mask_value=0,
         masked_loss: bool = False,
         mask_mode: str = "mask_before_encoder",
@@ -120,9 +120,9 @@ class PatchTSMixerModelTester:
         self.head_dropout = head_dropout
         # masking related
         self.mask_type = mask_type
-        self.mask_ratio = mask_ratio
+        self.random_mask_ratio = random_mask_ratio
         self.mask_patches = mask_patches
-        self.mask_patch_ratios = mask_patch_ratios
+        self.forecast_mask_ratios = forecast_mask_ratios
         self.mask_value = mask_value
         self.channel_consistent_masking = channel_consistent_masking
         self.mask_mode = mask_mode
@@ -163,9 +163,9 @@ class PatchTSMixerModelTester:
             scaling=self.scaling,
             head_dropout=self.head_dropout,
             mask_type=self.mask_type,
-            mask_ratio=self.mask_ratio,
+            random_mask_ratio=self.random_mask_ratio,
             mask_patches=self.mask_patches,
-            mask_patch_ratios=self.mask_patch_ratios,
+            forecast_mask_ratios=self.forecast_mask_ratios,
             mask_value=self.mask_value,
             channel_consistent_masking=self.channel_consistent_masking,
             mask_mode=self.mask_mode,
@@ -524,9 +524,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             gated_attn=True,
             norm_mlp="LayerNorm",
             mask_type="random",
-            mask_ratio=0.5,
+            random_mask_ratio=0.5,
             mask_patches=[2, 3],
-            mask_patch_ratios=[1, 1],
+            forecast_mask_ratios=[1, 1],
             mask_value=0,
             masked_loss=True,
             channel_consistent_masking=True,

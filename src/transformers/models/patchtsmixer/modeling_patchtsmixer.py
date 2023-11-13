@@ -900,50 +900,54 @@ def random_masking(
 # TODO: add copied from after PatchTST master merge
 def forecast_masking(
     inputs: torch.Tensor,
-    patch_lengths: list,
-    mix_ratio: list = None,
+    forecast_mask_patches: list,
+    forecast_mask_ratios: list = None,
     unmasked_channel_indices: list = None,
     mask_value: int = 0,
     seed_number: Optional[int] = None,
 ):
-    """forecast_masking Mask last K patches where K is from the patch_lengths list.
-    For every batch, distribute the patch lengths based on mix_ratio Ignore masks for column indices mentioned in
-    cv_channel_indices
+    """Forecast masking that masks the last K patches where K is from the forecast_mask_patches list.
+    For every batch, distribute the patch lengths based on forecast_mask_ratios and ignore masks for column indices
+    mentioned in unmasked_channel_indices.
 
-    Args:
-        inputs (`torch.Tensor` of shape `(batch_size, num_channels, num_patch, patch_length)` or
-                    `(batch_size, tsg1, tag2, num_channels, num_patch, patch_length)`):
-            Input to mask
-        patch_lengths (`list`): List of patch lengths to mask in the end of the data.
-        mix_ratio (`list`, *optional*): List of weights to use for each patch length. For Ex.
-            if patch_lengths is [5,4] and mix_ratio is [1,1], then equal weights to both patch lengths. Defaults to
-            None.
+    Parameters:
+        inputs (`torch.Tensor`):
+            Input of shape `(bs, num_channels, num_patch, patch_len)` or `(bs, tsg1, tag2, num_channels, num_patch,
+            patch_len)`
+        forecast_mask_patches (`list`): [2, 4]
+            List of patch lengths to mask in the end of the data.
+        forecast_mask_ratios (`list`, *optional*): [0.7, 0.3]
+            List of weights to use for each patch length. For Ex. if forecast_mask_patches is [5,4] and
+            forecast_mask_ratios is [1,1], then equal weights to both patch lengths.
         unmasked_channel_indices (`list`, *optional*):
-            Control Variable channel indices. These channels will not be masked. Defaults to None.
-        mask_value (`int`, *optional*): Value to use for masking. Defaults to 0.
+            Control Variable channel indices. These channels will not be masked.
+        mask_value (`int`, *optional*, defaults to 0):
+            Value to use for masking.
+        seed_number (`int`, *optional*):
+            Value to set for the random seed.
 
     Returns:
-        `tuple(torch.Tensor)`: inputs_mask of the same shape as inputs Tensor and Mask tensor of shape `(batch_size,
-        num_channels , num_patch)` or `(batch_size, tsg1, tsg2, num_channels, num_patch)`
+        `tuple(torch.Tensor)`: inputs_mask, masked input, same shape as inputs Tensor and Mask tensor of shape `(bs,
+        num_channels , num_patch)` or `(bs, tsg1, tsg2, num_channels, num_patch)`
     """
     if seed_number:
         set_seed(seed_number)
 
-    if mix_ratio is None:
-        mix_ratio = [1 for t in patch_lengths]
+    if forecast_mask_ratios is None:
+        forecast_mask_ratios = [1 for _ in forecast_mask_patches]
 
     batch_size, num_channels, sequence_length, num_features = inputs.shape
     mask = torch.zeros(batch_size, num_channels, sequence_length, device=inputs.device)
 
     t_list = []
     total_length = 0
-    total_ratio = sum(mix_ratio)
+    total_ratio = sum(forecast_mask_ratios)
 
-    for i, j in zip(patch_lengths, mix_ratio):
-        if i <= 0 or i >= sequence_length:
+    for patch_length, ratio in zip(forecast_mask_patches, forecast_mask_ratios):
+        if patch_length <= 0 or patch_length >= sequence_length:
             raise Exception("masked_patch_len should be greater than 0 and less than total patches.")
-        temp_len = int(batch_size * j / total_ratio)
-        t_list.append([i, j, temp_len])
+        temp_len = int(batch_size * ratio / total_ratio)
+        t_list.append([patch_length, ratio, temp_len])
         total_length += temp_len
 
     t_list = sorted(t_list, key=lambda x: x[2])
@@ -953,18 +957,16 @@ def forecast_masking(
     elif total_length > batch_size:
         t_list[-1][2] = t_list[-1][2] + (total_length - batch_size)
 
-    b1 = 0
-    for p, r, l in t_list:
-        b2 = b1 + l
-        mask[b1:b2, :, -p:] = 1
-        b1 = b2
+    batch1 = 0
+    for patch_len, _, temp_len in t_list:
+        batch2 = batch1 + temp_len
+        mask[batch1:batch2, :, -patch_len:] = 1
+        batch1 = batch2
 
     perm = torch.randperm(mask.shape[0])
     mask = mask[perm]
 
-    mask = mask.unsqueeze(-1).repeat(
-        1, 1, 1, num_features
-    )  # mask: [batch_size x num_channels x num_patch x patch_length]
+    mask = mask.unsqueeze(-1).repeat(1, 1, 1, num_features)  # mask: [bs x num_channels x num_patch x patch_len]
     if unmasked_channel_indices is not None:
         mask[:, unmasked_channel_indices, :, :] = 0
 
@@ -1024,84 +1026,70 @@ class PatchTSMixerPatchify(nn.Module):
 # TODO: add copied from after PatchTST master merge
 class PatchTSMixerMasking(nn.Module):
     """
-    Class to random or forcast masking.
+    Class to perform random or forecast masking.
 
-    Args:
-        mask_type (str, *optional*): Masking type. Allowed values are random, forecast. Defaults to random.
-        mask_ratio (`float`, *optional*): Mask ratio.
-        mask_patches (`list`, *optional*): List of patch lengths to mask in the end of the data.
-        mask_patch_ratios (`list`, *optional*): List of weights to use for each patch length. For Ex. if
-            patch_lengths is [5,4] and mix_ratio is [1,1], then equal weights to both patch lengths. Defaults to None.
-        unmasked_channel_indices (`list`, *optional*):
-            Control Variable channel indices. These channels will not be masked. Defaults to None.
-        channel_consistent_masking (bool, *optional*):
-            When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
-            across channels. Defaults to True.
-        mask_value (`int`, *optional*): Value to use for masking. Defaults to 0.
-        seed_number (`int`, *optional*): Random seed, when None seed is not set. Defaults to None.
+    Parameters:
+        config (`PatchTSTConfig`): model config
+
+    Returns:
+        x_mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`)
+                Masked patched input
+        mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches)`)
+            Bool tensor indicating True on masked points
+
     """
 
-    def __init__(
-        self,
-        mask_type: str = "random",
-        mask_ratio=0.5,
-        mask_patches: list = [2, 3],
-        mask_patch_ratios: list = [1, 1],
-        channel_consistent_masking: bool = False,
-        unmasked_channel_indices: list = None,
-        mask_value=0,
-        seed_number: Optional[int] = None,
-    ):
-        self.mask_ratio = mask_ratio
-        self.channel_consistent_masking = channel_consistent_masking
-        self.mask_type = mask_type
-        self.mask_patches = mask_patches
-        self.mask_patch_ratios = mask_patch_ratios
-        self.unmasked_channel_indices = unmasked_channel_indices
-        self.mask_value = mask_value
+    def __init__(self, config: PatchTSMixerConfig):
+        super().__init__()
+        self.random_mask_ratio = config.random_mask_ratio
+        self.channel_consistent_masking = config.channel_consistent_masking
+        self.mask_type = config.mask_type
+        self.forecast_mask_patches = config.forecast_mask_patches
+        self.forecast_mask_ratios = config.forecast_mask_ratios
+        self.unmasked_channel_indices = config.unmasked_channel_indices
+        self.mask_value = config.mask_value
         if self.unmasked_channel_indices is not None:
             self.unmasked_channel_indices.sort()
-        self.seed_number = seed_number
-
-        super().__init__()
+        self.seed_number = config.seed_number
 
     def forward(self, patch_input: torch.Tensor):
         """
-        Args:
-            patch_input (`torch.Tensor` of shape `(batch_size, num_input_channels, num_patches, patch_length)`):
-                patched input
-        Returns:
-            x_mask (`torch.Tensor` of shape `(batch_size, num_input_channels, num_patches, patch_length)`) :
+        Parameters:
+            patch_input (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`, *required*):
+                Patch input
+
+        Return:
+            masked_input (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`)
                 Masked patched input
-            mask (`torch.Tensor` of shape `(batch_size, num_input_channels, num_patches)`):
+            mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches)`)
                 Bool tensor indicating True on masked points
 
         """
 
         if self.mask_type == "random":
-            x_mask, mask = random_masking(
+            masked_input, mask = random_masking(
                 inputs=patch_input,
-                mask_ratio=self.mask_ratio,
+                mask_ratio=self.random_mask_ratio,
                 unmasked_channel_indices=self.unmasked_channel_indices,
                 channel_consistent_masking=self.channel_consistent_masking,
                 mask_value=self.mask_value,
                 seed_number=self.seed_number,
             )
         elif self.mask_type == "forecast":
-            x_mask, mask = forecast_masking(
+            masked_input, mask = forecast_masking(
                 inputs=patch_input,
-                patch_lengths=self.mask_patches,
-                mix_ratio=self.mask_patch_ratios,
+                forecast_mask_patches=self.forecast_mask_patches,
+                forecast_mask_ratios=self.forecast_mask_ratios,
                 unmasked_channel_indices=self.unmasked_channel_indices,
                 mask_value=self.mask_value,
                 seed_number=self.seed_number,
             )
         else:
-            raise ValueError("Invalid mask type")
+            raise Exception("Invalid mask type")
 
-        mask = mask.bool()  # mask: [batch_size x num_input_channels x num_patch]
+        mask = mask.bool()  # mask: [bs x num_input_channels x num_patch]
 
-        return x_mask, mask
+        return masked_input, mask
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeries->PatchTSMixer
@@ -1401,20 +1389,10 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         super().__init__(config)
 
         self.encoder = PatchTSMixerEncoder(config)
-        self.patching = PatchTSMixerPatchify(
-            config
-        )
+        self.patching = PatchTSMixerPatchify(config)
 
         if mask_input is True:
-            self.masking = PatchTSMixerMasking(
-                mask_type=config.mask_type,
-                mask_ratio=config.mask_ratio,
-                mask_patches=config.mask_patches,
-                mask_patch_ratios=config.mask_patch_ratios,
-                channel_consistent_masking=config.channel_consistent_masking,
-                mask_value=config.mask_value,
-                seed_number=config.seed_number,
-            )
+            self.masking = PatchTSMixerMasking(config)
         else:
             self.masking = None
 

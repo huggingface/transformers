@@ -14,7 +14,7 @@
 # limitations under the License.
 """ PatchTSMixer model configuration"""
 
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -99,17 +99,19 @@ class PatchTSMixerConfig(PretrainedConfig):
         mask_type (`str`, *optional*, defaults to `"random"`):
             Type of masking to use for Masked Pretraining mode. Allowed values are "random", "forecast". In Random
             masking, points are maskes random. In Forecast masking, Points are masked towards the end.
-        mask_ratio (`float`, *optional*, defaults to 0.5):
+        random_mask_ratio (`float`, *optional*, defaults to 0.5):
             Masking ratio to use when `mask_type` is `random`. Higher value indicates more masking.
-        mask_patches (`list`, *optional*, defaults to `[2, 3]`):
+        forecast_mask_patches (`list`, *optional*, defaults to `[2, 3]`):
             List of patch lengths to mask in the end of the data, when `mask_type` is `forecast`.
-        mask_patch_ratios (`list`, *optional*, defaults to `[1, 1]`):
-            List of weights to use for each patch length for forecast masking. For Example, if `mask_patches` is [2,3]
-            and `mask_patch_ratios` is [1,1], then equal weights to both patch lengths.
+        forecast_mask_ratios (`list`, *optional*, defaults to `[1, 1]`):
+            List of weights to use for each patch length for forecast masking. For Example, if `forecast_mask_patches` is [2,3]
+            and `forecast_mask_ratios` is [1,1], then equal weights to both patch lengths.
         mask_value (`float`, *optional*, defaults to `0.0`):
             Mask value to use.
         masked_loss (`bool`, *optional*, defaults to `True`):
             Whether to compute pretraining loss only at the masked portions, or on the entire output.
+        unmasked_channel_indices (`list`, *optional*):
+            Channels that are not masked during pretraining.
         channel_consistent_masking (`bool`, *optional*, defaults to `True`):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
             across channels.
@@ -179,12 +181,13 @@ class PatchTSMixerConfig(PretrainedConfig):
         post_init: bool = False,
         # Pretrain model configuration
         mask_type: str = "random",
-        mask_ratio=0.5,
-        mask_patches: list = [2, 3],
-        mask_patch_ratios: list = [1, 1],
+        random_mask_ratio=0.5,
+        forecast_mask_patches: list = [2, 3],
+        forecast_mask_ratios: list = [1, 1],
         mask_value=0,
         masked_loss: bool = True,
         channel_consistent_masking: bool = True,
+        unmasked_channel_indices: Optional[List[int]] = None,
         # General head configuration
         head_dropout: float = 0.2,
         distribution_output: str = "student_t",
@@ -213,9 +216,9 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.head_dropout = head_dropout
         self.num_patches = (max(context_length, patch_len) - patch_len) // patch_stride + 1
         self.mask_type = mask_type
-        self.mask_ratio = mask_ratio
-        self.mask_patches = mask_patches
-        self.mask_patch_ratios = mask_patch_ratios
+        self.random_mask_ratio = random_mask_ratio
+        self.forecast_mask_patches = forecast_mask_patches
+        self.forecast_mask_ratios = forecast_mask_ratios
         self.mask_value = mask_value
         self.channel_consistent_masking = channel_consistent_masking
         self.masked_loss = masked_loss
@@ -236,5 +239,6 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.distribution_output = distribution_output
         self.loss = loss
         self.num_parallel_samples = num_parallel_samples
+        self.unmasked_channel_indices = unmasked_channel_indices
 
         super().__init__(**kwargs)
