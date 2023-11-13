@@ -113,12 +113,7 @@ The [`pipeline`] can accommodate any model from the [Hub](https://huggingface.co
 <pt>
 Use [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and it's associated tokenizer (more on an `AutoClass` in the next section):
 
-```py
->>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
->>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-```
 </pt>
 <tf>
 Use [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and it's associated tokenizer (more on an `TFAutoClass` in the next section):
@@ -188,12 +183,7 @@ Check out the [preprocess](./preprocessing) tutorial for more details about toke
 <pt>
 🤗 Transformers provides a simple and unified way to load pretrained instances. This means you can load an [`AutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`AutoModel`] for the task. For text (or sequence) classification, you should load [`AutoModelForSequenceClassification`]:
 
-```py
->>> from transformers import AutoModelForSequenceClassification
 
->>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
->>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name)
-```
 
 <Tip>
 
@@ -247,9 +237,7 @@ Once your model is fine-tuned, you can save it with its tokenizer using [`PreTra
 
 When you are ready to use the model again, reload it with [`PreTrainedModel.from_pretrained`]:
 
-```py
->>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
-```
+
 </pt>
 <tf>
 Once your model is fine-tuned, you can save it with its tokenizer using [`TFPreTrainedModel.save_pretrained`]:
