@@ -601,7 +601,7 @@ class RTDetrTransformerDecoderLayer(nn.Module):
         # self attention
         query = keys = self.with_pos_embed(target, query_pos_embed)
 
-        attention_res, _ = self.self_attn(q, k, value=target, attn_mask=attn_mask)
+        attention_res, _ = self.self_attn(query, keys, value=target, attn_mask=attn_mask)
         target = target + self.dropout1(attention_res)
         target = self.norm1(target)
 
@@ -623,12 +623,10 @@ class RTDetrTransformerDecoderLayer(nn.Module):
 
 
 class RTDetrTransformerDecoder(nn.Module):
-    def __init__(self, hidden_dim, decoder_layer, num_layers, eval_idx=-1):
+    def __init__(self, config: RTDetrConfig):
         super().__init__()
-        self.layers = nn.ModuleList([copy.deepcopy(decoder_layer) for _ in range(num_layers)])
-        self.hidden_dim = hidden_dim
-        self.num_layers = num_layers
-        self.eval_idx = eval_idx if eval_idx >= 0 else num_layers + eval_idx
+        self.layers = nn.ModuleList([RTDetrTransformerDecoderLayer(config) for _ in range(config.num_decoder_layers)])
+        self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.num_decoder_layers + config.eval_idx 
 
     def forward(
         self,
@@ -736,9 +734,7 @@ class RTDetrTransformer(nn.Module):
         self.build_input_proj_layer(config)
 
         # Transformer module
-        decoder_layer = RTDetrTransformerDecoderLayer(config)
-
-        self.decoder = RTDetrTransformerDecoder(self.hidden_dim, decoder_layer, self.num_decoder_layers, eval_idx)
+        self.decoder = RTDetrTransformerDecoder(config)
 
         # denoising part
         if self.num_denoising > 0:
