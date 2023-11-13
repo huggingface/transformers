@@ -134,12 +134,7 @@ Use [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the p
 
 Specify the model and tokenizer in the [`pipeline`], and now you can apply the `classifier` on French text:
 
-```py
->>> from transformers import pipeline
->>> classifier = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
->>> classifier("Nous sommes très heureux de vous présenter la bibliothèque 🤗 Transformers.")
-[{'label': '5 stars', 'score': 0.7273}]
-```
+
 
 If you can't find a model for your use-case, you'll need to finetune a pretrained model on your data. Take a look at our [finetuning tutorial](./training) to learn how. Finally, after you've finetuned your pretrained model, please consider [sharing](./model_sharing) the model with the community on the Hub to democratize machine learning for everyone! 🤗
 
@@ -157,22 +152,11 @@ A tokenizer is responsible for preprocessing text into an array of numbers as in
 
 Load a tokenizer with [`AutoTokenizer`]:
 
-```py
->>> from transformers import AutoTokenizer
 
->>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
->>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-```
 
 Pass your text to the tokenizer:
 
-```py
->>> encoding = tokenizer("We are very happy to show you the 🤗 Transformers library.")
->>> print(encoding)
-{'input_ids': [101, 11312, 10320, 12495, 19308, 10114, 11391, 10855, 10103, 100, 58263, 13299, 119, 102],
- 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
- 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
-```
+
 
 The tokenizer returns a dictionary containing:
 
@@ -184,27 +168,11 @@ A tokenizer can also accept a list of inputs, and pad and truncate the text to r
 <frameworkcontent>
 <pt>
 
-```py
->>> pt_batch = tokenizer(
-...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
-...     padding=True,
-...     truncation=True,
-...     max_length=512,
-...     return_tensors="pt",
-... )
-```
+
 </pt>
 <tf>
 
-```py
->>> tf_batch = tokenizer(
-...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
-...     padding=True,
-...     truncation=True,
-...     max_length=512,
-...     return_tensors="tf",
-... )
-```
+
 </tf>
 </frameworkcontent>
 
