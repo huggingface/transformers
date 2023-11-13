@@ -69,7 +69,7 @@ user messages (but not assistant messages!). Mistral-instruct was trained with t
 As you can see in the example above, chat templates are easy to use. Simply build a list of messages, with `role`
 and `content` keys, and then pass it to the [`~PreTrainedTokenizer.apply_chat_template`] method. Once you do that,
 you'll get output that's ready to go! When using chat templates as input for model generation, it's also a good idea
-to use `add_generation_prompt=True` - see the "What are generation prompts?" section below. 
+to use `add_generation_prompt=True` to add a [generation prompt](#what-are-generation-prompts). 
 
 Here's an example of preparing input for `model.generate()`, using the `Zephyr` assistant model:
 
