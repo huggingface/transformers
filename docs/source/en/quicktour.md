@@ -123,12 +123,7 @@ Use [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pre
 <tf>
 Use [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and it's associated tokenizer (more on an `TFAutoClass` in the next section):
 
-```py
->>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
->>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
->>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-```
 </tf>
 </frameworkcontent>
 
@@ -356,11 +351,7 @@ All models are a standard [`tf.keras.Model`](https://www.tensorflow.org/api_docs
 
 1. You'll start with a [`TFPreTrainedModel`] or a [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model):
 
-   ```py
-   >>> from transformers import TFAutoModelForSequenceClassification
 
-   >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
-   ```
 
 2. Load a preprocessing class like a tokenizer, image processor, feature extractor, or processor:
 
