@@ -200,10 +200,11 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self._check_lora_correctly_converted(model)
 
                 _has_modules_to_save_wrapper = False
-                for _, module in model.named_modules():
+                for name, module in model.named_modules():
                     if isinstance(module, ModulesToSaveWrapper):
                         _has_modules_to_save_wrapper = True
                         self.assertTrue(module.modules_to_save.default.weight.requires_grad)
+                        self.assertTrue("lm_head" in name)
                         break
 
                 self.assertTrue(_has_modules_to_save_wrapper)
