@@ -709,11 +709,27 @@ class RTDetrTransformer(nn.Module):
         self.num_denoising = config.num_denoising
         self.label_noise_ratio = config.label_noise_ratio
         self.box_noise_scale = config.box_noise_scale
+        feat_channels = config.feat_channels
 
         # backbone feature projection
-        self.build_input_proj_layer(config)
+        self.input_proj = nn.ModuleList()
+        for in_channels in feat_channels:
+            conv = nn.Conv2d(in_channels, self.hidden_dim, 1, bias=False)
+            norm = nn.BatchNorm2d(self.hidden_dim, config.batch_norm_eps)
+            layer = [("conv", conv), ("norm", norm)]
+            sequential_layer = nn.Sequential(OrderedDict(layer))
+            self.input_proj.append(sequential_layer)
 
-        # Transformer module
+        in_channels = feat_channels[-1]
+
+        for _ in range(self.num_levels - len(feat_channels)):
+            conv = nn.Conv2d(in_channels, self.hidden_dim, 3, 2, padding=1, bias=False)
+            norm = nn.BatchNorm2d(self.hidden_dim, config.batch_norm_eps)
+            layer = [("conv", conv), ("norm", norm)]
+            self.input_proj.append(nn.Sequential(OrderedDict(layer)))
+            in_channels = self.hidden_dim
+
+        # transformer module
         self.decoder = RTDetrTransformerDecoder(config)
 
         # denoising part
@@ -746,25 +762,6 @@ class RTDetrTransformer(nn.Module):
         # init encoder output anchors and valid_mask
         if self.eval_spatial_size:
             self.anchors, self.valid_mask = self.generate_anchors()
-
-    def build_input_proj_layer(self, config):
-        feat_channels = config.feat_channels
-        self.input_proj = nn.ModuleList()
-        for in_channels in feat_channels:
-            conv = nn.Conv2d(in_channels, self.hidden_dim, 1, bias=False)
-            norm = nn.BatchNorm2d(self.hidden_dim, config.batch_norm_eps)
-            layer = [("conv", conv), ("norm", norm)]
-            sequential_layer = nn.Sequential(OrderedDict(layer))
-            self.input_proj.append(sequential_layer)
-
-        in_channels = feat_channels[-1]
-
-        for _ in range(self.num_levels - len(feat_channels)):
-            conv = nn.Conv2d(in_channels, self.hidden_dim, 3, 2, padding=1, bias=False)
-            norm = nn.BatchNorm2d(self.hidden_dim, config.batch_norm_eps)
-            layer = [("conv", conv), ("norm", norm)]
-            self.input_proj.append(nn.Sequential(OrderedDict(layer)))
-            in_channels = self.hidden_dim
 
     def generate_anchors(self, spatial_shapes=None, grid_size=0.05, dtype=torch.float32, device="cpu"):
         if spatial_shapes is None:
@@ -1401,6 +1398,96 @@ RT_DETR_INPUTS_DOCSTRING = r"""
 """
 
 
+class RTDetrHungarianMatcher(nn.Module):
+    """This class computes an assignment between the targets and the predictions of the network
+
+    For efficiency reasons, the targets don't include the no_object. Because of this, in general, there are more
+    predictions than targets. In this case, we do a 1-to-1 matching of the best predictions, while the others are
+    un-matched (and thus treated as non-objects).
+
+    Args:
+    class_cost:
+        The relative weight of the classification error in the matching cost.
+    bbox_cost:
+        The relative weight of the L1 error of the bounding box coordinates in the matching cost.
+    giou_cost:
+        The relative weight of the giou loss of the bounding box in the matching cost.
+    """
+
+    def __init__(self, class_cost, bbox_cost, giou_cost, use_focal_loss, alpha, gamma):
+        super().__init__()
+        requires_backends(self, ["scipy"])
+
+        self.cost_class = class_cost
+        self.cost_bbox = bbox_cost
+        self.cost_giou = giou_cost
+
+        self.use_focal_loss = use_focal_loss
+        self.alpha = alpha
+        self.gamma = gamma
+
+        if self.cost_class == 0 and self.cost_bbox == 0 and self.cost_giou == 0:
+            raise ValueError("All costs of the Matcher can't be 0")
+
+    @torch.no_grad()
+    def forward(self, outputs, targets):
+        """Performs the matching
+
+        Params:
+            outputs: This is a dict that contains at least these entries:
+                 "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
+                 "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates
+
+            targets: This is a list of targets (len(targets) = batch_size), where each target is a dict containing:
+                 "labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
+                           objects in the target) containing the class labels
+                 "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates
+
+        Returns:
+            A list of size batch_size, containing tuples of (index_i, index_j) where:
+                - index_i is the indices of the selected predictions (in order)
+                - index_j is the indices of the corresponding selected targets (in order)
+            For each batch element, it holds:
+                len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
+        """
+        bs, num_queries = outputs["logits"].shape[:2]
+
+        # We flatten to compute the cost matrices in a batch
+        if self.use_focal_loss:
+            out_prob = F.sigmoid(outputs["logits"].flatten(0, 1))
+        else:
+            out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
+
+        out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
+
+        # Also concat the target labels and boxes
+        tgt_ids = torch.cat([v["class_labels"] for v in targets])
+        tgt_bbox = torch.cat([v["boxes"] for v in targets])
+
+        # Compute the classification cost. Contrary to the loss, we don't use the NLL,
+        # but approximate it in 1 - proba[target class].
+        # The 1 is a constant that doesn't change the matching, it can be ommitted.
+        if self.use_focal_loss:
+            out_prob = out_prob[:, tgt_ids]
+            neg_cost_class = (1 - self.alpha) * (out_prob**self.gamma) * (-(1 - out_prob + 1e-8).log())
+            pos_cost_class = self.alpha * ((1 - out_prob) ** self.gamma) * (-(out_prob + 1e-8).log())
+            cost_class = pos_cost_class - neg_cost_class
+        else:
+            cost_class = -out_prob[:, tgt_ids]
+
+        # Compute the L1 cost between boxes
+        cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
+        # Compute the giou cost betwen boxes
+        cost_giou = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(tgt_bbox))
+        # Compute the final cost matrix
+        final_cost = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
+        final_cost = final_cost.view(bs, num_queries, -1).cpu()
+
+        sizes = [len(v["boxes"]) for v in targets]
+        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(final_cost.split(sizes, -1))]
+
+        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+
 @add_start_docstrings(
     """
     RT-DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further
@@ -1568,93 +1655,3 @@ class RTDetrModel(RTDetrPreTrainedModel):
         output = (logits, pred_boxes, encoder_states)
         return ((loss, loss_dict) + output) if loss is not None else output
 
-
-class RTDetrHungarianMatcher(nn.Module):
-    """This class computes an assignment between the targets and the predictions of the network
-
-    For efficiency reasons, the targets don't include the no_object. Because of this, in general, there are more
-    predictions than targets. In this case, we do a 1-to-1 matching of the best predictions, while the others are
-    un-matched (and thus treated as non-objects).
-
-    Args:
-    class_cost:
-        The relative weight of the classification error in the matching cost.
-    bbox_cost:
-        The relative weight of the L1 error of the bounding box coordinates in the matching cost.
-    giou_cost:
-        The relative weight of the giou loss of the bounding box in the matching cost.
-    """
-
-    def __init__(self, class_cost, bbox_cost, giou_cost, use_focal_loss, alpha, gamma):
-        super().__init__()
-        requires_backends(self, ["scipy"])
-
-        self.cost_class = class_cost
-        self.cost_bbox = bbox_cost
-        self.cost_giou = giou_cost
-
-        self.use_focal_loss = use_focal_loss
-        self.alpha = alpha
-        self.gamma = gamma
-
-        if self.cost_class == 0 and self.cost_bbox == 0 and self.cost_giou == 0:
-            raise ValueError("All costs of the Matcher can't be 0")
-
-    @torch.no_grad()
-    def forward(self, outputs, targets):
-        """Performs the matching
-
-        Params:
-            outputs: This is a dict that contains at least these entries:
-                 "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
-                 "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates
-
-            targets: This is a list of targets (len(targets) = batch_size), where each target is a dict containing:
-                 "labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
-                           objects in the target) containing the class labels
-                 "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates
-
-        Returns:
-            A list of size batch_size, containing tuples of (index_i, index_j) where:
-                - index_i is the indices of the selected predictions (in order)
-                - index_j is the indices of the corresponding selected targets (in order)
-            For each batch element, it holds:
-                len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
-        """
-        bs, num_queries = outputs["logits"].shape[:2]
-
-        # We flatten to compute the cost matrices in a batch
-        if self.use_focal_loss:
-            out_prob = F.sigmoid(outputs["logits"].flatten(0, 1))
-        else:
-            out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
-
-        out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
-
-        # Also concat the target labels and boxes
-        tgt_ids = torch.cat([v["class_labels"] for v in targets])
-        tgt_bbox = torch.cat([v["boxes"] for v in targets])
-
-        # Compute the classification cost. Contrary to the loss, we don't use the NLL,
-        # but approximate it in 1 - proba[target class].
-        # The 1 is a constant that doesn't change the matching, it can be ommitted.
-        if self.use_focal_loss:
-            out_prob = out_prob[:, tgt_ids]
-            neg_cost_class = (1 - self.alpha) * (out_prob**self.gamma) * (-(1 - out_prob + 1e-8).log())
-            pos_cost_class = self.alpha * ((1 - out_prob) ** self.gamma) * (-(out_prob + 1e-8).log())
-            cost_class = pos_cost_class - neg_cost_class
-        else:
-            cost_class = -out_prob[:, tgt_ids]
-
-        # Compute the L1 cost between boxes
-        cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
-        # Compute the giou cost betwen boxes
-        cost_giou = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(tgt_bbox))
-        # Compute the final cost matrix
-        final_cost = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
-        final_cost = final_cost.view(bs, num_queries, -1).cpu()
-
-        sizes = [len(v["boxes"]) for v in targets]
-        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(final_cost.split(sizes, -1))]
-
-        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
