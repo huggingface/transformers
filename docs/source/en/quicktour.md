@@ -243,11 +243,7 @@ function (like softmax) because the final activation function is often fused wit
 <pt>
 Once your model is fine-tuned, you can save it with its tokenizer using [`PreTrainedModel.save_pretrained`]:
 
-```py
->>> pt_save_directory = "./pt_save_pretrained"
->>> tokenizer.save_pretrained(pt_save_directory)  # doctest: +IGNORE_RESULT
->>> pt_model.save_pretrained(pt_save_directory)
-```
+
 
 When you are ready to use the model again, reload it with [`PreTrainedModel.from_pretrained`]:
 
@@ -258,17 +254,11 @@ When you are ready to use the model again, reload it with [`PreTrainedModel.from
 <tf>
 Once your model is fine-tuned, you can save it with its tokenizer using [`TFPreTrainedModel.save_pretrained`]:
 
-```py
->>> tf_save_directory = "./tf_save_pretrained"
->>> tokenizer.save_pretrained(tf_save_directory)  # doctest: +IGNORE_RESULT
->>> tf_model.save_pretrained(tf_save_directory)
-```
+
 
 When you are ready to use the model again, reload it with [`TFPreTrainedModel.from_pretrained`]:
 
-```py
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("./tf_save_pretrained")
-```
+
 </tf>
 </frameworkcontent>
 
@@ -277,21 +267,11 @@ One particularly cool 🤗 Transformers feature is the ability to save a model a
 <frameworkcontent>
 <pt>
 
-```py
->>> from transformers import AutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
->>> pt_model = AutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
-```
 </pt>
 <tf>
 
-```py
->>> from transformers import TFAutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
-```
 </tf>
 </frameworkcontent>
 
