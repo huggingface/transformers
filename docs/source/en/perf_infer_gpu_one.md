@@ -29,6 +29,8 @@ The majority of the optimizations described here also apply to multi-GPU setups!
 
 FlashAttention-2 is experimental and may change considerably in future versions.
 
+</Tip>
+
 [FlashAttention-2](https://huggingface.co/papers/2205.14135) is a faster and more efficient implementation of the standard attention mechanism that can significantly speedup inference by:
 
 1. additionally parallelizing the attention computation over sequence length
