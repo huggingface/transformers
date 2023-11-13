@@ -91,6 +91,7 @@ class RTDetrModelOutput(ModelOutput):
     pred_boxes: torch.FloatTensor = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
+
 class NestedTensor(object):
     def __init__(self, tensors, mask: Optional[Tensor]):
         self.tensors = tensors
@@ -451,10 +452,12 @@ class RTDetrTransformerEncoder(nn.Module):
 
 
 class RepVggBlock(nn.Module):
-    def __init__(self, channels_in, channels_out, activation="relu"):
+    def __init__(self, config: RTDetrConfig):
         super().__init__()
-        self.channels_in = channels_in
-        self.channels_out = channels_out
+
+        channels_in = int(config.hidden_dim * config.expansion)
+        channels_out = int(config.hidden_dim * config.expansion)
+        activation = config.act_encoder
         self.conv1 = RTDetrConvNormLayer(channels_in, channels_out, 3, 1, padding=1, activation=None)
         self.conv2 = RTDetrConvNormLayer(channels_in, channels_out, 1, 1, padding=0, activation=None)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
@@ -476,9 +479,7 @@ class RTDetrCSPRepLayer(nn.Module):
         hidden_channels = int(out_channels * config.expansion)
         self.conv1 = RTDetrConvNormLayer(in_channels, hidden_channels, 1, 1, bias=None, activation=activation)
         self.conv2 = RTDetrConvNormLayer(in_channels, hidden_channels, 1, 1, bias=None, activation=activation)
-        self.bottlenecks = nn.Sequential(
-            *[RepVggBlock(hidden_channels, hidden_channels, activation=activation) for _ in range(num_blocks)]
-        )
+        self.bottlenecks = nn.Sequential(*[RepVggBlock(config) for _ in range(num_blocks)])
         if hidden_channels != out_channels:
             self.conv3 = RTDetrConvNormLayer(hidden_channels, out_channels, 1, 1, bias=None, activation=activation)
         else:
@@ -1387,6 +1388,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
 
         return outs
 
+
 RT_DETR_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1411,6 +1413,7 @@ RT_DETR_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
 
 @add_start_docstrings(
     """
