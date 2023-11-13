@@ -925,6 +925,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
 @add_start_docstrings(CLIP_START_DOCSTRING)
 class CLIPModel(CLIPPreTrainedModel):
     config_class = CLIPConfig
+    _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer"]
 
     def __init__(self, config: CLIPConfig):
         super().__init__(config)
