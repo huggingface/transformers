@@ -208,6 +208,16 @@ As you can see, the model correctly identified two named entities from the given
 
 #### Translation
 
+```py
+model_name = "gpt2"
+
+>>> from transformers import TFAutoModel
+
+>>> # model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
+>>> _ = TFAutoModel.from_pretrained(model_name)
+
+```
+
 Another task LLMs can perform is translation. You can choose to use encoder-decoder models for this task, however, here,
 for the simplicity of the examples, we'll keep using Falcon-7b-instruct, which does a decent job. Once again, here's how 
 you can write a basic prompt to instruct a model to translate a piece of text from English to Italian: 
