@@ -838,7 +838,7 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
                     batch_size, _, height, width = pixel_values.shape
                     patch_size = self.config.patch_size
                     hidden_state = hidden_state[:, 1:, :].reshape(
-                        batch_size, width // patch_size, height // patch_size, -1
+                        batch_size, height // patch_size, width // patch_size, -1
                     )
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
