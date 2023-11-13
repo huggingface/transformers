@@ -15,8 +15,6 @@
 # limitations under the License.
 
 import argparse
-import base64
-import gzip
 import hashlib
 import io
 import json
@@ -26,7 +24,6 @@ import urllib
 import warnings
 from typing import Any, Optional, Tuple
 
-import numpy as np
 import torch
 from torch import nn
 from tqdm import tqdm
@@ -57,20 +54,6 @@ _MODELS = {
     "large-v3": "https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt",
 }
 
-_ALIGNMENT_HEADS = {
-    "tiny.en": b"ABzY8J1N>@0{>%R00Bk>$p{7v037`oCl~+#00",
-    "tiny": b"ABzY8bu8Lr0{>%RKn9Fp%m@SkK7Kt=7ytkO",
-    "base.en": b"ABzY8;40c<0{>%RzzG;p*o+Vo09|#PsxSZm00",
-    "base": b"ABzY8KQ!870{>%RzyTQH3`Q^yNP!>##QT-<FaQ7m",
-    "small.en": b"ABzY8>?_)10{>%RpeA61k&I|OI3I$65C{;;pbCHh0B{qLQ;+}v00",
-    "small": b"ABzY8DmU6=0{>%Rpa?J`kvJ6qF(V^F86#Xh7JUGMK}P<N0000",
-    "medium.en": b"ABzY8usPae0{>%R7<zz_OvQ{)4kMa0BMw6u5rT}kRKX;$NfYBv00*Hl@qhsU00",
-    "medium": b"ABzY8B0Jh+0{>%R7}kK1fFL7w6%<-Pf*t^=N)Qr&0RR9",
-    "large-v1": b"ABzY8r9j$a0{>%R7#4sLmoOs{s)o3~84-RPdcFk!JR<kSfC2yj",
-    "large-v2": b"ABzY8zd+h!0{>%R7=D0pU<_bnWW*tkYAhobTNnu$jnkEkXqp)j;w1Tzk)UH3X%SZd&fFZ2fC2yj",
-    "large-v3": b"ABzY8gWO1E0{>%R7(9S+Kn!D~%ngiGaR?*L!iJG9p-nab0JQ=-{D1-g00",
-    "large": b"ABzY8r9j$a0{>%R7#4sLmoOs{s)o3~84-RPdcFk!JR<kSfC2yj",
-}
 
 _TOKENIZERS = {
     "multilingual": "https://raw.githubusercontent.com/openai/whisper/main/whisper/assets/multilingual.tiktoken",
@@ -78,19 +61,7 @@ _TOKENIZERS = {
 }
 
 
-def _alignment_head_indices(
-    alignment_heads: bytes,
-    n_text_layer: int,
-    n_text_head: int,
-) -> list[tuple[int, int]]:
-    arr = np.frombuffer(gzip.decompress(base64.b85decode(alignment_heads)), dtype=bool)
-    mask = arr.reshape(n_text_layer, n_text_head)
-    return [(int(i), int(j)) for i, j in zip(*np.where(mask))]
-
-
 def _get_generation_config(
-    n_text_layer: int,
-    n_text_head: int,
     is_multilingual: bool,
     num_languages: int = 100,
     openai_version: Optional[str] = None,
@@ -98,7 +69,9 @@ def _get_generation_config(
     """
     Loads the appropriate generation config from HF repo
     """
-    if not is_multilingual:
+    if openai_version is not None:
+        repo = f"openai/whisper-{openai_version}"
+    elif not is_multilingual:
         repo = "openai/whisper-medium.en"
     elif num_languages < 100:
         repo = "openai/whisper-large-v2"
@@ -106,9 +79,7 @@ def _get_generation_config(
         repo = "openai/whisper-large-v3"
 
     gen_cfg = GenerationConfig.from_pretrained(repo)
-    if openai_version is not None:
-        gen_cfg.alignment_heads = _alignment_head_indices(_ALIGNMENT_HEADS[openai_version], n_text_layer, n_text_head)
-    else:
+    if openai_version is None:
         gen_cfg.alignment_heads = None
         warnings.warn(
             "Alignment heads have not been included in the generation config, since they are available "
@@ -264,8 +235,6 @@ def convert_openai_whisper_to_tfms(
     num_languages = model.config.vocab_size - 51765 - int(is_multilingual)
 
     model.generation_config = _get_generation_config(
-        model.config.decoder_layers,
-        model.config.decoder_attention_heads,
         is_multilingual,
         num_languages,
         openai_version,
