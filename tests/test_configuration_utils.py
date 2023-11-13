@@ -142,7 +142,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
-        config.push_to_hub("valid_org/test-config-org", use_auth_token=self._token)
+        config.push_to_hub("valid_org/test-config-org", token=self._token)
 
         new_config = BertConfig.from_pretrained("valid_org/test-config-org")
         for k, v in config.to_dict().items():
@@ -154,9 +154,7 @@ class ConfigPushToHubTester(unittest.TestCase):
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(
-                tmp_dir, repo_id="valid_org/test-config-org", push_to_hub=True, use_auth_token=self._token
-            )
+            config.save_pretrained(tmp_dir, repo_id="valid_org/test-config-org", push_to_hub=True, token=self._token)
 
         new_config = BertConfig.from_pretrained("valid_org/test-config-org")
         for k, v in config.to_dict().items():
@@ -167,7 +165,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         CustomConfig.register_for_auto_class()
         config = CustomConfig(attribute=42)
 
-        config.push_to_hub("test-dynamic-config", use_auth_token=self._token)
+        config.push_to_hub("test-dynamic-config", token=self._token)
 
         # This has added the proper auto_map field to the config
         self.assertDictEqual(config.auto_map, {"AutoConfig": "custom_configuration.CustomConfig"})
