@@ -50,7 +50,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 class RTDetrImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a RTDetr image processor.
+    Constructs an RT-DETR image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
