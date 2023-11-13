@@ -313,16 +313,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            # inputs_dict["output_hidden_states"] = True
-            print("model_class: ", model_class)
-
             check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            # del inputs_dict["output_hidden_states"]
-            # config.output_hidden_states = True
-
-            # check_hidden_states_output(inputs_dict, config, model_class)
 
     @unittest.skip("No tokens embeddings")
     def test_resize_tokens_embeddings(self):
@@ -484,7 +475,6 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         # TODO: Make repo public
         model = PatchTSMixerForForecasting.from_pretrained("ibm/patchtsmixer-etth1-forecasting").to(torch_device)
         batch = prepare_batch(file="forecast_batch.pt")
-        print(batch)
 
         model.eval()
         torch.manual_seed(0)
@@ -494,7 +484,6 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
                 target_values=batch["target_values"].to(torch_device),
             ).prediction_logits
 
-        print(output[0, :1, :7])
         expected_shape = torch.Size([32, model.config.forecast_len, model.config.num_input_channels])
         self.assertEqual(output.shape, expected_shape)
 
@@ -751,7 +740,6 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
                                 head_aggregation=head_aggregation,
                                 gated_attn=gated_attn,
                             )
-                            # print(mode,self_attn,revin,gated_attn,head_aggregation)
 
                             self.check_module(task="classification", params=params)
 
@@ -771,7 +759,6 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
                                     gated_attn=gated_attn,
                                     loss=loss,
                                 )
-                                # print(mode,self_attn,revin,gated_attn,head_aggregation)
 
                                 self.check_module(task="regression", params=params)
 
@@ -793,19 +780,8 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
                                         masked_loss=masked_loss,
                                         channel_consistent_masking=channel_consistent_masking,
                                     )
-                                    # print(mode,self_attn,revin,gated_attn,head_aggregation)
 
                                     self.check_module(task="pretrain", params=params)
-
-        # for mode in ["flatten","common_channel","mix_channel"]:
-        #     for task in ["forecast","classification","regression","pretrain"]:
-        #         for self_attn in [True,False]:
-        #             for head_aggregation in ["max_pool","avg_pool"]:
-        #                 for mask_type in ["random","forecast"]:
-        #                     for masked_loss in [True, False]:
-        #                         for channel_consistent_masking in [True, False]:
-        #                             for revin in [True, False]:
-        #                                 for forecast_channel_indices in [None, [0,2]]:
 
     def forecast_full_module(self, params=None, output_hidden_states=False, return_dict=None):
         config = PatchTSMixerConfig(**params)
@@ -985,9 +961,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         head = PatchTSMixerLinearHead(
             config=config,
         )
-        # output = head(self.__class__.enc_output, raw_data = self.__class__.correct_pretrain_output)
         output = head(self.__class__.enc_output)
-        # print(output.shape)
         self.assertEqual(output.shape, self.__class__.correct_regression_output.shape)
 
     def test_regression_full(self):
