@@ -587,9 +587,6 @@ class RTDetrTransformerDecoderLayer(nn.Module):
     def with_pos_embed(self, tensor, pos):
         return tensor if pos is None else tensor + pos
 
-    def forward_ffn(self, tgt):
-        return self.linear2(self.dropout3(self.activation(self.linear1(tgt))))
-
     def forward(
         self,
         target,
@@ -615,8 +612,10 @@ class RTDetrTransformerDecoderLayer(nn.Module):
         target = target + self.dropout2(cross_attention_res)
         target = self.norm2(target)
 
-        # ffn
-        forward_res = self.forward_ffn(target)
+        forward_res = self.linear1(target)
+        forward_res = self.activation(forward_res)
+        forward_res = self.dropout3(forward_res)
+        forward_res = self.linear2(forward_res)
         target = target + self.dropout4(forward_res)
         target = self.norm3(target)
 
