@@ -622,7 +622,7 @@ class RTDetrTransformerDecoderLayer(nn.Module):
         return target
 
 
-class TransformerDecoder(nn.Module):
+class RTDetrTransformerDecoder(nn.Module):
     def __init__(self, hidden_dim, decoder_layer, num_layers, eval_idx=-1):
         super().__init__()
         self.layers = nn.ModuleList([copy.deepcopy(decoder_layer) for _ in range(num_layers)])
@@ -738,7 +738,7 @@ class RTDetrTransformer(nn.Module):
         # Transformer module
         decoder_layer = RTDetrTransformerDecoderLayer(config)
 
-        self.decoder = TransformerDecoder(self.hidden_dim, decoder_layer, self.num_decoder_layers, eval_idx)
+        self.decoder = RTDetrTransformerDecoder(self.hidden_dim, decoder_layer, self.num_decoder_layers, eval_idx)
 
         # denoising part
         if self.num_denoising > 0:
