@@ -203,30 +203,16 @@ See the [task summary](./task_summary) for tasks supported by an [`AutoModel`] c
 
 Now pass your preprocessed batch of inputs directly to the model. You just have to unpack the dictionary by adding `**`:
 
-```py
->>> pt_outputs = pt_model(**pt_batch)
-```
+
 
 The model outputs the final activations in the `logits` attribute. Apply the softmax function to the `logits` to retrieve the probabilities:
 
-```py
->>> from torch import nn
 
->>> pt_predictions = nn.functional.softmax(pt_outputs.logits, dim=-1)
->>> print(pt_predictions)
-tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
-        [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
-```
 </pt>
 <tf>
 🤗 Transformers provides a simple and unified way to load pretrained instances. This means you can load an [`TFAutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`TFAutoModel`] for the task. For text (or sequence) classification, you should load [`TFAutoModelForSequenceClassification`]:
 
-```py
->>> from transformers import TFAutoModelForSequenceClassification
 
->>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
-```
 
 <Tip>
 
@@ -236,18 +222,11 @@ See the [task summary](./task_summary) for tasks supported by an [`AutoModel`] c
 
 Now pass your preprocessed batch of inputs directly to the model. You can pass the tensors as-is:
 
-```py
->>> tf_outputs = tf_model(tf_batch)
-```
+
 
 The model outputs the final activations in the `logits` attribute. Apply the softmax function to the `logits` to retrieve the probabilities:
 
-```py
->>> import tensorflow as tf
 
->>> tf_predictions = tf.nn.softmax(tf_outputs.logits, axis=-1)
->>> tf_predictions  # doctest: +IGNORE_RESULT
-```
 </tf>
 </frameworkcontent>
 
