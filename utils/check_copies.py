@@ -228,13 +228,11 @@ def get_indent(code: str) -> str:
 
 
 async def run_ruff(filepath):
-    command = f"ruff format {filepath} --config pyproject.toml"
-    process = await asyncio.create_subprocess_shell(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = await process.communicate()
-    return stdout, stderr
+    command = ["ruff", "format", str(filepath), "--config", "pyproject.toml", "--silent"]
+    process = await asyncio.create_subprocess_exec(*command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    await process.communicate()
 
-
-def stylify(code: str, name="") -> str:
+def stylify(code: str) -> str:
     """
     Applies the ruff part of our `make style` command to some code. This formats the code using `ruff format`.
     As `ruff` does not provide a python api this cannot be done on the fly.
@@ -254,9 +252,9 @@ def stylify(code: str, name="") -> str:
     with tempfile.TemporaryDirectory() as tmpdir:
         filepath = Path(tmpdir) / "__init__.py"
         filepath.write_text(code)
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(run_ruff(filepath))
+        asyncio.run(run_ruff(filepath))
         result = filepath.read_text()
+
     return result[len("class Bla:\n") :] if has_indent else result
 
 
@@ -378,7 +376,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False) -> Optional[List[
 
     if overwrite and len(diffs) > 0:
         # Warn the user a file has been modified.
-        print(f"Detected changes, rewriting {filename}.")
+        # print(f"Detected changes, rewriting {filename}.")
         with open(filename, "w", encoding="utf-8", newline="\n") as f:
             f.writelines(lines)
     return diffs
