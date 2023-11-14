@@ -35,6 +35,7 @@ from transformers import (
     WhisperForConditionalGeneration,
     WhisperProcessor,
     WhisperTokenizer,
+    WhisperTokenizerFast,
 )
 from transformers.models.whisper.tokenization_whisper import LANGUAGES, bytes_to_unicode
 from transformers.utils.import_utils import _is_package_available
@@ -352,5 +353,9 @@ if __name__ == "__main__":
             )
             processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
             processor.save_pretrained(args.pytorch_dump_folder_path)
+
+            # save fast tokenizer as well
+            fast_tokenizer = WhisperTokenizerFast(__slow_tokenizer=tokenizer)
+            fast_tokenizer.save_pretrained(args.pytorch_dump_folder_path, legacy_format=False)
 
     model.save_pretrained(args.pytorch_dump_folder_path)
