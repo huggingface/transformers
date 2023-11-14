@@ -92,7 +92,8 @@ class LagLlamaConfig(PretrainedConfig):
             experimental feature, subject to breaking API changes in future versions.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
-
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
 
     ```python
     >>> from transformers import LagLlamaModel, LagLlamaConfig
@@ -131,6 +132,7 @@ class LagLlamaConfig(PretrainedConfig):
         rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
+        attention_dropout=0.0,
         **kwargs,
     ):
         self.distribution_output = distribution_output
@@ -157,8 +159,9 @@ class LagLlamaConfig(PretrainedConfig):
         self.pretraining_tp = pretraining_tp
         self.rope_scaling = rope_scaling
         self._rope_scaling_validation()
-        self.attention_bias = attention_bias
-
+        self.attention_bias = attention_bias    
+        self.attention_dropout = attention_dropout
+        
         super().__init__(**kwargs)
 
     @property
