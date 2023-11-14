@@ -749,7 +749,7 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
         # Positional encoding
         self.positional_encoder = PatchTSTPositionalEncoding(config)
         # Encoder
-        self.layers = nn.ModuleList([PatchTSTEncoderLayer(config) for i in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([PatchTSTEncoderLayer(config) for i in range(config.num_hidden_layers)])
 
         # Initialize weights and apply final processing
         self.post_init()

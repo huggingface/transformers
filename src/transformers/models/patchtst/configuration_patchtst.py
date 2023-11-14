@@ -54,7 +54,7 @@ class PatchTSTConfig(PretrainedConfig):
             Define the patch length of the patchification process.
         patch_stride (`int`, *optional*, defaults to 1):
             Define the stride of the patchification process.
-        encoder_layers (`int`, *optional*, defaults to 3):
+        num_hidden_layers (`int`, *optional*, defaults to 3):
             Number of encoder layers.
         d_model (`int`, *optional*, defaults to 64):
             Dimensionality of the transformer layers.
@@ -151,7 +151,7 @@ class PatchTSTConfig(PretrainedConfig):
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "num_attention_heads",
-        "num_hidden_layers": "encoder_layers",
+        "num_hidden_layers": "num_hidden_layers",
     }
 
     def __init__(
@@ -165,7 +165,7 @@ class PatchTSTConfig(PretrainedConfig):
         patch_length: int = 1,
         patch_stride: int = 1,
         # Transformer architecture configuration
-        encoder_layers: int = 3,
+        num_hidden_layers: int = 3,
         d_model: int = 64,
         num_attention_heads: int = 4,
         shared_embedding: bool = True,
@@ -218,7 +218,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.d_model = d_model
         self.num_attention_heads = num_attention_heads
         self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_layers = encoder_layers
+        self.num_hidden_layers = num_hidden_layers
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.shared_embedding = shared_embedding
