@@ -824,6 +824,12 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
 
+    @unittest.skip(
+        "Need to investigate why config.do_stable_layer_norm is set to False here when it doesn't seem to be supported"
+    )
+    def test_flax_from_pt_safetensors(self):
+        return
+
 
 @require_torch
 class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):

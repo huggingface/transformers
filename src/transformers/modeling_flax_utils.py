@@ -721,7 +721,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
             is_local = os.path.isdir(pretrained_model_name_or_path)
             if os.path.isdir(pretrained_model_name_or_path):
-                if is_safetensors_available() and os.path.isfile(
+                if os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)):
+                    # Load from a Flax checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_INDEX_NAME)):
+                    # Load from a sharded Flax checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_INDEX_NAME)
+                    is_sharded = True
+                elif is_safetensors_available() and os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, SAFE_WEIGHTS_NAME)
                 ):
                     # Load from a safetensors checkpoint
@@ -734,13 +741,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 ):
                     # Load from a sharded pytorch checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, subfolder, WEIGHTS_INDEX_NAME)
-                    is_sharded = True
-                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)):
-                    # Load from a Flax checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)
-                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_INDEX_NAME)):
-                    # Load from a sharded Flax checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_INDEX_NAME)
                     is_sharded = True
                 # At this stage we don't have a weight file so we will raise an error.
                 elif is_safetensors_available() and os.path.isfile(
@@ -770,8 +770,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             else:
                 if from_pt:
                     filename = WEIGHTS_NAME
-                elif is_safetensors_available():
-                    filename = SAFE_WEIGHTS_NAME
                 else:
                     filename = FLAX_WEIGHTS_NAME
 
@@ -792,22 +790,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     }
                     resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
-                    # Since we set _raise_exceptions_for_missing_entries=False, we don't get an exception but a None
-                    # result when internet is up, the repo and revision exist, but the file does not.
-                    if resolved_archive_file is None and filename == SAFE_WEIGHTS_NAME:
-                        # Did not find the safetensors file, let's fallback to Flax.
-                        # No support for sharded safetensors yet, so we'll raise an error if that's all we find.
-                        filename = FLAX_WEIGHTS_NAME
-                        resolved_archive_file = cached_file(
-                            pretrained_model_name_or_path, FLAX_WEIGHTS_NAME, **cached_file_kwargs
-                        )
+                    # Maybe the checkpoint is sharded, we try to grab the index name in this case.
                     if resolved_archive_file is None and filename == FLAX_WEIGHTS_NAME:
-                        # Maybe the checkpoint is sharded, we try to grab the index name in this case.
                         resolved_archive_file = cached_file(
                             pretrained_model_name_or_path, FLAX_WEIGHTS_INDEX_NAME, **cached_file_kwargs
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
+
                     # Maybe the checkpoint is pytorch sharded, we try to grab the pytorch index name in this case.
                     if resolved_archive_file is None and from_pt:
                         resolved_archive_file = cached_file(
@@ -815,6 +805,17 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
+
+                    # If we still haven't found anything, look for `safetensors`.
+                    if resolved_archive_file is None:
+                        # No support for sharded safetensors yet, so we'll raise an error if that's all we find.
+                        filename = SAFE_WEIGHTS_NAME
+                        resolved_archive_file = cached_file(
+                            pretrained_model_name_or_path, SAFE_WEIGHTS_NAME, **cached_file_kwargs
+                        )
+
+                    # Since we set _raise_exceptions_for_missing_entries=False, we don't get an exception but a None
+                    # result when internet is up, the repo and revision exist, but the file does not.
                     if resolved_archive_file is None:
                         # Otherwise, maybe there is a TF or Torch model file.  We try those to give a helpful error
                         # message.

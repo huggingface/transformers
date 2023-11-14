@@ -397,6 +397,7 @@ custom_tokenizers_job = CircleCIJob(
 
 examples_torch_job = CircleCIJob(
     "examples_torch",
+    additional_env={"OMP_NUM_THREADS": 8},
     cache_name="torch_examples",
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
@@ -405,6 +406,7 @@ examples_torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager -r examples/pytorch/_tests_requirements.txt",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
+    pytest_num_workers=1,
 )
 
 
