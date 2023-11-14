@@ -240,8 +240,6 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
-            print("model_class: ", model_class)
-
             check_hidden_states_output(inputs_dict, config, model_class)
 
             # check that output_hidden_states also work using config
