@@ -75,37 +75,39 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
     which supports prompt infilling.
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        tokenizer_file (`str`):
+        tokenizer_file (`str`, *optional*):
             [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
             contains everything needed to load the tokenizer.
         clean_up_tokenization_spaces (`str`, *optional*, defaults to `False`):
             Wether to cleanup spaces after decoding, cleanup consists in removing potential artifacts like extra
             spaces.
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
         prefix_token (`str`, *optional*, defaults to `"▁<PRE>"`):
             Prefix token used for infilling.
-        suffix_token (`str`, *optional*, defaults to `"▁<SUF>"`):
-            Suffix token used for infilling.
         middle_token (`str`, *optional*, defaults to `"▁<MID>"`):
             Middle token used for infilling.
+        suffix_token (`str`, *optional*, defaults to `"▁<SUF>"`):
+            Suffix token used for infilling.
         eot_token (`str`, *optional*, defaults to `"▁<EOT>"`):
             End of text token used for infilling.
         fill_token (`str`, *optional*, defaults to `"<FILL_ME>"`):
             The token used to split the input between the prefix and suffix.
-        suffix_first (`bool`, *optional*, default to `False`):
-            Whether the input prompt and suffix should be formatted with the suffix first.
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer.
-        use_default_system_prompt (`bool`, *optional*, defaults to `True`):
+        add_bos_token (`bool`, *optional*, defaults to `True`):
+            Whether to add a beginning of sequence token at the start of sequences.
+        add_eos_token (`bool`, *optional*, defaults to `False`):
+            Whether to add an end of sequence token at the end of sequences.
+        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
     """
 
@@ -147,6 +149,8 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            add_bos_token=add_bos_token,
+            add_eos_token=add_eos_token,
             prefix_token=prefix_token,
             middle_token=middle_token,
             suffix_token=suffix_token,
@@ -178,12 +182,16 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         """
         bos = self.bos_token
         bos_token_id = self.bos_token_id
+        if bos is None and self.add_bos_token:
+            raise ValueError("add_bos_token = True but bos_token = None")
 
         eos = self.eos_token
         eos_token_id = self.eos_token_id
+        if eos is None and self.add_eos_token:
+            raise ValueError("add_eos_token = True but eos_token = None")
 
-        single = f"{(bos+':0 ') * self.add_bos_token}$A:0{(' '+eos+':0') if self.add_eos_token else ''}"
-        pair = f"{single}{(' '+bos+':1') * self.add_bos_token} $B:1{(' '+eos+':1') if self.add_eos_token else ''}"
+        single = f"{(bos+':0 ') if self.add_bos_token else ''}$A:0{(' '+eos+':0') if self.add_eos_token else ''}"
+        pair = f"{single}{(' '+bos+':1') if self.add_bos_token else ''} $B:1{(' '+eos+':1') if self.add_eos_token else ''}"
 
         special_tokens = []
         if self.add_bos_token:
@@ -278,7 +286,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         special_tokens = [(self.bos_token, self.bos_token_id)] if self.add_bos_token and add_special_tokens else []
         if suffix_first:
             # format as " <PRE> <SUF>{suf} <MID> {pre}"
-            pair += [self.prefix_token, self.suffix_token, "$A", self.middle_token, "$B"]
+            pair += [self.prefix_token, self.suffix_token, "$B", self.middle_token, "$A"]
             special_tokens += [
                 (self.prefix_token, self.prefix_id),
                 (self.suffix_token, self.suffix_id),
@@ -303,7 +311,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
     def encode_plus(self, text, text_pair=None, suffix_first=False, add_special_tokens=True, **kwargs):
         # hack to make sure the input is pre-process but outside rust
         text_pair = kwargs.pop("suffix", text_pair)
-        if self.fill_token in text and text_pair is None:
+        if self.fill_token is not None and self.fill_token in text and text_pair is None:
             text, text_pair = text.split(self.fill_token)
 
         if text_pair is None or len(text_pair) < 1:
@@ -354,10 +362,19 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
 
         The output should look something like:
 
-        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos> <bos>[INST] Prompt [/INST] Answer <eos>
+        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos><bos>[INST] Prompt [/INST] Answer <eos>
         <bos>[INST] Prompt [/INST]
-        """
 
+        The reference for this chat template is [this code
+        snippet](https://github.com/facebookresearch/llama/blob/556949fdfb72da27c2f4a40b7f0e4cf0b8153a28/llama/generation.py#L320-L362)
+        in the original repository.
+        """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
         template = (
             "{% if messages[0]['role'] == 'system' %}"
             "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present

@@ -71,6 +71,10 @@
       title: Zero-shot image classification
     - local: tasks/monocular_depth_estimation
       title: Depth estimation
+    - local: tasks/image_to_image
+      title: Image-to-Image
+    - local: tasks/knowledge_distillation_for_image_classification
+      title: Knowledge Distillation for Computer Vision
     title: Computer Vision
   - isExpanded: false
     sections:
@@ -92,6 +96,8 @@
     sections:
     - local: tasks/idefics
       title: Image tasks with IDEFICS
+    - local: tasks/prompting
+      title: LLM prompting guide
     title: Prompting
   title: Task Guides
 - sections:
@@ -149,13 +155,9 @@
     title: Efficient training techniques
   - sections:
     - local: perf_infer_cpu
-      title: Inference on CPU
+      title: CPU inference
     - local: perf_infer_gpu_one
-      title: Inference on one GPU
-    - local: perf_infer_gpu_many
-      title: Inference on many GPUs
-    - local: perf_infer_special
-      title: Inference on Specialized Hardware
+      title: GPU inference
     title: Optimizing inference
   - local: big_models
     title: Instantiating a big model
@@ -205,6 +207,8 @@
     title: Pipelines for webserver inference
   - local: model_memory_anatomy
     title: Model training anatomy
+  - local: llm_tutorial_optimization
+    title: Getting the most out of LLMs
   title: Conceptual guides
 - sections:
   - sections:
@@ -334,6 +338,8 @@
         title: FSMT
       - local: model_doc/funnel
         title: Funnel Transformer
+      - local: model_doc/fuyu
+        title: Fuyu
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -418,6 +424,8 @@
         title: PEGASUS-X
       - local: model_doc/persimmon
         title: Persimmon
+      - local: model_doc/phi
+        title: Phi
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart
@@ -508,7 +516,7 @@
       - local: model_doc/dinat
         title: DiNAT
       - local: model_doc/dinov2
-        title: DINO V2
+        title: DINOV2
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -604,6 +612,8 @@
         title: MusicGen
       - local: model_doc/pop2piano
         title: Pop2Piano
+      - local: model_doc/seamless_m4t
+        title: Seamless-M4T
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d
@@ -655,6 +665,8 @@
         title: CLIP
       - local: model_doc/clipseg
         title: CLIPSeg
+      - local: model_doc/clvp
+        title: CLVP
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deplot
@@ -671,6 +683,8 @@
         title: IDEFICS
       - local: model_doc/instructblip
         title: InstructBLIP
+      - local: model_doc/kosmos-2
+        title: KOSMOS-2
       - local: model_doc/layoutlm
         title: LayoutLM
       - local: model_doc/layoutlmv2
@@ -693,6 +707,8 @@
         title: OneFormer
       - local: model_doc/owlvit
         title: OWL-ViT
+      - local: model_doc/owlv2
+        title: OWLv2
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/pix2struct
@@ -731,6 +747,8 @@
         title: Autoformer
       - local: model_doc/informer
         title: Informer
+      - local: model_doc/patchtst
+        title: PatchTST
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
       title: Time series models

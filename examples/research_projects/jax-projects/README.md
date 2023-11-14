@@ -1117,7 +1117,7 @@ params = model.init(key2, x)
 
 bytes_output = serialization.to_bytes(params)
 
-repo = Repository("flax-model", clone_from="flax-community/flax-model-dummy", use_auth_token=True)
+repo = Repository("flax-model", clone_from="flax-community/flax-model-dummy", token=True)
 with repo.commit("My cool Flax model :)"):
     with open("flax_model.msgpack", "wb") as f:
         f.write(bytes_output)
