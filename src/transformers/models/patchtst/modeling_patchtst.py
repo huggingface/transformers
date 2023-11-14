@@ -1660,6 +1660,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         )
         # get output head
         y_hat = self.head(model_output.last_hidden_state)
+        y_hat_rescaled = y_hat * model_output.scale + model_output.loc
 
         loss_val = None
 
@@ -1675,19 +1676,18 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 # loss_val = nn.MSELoss(reduction='none')(distribution.mean, future_values)
                 # loss_val = weighted_average(loss_val)
             else:
-                y_hat = y_hat * model_output.scale + model_output.loc
                 loss = nn.MSELoss(reduction="mean")
-                loss_val = loss(y_hat, future_values)
+                loss_val = loss(y_hat_rescaled, future_values)
 
         loc = model_output.loc
         scale = model_output.scale
 
         if not return_dict:
-            outputs = (loss_val, y_hat, model_output.hidden_states, model_output.attentions, loc, scale)
+            outputs = (loss_val, y_hat_rescaled, model_output.hidden_states, model_output.attentions, loc, scale)
             return tuple(v for v in outputs if v is not None)
         return PatchTSTForPredictionOutput(
             loss=loss_val,
-            prediction_outputs=y_hat,
+            prediction_outputs=y_hat_rescaled,
             hidden_states=model_output.hidden_states,
             attentions=model_output.attentions,
             loc=loc,
