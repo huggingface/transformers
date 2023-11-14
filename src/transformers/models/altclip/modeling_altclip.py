@@ -441,7 +441,12 @@ class AltRobertaSelfOutput(nn.Module):
 class AltRobertaAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = AltRobertaSelfAttention(config, position_embedding_type=position_embedding_type)
+        if not getattr(config, "_flash_attn_2_enabled", False):
+            self.self = AltRobertaSelfAttention(config, position_embedding_type=position_embedding_type)
+        else:
+            if config.position_embedding_type != "absolute":
+                raise NotImplementedError("flash_attn_2 now only supports absolute position embedding")
+            self.self = AltRobertaSelfFlashAttention(config, position_embedding_type=position_embedding_type)
         self.output = AltRobertaSelfOutput(config)
         self.pruned_heads = set()
 
@@ -1343,7 +1348,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         )
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=extended_attention_mask if not getattr(self.config, "_flash_attn_2_enabled", False) else attention_mask,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,

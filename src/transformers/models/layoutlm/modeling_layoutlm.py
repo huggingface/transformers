@@ -282,7 +282,12 @@ class LayoutLMSelfOutput(nn.Module):
 class LayoutLMAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = LayoutLMSelfAttention(config, position_embedding_type=position_embedding_type)
+        if not getattr(config, "_flash_attn_2_enabled", False):
+            self.self = LayoutLMSelfAttention(config, position_embedding_type=position_embedding_type)
+        else:
+            if config.position_embedding_type != "absolute":
+                raise NotImplementedError("flash_attn_2 now only supports absolute position embedding")
+            self.self = LayoutLMSelfFlashAttention(config, position_embedding_type=position_embedding_type)
         self.output = LayoutLMSelfOutput(config)
         self.pruned_heads = set()
 

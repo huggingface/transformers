@@ -569,7 +569,12 @@ class BridgeTowerSelfAttention(nn.Module):
 class BridgeTowerAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = BridgeTowerSelfAttention(config, position_embedding_type=position_embedding_type)
+        if not getattr(config, "_flash_attn_2_enabled", False):
+            self.self = BridgeTowerSelfAttention(config, position_embedding_type=position_embedding_type)
+        else:
+            if config.position_embedding_type != "absolute":
+                raise NotImplementedError("flash_attn_2 now only supports absolute position embedding")
+            self.self = BridgeTowerSelfFlashAttention(config, position_embedding_type=position_embedding_type)
         self.output = BridgeTowerSelfOutput(config)
         self.pruned_heads = set()
 
@@ -1168,7 +1173,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         )
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=extended_attention_mask if not getattr(self.config, "_flash_attn_2_enabled", False) else attention_mask,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
