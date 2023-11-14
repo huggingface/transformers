@@ -236,7 +236,7 @@ class GPT2Attention(nn.Module):
 
         if attention_mask is not None:
             # Apply the attention mask
-            attn_weights = attn_weights + attention_mask.unsqueeze(3)
+            attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
