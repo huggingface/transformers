@@ -1396,6 +1396,11 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
+        # Turn off masking
+        if config.mask_input:
+            logger.debug("Setting `mask_input` parameter to False.")
+            config.mask_input = False
+
         self.model = PatchTSTModel(config)
         self.head = PatchTSTClassificationHead(config)
 
@@ -1589,6 +1594,12 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
 
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
+
+        # Turn off masking
+        if config.mask_input:
+            logger.debug("Setting `mask_input` parameter to False.")
+            config.mask_input = False
+
         self.model = PatchTSTModel(config)
 
         if config.loss == "mse":
@@ -1788,7 +1799,11 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
     # PatchTST model + Regression head
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
-        self.model = PatchTSTModel(config)
+
+        # Turn off masking
+        if config.mask_input:
+            logger.debug("Setting `mask_input` parameter to False.")
+            config.mask_input = False
 
         self.model = PatchTSTModel(config)
         if config.loss == "mse":
