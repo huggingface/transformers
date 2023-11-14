@@ -377,7 +377,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False) -> Optional[List[
 
     if overwrite and len(diffs) > 0:
         # Warn the user a file has been modified.
-        # print(f"Detected changes, rewriting {filename}.")
+        print(f"Detected changes, rewriting {filename}.")
         with open(filename, "w", encoding="utf-8", newline="\n") as f:
             f.writelines(lines)
     return diffs
