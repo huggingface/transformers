@@ -2892,6 +2892,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Instantiate model.
         model = cls(config, *model_args, **model_kwargs)
 
+        if tf_to_pt_weight_rename is None and hasattr(model, "tf_to_pt_weight_rename"):
+            tf_to_pt_weight_rename = model.tf_to_pt_weight_rename
+
         if from_pt:
             from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
