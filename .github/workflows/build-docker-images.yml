@@ -20,7 +20,7 @@ concurrency:
 jobs:
   latest-pytorch-amd:
     name: "Latest PyTorch (AMD) [dev]"
-    runs-on: [self-hosted, docker-cpu]
+    runs-on: [self-hosted, yih-dar-shieh-debug-doctest]
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
