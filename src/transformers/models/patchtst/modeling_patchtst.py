@@ -528,7 +528,7 @@ class PatchTSTEncoderLayer(nn.Module):
 
         # Add & Norm of the sublayer 1
         self.dropout_path1 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
-        if "batch" in config.norm.lower():
+        if "batch" in config.norm_layer.lower():
             self.norm_sublayer1 = PatchTSTBatchNorm(config)
         else:
             self.norm_sublayer1 = nn.LayerNorm(config.d_model, eps=config.norm_eps)
@@ -536,7 +536,7 @@ class PatchTSTEncoderLayer(nn.Module):
         # Add & Norm of the sublayer 2
         if self.channel_attention:
             self.dropout_path2 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
-            if "batch" in config.norm.lower():
+            if "batch" in config.norm_layer.lower():
                 self.norm_sublayer2 = PatchTSTBatchNorm(config)
             else:
                 self.norm_sublayer2 = nn.LayerNorm(config.d_model, eps=config.norm_eps)
@@ -551,7 +551,7 @@ class PatchTSTEncoderLayer(nn.Module):
 
         # Add & Norm of sublayer 3
         self.dropout_path3 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
-        if "batch" in config.norm.lower():
+        if "batch" in config.norm_layer.lower():
             self.norm_sublayer3 = PatchTSTBatchNorm(config)
         else:
             self.norm_sublayer3 = nn.LayerNorm(config.d_model, eps=config.norm_eps)
