@@ -303,7 +303,7 @@ class MobileBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         super().test_resize_tokens_embeddings()
 
     @unnittest.skip("This test is currently broken because of safetensors.")
-    def test_tf_from_pt_safetensors(self)
+    def test_tf_from_pt_safetensors(self):
         pass
 
     def setUp(self):
