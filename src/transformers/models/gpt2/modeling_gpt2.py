@@ -70,6 +70,7 @@ GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all GPT-2 models at https://huggingface.co/models?filter=gpt2
 ]
 
+
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
