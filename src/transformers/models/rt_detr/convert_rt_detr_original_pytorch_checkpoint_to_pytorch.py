@@ -457,6 +457,9 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
         new_key = new_key.replace("model.", "")
         state_dict_for_object_detection[new_key] = new_val
 
+    # model contains an object criterion (DetrLoss) which has a buffer that needs to be mapped
+    state_dict_for_object_detection["criterion.empty_weight"] = model.criterion.empty_weight
+
     # Transfer mapped weights
     model.load_state_dict(state_dict_for_object_detection)
     model.eval()

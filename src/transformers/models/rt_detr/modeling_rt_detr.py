@@ -1003,21 +1003,24 @@ class RTDetrLoss(nn.Module):
             Number of object categories, omitting the special no-object category.
     """
 
-    def __init__(self, matcher, weight_dict, losses, alpha, gamma, eos_coef, num_classes):
+    # def __init__(self, matcher, weight_dict, losses, alpha, gamma, eos_coef, num_classes):
+    def __init__(self, config):
         super().__init__()
-        self.num_classes = num_classes
-        self.matcher = matcher
-        self.weight_dict = weight_dict
-        self.losses = losses
 
-        self.eos_coef = eos_coef
-        self.losses = losses
-        class_weight = torch.ones(self.num_classes + 1)
-        class_weight[-1] = self.eos_coef
-        self.register_buffer("class_weight", class_weight)
-
-        self.alpha = alpha
-        self.gamma = gamma
+        self.matcher = RTDetrHungarianMatcher(config)
+        self.num_classes = config.num_classes
+        self.weight_dict = {
+            "loss_vfl": config.weight_loss_vfl,
+            "loss_bbox": config.weight_loss_bbox,
+            "loss_giou": config.weight_loss_giou,
+        }
+        self.losses = ["vfl", "boxes"]
+        self.eos_coef = config.eos_coefficient
+        empty_weight = torch.ones(config.num_classes + 1)
+        empty_weight[-1] = self.eos_coef
+        self.register_buffer("empty_weight", empty_weight)
+        self.alpha = config.focal_loss_alpha
+        self.gamma = config.focal_loss_gamma
 
     def loss_labels_vfl(self, outputs, targets, indices, num_boxes, log=True):
         if "pred_boxes" not in outputs:
@@ -1434,17 +1437,17 @@ class RTDetrHungarianMatcher(nn.Module):
         The relative weight of the giou loss of the bounding box in the matching cost.
     """
 
-    def __init__(self, class_cost, bbox_cost, giou_cost, use_focal_loss, alpha, gamma):
+    def __init__(self, config):
         super().__init__()
         requires_backends(self, ["scipy"])
 
-        self.cost_class = class_cost
-        self.cost_bbox = bbox_cost
-        self.cost_giou = giou_cost
+        self.cost_class = config.matcher_class_cost
+        self.cost_bbox = config.matcher_bbox_cost
+        self.cost_giou = config.matcher_giou_cost
 
-        self.use_focal_loss = use_focal_loss
-        self.alpha = alpha
-        self.gamma = gamma
+        self.use_focal_loss = config.use_focal_loss
+        self.alpha = config.matcher_alpha
+        self.gamma = config.matcher_gamma
 
         if self.cost_class == 0 and self.cost_bbox == 0 and self.cost_giou == 0:
             raise ValueError("All costs of the Matcher can't be 0")
@@ -1520,6 +1523,8 @@ class RTDetrModel(RTDetrPreTrainedModel):
         self.encoder = RTDetrHybridEncoder(config)
         # decoder
         self.decoder = RTDetrTransformer(config)
+
+        self.criterion = RTDetrLoss(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1611,13 +1616,12 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         loss, loss_dict = None, None
         if labels is not None:
-            criterion = RTDetrLoss(config)
-            criterion.to(self.device)
+            self.criterion.to(self.device)
             # Third: compute the losses, based on outputs and labels
             outputs_loss = {}
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
-            loss_dict = criterion(outputs_loss, labels)
+            loss_dict = self.criterion(outputs_loss, labels)
             # Compute total loss, as a weighted sum of the various losses
             weight_dict = {
                 "loss_vfl": self.config.weight_loss_vfl,
