@@ -318,7 +318,16 @@ def load_pytorch_state_dict_in_tf2_model(
             name_scope=_prefix,
         )
         if tf_to_pt_weight_rename is not None:
-            name = tf_to_pt_weight_rename(name)
+            aliases = tf_to_pt_weight_rename(name)  # Can potentially be a tuple to account for name aliasing
+            if isinstance(aliases, str):
+                name = aliases
+            else:
+                for alias in aliases:  # The aliases are in priority order
+                    if alias in tf_keys_to_pt_keys:
+                        name = alias
+                        break
+                else:
+                    name = aliases[0]  # None of them match, so just take the first one
 
         # Find associated numpy array in pytorch model state dict
         if name not in tf_keys_to_pt_keys:
