@@ -121,6 +121,20 @@ Next, let's load the model with the appropriate pipeline (`"text-generation"`):
 
 
 
+```py
+>>> model_name = "distilbert"
+
+>>> from transformers import TFAutoModel, TFAutoConfig
+>>> config = TFAutoConfig.from_pretrained(model_name)
+>>> config.n_layers = 2
+>>> config.n_heads = 2
+>>> config.dim = 16
+>>> config.hidden_dim = 16
+>>> # model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
+>>> _ = TFAutoModel.from_config(config)
+
+```
+
 
 ```python
 >>> from transformers import pipeline, AutoTokenizer
@@ -140,15 +154,7 @@ Next, let's load the model with the appropriate pipeline (`"text-generation"`):
 ```
 
 
-```py
->>> model_name = "distilbert"
 
->>> from transformers import TFAutoModel
-
->>> # model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
->>> _ = TFAutoModel.from_pretrained(model_name)
-
-```
 
 
 <Tip>
@@ -226,15 +232,10 @@ As you can see, the model correctly identified two named entities from the given
 
 #### Translation
 
-```py
->>> model_name = "gpt2"
 
->>> from transformers import TFAutoModel
 
->>> # model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
->>> _ = TFAutoModel.from_pretrained(model_name)
 
-```
+
 
 Another task LLMs can perform is translation. You can choose to use encoder-decoder models for this task, however, here,
 for the simplicity of the examples, we'll keep using Falcon-7b-instruct, which does a decent job. Once again, here's how 
