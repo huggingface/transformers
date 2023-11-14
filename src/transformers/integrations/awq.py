@@ -135,6 +135,7 @@ def get_fusing_mapping(model, quantization_config):
     # Always default to `quantization_config.fusing_mapping`
     if quantization_config.fusing_mapping is not None:
         current_fused_mapping = quantization_config.fusing_mapping
+        current_fused_mapping["max_seq_len"] = quantization_config.fuse_max_seq_len
     elif model.config.model_type in AWQ_FUSED_MAPPINGS:
         current_fused_mapping = AWQ_FUSED_MAPPINGS[model.config.model_type]
 
