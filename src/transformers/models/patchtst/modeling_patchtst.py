@@ -667,7 +667,7 @@ class PatchTSTEmbedding(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
         # Input encoding: projection of feature vectors onto a d-dim vector space
-        if not config.shared_embedding:
+        if not config.share_embedding:
             self.input_embedding = nn.ModuleList()
             for _ in range(config.num_input_channels):
                 self.input_embedding.append(nn.Linear(config.patch_length, config.d_model))
@@ -740,7 +740,7 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
         self.num_input_channels = config.num_input_channels
         self.patch_length = config.patch_length
         self.d_model = config.d_model
-        self.shared_embedding = config.shared_embedding
+        self.share_embedding = config.share_embedding
         self.use_cls_token = config.use_cls_token
         self.gradient_checkpointing = False
 
@@ -1496,13 +1496,13 @@ class PatchTSTPredictionHead(nn.Module):
     def __init__(self, config: PatchTSTConfig, distribution_output=None):
         super().__init__()
 
-        self.shared_projection = config.shared_projection
+        self.share_projection = config.share_projection
         self.num_input_channels = config.num_input_channels
         self.use_cls_token = config.use_cls_token
         self.pooling_type = config.pooling_type
         head_dim = config.d_model if self.pooling_type else config.d_model * config.num_patches
 
-        if not self.shared_projection:
+        if not self.share_projection:
             # if each channel has its own head
             self.projections = nn.ModuleList()
             self.dropouts = nn.ModuleList()
@@ -1551,7 +1551,7 @@ class PatchTSTPredictionHead(nn.Module):
                 # pooled_embedding: [bs x num_channels x num_patches x d_model]
                 pooled_embedding = embedding
 
-        if not self.shared_projection:
+        if not self.share_projection:
             output = []
             for i in range(self.num_input_channels):
                 # pooled_embedding: [bs x (d_model * num_patches)] or [bs x d_model)]

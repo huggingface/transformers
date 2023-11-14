@@ -60,7 +60,7 @@ class PatchTSTConfig(PretrainedConfig):
             Dimensionality of the transformer layers.
         num_attention_heads (`int`, *optional*, defaults to 4):
             Number of attention heads for each attention layer in the Transformer encoder.
-        shared_embedding (`bool`, *optional*, defaults to `True`):
+        share_embedding (`bool`, *optional*, defaults to `True`):
             Sharing the input embedding across all channels.
         channel_attention (`bool`, *optional*, defaults to `False`):
             Activate channel attention block in the Transformer to allow channels to attend each other.
@@ -95,7 +95,7 @@ class PatchTSTConfig(PretrainedConfig):
             Whether cls token is used.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal weight initialization distribution.
-        shared_projection (`bool`, *optional*, defaults to `True`):
+        share_projection (`bool`, *optional*, defaults to `True`):
             Sharing the projection layer across different channels in the forecast head.
         seed_number (`Optional`, *optional*):
             Seed number used for random masking. If unset, no seed is set.
@@ -168,7 +168,7 @@ class PatchTSTConfig(PretrainedConfig):
         num_hidden_layers: int = 3,
         d_model: int = 64,
         num_attention_heads: int = 4,
-        shared_embedding: bool = True,
+        share_embedding: bool = True,
         channel_attention: bool = False,
         encoder_ffn_dim: int = 256,
         norm_layer: str = "BatchNorm",
@@ -185,7 +185,7 @@ class PatchTSTConfig(PretrainedConfig):
         learn_pe: bool = False,
         use_cls_token: bool = False,
         init_std: float = 0.02,
-        shared_projection: bool = True,
+        share_projection: bool = True,
         seed_number: Optional[int] = None,
         scaling: Optional[Union[str, bool]] = "mean",
         # mask pretraining
@@ -221,7 +221,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.dropout = dropout
         self.attention_dropout = attention_dropout
-        self.shared_embedding = shared_embedding
+        self.share_embedding = share_embedding
         self.channel_attention = channel_attention
         self.norm_layer = norm_layer
         self.norm_eps = norm_eps
@@ -257,7 +257,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.head_dropout = head_dropout
 
         # For prediction head
-        self.shared_projection = shared_projection
+        self.share_projection = share_projection
         self.prediction_length = prediction_length
 
         # For prediction and regression head
