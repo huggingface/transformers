@@ -40,14 +40,15 @@ class PatchTSMixerConfig(PretrainedConfig):
     Args:
         context_length (`int`, *optional*, defaults to 32):
             The context/history length for the input sequence.
-        patch_len (`int`, *optional*, defaults to 8): <fill_docstring>
+        patch_len (`int`, *optional*, defaults to 8):
+            The patch length for the input sequence.
         num_input_channels (`int`, *optional*, defaults to 1):
             Number of input variates. For Univariate, set it to 1.
         patch_stride (`int`, *optional*, defaults to 8):
             Determines the overlap between two consecutive patches. Set it to patch_length (or greater), if we want
             non-overlapping patches.
         num_parallel_samples (`int`, *optional*, defaults to 100):
-            The number of samples to generate in parallel for probablistic forecast.
+            The number of samples to generate in parallel for probabilistic forecast.
         num_features (`int`, *optional*, defaults to 8):
             Hidden dimension of the model. Recommended to set it as a multiple of patch_length (i.e. 2-5X of
             patch_len). Larger value indicates more complex model.
@@ -60,7 +61,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         mode (`str`, *optional*, defaults to `"common_channel"`):
             Mixer Mode. Determines how to process the channels. Allowed values: "common_channel", "mix_channel". In
             "common_channel" mode, we follow Channel-independent modelling with no explicit channel-mixing. Channel
-            mixing happens in an implict manner via shared weights across channels. (preferred first approach) In
+            mixing happens in an implicit manner via shared weights across channels. (preferred first approach) In
             "mix_channel" mode, we follow explicit channel-mixing in addition to patch and feature mixer. (preferred
             approach when channel correlations are very important to model)
         gated_attn (`bool`, *optional*, defaults to `True`):
@@ -99,7 +100,7 @@ class PatchTSMixerConfig(PretrainedConfig):
             A value added to the denominator for numerical stability of normalization.
         mask_type (`str`, *optional*, defaults to `"random"`):
             Type of masking to use for Masked Pretraining mode. Allowed values are "random", "forecast". In Random
-            masking, points are maskes random. In Forecast masking, Points are masked towards the end.
+            masking, points are masked randomly. In Forecast masking, points are masked towards the end.
         random_mask_ratio (`float`, *optional*, defaults to 0.5):
             Masking ratio to use when `mask_type` is `random`. Higher value indicates more masking.
         forecast_mask_patches (`list`, *optional*, defaults to `[2, 3]`):
@@ -125,7 +126,7 @@ class PatchTSMixerConfig(PretrainedConfig):
             Number of time steps to forecast for a forecasting task. Also known as the Forecast Horizon.
         forecast_channel_indices (`list`, *optional*):
             List of channel indices to forecast. If None, forecast all channels. Target data is expected to have all
-            channels and we explitly filter the channels in prediction and target before loss computation.
+            channels and we explicitly filter the channels in prediction and target before loss computation.
         num_targets (`int`, *optional*, defaults to 3):
             Number of targets (dimensionality of the regressed variable) for a regression task.
         output_range (`list`, *optional*):
