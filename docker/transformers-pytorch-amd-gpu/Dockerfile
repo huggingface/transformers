@@ -5,4 +5,4 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 RUN df
 
-# RUN apt update
+RUN apt update
