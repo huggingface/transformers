@@ -1024,16 +1024,19 @@ class GPT2Model(GPT2PreTrainedModel):
 
             # If a 2D or 3D attention mask is provided for the cross-attention
             # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-            if (
-                self.config.add_cross_attention
-                and encoder_hidden_states is not None
-                and encoder_attention_mask is not None
-            ):
+
+        if self.config.add_cross_attention and encoder_hidden_states is not None:
+            # Check if encoder_attention_mask is provided
+            if encoder_attention_mask is not None:
+                # Reshape for broadcasting if necessary
                 if encoder_attention_mask.dim() == 2:
-                    encoder_attention_mask.unsqueeze(1)
+                    encoder_attention_mask = encoder_attention_mask.unsqueeze(1)
+                # Ensure it has three dimensions
                 assert encoder_attention_mask.dim() == 3
+                # Make it broadcastable
                 encoder_attention_mask = encoder_attention_mask.bool().unsqueeze(2 if self.multi_query else 1)
             else:
+                # Handle None case
                 encoder_attention_mask = None
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
