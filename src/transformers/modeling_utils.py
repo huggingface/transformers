@@ -3804,11 +3804,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 weight_map = {p: archive_file for p in original_loaded_keys}
             else:
                 weight_map = {p: os.path.join(folder, f) for p, f in sharded_metadata["weight_map"].items()}
-            weight_map = {p[len(start_prefix) :]: v for p, v in weight_map.items() if p.startswith(start_prefix)}
             offload_index = {
-                p: {"safetensors_file": f, "weight_name": p, "dtype": str_dtype}
+                p[len(start_prefix) :]: {"safetensors_file": f, "weight_name": p, "dtype": str_dtype}
                 for p, f in weight_map.items()
-                if param_device_map[p] == "disk"
+                if p.startswith(start_prefix) and param_device_map[p[len(start_prefix) :]] == "disk"
             }
 
         if state_dict is not None:
