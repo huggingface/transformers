@@ -16,7 +16,6 @@ import tempfile
 import unittest
 
 import numpy as np
-from transformers.models.esm.openfold_utils import feats
 
 from transformers.testing_utils import (
     is_pt_tf_cross_test,
@@ -102,7 +101,9 @@ class SamProcessorTest(unittest.TestCase):
             np.testing.assert_array_equal(original_size, np.array([30, 400]))
 
         for reshaped_input_size in input_feat_extract.reshaped_input_sizes:
-            np.testing.assert_array_equal(reshaped_input_size, np.array([77, 1024])) # reshaped_input_size value is before padding
+            np.testing.assert_array_equal(
+                reshaped_input_size, np.array([77, 1024])
+            )  # reshaped_input_size value is before padding
 
     def test_image_processor_with_masks(self):
         image_processor = self.get_image_processor()
