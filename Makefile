@@ -9,7 +9,8 @@ modified_only_fixup:
 	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
 	@if test -n "$(modified_py_files)"; then \
 		echo "Checking/fixing $(modified_py_files)"; \
-		ruff $(modified_py_files) --fix; \
+		ruff check $(modified_py_files) --fix; \
+		ruff format $(modified_py_files);\
 	else \
 		echo "No library .py files were modified"; \
 	fi
@@ -48,7 +49,7 @@ repo-consistency:
 
 quality:
 	ruff check $(check_dirs) setup.py conftest.py
-	ruff format --check $(check_dirs) setup.py conftest.py --line-length 119
+	ruff format --check $(check_dirs) setup.py conftest.py
 	python utils/custom_init_isort.py --check_only
 	python utils/sort_auto_mappings.py --check_only
 	python utils/check_doc_toc.py
@@ -64,7 +65,7 @@ extra_style_checks:
 
 style:
 	ruff check $(check_dirs) setup.py conftest.py --fix
-	ruff format $(check_dirs) setup.py conftest.py --config pyproject.toml
+	ruff format $(check_dirs) setup.py conftest.py
 	${MAKE} autogenerate_code
 	${MAKE} extra_style_checks
 
