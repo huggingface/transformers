@@ -621,18 +621,18 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
         # GPT2Attention mask.
-        if attention_mask is not None:
-            if batch_size <= 0:
-                raise ValueError("batch_size has to be defined and > 0")
-            attention_mask = attention_mask.view(batch_size, -1)
-            if getattr(self.config, "_flash_attn_2_enabled", False):
-                attention_mask = attention_mask if 0 in attention_mask else None
-            else:
-                # We create a 3D attention mask from a 2D tensor mask.
-                # Sizes are [batch_size, 1, 1, to_seq_length]
-                # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-                # this attention mask is more simple than the triangular masking of causal attention
-                # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+        if getattr(self.config, "_flash_attn_2_enabled", False):
+            # 2d mask is passed through the layers
+            attention_mask = attention_mask.bool() if (attention_mask is not None and 0 in attention_mask) else None
+            encoder_attention_mask = (
+                encoder_attention_mask.bool()
+                if (encoder_attention_mask is not None and 0 in encoder_attention_mask)
+                else None
+            )
+        else:
+            if attention_mask is not None:
+                if batch_size <= 0:
+                    raise ValueError("batch_size has to be defined and > 0")
                 attention_mask = attention_mask[:, None, None, :]
 
                 # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
@@ -643,6 +643,19 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
                 attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
                 attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
+            # If a 2D or 3D attention mask is provided for the cross-attention
+            # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
+            if (
+                self.config.add_cross_attention
+                and encoder_hidden_states is not None
+                and encoder_attention_mask is not None
+            ):
+                if encoder_attention_mask.dim() == 2:
+                    encoder_attention_mask.unsqueeze(1)
+                assert encoder_attention_mask.dim() == 3
+                encoder_attention_mask = encoder_attention_mask.bool().unsqueeze(2 if self.multi_query else 1)
+            else:
+                encoder_attention_mask = None
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.add_cross_attention and encoder_hidden_states is not None:

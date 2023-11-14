@@ -365,63 +365,120 @@ class GPT2Attention(nn.Module):
 
 class GPT2FlashAttention(GPT2Attention):
     """
-    GPT2FlashAttention inherits from `GPT2Attention` as the weights of the module stays untouched. The only required
-    change would be on the forward pass where it needs to correctly call the public API of flash attention and deal
-    with padding tokens in case the input contains any of them.
+    GPT2FlashAttention inherits from `GPT2Attention`. The primary change is in the forward pass, where it correctly
+    calls the public API of flash attention and handles padding tokens.
     """
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
+        hidden_states: Optional[Tuple[torch.FloatTensor]],
         layer_past: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    ):
+    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         # Prepare query, key, and value
-        if layer_past is not None:
-            past_key, past_value = layer_past
-            key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
-            key = torch.cat((past_key, key), dim=-2)
-            value = torch.cat((past_value, value), dim=-2)
+        if encoder_hidden_states is not None:
+            if not hasattr(self, "q_attn"):
+                raise ValueError(
+                    "If class is used as cross attention, the weights `q_attn` have to be defined. "
+                    "Please make sure to instantiate class with `GPT2Attention(..., is_cross_attention=True)`."
+                )
+
+            query = self.q_attn(hidden_states)
+            key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
+            attention_mask = encoder_attention_mask
         else:
-            key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
+            query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
 
-        query = self.q_attn(hidden_states)
-
-        # Reshape and permute Q, K, V for multi-head attention
         query = self._split_heads(query, self.num_heads, self.head_dim)
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
+        if layer_past is not None:
+            past_key, past_value = layer_past
+            key = torch.cat((past_key, key), dim=-2)
+            value = torch.cat((past_value, value), dim=-2)
+
+        if use_cache is True:
+            present = (key, value)
+        else:
+            present = None
+
         # Apply Flash Attention Forward
+        if self.multi_query:
+            batch_size, query_length, _ = query.shape
+            query = query.reshape(batch_size, query_length, self.num_heads, self.head_dim)
+            key = key.unsqueeze(2)
+            value = value.unsqueeze(2)
+        else:
+            query_length = query.shape[2]
+            batch_size, _, tgt, _ = key.shape
+            query = query.transpose(1, 2).reshape(batch_size, query_length, self.num_heads, self.head_dim)
+            key = key.transpose(1, 2).reshape(batch_size, tgt, self.num_heads, self.head_dim)
+            value = value.transpose(1, 2).reshape(batch_size, tgt, self.num_heads, self.head_dim)
+
+        attn_dropout = self.dropout if self.training else 0.0
+
+        softmax_dtype = torch.float32 if self.attention_softmax_in_fp32 else query.dtype
+        upcast = query.dtype != softmax_dtype
+        softmax_scale = self.layer_idx + 1 if self.scale_attention_softmax_in_fp32 and upcast else 1
+        softmax_scale = softmax_scale**-1
+        if self.scale_attn_weights:
+            softmax_scale /= self.head_dim**0.5
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in float16 just to be sure everything works as expected.
+        input_dtype = query.dtype
+        if input_dtype == torch.float32:
+            # Handle the case where the model is quantized
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.c_attn.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+            query = query.to(target_dtype)
+            key = key.to(target_dtype)
+            value = value.to(target_dtype)
+
         attn_output = self._flash_attention_forward(
-            query, key, value, attention_mask, dropout=self.attn_dropout.rate, softmax_scale=1 / (self.head_dim**0.5)
+            query, key, value, attention_mask, query_length, dropout=attn_dropout, softmax_scale=softmax_scale
         )
 
-        # Merge heads and project output
-        attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
-        attn_output = self.c_proj(attn_output)
+        attn_weights_reshaped = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
+        attn_output = self.c_proj(attn_weights_reshaped)
         attn_output = self.resid_dropout(attn_output)
 
-        # Prepare outputs
-        outputs = (attn_output,)
-        if use_cache:
-            outputs += ((key, value),)
-        if output_attentions:
-            # Flash Attention doesn't return individual attention weights
-            outputs += (None,)
+        outputs = (attn_output, present)
 
-        return outputs
+        if output_attentions:
+            if self.multi_query:
+                # Transpose to return weights in the usual format (batch_size, num_heads, query_length, key_length)
+                attn_weights_reshaped = attn_weights_reshaped.transpose(1, 2)
+        else:
+            attn_weights_reshaped = None
+
+        outputs += (attn_weights_reshaped,)
+
+        return outputs  # a, present, (attentions)
 
     def _flash_attention_forward(
         self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
         """
-        Args:
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
         first unpad the input, then computes the attention scores and pad the final attention scores.
+
+        Args:
             query_states (`torch.Tensor`):
                 Input query states to be passed to Flash Attention API
             key_states (`torch.Tensor`):
@@ -976,18 +1033,18 @@ class GPT2Model(GPT2PreTrainedModel):
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
         # GPT2Attention mask.
-        if attention_mask is not None:
-            if batch_size <= 0:
-                raise ValueError("batch_size has to be defined and > 0")
-            attention_mask = attention_mask.view(batch_size, -1)
-            if getattr(self.config, "_flash_attn_2_enabled", False):
-                attention_mask = attention_mask if 0 in attention_mask else None
-            else:
-                # We create a 3D attention mask from a 2D tensor mask.
-                # Sizes are [batch_size, 1, 1, to_seq_length]
-                # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-                # this attention mask is more simple than the triangular masking of causal attention
-                # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+        if getattr(self.config, "_flash_attn_2_enabled", False):
+            # 2d mask is passed through the layers
+            attention_mask = attention_mask.bool() if (attention_mask is not None and 0 in attention_mask) else None
+            encoder_attention_mask = (
+                encoder_attention_mask.bool()
+                if (encoder_attention_mask is not None and 0 in encoder_attention_mask)
+                else None
+            )
+        else:
+            if attention_mask is not None:
+                if batch_size <= 0:
+                    raise ValueError("batch_size has to be defined and > 0")
                 attention_mask = attention_mask[:, None, None, :]
 
                 # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
@@ -998,6 +1055,19 @@ class GPT2Model(GPT2PreTrainedModel):
                 attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
                 attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
+            # If a 2D or 3D attention mask is provided for the cross-attention
+            # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
+            if (
+                self.config.add_cross_attention
+                and encoder_hidden_states is not None
+                and encoder_attention_mask is not None
+            ):
+                if encoder_attention_mask.dim() == 2:
+                    encoder_attention_mask.unsqueeze(1)
+                assert encoder_attention_mask.dim() == 3
+                encoder_attention_mask = encoder_attention_mask.bool().unsqueeze(2 if self.multi_query else 1)
+            else:
+                encoder_attention_mask = None
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.add_cross_attention and encoder_hidden_states is not None:
