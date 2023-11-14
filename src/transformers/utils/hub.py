@@ -494,7 +494,7 @@ def cached_file(
         raise EnvironmentError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{err}")
     except HFValidationError as e:
         raise EnvironmentError(
-            f"Incorrect path_or_model_id: {path_or_repo_id}. Please provide either the path to a local folder or the repo_id of a model on the Hub. {e}"
+            f"Incorrect path_or_model_id: '{path_or_repo_id}'. Please provide either the path to a local folder or the repo_id of a model on the Hub. {e}"
         ) from e
     return resolved_file
 
