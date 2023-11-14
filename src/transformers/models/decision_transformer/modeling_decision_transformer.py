@@ -331,7 +331,77 @@ class DecisionTransformerGPT2Attention(nn.Module):
         return outputs  # a, present, (attentions)
 
 
+class DecisionTransformerGPT2FlashAttention(DecisionTransformerGPT2Attention):
+    """
+    DecisionTransformerGPT2FlashAttention inherits from `DecisionTransformerGPT2Attention` as the weights of the module
+    stays untouched. The only required change would be on the forward pass where it needs to correctly call the public
+    API of flash attention and deal with padding tokens in case the input contains any of them.
+    """
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
+    ):
+        # Prepare query, key, and value
+        if layer_past is not None:
+            past_key, past_value = layer_past
+            key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
+            key = torch.cat((past_key, key), dim=-2)
+            value = torch.cat((past_value, value), dim=-2)
+        else:
+            key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
+
+        query = self.q_attn(hidden_states)
+
+        # Reshape and permute Q, K, V for multi-head attention
+        query = self._split_heads(query, self.num_heads, self.head_dim)
+        key = self._split_heads(key, self.num_heads, self.head_dim)
+        value = self._split_heads(value, self.num_heads, self.head_dim)
+
+        # Apply Flash Attention Forward
+        attn_output = self._flash_attention_forward(
+            query, key, value, attention_mask, dropout=self.attn_dropout.rate, softmax_scale=1 / (self.head_dim**0.5)
+        )
+
+        # Merge heads and project output
+        attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
+        attn_output = self.c_proj(attn_output)
+        attn_output = self.resid_dropout(attn_output)
+
+        # Prepare outputs
+        outputs = (attn_output,)
+        if use_cache:
+            outputs += ((key, value),)
+        if output_attentions:
+            # Flash Attention doesn't return individual attention weights
+            outputs += (None,)
+
+        return outputs
+
+
 # Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP with GPT2->DecisionTransformerGPT2
+class DecisionTransformerGPT2MLP(nn.Module):
+    def __init__(self, intermediate_size, config):
+        super().__init__()
+        embed_dim = config.hidden_size
+        self.c_fc = Conv1D(intermediate_size, embed_dim)
+        self.c_proj = Conv1D(embed_dim, intermediate_size)
+        self.act = ACT2FN[config.activation_function]
+        self.dropout = nn.Dropout(config.resid_pdrop)
+
+    def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
+        hidden_states = self.c_fc(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.c_proj(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
+
+
 class DecisionTransformerGPT2MLP(nn.Module):
     def __init__(self, intermediate_size, config):
         super().__init__()
@@ -948,9 +1018,12 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         x = x.reshape(batch_size, seq_length, 3, self.hidden_size).permute(0, 2, 1, 3)
 
         # get predictions
-        return_preds = self.predict_return(x[:, 2])  # predict next return given state and action
-        state_preds = self.predict_state(x[:, 2])  # predict next state given state and action
-        action_preds = self.predict_action(x[:, 1])  # predict next action given state
+        # predict next return given state and action
+        return_preds = self.predict_return(x[:, 2])
+        # predict next state given state and action
+        state_preds = self.predict_state(x[:, 2])
+        # predict next action given state
+        action_preds = self.predict_action(x[:, 1])
         if not return_dict:
             return (state_preds, action_preds, return_preds)
 
