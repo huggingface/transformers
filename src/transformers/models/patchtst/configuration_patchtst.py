@@ -53,12 +53,12 @@ class PatchTSTConfig(PretrainedConfig):
         patch_length (`int`, *optional*, defaults to 1):
             Define the patch length of the patchification process.
         patch_stride (`int`, *optional*, defaults to 1):
-            define the stride of the patchification process.
+            Define the stride of the patchification process.
         encoder_layers (`int`, *optional*, defaults to 3):
             Number of encoder layers.
         d_model (`int`, *optional*, defaults to 64):
             Dimensionality of the transformer layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 4):
+        num_attention_heads (`int`, *optional*, defaults to 4):
             Number of attention heads for each attention layer in the Transformer encoder.
         shared_embedding (`bool`, *optional*, defaults to `True`):
             Sharing the input embedding across all channels.
@@ -102,7 +102,7 @@ class PatchTSTConfig(PretrainedConfig):
         scaling (`Union`, *optional*, defaults to `"mean"`):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
             scaler is set to "mean".
-        mask_input (`bool`, *optional*, defaults to `False`):
+        mask_input (`bool`, *optional*):
             Apply masking during the pretraining.
         mask_type (`str`, *optional*, defaults to `"random"`):
             Masking type. Only `"random"` and `"forecast"` are currently supported.
@@ -150,7 +150,7 @@ class PatchTSTConfig(PretrainedConfig):
     model_type = "patchtst"
     attribute_map = {
         "hidden_size": "d_model",
-        "num_attention_heads": "encoder_attention_heads",
+        "num_attention_heads": "num_attention_heads",
         "num_hidden_layers": "encoder_layers",
     }
 
@@ -167,7 +167,7 @@ class PatchTSTConfig(PretrainedConfig):
         # Transformer architecture configuration
         encoder_layers: int = 3,
         d_model: int = 64,
-        encoder_attention_heads: int = 4,
+        num_attention_heads: int = 4,
         shared_embedding: bool = True,
         channel_attention: bool = False,
         encoder_ffn_dim: int = 256,
@@ -216,7 +216,7 @@ class PatchTSTConfig(PretrainedConfig):
 
         # Transformer architecture configuration
         self.d_model = d_model
-        self.encoder_attention_heads = encoder_attention_heads
+        self.num_attention_heads = num_attention_heads
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = encoder_layers
         self.dropout = dropout

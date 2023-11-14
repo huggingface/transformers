@@ -522,7 +522,7 @@ class PatchTSTEncoderLayer(nn.Module):
         # Multi-Head attention
         self.self_attn = PatchTSTAttention(
             embed_dim=config.d_model,
-            num_heads=config.encoder_attention_heads,
+            num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
         )
 

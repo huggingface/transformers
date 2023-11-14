@@ -105,7 +105,7 @@ class PatchTSTModelTester:
             num_input_channels=self.num_input_channels,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
-            encoder_attention_heads=self.num_attention_heads,
+            num_attention_heads=self.num_attention_heads,
             encoder_ffn_dim=self.intermediate_size,
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
