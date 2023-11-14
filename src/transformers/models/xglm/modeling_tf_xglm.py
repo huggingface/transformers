@@ -929,4 +929,4 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         if tf_weight == "lm_head.weight":
             return tf_weight, "model.embed_tokens.weight"
         else:
-            return tf_weight
+            return (tf_weight,)

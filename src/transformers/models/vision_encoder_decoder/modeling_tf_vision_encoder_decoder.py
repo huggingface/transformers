@@ -305,7 +305,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         if "encoder" in tf_weight and "decoder" not in tf_weight:
             return re.sub(rf"encoder\.{encoder_model_type}\.", "encoder.", tf_weight)
         else:
-            return tf_weight
+            return (tf_weight,)
 
     @classmethod
     def from_encoder_decoder_pretrained(

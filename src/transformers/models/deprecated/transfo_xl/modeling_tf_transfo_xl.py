@@ -1000,7 +1000,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
                     # self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[i]
                     return tf_weight, tf_weight.replace("crit.out_projs", "transformer.word_emb.emb_projs")
         else:
-            return tf_weight
+            return (tf_weight,)
 
 
 @add_start_docstrings(

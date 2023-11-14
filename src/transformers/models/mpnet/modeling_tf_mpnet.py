@@ -820,7 +820,7 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
         if tf_weight == "cls.predictions.decoder.weight":
             return tf_weight, "mobilebert.embeddings.word_embeddings.weight"
         else:
-            return tf_weight
+            return (tf_weight,)
 
 
 class TFMPNetClassificationHead(tf.keras.layers.Layer):

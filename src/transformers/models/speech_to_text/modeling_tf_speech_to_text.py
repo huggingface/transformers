@@ -1465,4 +1465,4 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         if tf_weight == "lm_head.weight":
             return tf_weight, "model.decoder.embed_tokens.weight"
         else:
-            return tf_weight
+            return (tf_weight,)

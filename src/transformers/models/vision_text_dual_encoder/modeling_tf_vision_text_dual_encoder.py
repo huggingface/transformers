@@ -244,7 +244,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         elif "text_model" in tf_weight:
             return re.sub(r"text_model\..*?\.", "text_model.", tf_weight)
         else:
-            return tf_weight
+            return (tf_weight,)
 
     @add_start_docstrings_to_model_forward(VISION_TEXT_DUAL_ENCODER_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
