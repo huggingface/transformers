@@ -659,7 +659,7 @@ MPNET_INPUTS_DOCSTRING = r"""
 class TFMPNetModel(TFMPNetPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.mpnet = TFMPNetMainLayer(config, add_pooling_layer=False, name="mpnet")
+        self.mpnet = TFMPNetMainLayer(config, add_pooling_layer=True, name="mpnet")
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
