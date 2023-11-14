@@ -2493,17 +2493,6 @@ else:
         ]
     )
 
-    _import_structure["models.patchtst"].extend(
-        [
-            "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "PatchTSTForClassification",
-            "PatchTSTForPrediction",
-            "PatchTSTForPretraining",
-            "PatchTSTForRegression",
-            "PatchTSTModel",
-            "PatchTSTPreTrainedModel",
-        ]
-    )
     _import_structure["models.patchtsmixer"].extend(
         [
             "PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2513,6 +2502,17 @@ else:
             "PatchTSMixerForRegression",
             "PatchTSMixerModel",
             "PatchTSMixerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.patchtst"].extend(
+        [
+            "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PatchTSTForClassification",
+            "PatchTSTForPrediction",
+            "PatchTSTForPretraining",
+            "PatchTSTForRegression",
+            "PatchTSTModel",
+            "PatchTSTPreTrainedModel",
         ]
     )
     _import_structure["models.pegasus"].extend(
@@ -4727,6 +4727,7 @@ if TYPE_CHECKING:
         OwlViTTextConfig,
         OwlViTVisionConfig,
     )
+    from .models.patchtsmixer import PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP, PatchTSMixerConfig
     from .models.patchtst import PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP, PatchTSTConfig
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
@@ -6420,15 +6421,6 @@ if TYPE_CHECKING:
             OwlViTTextModel,
             OwlViTVisionModel,
         )
-        from .models.patchtst import (
-            PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PatchTSTForClassification,
-            PatchTSTForPrediction,
-            PatchTSTForPretraining,
-            PatchTSTForRegression,
-            PatchTSTModel,
-            PatchTSTPreTrainedModel,
-        )
         from .models.patchtsmixer import (
             PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
             PatchTSMixerForClassification,
@@ -6437,6 +6429,15 @@ if TYPE_CHECKING:
             PatchTSMixerForRegression,
             PatchTSMixerModel,
             PatchTSMixerPreTrainedModel,
+        )
+        from .models.patchtst import (
+            PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PatchTSTForClassification,
+            PatchTSTForPrediction,
+            PatchTSTForPretraining,
+            PatchTSTForRegression,
+            PatchTSTModel,
+            PatchTSTPreTrainedModel,
         )
         from .models.pegasus import (
             PegasusForCausalLM,
