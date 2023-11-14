@@ -1278,7 +1278,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
         self.num_encoder_layers = config.num_encoder_layers
         self.pe_temperature = config.pe_temperature
         self.eval_size = config.eval_size
-        self.out_channels = [self.hidden_dim for _ in range(len(self.in_channels))]
+        self.out_channels = [self.hidden_dim for _ in self.in_channels]
         self.out_strides = self.feat_strides
         act_encoder = config.act_encoder
         # channel projection
