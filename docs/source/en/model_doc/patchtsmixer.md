@@ -45,9 +45,9 @@ This model was contributed by [ajati](https://huggingface.co/ajati), [vijaye12](
     - forward
 
 
-## PatchTSMixerForForecasting
+## PatchTSMixerForPrediction
 
-[[autodoc]] PatchTSMixerForForecasting
+[[autodoc]] PatchTSMixerForPrediction
     - forward
 
 
