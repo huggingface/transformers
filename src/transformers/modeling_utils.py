@@ -2146,7 +2146,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             del state_dict[name]
                             warn_names.add(name)
             if len(warn_names) > 0:
-                logger.warning_once(
+                raise Exception(
                     f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
                 )
 
