@@ -240,7 +240,6 @@ class PatchTSTConfig(PretrainedConfig):
         # PatchTST parameters
         self.patch_length = patch_length
         self.patch_stride = patch_stride
-        self.num_patches = self._num_patches()
 
         # Mask pretraining
         self.seed_number = seed_number
@@ -269,6 +268,3 @@ class PatchTSTConfig(PretrainedConfig):
         self.output_range = output_range
 
         super().__init__(**kwargs)
-
-    def _num_patches(self):
-        return (max(self.context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
