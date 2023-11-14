@@ -59,6 +59,7 @@ TEXTNET_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST = ["Raghavan/textnet-base"]
@@ -94,9 +95,7 @@ class TextNetConvLayer(nn.Module):
             padding=padding,
             bias=False,
         )
-        self.batch_norm = nn.Identity()
-
-        self.batch_norm = nn.BatchNorm2d(config.out_channels)
+        self.batch_norm = nn.BatchNorm2d(config.out_channels, config.batch_norm_eps)
 
         self.activation = nn.Identity()
         if self.activation_function is not None:
@@ -121,8 +120,6 @@ class TextNetConvLayer(nn.Module):
         """During inference, the functionary of batch norm layers is turned off but
         only the mean and var alone channels are used, which exposes the chance to fuse it with the preceding conv
         layers to save computations and simplify network structures."""
-        if isinstance(batch_norm, nn.Identity):
-            return conv
         conv_w = conv.weight
         conv_b = conv.bias if conv.bias is not None else torch.zeros_like(batch_norm.running_mean)
 
@@ -132,8 +129,8 @@ class TextNetConvLayer(nn.Module):
         return conv
 
 
-class TestNetRepConvLayer(nn.Module):
-    def __init__(self, num_channels, out_channels, kernel_size, stride=1):
+class TextNetRepConvLayer(nn.Module):
+    def __init__(self, config, num_channels, out_channels, kernel_size, stride):
         super().__init__()
 
         self.num_channels = num_channels
@@ -141,7 +138,7 @@ class TestNetRepConvLayer(nn.Module):
         self.kernel_size = kernel_size
         self.stride = stride
 
-        padding = (int((kernel_size[0] - 1) / 2), int((kernel_size[1] - 1) / 2))
+        padding = ((kernel_size[0] - 1) // 2, (kernel_size[1] - 1) // 2)
 
         self.nonlinearity = nn.ReLU(inplace=True)
 
@@ -153,10 +150,10 @@ class TestNetRepConvLayer(nn.Module):
             padding=padding,
             bias=False,
         )
-        self.main_batch_norm = nn.BatchNorm2d(num_features=out_channels)
+        self.main_batch_norm = nn.BatchNorm2d(num_features=out_channels, eps=config.batch_norm_eps)
 
-        ver_pad = (int((kernel_size[0] - 1) / 2), 0)
-        hor_pad = (0, int((kernel_size[1] - 1) / 2))
+        ver_pad = ((kernel_size[0] - 1) // 2, 0)
+        hor_pad = (0, (kernel_size[1] - 1) // 2)
 
         if kernel_size[1] != 1:
             self.vertical_conv = nn.Conv2d(
@@ -167,7 +164,7 @@ class TestNetRepConvLayer(nn.Module):
                 padding=ver_pad,
                 bias=False,
             )
-            self.vertical_batch_norm = nn.BatchNorm2d(num_features=out_channels)
+            self.vertical_batch_norm = nn.BatchNorm2d(num_features=out_channels, eps=config.batch_norm_eps)
         else:
             self.vertical_conv, self.vertical_batch_norm = None, None
 
@@ -180,12 +177,14 @@ class TestNetRepConvLayer(nn.Module):
                 padding=hor_pad,
                 bias=False,
             )
-            self.horizontal_batch_norm = nn.BatchNorm2d(num_features=out_channels)
+            self.horizontal_batch_norm = nn.BatchNorm2d(num_features=out_channels, eps=config.batch_norm_eps)
         else:
             self.horizontal_conv, self.horizontal_batch_norm = None, None
 
         self.rbr_identity = (
-            nn.BatchNorm2d(num_features=num_channels) if out_channels == num_channels and stride == 1 else None
+            nn.BatchNorm2d(num_features=num_channels, eps=config.batch_norm_eps)
+            if out_channels == num_channels and stride == 1
+            else None
         )
 
     def forward(self, hidden_states):
@@ -195,21 +194,18 @@ class TestNetRepConvLayer(nn.Module):
 
             main_outputs = self.main_conv(hidden_states)
             main_outputs = self.main_batch_norm(main_outputs)
+
+            vertical_outputs = 0
             if self.vertical_conv is not None:
                 vertical_outputs = self.vertical_conv(hidden_states)
                 vertical_outputs = self.vertical_batch_norm(vertical_outputs)
-            else:
-                vertical_outputs = 0
-
+            horizontal_outputs = 0
             if self.horizontal_conv is not None:
                 horizontal_outputs = self.horizontal_conv(hidden_states)
                 horizontal_outputs = self.horizontal_batch_norm(horizontal_outputs)
-            else:
-                horizontal_outputs = 0
 
-            if self.rbr_identity is None:
-                id_out = 0
-            else:
+            id_out = 0
+            if self.rbr_identity is not None:
                 id_out = self.rbr_identity(hidden_states)
 
             return self.nonlinearity(main_outputs + vertical_outputs + horizontal_outputs + id_out)
@@ -289,16 +285,11 @@ class TestNetRepConvLayer(nn.Module):
 
 
 class TextNetStage(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride):
+    def __init__(self, config, in_channels, out_channels, kernel_size, stride):
         super().__init__()
         stage = []
-        for stage_config in zip(
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride,
-        ):
-            stage.append(TestNetRepConvLayer(*stage_config))
+        for stage_config in zip(in_channels, out_channels, kernel_size, stride):
+            stage.append(TextNetRepConvLayer(config, *stage_config))
         self.stage = nn.ModuleList(stage)
 
     def forward(self, hidden_state):
@@ -315,6 +306,7 @@ class TextNetEncoder(nn.Module):
         for stage_ix in range(1, 5):
             stages.append(
                 TextNetStage(
+                    config,
                     getattr(config, f"stage{stage_ix}_in_channels"),
                     getattr(config, f"stage{stage_ix}_out_channels"),
                     getattr(config, f"stage{stage_ix}_kernel_size"),
@@ -498,15 +490,14 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
     TEXTNET_START_DOCSTRING,
 )
 class TextNetForImageClassification(TextNetPreTrainedModel):
-    # Copied from transformers.models.bit.modeling_bit.BitForImageClassification.__init__ with Bit->TextNet
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.bit = TextNetModel(config)
+        self.textnet = TextNetModel(config)
         # classification head
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity(),
+            nn.Linear(config.hidden_sizes[-1] * 2 * 2, config.num_labels) if config.num_labels > 0 else nn.Identity(),
         )
         # initialize weights and apply final processing
         self.post_init()

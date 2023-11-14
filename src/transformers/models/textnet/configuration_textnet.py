@@ -27,10 +27,10 @@ TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TextNextModel`]. It is used to instantiate a
-    TextNextModel model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the
-    [Raghavan/textnet-base](https://huggingface.co/Raghavan/textnet-base) Configuration objects inherit from
+    This is the configuration class to store the configuration of a [`TextNextModel`] which can be used with backbone
+    api as a backbone. It is used to instantiate a TextNextModel model according to the specified arguments, defining
+    the model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that
+    of the [Raghavan/textnet-base](https://huggingface.co/Raghavan/textnet-base) Configuration objects inherit from
     [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`]
     for more information.
 
@@ -79,6 +79,8 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
             The strides for list of conv in stage 4.Should be of same length os `stage4_in_channels`
         hidden_sizes (`List[int]`, *optional*, defaults to `[64, 64, 128, 256, 512]`):
             Dimensionality (hidden size) at each stage.
+        batch_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the batch normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         out_features (`List[str]`, *optional*):
@@ -133,6 +135,7 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
         stage4_kernel_size=[[3, 3], [3, 1], [1, 3], [3, 3]],
         stage4_stride=[2, 1, 1, 1],
         hidden_sizes=[64, 64, 128, 256, 512],
+        batch_norm_eps=1e-5,
         initializer_range=0.02,
         out_features=None,
         out_indices=None,
@@ -168,6 +171,7 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
 
         self.initializer_range = initializer_range
         self.hidden_sizes = hidden_sizes
+        self.batch_norm_eps = batch_norm_eps
 
         self.depths = [
             len(self.stage1_out_channels),
