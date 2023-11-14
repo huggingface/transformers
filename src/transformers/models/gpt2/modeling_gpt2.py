@@ -365,9 +365,9 @@ class GPT2Attention(nn.Module):
 
 class GPT2FlashAttention(GPT2Attention):
     """
-    GPT2FlashAttention inherits from `GPT2Attention` as the weights of the module
-    stays untouched. The only required change would be on the forward pass where it needs to correctly call the public
-    API of flash attention and deal with padding tokens in case the input contains any of them.
+    GPT2FlashAttention inherits from `GPT2Attention` as the weights of the module stays untouched. The only required
+    change would be on the forward pass where it needs to correctly call the public API of flash attention and deal
+    with padding tokens in case the input contains any of them.
     """
 
     def forward(
@@ -419,9 +419,9 @@ class GPT2FlashAttention(GPT2Attention):
         self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
         """
+        Args:
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
         first unpad the input, then computes the attention scores and pad the final attention scores.
-        Args:
             query_states (`torch.Tensor`):
                 Input query states to be passed to Flash Attention API
             key_states (`torch.Tensor`):
@@ -468,19 +468,15 @@ class GPT2FlashAttention(GPT2Attention):
         return attn_output
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
+    def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length):
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
+        batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
 
-        key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
+        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
+        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
+                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -494,8 +490,8 @@ class GPT2FlashAttention(GPT2Attention):
             query_layer = query_layer.squeeze(1)
         else:
             # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
+            padding_mask = padding_mask[:, -query_length:]
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, padding_mask)
 
         return (
             query_layer,

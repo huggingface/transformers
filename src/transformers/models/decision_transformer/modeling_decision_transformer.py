@@ -147,6 +147,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
         self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
+        self.is_causal = True
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
         self.pruned_heads = set()
@@ -264,7 +265,8 @@ class DecisionTransformerGPT2Attention(nn.Module):
         """
         new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
         tensor = tensor.view(new_shape)
-        return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
+        # (batch, head, seq_length, head_features)
+        return tensor.permute(0, 2, 1, 3)
 
     def _merge_heads(self, tensor, num_heads, attn_head_size):
         """
@@ -284,6 +286,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
+        padding_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn"):
@@ -354,12 +357,18 @@ class DecisionTransformerGPT2Block(nn.Module):
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = DecisionTransformerGPT2Attention(config, layer_idx=layer_idx)
+        self.attn = (
+            DecisionTransformerGPT2Attention(config, layer_idx=layer_idx)
+            if not getattr(config, "_flash_attn_2_enabled", False)
+            else DecisionTransformerGPT2FlashAttention(config, layer_idx=layer_idx)
+        )
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
-            self.crossattention = DecisionTransformerGPT2Attention(
-                config, is_cross_attention=True, layer_idx=layer_idx
+            self.crossattention = (
+                DecisionTransformerGPT2Attention(config, is_cross_attention=True, layer_idx=layer_idx)
+                if not getattr(config, "_flash_attn_2_enabled", False)
+                else DecisionTransformerGPT2FlashAttention(config, is_cross_attention=True, layer_idx=layer_idx)
             )
             self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
@@ -411,7 +420,8 @@ class DecisionTransformerGPT2Block(nn.Module):
             attn_output = cross_attn_outputs[0]
             # residual connection
             hidden_states = residual + attn_output
-            outputs = outputs + cross_attn_outputs[2:]  # add cross attentions if we output attention weights
+            # add cross attentions if we output attention weights
+            outputs = outputs + cross_attn_outputs[2:]
 
         residual = hidden_states
         hidden_states = self.ln_2(hidden_states)
@@ -424,7 +434,8 @@ class DecisionTransformerGPT2Block(nn.Module):
         else:
             outputs = (hidden_states,) + outputs[1:]
 
-        return outputs  # hidden_states, present, (attentions, cross_attentions)
+        # hidden_states, present, (attentions, cross_attentions)
+        return outputs
 
 
 class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
@@ -561,20 +572,23 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
             attention_mask = attention_mask.view(batch_size, -1)
-            # We create a 3D attention mask from a 2D tensor mask.
-            # Sizes are [batch_size, 1, 1, to_seq_length]
-            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-            # this attention mask is more simple than the triangular masking of causal attention
-            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask[:, None, None, :]
+            if getattr(self.config, "_flash_attn_2_enabled", False):
+                attention_mask = attention_mask if 0 in attention_mask else None
+            else:
+                # We create a 3D attention mask from a 2D tensor mask.
+                # Sizes are [batch_size, 1, 1, to_seq_length]
+                # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
+                # this attention mask is more simple than the triangular masking of causal attention
+                # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+                attention_mask = attention_mask[:, None, None, :]
 
-            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-            # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and the dtype's smallest value for masked positions.
-            # Since we are adding it to the raw scores before the softmax, this is
-            # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
+                # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+                # masked positions, this operation will create a tensor which is 0.0 for
+                # positions we want to attend and the dtype's smallest value for masked positions.
+                # Since we are adding it to the raw scores before the softmax, this is
+                # effectively the same as removing these entirely.
+                attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+                attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
