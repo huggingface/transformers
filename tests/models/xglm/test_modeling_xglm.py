@@ -361,6 +361,7 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_tf_from_pt_safetensors(self):
         pass
 
+
 @require_torch
 class XGLMModelLanguageGenerationTest(unittest.TestCase):
     def tearDown(self):

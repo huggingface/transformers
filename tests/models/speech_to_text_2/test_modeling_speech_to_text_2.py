@@ -196,7 +196,6 @@ class Speech2Text2StandaloneDecoderModelTest(
     def test_inputs_embeds(self):
         pass
 
-
     @unnittest.skip("This test is currently broken because of safetensors.")
     def test_tf_from_pt_safetensors(self):
         pass

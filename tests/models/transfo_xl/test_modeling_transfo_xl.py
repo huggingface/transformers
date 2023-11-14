@@ -494,6 +494,7 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_tf_from_pt_safetensors(self):
         pass
 
+
 @require_torch
 class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
     @slow
