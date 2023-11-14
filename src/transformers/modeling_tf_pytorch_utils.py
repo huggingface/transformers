@@ -324,7 +324,8 @@ def load_pytorch_state_dict_in_tf2_model(
                     name = alias
                     break
             else:
-                name = aliases[0]  # If none of the aliases match, just use the first one (it'll be reported as missing)
+                # If none of the aliases match, just use the first one (it'll be reported as missing)
+                name = aliases[0]
 
         # Find associated numpy array in pytorch model state dict
         if name not in tf_keys_to_pt_keys:
