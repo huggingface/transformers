@@ -28,7 +28,6 @@ from typing import Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 
-
 import huggingface_hub
 import requests
 from huggingface_hub import (
@@ -44,9 +43,10 @@ from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
     EntryNotFoundError,
     GatedRepoError,
+    HFValidationError,
     LocalEntryNotFoundError,
     RepositoryNotFoundError,
-    RevisionNotFoundError,HFValidationError,
+    RevisionNotFoundError,
     build_hf_headers,
     hf_raise_for_status,
 )
