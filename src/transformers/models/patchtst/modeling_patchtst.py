@@ -771,9 +771,7 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
             `BaseModelOutput`
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
 
         # Input embedding
         patch_input = self.embedder(patch_input)
@@ -1355,6 +1353,8 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the output attention of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
@@ -1433,6 +1433,8 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the output attention of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
@@ -1646,6 +1648,8 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 future target values associated with the `past_values`
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the output attention of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
@@ -1680,9 +1684,6 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 loss_val = nll(distribution, future_values)
                 # take average of the loss
                 loss_val = weighted_average(loss_val)
-                # for testing
-                # loss_val = nn.MSELoss(reduction='none')(distribution.mean, future_values)
-                # loss_val = weighted_average(loss_val)
             else:
                 loss = nn.MSELoss(reduction="mean")
                 loss_val = loss(y_hat_out, future_values)
@@ -1854,6 +1855,8 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
                 target values associates with the `past_values`
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the output attention of all layers
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
