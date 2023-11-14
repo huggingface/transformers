@@ -2039,7 +2039,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                 last_slice = 0
                 for current_slice in slices:
-                    sliced_tokens = seek_sequence[:, last_slice:current_slice]
+                    # sliced_tokens = seek_sequence[:, last_slice:current_slice]
                     # start_timestamp_pos = (
                     #     sliced_tokens[0].item() - timestamp_begin 
                     # )
@@ -2047,11 +2047,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     #     sliced_tokens[-1].item() - timestamp_begin 
                     # )
                     # current_segments.append(
-                    #     new_segment(
+                    #     dict(
                     #         start=time_offset + start_timestamp_pos * time_precision,
                     #         end=time_offset + end_timestamp_pos * time_precision,
                     #         tokens=sliced_tokens,
-                    #         result=result,
                     #     )
                     # )
                     last_slice = current_slice
@@ -2089,8 +2088,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 # )
                 seek += seek_num_frames
 
-
-            print(seek)
 
             if sequence is None:
                 sequence = seek_sequence
