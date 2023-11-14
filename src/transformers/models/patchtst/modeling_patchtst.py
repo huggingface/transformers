@@ -414,8 +414,8 @@ class PatchTSTPatchify(nn.Module):
             )
 
         # get the number of patches
-        num_patches = (max(self.sequence_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
-        new_sequence_length = self.patch_length + self.patch_stride * (num_patches - 1)
+        self.num_patches = (max(self.sequence_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
+        new_sequence_length = self.patch_length + self.patch_stride * (self.num_patches - 1)
         self.sequence_start = self.sequence_length - new_sequence_length
 
     def forward(self, past_values: torch.Tensor):
@@ -738,7 +738,6 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
         self.num_input_channels = config.num_input_channels
-        self.num_patches = config.num_patches
         self.patch_length = config.patch_length
         self.d_model = config.d_model
         self.shared_embedding = config.shared_embedding
@@ -1215,6 +1214,9 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         self.scaler = PatchTSTScaler(config)
         self.patchifier = PatchTSTPatchify(config)
         self.mask_input = config.mask_input
+
+        # get num_patches information from PatchTSTPatchify
+        config.num_patches = self.patchifier.num_patches
 
         if self.mask_input:
             self.masking = PatchTSTMasking(config)
