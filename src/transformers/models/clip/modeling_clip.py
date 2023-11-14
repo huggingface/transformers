@@ -185,13 +185,13 @@ class CLIPVisionEmbeddings(nn.Module):
         Source:
         https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
         """
-        self.position_embeddings = self.position_embedding.weight.unsqueeze(0)
+        position_embeddings = self.position_embedding.weight.unsqueeze(0)
         num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
+        num_positions = position_embeddings.shape[1] - 1
         if num_patches == num_positions and height == width:
-            return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
-        patch_pos_embed = self.position_embeddings[:, 1:]
+            return position_embeddings
+        class_pos_embed = position_embeddings[:, 0]
+        patch_pos_embed = position_embeddings[:, 1:]
         dim = embeddings.shape[-1]
         height = height // self.config.patch_size
         width = width // self.config.patch_size
