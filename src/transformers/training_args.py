@@ -238,6 +238,8 @@ class TrainingArguments:
             when all data is exhausted
         lr_scheduler_type (`str` or [`SchedulerType`], *optional*, defaults to `"linear"`):
             The scheduler type to use. See the documentation of [`SchedulerType`] for all possible values.
+        lr_scheduler_kwargs ('dict', *optional*, defaults to {}):
+            The extra arguments for the lr_scheduler. See the documentation of each scheduler for possible values.
         warmup_ratio (`float`, *optional*, defaults to 0.0):
             Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
         warmup_steps (`int`, *optional*, defaults to 0):
@@ -507,7 +509,7 @@ class TrainingArguments:
             instance of `Dataset`.
         report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
-            `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"flyte"`, `"mlflow"`, `"neptune"`,
+            `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
             `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"` for no
             integrations.
         ddp_find_unused_parameters (`bool`, *optional*):
@@ -572,7 +574,7 @@ class TrainingArguments:
             Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
-        gradient_checkpointing_args (`dict`, *optional*, defaults to `None`):
+        gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
             Key word arguments to be passed to the `gradient_checkpointing_enable` method.
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
             Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
@@ -728,6 +730,14 @@ class TrainingArguments:
     lr_scheduler_type: Union[SchedulerType, str] = field(
         default="linear",
         metadata={"help": "The scheduler type to use."},
+    )
+    lr_scheduler_kwargs: Optional[Dict] = field(
+        default_factory=dict,
+        metadata={
+            "help": (
+                "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts"
+            )
+        },
     )
     warmup_ratio: float = field(
         default=0.0, metadata={"help": "Linear warmup over warmup_ratio fraction of total steps."}
@@ -1134,7 +1144,7 @@ class TrainingArguments:
             "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
         },
     )
-    gradient_checkpointing_kwargs: dict = field(
+    gradient_checkpointing_kwargs: Optional[dict] = field(
         default=None,
         metadata={
             "help": "Gradient checkpointing key word arguments such as `use_reentrant`. Will be passed to `torch.utils.checkpoint.checkpoint` through `model.gradient_checkpointing_enable`."
@@ -2381,9 +2391,9 @@ class TrainingArguments:
                 and lets the application set the level.
             report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
                 The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
-                `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"flyte"`, `"mlflow"`, `"neptune"`,
-                `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"` for no
-                integrations.
+                `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`,
+                `"neptune"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed,
+                `"none"` for no integrations.
             first_step (`bool`, *optional*, defaults to `False`):
                 Whether to log and evaluate the first `global_step` or not.
             nan_inf_filter (`bool`, *optional*, defaults to `True`):
