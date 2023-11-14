@@ -38,7 +38,7 @@ rendered properly in your Markdown viewer.
 
 如果您购买了昂贵的高端GPU，请确保为其提供正确的供电和足够的散热。
 
-**供电**
+**供电**：
 
 一些高端消费者级GPU卡具有2个，有时甚至3个PCI-E-8针电源插口。请确保将与插口数量相同的独立12V PCI-E-8针线缆插入卡中。不要使用同一根线缆两端的2个分叉（也称为pigtail cable）。也就是说，如果您的GPU上有2个插口，您需要使用2条PCI-E-8针线缆连接电源和卡，而不是使用一条末端有2个PCI-E-8针连接器的线缆！否则，您无法充分发挥卡的性能。
 
@@ -52,7 +52,7 @@ rendered properly in your Markdown viewer.
 
 当然，电源还需要有足够的未使用的瓦数来为卡供电。
 
-**散热：**
+**散热**：
 
 当GPU过热时，它将开始降频，不会提供完整的性能。如果温度过高，可能会缩短GPU的使用寿命。
 
@@ -104,7 +104,7 @@ GPU1    PHB      X      0-11            N/A
 
 #### NVlink
 
-NVLink是由Nvidia开发的一种基于线缆的串行多通道近程通信链接。
+[NVLink](https://en.wikipedia.org/wiki/NVLink)是由Nvidia开发的一种基于线缆的串行多通道近程通信链接。
 
 每个新一代提供更快的带宽，例如在[Nvidia Ampere GA102 GPU架构](https://www.nvidia.com/content/dam/en-zz/Solutions/geforce/ampere/pdf/NVIDIA-ampere-GA102-GPU-Architecture-Whitepaper-V1.pdf)中有这样的引述：
 
