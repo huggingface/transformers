@@ -3234,7 +3234,6 @@ class ModelTesterMixin:
     def test_tf_from_pt_safetensors(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.tie_word_embeddings = True  # Tied weights often cause safetensors loading to fail
 
             tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
             if not hasattr(transformers, tf_model_class_name):
