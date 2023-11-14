@@ -1003,7 +1003,6 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             return tf_weight
 
 
-
 @add_start_docstrings(
     """
     The Transfo XL Model transformer with a sequence classification head on top (linear layer).
