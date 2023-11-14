@@ -16,13 +16,39 @@
 Processor class for Grounding DINO.
 """
 
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict, Tuple
+
+import torch
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
 
+def get_phrases_from_posmap(posmaps: torch.BoolTensor, input_ids: torch.LongTensor):
+    """Get token ids of phrases from posmaps and input_ids.
+
+    Args:
+        posmaps (`torch.BoolTensor` of shape `(num_boxes, hidden_size)`): 
+            A boolean tensor of text-thresholded logits related to the detected bounding boxes.
+        input_ids (`torch.LongTensor`) of shape `(sequence_length, )`): 
+            A tensor of token ids.
+
+    Returns:
+        _type_: _description_
+    """
+    left_idx = 0
+    right_idx = 255
+
+    posmaps[:, 0: left_idx + 1] = False
+    posmaps[:, right_idx:] = False
+
+    token_ids = []
+    for posmap in posmaps:
+        non_zero_idx = posmap.nonzero(as_tuple=True)[0].tolist()
+        token_ids.append([input_ids[i] for i in non_zero_idx])
+
+    return token_ids
 
 class GroundingDINOProcessor(ProcessorMixin):
     r"""
@@ -149,3 +175,21 @@ class GroundingDINOProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+    
+    def post_process_grounded_object_detection(self, outputs, input_ids, box_threshold: float, text_threshold: float, target_sizes: Union[TensorType, List[Tuple]] = None):
+        """
+        Post-process the output of the model to get the grounded object detection results.
+        """
+        results = self.image_processor.post_process_object_detection(outputs, box_threshold, target_sizes)
+
+        probs = torch.sigmoid(outputs.logits) # (batch_size, num_queries, 256)
+
+        for idx, (result, prob) in enumerate(zip(results, probs)):
+            labels = result["labels"]
+            # Assuming that selected bboxes are sorted by confidence due to Hungarian matching loss in training
+            prob = prob[:len(labels)] # len(labels) , 256
+            token_ids = get_phrases_from_posmap(prob > text_threshold, input_ids[idx])
+            # overrides result labels key
+            result["labels"] = self.batch_decode(token_ids)
+
+        return results
