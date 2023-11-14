@@ -1075,9 +1075,8 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         past_observed_values: torch.Tensor,
     ):
         # calculate loc and scale
-        _, loc, scale = self.scaler(past_target, past_observed_values)
+        scaled_past_target, loc, scale = self.scaler(past_target, past_observed_values)
 
-        scaled_past_target = (past_target - loc) / scale
         input = scaled_past_target[..., max(self.config.lags_sequence) :]
         prior_input = scaled_past_target[..., : max(self.config.lags_sequence)]
         lags = self.lagged_sequence_values(prior_input, input, dim=1)
