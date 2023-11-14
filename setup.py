@@ -167,6 +167,7 @@ _deps = [
     "starlette",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
+    "tensorboard",
     # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
     "tensorflow-cpu>=2.6,<2.15",
     "tensorflow>=2.6,<2.15",
@@ -319,6 +320,7 @@ extras["testing"] = (
         "sacremoses",
         "rjieba",
         "beautifulsoup4",
+        "tensorboard",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
@@ -426,7 +428,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.35.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.36.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

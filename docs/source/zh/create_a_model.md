@@ -110,7 +110,7 @@ DistilBertConfig {
 
 ## 模型
 
-接下来，创建一个[模型](main_classes/models)。模型，也可泛指架构，定义了每一层网络的行为以及进行的操作。配置中的 `num_hidden_layers` 等属性用于定义架构。每个模型都共享基类 [`PreTrainedModel`] 和一些常用方法，例如调整输入嵌入的大小和修剪自注意力头。此外，所有模型都是 [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html)、[`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) 或 [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/flax.linen.html#module) 的子类。这意味着模型与各自框架的用法兼容。
+接下来，创建一个[模型](main_classes/models)。模型，也可泛指架构，定义了每一层网络的行为以及进行的操作。配置中的 `num_hidden_layers` 等属性用于定义架构。每个模型都共享基类 [`PreTrainedModel`] 和一些常用方法，例如调整输入嵌入的大小和修剪自注意力头。此外，所有模型都是 [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html)、[`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) 或 [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) 的子类。这意味着模型与各自框架的用法兼容。
 
 <frameworkcontent>
 <pt>

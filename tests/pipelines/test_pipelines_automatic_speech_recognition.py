@@ -39,9 +39,10 @@ from transformers.testing_utils import (
     require_pyctcdecode,
     require_tf,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torchaudio,
     slow,
+    torch_device,
 )
 
 from .test_pipelines_common import ANY
@@ -166,13 +167,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             _ = speech_recognizer(waveform, return_timestamps="char")
 
     @slow
-    @require_torch
+    @require_torch_accelerator
     def test_whisper_fp16(self):
-        if not torch.cuda.is_available():
-            self.skipTest("Cuda is necessary for this test")
         speech_recognizer = pipeline(
             model="openai/whisper-base",
-            device=0,
+            device=torch_device,
             torch_dtype=torch.float16,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
@@ -855,6 +854,44 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
+    def test_whisper_language(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny.en",
+            framework="pt",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        filename = ds[0]["file"]
+
+        # 1. English-only model compatible with no language argument
+        output = speech_recognizer(filename)
+        self.assertEqual(
+            output,
+            {"text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."},
+        )
+
+        # 2. English-only Whisper does not accept the language argument
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot specify `task` or `langauge` for an English-only model. If the model is intended to be multilingual, "
+            "pass `is_multilingual=True` to generate, or update the generation config.",
+        ):
+            _ = speech_recognizer(filename, generate_kwargs={"language": "en"})
+
+        # 3. Multilingual model accepts language argument
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            framework="pt",
+        )
+        output = speech_recognizer(filename, generate_kwargs={"language": "en"})
+        self.assertEqual(
+            output,
+            {"text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."},
+        )
+
+    @slow
+    @require_torch
     @require_torchaudio
     def test_xls_r_to_en(self):
         speech_recognizer = pipeline(
@@ -904,12 +941,12 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(output, {"text": "a man said to the universe sir i exist"})
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_wav2vec2_conformer_float16(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-conformer-rope-large-960h-ft",
-            device="cuda:0",
+            device=torch_device,
             torch_dtype=torch.float16,
             framework="pt",
         )
@@ -1304,14 +1341,14 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(output, {"text": "XB"})
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_slow_unfinished_sequence(self):
         from transformers import GenerationConfig
 
         pipe = pipeline(
             "automatic-speech-recognition",
             model="vasista22/whisper-hindi-large-v2",
-            device="cuda:0",
+            device=torch_device,
         )
         # Original model wasn't trained with timestamps and has incorrect generation config
         pipe.model.generation_config = GenerationConfig.from_pretrained("openai/whisper-large-v2")

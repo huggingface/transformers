@@ -73,6 +73,9 @@ PRIVATE_MODELS = [
     "MaskFormerSwinPreTrainedModel",
     "BridgeTowerTextModel",
     "BridgeTowerVisionModel",
+    "Kosmos2TextModel",
+    "Kosmos2TextForCausalLM",
+    "Kosmos2VisionModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -182,6 +185,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TimeSeriesTransformerForPrediction",
     "InformerForPrediction",
     "AutoformerForPrediction",
+    "PatchTSTForPretraining",
+    "PatchTSTForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",
     "SamModel",
@@ -204,6 +209,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CLIPTextModelWithProjection",
     "CLIPVisionModel",
     "CLIPVisionModelWithProjection",
+    "ClvpForCausalLM",
+    "ClvpModel",
     "GroupViTTextModel",
     "GroupViTVisionModel",
     "TFCLIPTextModel",

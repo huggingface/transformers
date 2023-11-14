@@ -16,7 +16,6 @@
 Feature extractor class for SeamlessM4T
 """
 
-import copy
 from typing import List, Optional, Union
 
 import numpy as np
@@ -288,18 +287,3 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary.
-
-        Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["feature_extractor_type"] = self.__class__.__name__
-        if "mel_filters" in output:
-            del output["mel_filters"]
-        if "window" in output:
-            del output["window"]
-        return output
