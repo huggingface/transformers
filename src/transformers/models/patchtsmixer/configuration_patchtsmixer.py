@@ -122,9 +122,9 @@ class PatchTSMixerConfig(PretrainedConfig):
         distribution_output (`string`, *optional*, defaults to `"student_t"`):
             The distribution emission head for the model when loss is "nll". Could be either "student_t", "normal" or
             "negative_binomial".
-        forecast_len (`int`, *optional*, defaults to 16):
+        prediction_length (`int`, *optional*, defaults to 16):
             Number of time steps to forecast for a forecasting task. Also known as the Forecast Horizon.
-        forecast_channel_indices (`list`, *optional*):
+        prediction_channel_indices (`list`, *optional*):
             List of channel indices to forecast. If None, forecast all channels. Target data is expected to have all
             channels and we explicitly filter the channels in prediction and target before loss computation.
         num_targets (`int`, *optional*, defaults to 3):
@@ -194,9 +194,9 @@ class PatchTSMixerConfig(PretrainedConfig):
         # General head configuration
         head_dropout: float = 0.2,
         distribution_output: str = "student_t",
-        # Forecast head configuration
-        forecast_len: int = 16,
-        forecast_channel_indices: list = None,
+        # Prediction head configuration
+        prediction_length: int = 16,
+        prediction_channel_indices: list = None,
         # Classification/Regression configuration
         num_targets: int = 3,
         output_range: list = None,
@@ -229,8 +229,8 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.use_positional_encoding = use_positional_encoding
         self.positional_encoding = positional_encoding
         self.learn_positional_encoding = learn_positional_encoding
-        self.forecast_len = forecast_len
-        self.forecast_channel_indices = forecast_channel_indices
+        self.prediction_length = prediction_length
+        self.prediction_channel_indices = prediction_channel_indices
         self.num_targets = num_targets
         self.output_range = output_range
         self.head_aggregation = head_aggregation

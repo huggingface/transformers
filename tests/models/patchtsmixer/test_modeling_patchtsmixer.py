@@ -43,7 +43,7 @@ if is_torch_available():
         MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
         PatchTSMixerConfig,
         PatchTSMixerForClassification,
-        PatchTSMixerForForecasting,
+        PatchTSMixerForPrediction,
         PatchTSMixerForPretraining,
         PatchTSMixerForRegression,
         PatchTSMixerModel,
@@ -51,8 +51,8 @@ if is_torch_available():
     from transformers.models.patchtsmixer.modeling_patchtsmixer import (
         PatchTSMixerEncoder,
         PatchTSMixerForClassificationOutput,
-        PatchTSMixerForecastHead,
-        PatchTSMixerForForecastOutput,
+        PatchTSMixerForPredictionHead,
+        PatchTSMixerForPredictionOutput,
         PatchTSMixerForRegressionOutput,
         PatchTSMixerLinearHead,
         PatchTSMixerPretrainHead,
@@ -90,7 +90,7 @@ class PatchTSMixerModelTester:
         # Head related
         head_dropout: float = 0.2,
         # forecast related
-        forecast_len: int = 16,
+        prediction_length: int = 16,
         out_channels: int = None,
         # Classification/regression related
         num_labels: int = 3,
@@ -132,7 +132,7 @@ class PatchTSMixerModelTester:
         # patching related
         self.patch_last = True
         # forecast related
-        self.forecast_len = forecast_len
+        self.prediction_length = prediction_length
         self.out_channels = out_channels
         # classification/regression related
         self.num_labels = num_labels
@@ -172,7 +172,7 @@ class PatchTSMixerModelTester:
             channel_consistent_masking=self.channel_consistent_masking,
             mask_mode=self.mask_mode,
             masked_loss=self.masked_loss,
-            forecast_len=self.forecast_len,
+            prediction_length=self.prediction_length,
             out_channels=self.out_channels,
             num_labels=self.num_labels,
             num_targets=self.num_targets,
@@ -191,7 +191,7 @@ class PatchTSMixerModelTester:
         # [bs x context_length x n_vars]
         past_values = floats_tensor([self.batch_size, _past_length, self.num_input_channels])
 
-        target_values = floats_tensor([self.batch_size, config.forecast_len, self.num_input_channels])
+        target_values = floats_tensor([self.batch_size, config.prediction_length, self.num_input_channels])
 
         inputs_dict = {
             "past_values": past_values,
@@ -214,7 +214,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     all_model_classes = (
         (
             PatchTSMixerModel,
-            PatchTSMixerForForecasting,
+            PatchTSMixerForPrediction,
             PatchTSMixerForPretraining,
             PatchTSMixerForClassification,
             PatchTSMixerForRegression,
@@ -223,7 +223,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         else ()
     )
     all_generative_model_classes = (
-        (PatchTSMixerForForecasting, PatchTSMixerForPretraining) if is_torch_available() else ()
+        (PatchTSMixerForPrediction, PatchTSMixerForPretraining) if is_torch_available() else ()
     )
     pipeline_model_mapping = {"feature-extraction": PatchTSMixerModel} if is_torch_available() else {}
     is_encoder_decoder = False
@@ -246,7 +246,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             self,
             config_class=PatchTSMixerConfig,
             has_text_modality=False,
-            forecast_len=self.model_tester.forecast_len,
+            prediction_length=self.model_tester.prediction_length,
             common_properties=["hidden_size", "expansion_factor", "num_hidden_layers"],
         )
 
@@ -475,7 +475,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
 
     def test_forecasting_head(self):
         # TODO: Make repo public
-        model = PatchTSMixerForForecasting.from_pretrained("ibm/patchtsmixer-etth1-forecasting").to(torch_device)
+        model = PatchTSMixerForPrediction.from_pretrained("ibm/patchtsmixer-etth1-forecasting").to(torch_device)
         batch = prepare_batch(file="forecast_batch.pt")
 
         model.eval()
@@ -486,7 +486,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
                 target_values=batch["target_values"].to(torch_device),
             ).prediction_logits
 
-        expected_shape = torch.Size([32, model.config.forecast_len, model.config.num_input_channels])
+        expected_shape = torch.Size([32, model.config.prediction_length, model.config.num_input_channels])
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
@@ -522,7 +522,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             masked_loss=True,
             channel_consistent_masking=True,
             head_dropout=0.2,
-            forecast_len=64,
+            prediction_length=64,
             out_channels=None,
             num_labels=3,
             num_targets=3,
@@ -544,7 +544,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         # batch_size = 32
         batch_size = 2
 
-        int(cls.params["forecast_len"] / cls.params["patch_length"])
+        int(cls.params["prediction_length"] / cls.params["patch_length"])
 
         cls.data = torch.rand(
             batch_size,
@@ -572,7 +572,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             cls.params["num_features"],
         )
 
-        cls.correct_pred_output = torch.rand(batch_size, cls.params["forecast_len"], cls.params["num_input_channels"])
+        cls.correct_pred_output = torch.rand(
+            batch_size, cls.params["prediction_length"], cls.params["num_input_channels"]
+        )
         cls.correct_regression_output = torch.rand(batch_size, cls.params["num_targets"])
 
         cls.correct_pretrain_output = torch.rand(
@@ -584,11 +586,11 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
         cls.correct_forecast_output = torch.rand(
             batch_size,
-            cls.params["forecast_len"],
+            cls.params["prediction_length"],
             cls.params["num_input_channels"],
         )
 
-        cls.correct_sel_forecast_output = torch.rand(batch_size, cls.params["forecast_len"], 2)
+        cls.correct_sel_forecast_output = torch.rand(batch_size, cls.params["prediction_length"], 2)
 
         cls.correct_classification_output = torch.rand(
             batch_size,
@@ -638,7 +640,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
     def test_forecast_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
-        head = PatchTSMixerForecastHead(
+        head = PatchTSMixerForPredictionHead(
             config=config,
         )
         # output = head(self.__class__.enc_output, raw_data = self.__class__.correct_pretrain_output)
@@ -654,9 +656,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
     ):
         config = PatchTSMixerConfig(**params)
         if task == "forecast":
-            mdl = PatchTSMixerForForecasting(config)
+            mdl = PatchTSMixerForPrediction(config)
             target_input = self.__class__.correct_forecast_output
-            if config.forecast_channel_indices is not None:
+            if config.prediction_channel_indices is not None:
                 target_output = self.__class__.correct_sel_forecast_output
             else:
                 target_output = target_input
@@ -721,13 +723,13 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             )
         )
     )
-    def test_forecast(self, mode, self_attn, scaling, gated_attn, forecast_channel_indices, loss):
+    def test_forecast(self, mode, self_attn, scaling, gated_attn, prediction_channel_indices, loss):
         params = self.__class__.params.copy()
         params.update(
             mode=mode,
             self_attn=self_attn,
             scaling=scaling,
-            forecast_channel_indices=forecast_channel_indices,
+            prediction_channel_indices=prediction_channel_indices,
             gated_attn=gated_attn,
             loss=loss,
         )
@@ -811,11 +813,11 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
     def forecast_full_module(self, params=None, output_hidden_states=False, return_dict=None):
         config = PatchTSMixerConfig(**params)
-        mdl = PatchTSMixerForForecasting(config)
+        mdl = PatchTSMixerForPrediction(config)
 
         target_val = self.__class__.correct_forecast_output
 
-        if config.forecast_channel_indices is not None:
+        if config.prediction_channel_indices is not None:
             target_val = self.__class__.correct_sel_forecast_output
 
         enc_output = self.__class__.enc_output
@@ -827,7 +829,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             return_dict=return_dict,
         )
         if isinstance(output, tuple):
-            output = PatchTSMixerForForecastOutput(*output)
+            output = PatchTSMixerForPredictionOutput(*output)
 
         if config.loss == "mse":
             self.assertEqual(output.prediction_logits.shape, target_val.shape)
@@ -886,7 +888,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         params = self.__class__.params.copy()
         params.update(
             mode="mix_channel",
-            forecast_channel_indices=[0, 2],
+            prediction_channel_indices=[0, 2],
         )
         self.forecast_full_module(params)
 
@@ -894,7 +896,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         params = self.__class__.params.copy()
         params.update(
             mode="mix_channel",
-            forecast_channel_indices=[0, 2],
+            prediction_channel_indices=[0, 2],
             loss="nll",
             distribution_output="normal",
         )
@@ -905,7 +907,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         params = self.__class__.params.copy()
         params.update(
             mode="mix_channel",
-            forecast_channel_indices=[0, 2],
+            prediction_channel_indices=[0, 2],
             loss="nll",
             # distribution_output = "normal",
         )
@@ -915,7 +917,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         params = self.__class__.params.copy()
         params.update(
             mode="mix_channel",
-            # forecast_channel_indices=[0, 2],
+            # prediction_channel_indices=[0, 2],
             loss="nll",
             distribution_output="normal",
         )
@@ -925,7 +927,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         params = self.__class__.params.copy()
         params.update(
             mode="mix_channel",
-            # forecast_channel_indices=[0, 2],
+            # prediction_channel_indices=[0, 2],
             loss="nll",
             distribution_output="normal",
         )

@@ -624,8 +624,8 @@ class PatchTSMixerBlock(nn.Module):
             return embedding, None
 
 
-class PatchTSMixerForecastHead(nn.Module):
-    """Forecasting Head.
+class PatchTSMixerForPredictionHead(nn.Module):
+    """Prediction Head for Forecasting
 
     Args:
         config (`PatchTSMixerConfig`, *required*): Configuration.
@@ -638,14 +638,14 @@ class PatchTSMixerForecastHead(nn.Module):
     ):
         super().__init__()
 
-        self.forecast_channel_indices = config.forecast_channel_indices
+        self.prediction_channel_indices = config.prediction_channel_indices
 
-        if self.forecast_channel_indices is not None:
-            self.forecast_channel_indices.sort()
+        if self.prediction_channel_indices is not None:
+            self.prediction_channel_indices.sort()
 
         self.dropout_layer = nn.Dropout(config.head_dropout)
         if distribution_output is None:
-            self.base_forecast_block = nn.Linear((config.num_patches * config.num_features), config.forecast_len)
+            self.base_forecast_block = nn.Linear((config.num_patches * config.num_features), config.prediction_length)
         else:
             self.base_forecast_block = distribution_output.get_parameter_projection(
                 config.num_patches * config.num_features
@@ -662,23 +662,23 @@ class PatchTSMixerForecastHead(nn.Module):
                 hidden features.
 
         Returns:
-            `torch.Tensor` of shape `(batch_size, forecast_len, nvars)`.
+            `torch.Tensor` of shape `(batch_size, prediction_length, nvars)`.
 
         """
 
         hidden_features = self.flatten(hidden_features)  # [batch_size x n_vars x num_patch * num_features]
         hidden_features = self.dropout_layer(hidden_features)  # [batch_size x n_vars x num_patch * num_features]
-        forecast = self.base_forecast_block(hidden_features)  # [batch_size x n_vars x forecast_len]
+        forecast = self.base_forecast_block(hidden_features)  # [batch_size x n_vars x prediction_length]
         if isinstance(forecast, tuple):
             forecast = tuple(z.transpose(-1, -2) for z in forecast)
         else:
-            forecast = forecast.transpose(-1, -2)  # [batch_size x forecast_len x n_vars]
+            forecast = forecast.transpose(-1, -2)  # [batch_size x prediction_length x n_vars]
 
-        if self.forecast_channel_indices is not None:
+        if self.prediction_channel_indices is not None:
             if isinstance(forecast, tuple):
-                forecast = tuple(z[..., self.forecast_channel_indices] for z in forecast)
+                forecast = tuple(z[..., self.prediction_channel_indices] for z in forecast)
             else:
-                forecast = forecast[..., self.forecast_channel_indices]  # [batch_size x forecast_len x n_vars]
+                forecast = forecast[..., self.prediction_channel_indices]  # [batch_size x prediction_length x n_vars]
 
         return forecast
 
@@ -1557,12 +1557,12 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
 
 
 @dataclass
-class PatchTSMixerForForecastOutput(ModelOutput):
+class PatchTSMixerForPredictionOutput(ModelOutput):
     """
-    Output type of [`PatchTSMixerForForecastOutput`].
+    Output type of [`PatchTSMixerForPredictionOutput`].
 
     Args:
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, forecast_len, num_input_channels)`):
+        prediction_logits (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_input_channels)`):
             Prediction output from the forecast head.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, num_features)`):
             Backbone embeddings before passing through the head.
@@ -1586,7 +1586,7 @@ class PatchTSMixerForForecastOutput(ModelOutput):
 
 
 @dataclass
-class SamplePatchTSMixerForecastOutput(ModelOutput):
+class SamplePatchTSMixerPredictionOutput(ModelOutput):
     """
     Base class for time series model's predictions outputs that contains the sampled values from the chosen
     distribution.
@@ -1646,7 +1646,7 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
         return input_tensor.mean(dim=dim)
 
 
-class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
+class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
     r"""
     `PatchTSMixer` for forecasting application.
 
@@ -1662,13 +1662,13 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         super().__init__(config)
         self.loss = config.loss
         self.use_return_dict = config.use_return_dict
-        self.forecast_channel_indices = config.forecast_channel_indices
+        self.prediction_channel_indices = config.prediction_channel_indices
         self.num_parallel_samples = config.num_parallel_samples
 
         if config.loss == "mse":
             self.distribution_output = None
         else:
-            dim = config.forecast_len
+            dim = config.prediction_length
             distribution_output_map = {
                 "student_t": StudentTOutput,
                 "normal": NormalOutput,
@@ -1681,7 +1681,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
         self.model = PatchTSMixerModel(config)
-        self.head = PatchTSMixerForecastHead(
+        self.head = PatchTSMixerForPredictionHead(
             config=config,
             distribution_output=self.distribution_output,
         )
@@ -1691,7 +1691,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             self.post_init()
 
     @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=PatchTSMixerForForecastOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=PatchTSMixerForPredictionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1700,7 +1700,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
         return_dict: Optional[bool] = None,
-    ) -> PatchTSMixerForForecastOutput:
+    ) -> PatchTSMixerForPredictionOutput:
         r"""
             observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
                 Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
@@ -1714,9 +1714,9 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                 required for a pretraining task.
 
                 For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
-                to forecast only specific channels by setting the indices in `forecast_channel_indices` parameter, pass
-                the target data with all channels, as channel Filtering for both prediction and target will be manually
-                applied before the loss computation.
+                to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
+                pass the target data with all channels, as channel Filtering for both prediction and target will be
+                manually applied before the loss computation.
 
             return_loss (`bool`,  *optional*):
                 Whether to return the loss in the `forward` call.
@@ -1745,30 +1745,30 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
         y_hat = self.head(
             model_output.last_hidden_state,
-        )  # tensor [batch_size x forecast_len x num_input_channels]
+        )  # tensor [batch_size x prediction_length x num_input_channels]
 
         loss_val = None
-        if self.forecast_channel_indices is not None:
+        if self.prediction_channel_indices is not None:
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(
                     y_hat,
-                    loc=model_output.loc[..., self.forecast_channel_indices],
-                    scale=model_output.scale[..., self.forecast_channel_indices],
+                    loc=model_output.loc[..., self.prediction_channel_indices],
+                    scale=model_output.scale[..., self.prediction_channel_indices],
                 )
                 if target_values is not None and return_loss is True:
                     loss_val = loss(
                         distribution,
-                        target_values[..., self.forecast_channel_indices],
+                        target_values[..., self.prediction_channel_indices],
                     )
                     # take average of the loss
                     loss_val = weighted_average(loss_val)
             else:
                 y_hat = (
-                    y_hat * model_output.scale[..., self.forecast_channel_indices]
-                    + model_output.loc[..., self.forecast_channel_indices]
+                    y_hat * model_output.scale[..., self.prediction_channel_indices]
+                    + model_output.loc[..., self.prediction_channel_indices]
                 )
                 if target_values is not None and return_loss is True:
-                    loss_val = loss(y_hat, target_values[..., self.forecast_channel_indices])
+                    loss_val = loss(y_hat, target_values[..., self.prediction_channel_indices])
         else:
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(
@@ -1782,9 +1782,9 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                 if target_values is not None and return_loss is True:
                     loss_val = loss(y_hat, target_values)
 
-        if self.forecast_channel_indices is not None:
-            loc = model_output.loc[..., self.forecast_channel_indices]
-            scale = model_output.scale[..., self.forecast_channel_indices]
+        if self.prediction_channel_indices is not None:
+            loc = model_output.loc[..., self.prediction_channel_indices]
+            scale = model_output.scale[..., self.prediction_channel_indices]
         else:
             loc = model_output.loc
             scale = model_output.scale
@@ -1802,8 +1802,8 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                 ]
             )
 
-        return PatchTSMixerForForecastOutput(
-            prediction_logits=y_hat,  # tensor [batch_size x forecast_len x num_input_channels]
+        return PatchTSMixerForPredictionOutput(
+            prediction_logits=y_hat,  # tensor [batch_size x prediction_length x num_input_channels]
             last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
@@ -1815,7 +1815,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         observed_mask: Optional[torch.Tensor] = None,
-    ) -> SamplePatchTSMixerForecastOutput:
+    ) -> SamplePatchTSMixerPredictionOutput:
         """
         Generate sequences of sample predictions from a model with a probability distribution head.
 
@@ -1831,7 +1831,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Return:
-            [`SamplePatchTSMixerForecastOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
+            [`SamplePatchTSMixerPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
             number of samples, prediction_length, num_input_channels)`.
         """
         # get number of samples
@@ -1851,12 +1851,12 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             outputs.prediction_logits, loc=outputs.loc, scale=outputs.scale
         )
 
-        # get samples: list of [batch_size x forecast_len x num_channels]
+        # get samples: list of [batch_size x prediction_length x num_channels]
         samples = [distribution.sample() for _ in range(num_parallel_samples)]
 
         # stack tensors
-        samples = torch.stack(samples, dim=1)  # [batch_size x num_samples x forecast_len x num_channels]
-        return SamplePatchTSMixerForecastOutput(sequences=samples)
+        samples = torch.stack(samples, dim=1)  # [batch_size x num_samples x prediction_length x num_channels]
+        return SamplePatchTSMixerPredictionOutput(sequences=samples)
 
 
 @dataclass
@@ -1930,9 +1930,9 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
                 required for a pretraining task.
 
                 For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
-                to forecast only specific channels by setting the indices in `forecast_channel_indices` parameter, pass
-                the target data with all channels, as channel Filtering for both prediction and target will be manually
-                applied before the loss computation.
+                to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
+                pass the target data with all channels, as channel Filtering for both prediction and target will be
+                manually applied before the loss computation.
 
                 For a classification task, it has a shape of `(batch_size,)`.
 
@@ -2122,9 +2122,9 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
                 required for a pretraining task.
 
                 For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
-                to forecast only specific channels by setting the indices in `forecast_channel_indices` parameter, pass
-                the target data with all channels, as channel Filtering for both prediction and target will be manually
-                applied before the loss computation.
+                to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
+                pass the target data with all channels, as channel Filtering for both prediction and target will be
+                manually applied before the loss computation.
 
                 For a classification task, it has a shape of `(batch_size,)`.
 
