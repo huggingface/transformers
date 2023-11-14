@@ -76,12 +76,12 @@ class PatchTSTConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the encoder, and decoder.
         positional_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability in the positional embedding layer.
-        dropout_path (`float`, *optional*, defaults to 0.0):
+        path_dropout (`float`, *optional*, defaults to 0.0):
             The dropout path in the residual block.
         ff_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability used between the two layers of the feed-forward networks.
         bias (`bool`, *optional*, defaults to `True`):
-            Consider bias in the feed-forward networks.
+            Whether to add bias in the feed-forward networks.
         activation_function (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (string) in the encoder.`"gelu"` and `"relu"` are supported.
         pre_norm (`bool`, *optional*, defaults to `True`):
@@ -176,7 +176,7 @@ class PatchTSTConfig(PretrainedConfig):
         attention_dropout: float = 0.0,
         dropout: float = 0.0,
         positional_dropout: float = 0.0,
-        dropout_path: float = 0.0,
+        path_dropout: float = 0.0,
         ff_dropout: float = 0.0,
         bias: bool = True,
         activation_function: str = "gelu",
@@ -226,7 +226,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.norm_type = norm_type
         self.norm_eps = norm_eps
         self.positional_dropout = positional_dropout
-        self.dropout_path = dropout_path
+        self.path_dropout = path_dropout
         self.ff_dropout = ff_dropout
         self.bias = bias
         self.activation_function = activation_function
