@@ -122,7 +122,7 @@ Next, let's load the model with the appropriate pipeline (`"text-generation"`):
 
 
 ```py
->>> model_name = "distilbert"
+>>> model_name = "distilbert-base-uncased"
 
 >>> from transformers import TFAutoModel, AutoConfig
 >>> config = AutoConfig.from_pretrained(model_name)
