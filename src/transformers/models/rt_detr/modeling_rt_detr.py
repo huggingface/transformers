@@ -88,6 +88,7 @@ class RTDetrModelOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
+# Copied from transformers.models.detr.modeling_detr.NestedTensor
 class NestedTensor(object):
     def __init__(self, tensors, mask: Optional[Tensor]):
         self.tensors = tensors
@@ -621,6 +622,24 @@ class RTDetrTransformerDecoder(nn.Module):
         attn_mask=None,
         memory_mask=None,
     ):
+        """
+        Forward pass for the RTDetrTransformerDecoder.
+
+        Args:
+            target: the input tensor for the target sequences.
+            ref_points_unact: unactivated reference points for positional encoding.
+            memory: the output of the transformer encoder, representing encoded features from the input.
+            memory_spatial_shapes: the spatial shape of each feature level in the memory.
+            memory_level_start_index: the starting index of each level in the flattened memory.
+            bbox_head: a list of bounding box prediction heads for each decoder layer.
+            score_head: a list of scoring heads (for class scores) for each decoder layer.
+            query_pos_head: MLP (RTDetrMLP) to generate query positional embeddings from reference points.
+            attn_mask (optional): attention mask for the target sequences.
+            memory_mask (optional): mask for the memory sequences.
+
+        Returns:
+            tuple containing bounding boxes and logits representing class scores
+        """
         output = target
         ref_points = None
         dec_out_bboxes = []

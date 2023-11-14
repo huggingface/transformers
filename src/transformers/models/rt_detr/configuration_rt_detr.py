@@ -179,6 +179,7 @@ class RTDetrConfig(PretrainedConfig):
         eval_size=None,
         normalize_before=False,
         # decoder RTDetrTransformer
+        num_classes=80,
         num_queries=300,
         position_embed_type="sine",
         feat_channels=[256, 256, 256],
