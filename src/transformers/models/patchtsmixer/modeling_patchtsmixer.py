@@ -131,7 +131,7 @@ class PatchTSMixerTranspose(nn.Module):
         return inputs.transpose(*self.dims)
 
 
-# TODO: add copied from after PatchTST master merge
+# Copied from transformers.models.patchtst.modeling_patchtst.PatchTSTBatchNorm with PatchTST->PatchTSMixer
 class PatchTSMixerBatchNorm(nn.Module):
     """
     Parameters:
@@ -805,24 +805,24 @@ class PatchTSMixerPretrainHead(nn.Module):
         return forecast
 
 
-# TODO: add copied from after PatchTST master merge
-def positional_encoding(position_embedding_type, learned, q_len, d_model):
+# Copied from transformers.models.patchtst.modeling_patchtst.positional_encoding
+def positional_encoding(positional_encoding_type, learned, q_len, d_model):
     # Positional encoding
-    if position_embedding_type is None:
-        # position_embedding_type = None and learned = False can be used to measure impact of positional encoding
+    if positional_encoding_type is None:
+        # positional_encoding_type = None and learned = False can be used to measure impact of positional encoding
         position_enc = torch.empty((q_len, d_model))
         nn.init.uniform_(position_enc, -0.02, 0.02)
         learned = False
-    elif position_embedding_type == "zeros":
+    elif positional_encoding_type == "zeros":
         position_enc = torch.empty((q_len, d_model))
         nn.init.uniform_(position_enc, -0.02, 0.02)
-    elif position_embedding_type == "normal":
+    elif positional_encoding_type == "normal":
         position_enc = torch.zeros((q_len, 1))
         nn.init.normal_(position_enc, mean=0.0, std=0.1)
-    elif position_embedding_type == "uniform":
+    elif positional_encoding_type == "uniform":
         position_enc = torch.zeros((q_len, 1))
         nn.init.uniform_(position_enc, a=0.0, b=0.1)
-    elif position_embedding_type == "sincos":
+    elif positional_encoding_type == "sincos":
         position_enc = torch.zeros(q_len, d_model)
         position = torch.arange(0, q_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model))
@@ -832,17 +832,12 @@ def positional_encoding(position_embedding_type, learned, q_len, d_model):
         position_enc = position_enc / (position_enc.std() * 10)
     else:
         raise ValueError(
-            f"{position_embedding_type} is not a valid positional encoder. Available types are 'normal', 'zeros', 'zero', uniform', 'sincos', None."
+            f"{positional_encoding_type} is not a valid positional encoder. Available types are 'normal', 'zeros', 'zero', uniform', 'sincos', None."
         )
     return nn.Parameter(position_enc, requires_grad=learned)
 
 
-# TODO: add copied from after PatchTST master merge
-def compute_num_patches(sequence_length, patch_length, patch_stride):
-    return (max(sequence_length, patch_length) - patch_length) // patch_stride + 1
-
-
-# TODO: add copied from after PatchTST master merge
+# Copied from transformers.models.patchtst.modeling_patchtst.random_masking
 def random_masking(
     inputs: torch.Tensor,
     mask_ratio: float,
@@ -859,11 +854,11 @@ def random_masking(
         mask_ratio (`float`):
             Mask ratio.
         unmasked_channel_indices (list, *optional*):
-            indices of unmasked channels. These channels will not be masked. Defaults to None.
+            indices of unmasked channels. These channels will not be masked.
         channel_consistent_masking (bool, *optional* defaults to False):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
-            across channels. Defaults to False.
-        mask_value (int, *optional* defaults to 0):
+            across channels.
+        mask_value (int, *optional*, defaults to 0):
             Value to use for masking.
         seed_number (int, *optional*):
             Value to set for the random seed.
@@ -884,13 +879,11 @@ def random_masking(
         noise = torch.rand(batch_size, 1, sequence_length, device=device)  # noise in [0, 1], bs x 1 x  L
         noise = noise.repeat(1, num_channels, 1)  # bs x num_channels x time
     else:
-        noise = torch.rand(
-            batch_size, num_channels, sequence_length, device=device
-        )  # noise in [0, 1], bs x num_channels x L
+        # noise in [0, 1], bs x num_channels x L
+        noise = torch.rand(batch_size, num_channels, sequence_length, device=device)
 
-    mask = torch.ones(
-        batch_size, num_channels, sequence_length, device=device
-    )  # mask: [bs x num_channels x num_patch]
+    # mask: [bs x num_channels x num_patch]
+    mask = torch.ones(batch_size, num_channels, sequence_length, device=device)
     mask[:, :, :len_keep] = 0
 
     # sort noise for each sample
@@ -906,7 +899,7 @@ def random_masking(
     return inputs_mask, mask[..., 0]
 
 
-# TODO: add copied from after PatchTST master merge
+# Copied from transformers.models.patchtst.modeling_patchtst.forecast_masking
 def forecast_masking(
     inputs: torch.Tensor,
     forecast_mask_patches: list,
@@ -923,10 +916,10 @@ def forecast_masking(
         inputs (`torch.Tensor`):
             Input of shape `(bs, num_channels, num_patch, patch_len)` or `(bs, tsg1, tag2, num_channels, num_patch,
             patch_len)`
-        forecast_mask_patches (`list`): [2, 4]
-            List of patch lengths to mask in the end of the data.
-        forecast_mask_ratios (`list`, *optional*): [0.7, 0.3]
-            List of weights to use for each patch length. For Ex. if forecast_mask_patches is [5,4] and
+        forecast_mask_patches (`list`):
+            List of patch lengths to mask at the end of the data e.g. [2, 4].
+        forecast_mask_ratios (`list`, *optional*):
+            List of weights to use for each patch length. For example if forecast_mask_patches is [5,4] and
             forecast_mask_ratios is [1,1], then equal weights to both patch lengths.
         unmasked_channel_indices (`list`, *optional*):
             Control Variable channel indices. These channels will not be masked.
@@ -983,7 +976,7 @@ def forecast_masking(
     return inputs_mask, mask[..., 0]
 
 
-# TODO: add copied from after PatchTST master merge
+# Copied from transformers.models.patchtst.modeling_patchtst.PatchTSTPatchify with PatchTST->PatchTSMixer
 class PatchTSMixerPatchify(nn.Module):
     """
     A class to patchify the time series sequence into different patches
@@ -1032,7 +1025,7 @@ class PatchTSMixerPatchify(nn.Module):
         return output
 
 
-# TODO: add copied from after PatchTST master merge
+# Copied from transformers.models.patchtst.modeling_patchtst.PatchTSTMasking with PatchTST->PatchTSMixer
 class PatchTSMixerMasking(nn.Module):
     """
     Class to perform random or forecast masking.
@@ -1101,7 +1094,7 @@ class PatchTSMixerMasking(nn.Module):
         return masked_input, mask
 
 
-# TODO: add copied from after PatchTST merge
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeriesTransformer->PatchTSMixer,TimeSeries->PatchTSMixer
 class PatchTSMixerStdScaler(nn.Module):
     """
     Standardize features by calculating the mean and scaling along the first dimension, and then normalizes it by
@@ -1137,7 +1130,7 @@ class PatchTSMixerStdScaler(nn.Module):
         return (data - loc) / scale, loc, scale
 
 
-# TODO: add copied from after PatchTST merge
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeriesTransformer->PatchTSMixer,TimeSeries->PatchTSMixer
 class PatchTSMixerMeanScaler(nn.Module):
     """
     Computes a scaling factor as the weighted average absolute value along the first dimension, and scales the data
@@ -1192,7 +1185,7 @@ class PatchTSMixerMeanScaler(nn.Module):
         return scaled_data, torch.zeros_like(scale), scale
 
 
-# TODO: add copied from after PatchTST merge
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeriesTransformer->PatchTSMixer,TimeSeries->PatchTSMixer
 class PatchTSMixerNOPScaler(nn.Module):
     """
     Assigns a scaling factor equal to 1 along the first dimension, and therefore applies no scaling to the input data.
