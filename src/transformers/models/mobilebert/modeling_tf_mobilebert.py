@@ -1092,7 +1092,7 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel, TFMobileBertPreTra
         if tf_weight == "cls.predictions.decoder.weight":
             return tf_weight, "mobilebert.embeddings.word_embeddings.weight"
         else:
-            return tf_weight
+            return (tf_weight,)
 
 
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top.""", MOBILEBERT_START_DOCSTRING)
