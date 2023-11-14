@@ -14,6 +14,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
+from ... import is_vision_available
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
@@ -23,7 +24,6 @@ from ...utils import (
 
 _import_structure = {
     "configuration_textnet": ["TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "TextNetConfig"],
-    "image_processing_textnet": ["TextNetImageProcessor"],
 }
 
 try:
@@ -39,9 +39,16 @@ else:
         "TextNetForImageClassification",
     ]
 
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_textnet"] = ["TextNetImageProcessor"]
+
 if TYPE_CHECKING:
     from .configuration_textnet import TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP, TextNetConfig
-    from .image_processing_textnet import TextNetImageProcessor
 
     try:
         if not is_torch_available():
@@ -56,6 +63,13 @@ if TYPE_CHECKING:
             TextNetPreTrainedModel,
         )
 
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_textnet import TextNetImageProcessor
 
 else:
     import sys

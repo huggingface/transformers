@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 the Fast authors and HuggingFace Inc. team.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,21 +27,19 @@ TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FastForSceneTextRecognition`]. It is used to
-    instantiate a FastForSceneTextRecognition model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    FastForSceneTextRecognition.
-    [Raghavan/fast_base_tt_800_finetune_ic17mlt](https://huggingface.co/Raghavan/fast_base_tt_800_finetune_ic17mlt)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    This is the configuration class to store the configuration of a [`TextNextModel`]. It is used to instantiate a
+    TextNextModel model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the
+    [Raghavan/textnet-base](https://huggingface.co/Raghavan/textnet-base) Configuration objects inherit from
+    [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`]
+    for more information.
 
     Args:
         kernel_size (`int`, *optional*, defaults to 3):
             The kernel size for the initial convolution layer.
         stride (`int`, *optional*, defaults to 2):
             The stride for the initial convolution layer.
-        in_channels (`int`, *optional*, defaults to 3):
+        num_channels (`int`, *optional*, defaults to 3):
             The num of channels in input for the initial convolution layer.
         out_channels (`int`, *optional*, defaults to 64):
             The num of channels in out for the initial convolution layer.
@@ -97,7 +95,7 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
     ```python
     >>> from transformers import TextNetConfig, TextNetBackbone
 
-    >>> # Initializing a Fast Config
+    >>> # Initializing a TextNetConfig
     >>> configuration = TextNetConfig()
 
     >>> # Initializing a model (with random weights)
@@ -115,7 +113,7 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
         self,
         kernel_size=3,
         stride=2,
-        in_channels=3,
+        num_channels=3,
         out_channels=64,
         act_func="relu",
         stage1_in_channels=[64, 64, 64],
@@ -144,7 +142,7 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
 
         self.kernel_size = kernel_size
         self.stride = stride
-        self.in_channels = in_channels
+        self.num_channels = num_channels
         self.out_channels = out_channels
         self.act_func = act_func
 

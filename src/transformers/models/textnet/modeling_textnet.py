@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 the Fast authors and HuggingFace Inc. team.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ from transformers.utils.backbone_utils import BackboneMixin
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "BitConfig"
+_CONFIG_FOR_DOC = "TextNetConfig"
 
 TEXTNET_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
@@ -44,7 +44,7 @@ TEXTNET_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`BitConfig`]): Model configuration class with all the parameters of the model.
+        config ([`TextNetConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -52,8 +52,8 @@ TEXTNET_START_DOCSTRING = r"""
 TEXTNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`BitImageProcessor.__call__`]
-            for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`TextNetImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -75,7 +75,7 @@ def get_same_padding(kernel_size):
 class TextNetConvLayer(nn.Module):
     def __init__(
         self,
-        in_channels,
+        num_channels,
         out_channels,
         kernel_size=3,
         stride=1,
@@ -90,7 +90,7 @@ class TextNetConvLayer(nn.Module):
         padding = get_same_padding(self.kernel_size)
 
         self.conv = nn.Conv2d(
-            in_channels,
+            num_channels,
             out_channels,
             kernel_size=kernel_size,
             stride=stride,
@@ -136,10 +136,10 @@ class TextNetConvLayer(nn.Module):
 
 
 class TestNetRepConvLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1):
+    def __init__(self, num_channels, out_channels, kernel_size, stride=1):
         super().__init__()
 
-        self.in_channels = in_channels
+        self.num_channels = num_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
         self.stride = stride
@@ -149,7 +149,7 @@ class TestNetRepConvLayer(nn.Module):
         self.nonlinearity = nn.ReLU(inplace=True)
 
         self.main_conv = nn.Conv2d(
-            in_channels=in_channels,
+            in_channels=num_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
             stride=stride,
@@ -163,7 +163,7 @@ class TestNetRepConvLayer(nn.Module):
 
         if kernel_size[1] != 1:
             self.vertical_conv = nn.Conv2d(
-                in_channels=in_channels,
+                in_channels=num_channels,
                 out_channels=out_channels,
                 kernel_size=(kernel_size[0], 1),
                 stride=stride,
@@ -176,7 +176,7 @@ class TestNetRepConvLayer(nn.Module):
 
         if kernel_size[0] != 1:
             self.horizontal_conv = nn.Conv2d(
-                in_channels=in_channels,
+                in_channels=num_channels,
                 out_channels=out_channels,
                 kernel_size=(1, kernel_size[1]),
                 stride=stride,
@@ -188,7 +188,7 @@ class TestNetRepConvLayer(nn.Module):
             self.horizontal_conv, self.horizontal_batch_norm = None, None
 
         self.rbr_identity = (
-            nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
+            nn.BatchNorm2d(num_features=num_channels) if out_channels == num_channels and stride == 1 else None
         )
 
     def forward(self, hidden_states):
@@ -225,9 +225,9 @@ class TestNetRepConvLayer(nn.Module):
         if identity is None:
             return 0, 0
         if not hasattr(self, "id_tensor"):
-            input_dim = self.in_channels
-            kernel_value = np.zeros((self.in_channels, input_dim, 1, 1), dtype=np.float32)
-            for i in range(self.in_channels):
+            input_dim = self.num_channels
+            kernel_value = np.zeros((self.num_channels, input_dim, 1, 1), dtype=np.float32)
+            for i in range(self.num_channels):
                 kernel_value[i, i % input_dim, 0, 0] = 1
             id_tensor = torch.from_numpy(kernel_value).to(identity.weight.device)
             self.id_tensor = self._pad_to_mxn_tensor(id_tensor)
@@ -291,6 +291,51 @@ class TestNetRepConvLayer(nn.Module):
             para.detach_()
 
 
+class TextNetStage(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride):
+        super().__init__()
+        stage = []
+        for stage_config in zip(
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+        ):
+            stage.append(TestNetRepConvLayer(*stage_config))
+        self.stage = nn.ModuleList(stage)
+
+    def forward(self, hidden_state):
+        for block in self.stage:
+            hidden_state = block(hidden_state)
+        return hidden_state
+
+
+class TextNetEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        stages = []
+        for stage_ix in range(1, 5):
+            stages.append(
+                TextNetStage(
+                    getattr(config, f"stage{stage_ix}_in_channels"),
+                    getattr(config, f"stage{stage_ix}_out_channels"),
+                    getattr(config, f"stage{stage_ix}_kernel_size"),
+                    getattr(config, f"stage{stage_ix}_stride"),
+                )
+            )
+
+            self.stages = nn.ModuleList(stages)
+
+    def forward(self, hidden_state):
+        hidden_states = []
+        for stage in self.stages:
+            hidden_state = stage(hidden_state)
+            hidden_states.append(hidden_state)
+
+        return hidden_states
+
+
 class TextNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -315,93 +360,65 @@ class TextNetPreTrainedModel(PreTrainedModel):
 class TextNetModel(TextNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.first_conv = TextNetConvLayer(
-            config.in_channels,
+        self.stem = TextNetConvLayer(
+            config.num_channels,
             config.out_channels,
             config.kernel_size,
             config.stride,
             config.act_func,
         )
-        stage1 = []
-        for stage_config in zip(
-            config.stage1_in_channels,
-            config.stage1_out_channels,
-            config.stage1_kernel_size,
-            config.stage1_stride,
-        ):
-            stage1.append(TestNetRepConvLayer(*stage_config))
-        self.stage1 = nn.ModuleList(stage1)
 
-        stage2 = []
-        for stage_config in zip(
-            config.stage2_in_channels,
-            config.stage2_out_channels,
-            config.stage2_kernel_size,
-            config.stage2_stride,
-        ):
-            stage2.append(TestNetRepConvLayer(*stage_config))
-        self.stage2 = nn.ModuleList(stage2)
-
-        stage3 = []
-        for stage_config in zip(
-            config.stage3_in_channels,
-            config.stage3_out_channels,
-            config.stage3_kernel_size,
-            config.stage3_stride,
-        ):
-            stage3.append(TestNetRepConvLayer(*stage_config))
-        self.stage3 = nn.ModuleList(stage3)
-
-        stage4 = []
-        for stage_config in zip(
-            config.stage4_in_channels,
-            config.stage4_out_channels,
-            config.stage4_kernel_size,
-            config.stage4_stride,
-        ):
-            stage4.append(TestNetRepConvLayer(*stage_config))
-        self.stage4 = nn.ModuleList(stage4)
+        self.encoder = TextNetEncoder(config)
 
         self.pooler = nn.AdaptiveAvgPool2d((2, 2))
 
         self.init_weights()
 
+    @add_start_docstrings_to_model_forward(TEXTNET_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
     ) -> Union[Tuple[Any, List[Any]], Tuple[Any], BaseModelOutputWithPoolingAndNoAttention]:
+        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoBackbone
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> processor = AutoImageProcessor.from_pretrained("Raghavan/textnet-base")
+        >>> model = AutoBackbone.from_pretrained("Raghavan/textnet-base")
+
+        >>> inputs = processor(image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        hidden_state = self.first_conv(pixel_values)
+        hidden_state = self.stem(pixel_values)
         hidden_states = [hidden_state]
 
-        for block in self.stage1:
-            hidden_state = block(hidden_state)
-        hidden_states.append(hidden_state)
+        hidden_states = hidden_states + self.encoder(hidden_state)
 
-        for block in self.stage2:
-            hidden_state = block(hidden_state)
-        hidden_states.append(hidden_state)
-
-        for block in self.stage3:
-            hidden_state = block(hidden_state)
-        hidden_states.append(hidden_state)
-
-        for block in self.stage4:
-            hidden_state = block(hidden_state)
-        hidden_states.append(hidden_state)
-
-        pooled_output = self.pooler(hidden_state)
+        last_hidden_state = hidden_states[-1]
+        pooled_output = self.pooler(last_hidden_state)
 
         if not return_dict:
-            output = (pooled_output, hidden_state)
+            output = (pooled_output, last_hidden_state)
             return output + (hidden_states,) if output_hidden_states else output
 
         return BaseModelOutputWithPoolingAndNoAttention(
             pooler_output=pooled_output,
-            last_hidden_state=hidden_state,
+            last_hidden_state=last_hidden_state,
             hidden_states=tuple(hidden_states) if output_hidden_states else None,
         )
 
@@ -430,10 +447,10 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TEXTNET_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class="")
+    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
-    ) -> BackboneOutput:
+    ) -> Union[Tuple[Tuple], BackboneOutput]:
         """
         Returns:
 
@@ -459,9 +476,9 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        outputs = self.textnet(pixel_values, output_hidden_states=True, return_dict=True)
+        outputs = self.textnet(pixel_values, output_hidden_states=True, return_dict=return_dict)
 
-        hidden_states = outputs.hidden_states
+        hidden_states = outputs.hidden_states if return_dict else outputs[2]
 
         feature_maps = ()
         for idx, stage in enumerate(self.stage_names):
@@ -471,7 +488,8 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
         if not return_dict:
             output = (feature_maps,)
             if output_hidden_states:
-                output += (outputs.hidden_states,)
+                hidden_states = outputs.hidden_states if return_dict else outputs[2]
+                output += (hidden_states,)
             return output
 
         return BackboneOutput(
@@ -501,7 +519,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward("BIT_INPUTS_DOCSTRING")
+    @add_start_docstrings_to_model_forward(TEXTNET_INPUTS_DOCSTRING)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
