@@ -124,8 +124,8 @@ Next, let's load the model with the appropriate pipeline (`"text-generation"`):
 ```py
 >>> model_name = "distilbert"
 
->>> from transformers import TFAutoModel, TFAutoConfig
->>> config = TFAutoConfig.from_pretrained(model_name)
+>>> from transformers import TFAutoModel, AutoConfig
+>>> config = AutoConfig.from_pretrained(model_name)
 >>> config.n_layers = 2
 >>> config.n_heads = 2
 >>> config.dim = 16
