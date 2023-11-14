@@ -1993,10 +1993,15 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         sequence = None
         timestamp_begin = getattr(self.generation_config, "no_timestamps_token_id", 50362) + 1
         # input stride is mel frames per encoder output vector which is the product of all conv strides
-        input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv1.stride[1]
+        input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
 
         while seek < total_input_frames:
-            segment_input = inputs[:, :, seek : seek + num_segment_frames]
+            seek_num_frames = min(num_segment_frames, total_input_frames - seek)
+            segment_input = inputs[:, :, seek : seek + seek_num_frames]
+
+            if segment_input.shape[-1] < num_segment_frames:
+                # pad to 3000 if necessary
+                segment_input = F.pad(segment_input, pad=(0, num_segment_frames - segment_input.shape[-1]))
 
             seek_outputs = super().generate(
                 segment_input,
@@ -2021,10 +2026,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 seek_sequence = seek_sequence[:, :-1]
 
             timestamp_tokens: torch.Tensor = seek_sequence.ge(timestamp_begin)
-            single_timestamp_ending = timestamp_tokens[-2:].tolist() == [False, True]
+            single_timestamp_ending = timestamp_tokens[:, -2:].tolist() == [False, True]
 
-            consecutive = torch.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
-            consecutive.add_(1)
+            consecutive = torch.where(timestamp_tokens[:, :-1] & timestamp_tokens[:, 1:])[-1]
+            print(consecutive)
 
             if len(consecutive) > 0:
                 # if the output contains two consecutive timestamp tokens
@@ -2034,7 +2039,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                 last_slice = 0
                 for current_slice in slices:
-                    sliced_tokens = seek_sequence[last_slice:current_slice]
+                    sliced_tokens = seek_sequence[:, last_slice:current_slice]
                     # start_timestamp_pos = (
                     #     sliced_tokens[0].item() - timestamp_begin 
                     # )
@@ -2053,24 +2058,24 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                 if single_timestamp_ending:
                     # single timestamp at the end means no speech after the last timestamp.
-                    seek += num_segment_frames
+                    seek += seek_num_frames
                 else:
                     # otherwise, ignore the unfinished segment and seek to the last timestamp
                     last_timestamp_pos = (
-                        seek_sequence[last_slice - 1].item() - timestamp_begin
+                        seek_sequence[:, last_slice].item() - timestamp_begin
                     )
                     seek += last_timestamp_pos * input_stride
-                    seek_sequence = seek_sequence[:, :last_slice]
+                    seek_sequence = seek_sequence[:, :last_slice + 1]
             else:
                 # duration = segment_duration
-                timestamps = seek_sequence[timestamp_tokens.nonzero().flatten()]
+                timestamps = seek_sequence[:, timestamp_tokens.nonzero().flatten()]
                 if (
                     len(timestamps) > 0
-                    and timestamps[-1].item() != timestamp_begin
+                    and timestamps[:, -1].item() != timestamp_begin
                 ):
                     # no consecutive timestamps but it has a timestamp; use the last one.
                     last_timestamp_pos = (
-                        timestamps[-1].item() - timestamp_begin
+                        timestamps[:, -1].item() - timestamp_begin
                     )
                     # duration = last_timestamp_pos * time_precision
 
@@ -2082,11 +2087,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 #         result=result,
                 #     )
                 # )
-                seek += num_segment_frames
+                seek += seek_num_frames
 
 
             print(seek)
-            import ipdb; ipdb.set_trace()
 
             if sequence is None:
                 sequence = seek_sequence
