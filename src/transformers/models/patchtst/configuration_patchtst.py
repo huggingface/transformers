@@ -118,7 +118,7 @@ class PatchTSTConfig(PretrainedConfig):
         unmasked_channel_indices (`list`, *optional*):
             Channels that are not masked during pretraining.
         mask_value (`int`, *optional*, defaults to 0):
-            Define the value of entries to be masked when pretraining.
+            Define the value of masked patches for pretraining.
         pooling_type (`str`, *optional*, defaults to `"mean"`):
             Pooling of the embedding. `"mean"`, `"max"` and `None` are supported.
         head_dropout (`float`, *optional*, defaults to 0.0):
