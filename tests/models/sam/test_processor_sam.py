@@ -16,6 +16,7 @@ import tempfile
 import unittest
 
 import numpy as np
+from transformers.models.esm.openfold_utils import feats
 
 from transformers.testing_utils import (
     is_pt_tf_cross_test,
@@ -91,11 +92,17 @@ class SamProcessorTest(unittest.TestCase):
         input_feat_extract = image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, return_tensors="np")
 
-        input_feat_extract.pop("original_sizes")  # pop original_sizes as it is popped in the processor
-        input_feat_extract.pop("reshaped_input_sizes")  # pop original_sizes as it is popped in the processor
-
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+
+        for image in input_feat_extract.pixel_values:
+            self.assertEqual(image.shape, (3, 1024, 1024))
+
+        for original_size in input_feat_extract.original_sizes:
+            np.testing.assert_array_equal(original_size, np.array([30, 400]))
+
+        for reshaped_input_size in input_feat_extract.reshaped_input_sizes:
+            np.testing.assert_array_equal(reshaped_input_size, np.array([77, 1024])) # reshaped_input_size value is before padding
 
     def test_image_processor_with_masks(self):
         image_processor = self.get_image_processor()
@@ -108,11 +115,11 @@ class SamProcessorTest(unittest.TestCase):
         input_feat_extract = image_processor(images=image_input, segmentation_maps=mask_input, return_tensors="np")
         input_processor = processor(images=image_input, segmentation_maps=mask_input, return_tensors="np")
 
-        input_feat_extract.pop("original_sizes")  # pop original_sizes as it is popped in the processor
-        input_feat_extract.pop("reshaped_input_sizes")  # pop original_sizes as it is popped in the processor
-
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+
+        for label in input_feat_extract.labels:
+            self.assertEqual(label.shape, (256, 256))
 
     @require_torch
     def test_post_process_masks(self):
