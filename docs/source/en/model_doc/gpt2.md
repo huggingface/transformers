@@ -81,6 +81,22 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [Token classification task guide](../tasks/token_classification)
 - [Causal language modeling task guide](../tasks/language_modeling)
 
+### Using Flash Attention 2
+Flash Attention 2 is an advanced optimization method that dramatically reduces memory usage and increases inference speed. It's particularly effective for large-scale generation tasks. To utilize Flash Attention 2, ensure your hardware is compatible and install the necessary package with:
+
+ ```python
+ pip install -U flash-attn --no-build-isolation
+ ```
+ 
+ Use the model with Flash Attention 2 as follows:
+
+ ```python
+ from transformers import AutoModelForCausalLM, AutoTokenizer
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = AutoModelForCausalLM.from_pretrained("gpt2", torch_dtype=torch.float16, use_flash_attention_2=True).to(device)
+tokenizer = AutoTokenizer.from_pretrained("gpt2")
+ ```
+
 ## GPT2Config
 
 [[autodoc]] GPT2Config
