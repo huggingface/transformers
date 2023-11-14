@@ -28,6 +28,7 @@ from typing import Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 
+
 import huggingface_hub
 import requests
 from huggingface_hub import (
@@ -45,7 +46,7 @@ from huggingface_hub.utils import (
     GatedRepoError,
     LocalEntryNotFoundError,
     RepositoryNotFoundError,
-    RevisionNotFoundError,
+    RevisionNotFoundError,HFValidationError,
     build_hf_headers,
     hf_raise_for_status,
 )
@@ -491,7 +492,10 @@ def cached_file(
             return None
 
         raise EnvironmentError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{err}")
-
+    except HFValidationError as e:
+        raise EnvironmentError(
+            f"Incorrect path_or_model_id: {path_or_repo_id}. Please provide either the path to a local folder or the repo_id of a model on the Hub. {e}"
+        ) from e
     return resolved_file
 
 
