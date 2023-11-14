@@ -305,12 +305,12 @@ def get_contrastive_denoising_training_group(
         idx_block_start = max_gt_num * 2 * i
         idx_block_end = max_gt_num * 2 * (i + 1)
         if i == 0:
-            attn_mask[idx_block_start: idx_block_end, idx_block_end: num_denoising] = True
+            attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising] = True
         if i == num_group - 1:
-            attn_mask[idx_block_start: idx_block_end, : idx_block_start] = True
+            attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
         else:
-            attn_mask[idx_block_start: idx_block_end, idx_block_end: num_denoising] = True
-            attn_mask[idx_block_start: idx_block_end, : idx_block_start] = True
+            attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising] = True
+            attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
 
     dn_meta = {
         "dn_positive_idx": dn_positive_idx,
@@ -1355,18 +1355,18 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
         # encoder
         if self.num_encoder_layers > 0:
             for i, enc_ind in enumerate(self.use_encoder_idx):
-                height, weight = proj_feats[enc_ind].shape[2:]
+                height, width = proj_feats[enc_ind].shape[2:]
                 # flatten [batch, channel, height, width] to [batch, heightxwidth, channel]
                 src_flatten = proj_feats[enc_ind].flatten(2).permute(0, 2, 1)
                 if self.training or self.eval_size is None:
                     pos_embed = self.build_2d_sincos_position_embedding(
-                        weight, height, self.hidden_dim, self.pe_temperature
+                        width, height, self.hidden_dim, self.pe_temperature
                     ).to(src_flatten.device)
                 else:
                     pos_embed = getattr(self, f"pos_embed{enc_ind}", None).to(src_flatten.device)
 
                 memory = self.encoder[i](src_flatten, pos_embed=pos_embed)
-                proj_feats[enc_ind] = memory.permute(0, 2, 1).reshape(-1, self.hidden_dim, height, weight).contiguous()
+                proj_feats[enc_ind] = memory.permute(0, 2, 1).reshape(-1, self.hidden_dim, height, width).contiguous()
 
         # broadcasting and fusion
         inner_outs = [proj_feats[-1]]
