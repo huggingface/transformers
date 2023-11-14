@@ -1611,30 +1611,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         loss, loss_dict = None, None
         if labels is not None:
-            # First: create the matcher
-            matcher = RTDetrHungarianMatcher(
-                class_cost=self.config.matcher_class_cost,
-                bbox_cost=self.config.matcher_bbox_cost,
-                giou_cost=self.config.matcher_giou_cost,
-                use_focal_loss=self.config.use_focal_loss,
-                alpha=self.config.matcher_alpha,
-                gamma=self.config.matcher_gamma,
-            )
-            weight_dict = {
-                "loss_vfl": self.config.weight_loss_vfl,
-                "loss_bbox": self.config.weight_loss_bbox,
-                "loss_giou": self.config.weight_loss_giou,
-            }
-            losses = ["vfl", "boxes"]
-            criterion = RTDetrLoss(
-                matcher=matcher,
-                weight_dict=weight_dict,
-                losses=losses,
-                alpha=self.config.focal_loss_alpha,
-                gamma=self.config.focal_loss_gamma,
-                num_classes=self.config.num_classes,
-                eos_coef=self.config.eos_coefficient,
-            )
+            criterion = RTDetrLoss(config)
             criterion.to(self.device)
             # Third: compute the losses, based on outputs and labels
             outputs_loss = {}
