@@ -274,6 +274,7 @@ class SamImageProcessor(BaseImageProcessor):
     ):
         if do_resize:
             image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+        reshaped_input_size = get_image_size(image, channel_dim=input_data_format)
 
         if do_rescale:
             image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
@@ -284,7 +285,7 @@ class SamImageProcessor(BaseImageProcessor):
         if do_pad:
             image = self.pad_image(image=image, pad_size=pad_size, input_data_format=input_data_format)
 
-        return image
+        return image, reshaped_input_size
 
     def _preprocess_image(
         self,
@@ -323,7 +324,7 @@ class SamImageProcessor(BaseImageProcessor):
 
         original_size = get_image_size(image, channel_dim=input_data_format)
 
-        image = self._preprocess(
+        image, reshaped_input_size = self._preprocess(
             image=image,
             do_resize=do_resize,
             size=size,
@@ -337,8 +338,6 @@ class SamImageProcessor(BaseImageProcessor):
             pad_size=pad_size,
             input_data_format=input_data_format,
         )
-
-        reshaped_input_size = get_image_size(image, channel_dim=input_data_format)
 
         if data_format is not None:
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
@@ -368,7 +367,7 @@ class SamImageProcessor(BaseImageProcessor):
 
         original_size = get_image_size(segmentation_map, channel_dim=input_data_format)
 
-        segmentation_map = self._preprocess(
+        segmentation_map, _ = self._preprocess(
             image=segmentation_map,
             do_resize=do_resize,
             size=mask_size,
