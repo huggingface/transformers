@@ -1843,7 +1843,7 @@ class Trainer:
                     main_input_name = getattr(self.model, "main_input_name", "input_ids")
                     if main_input_name not in inputs:
                         logger.warning(
-                            "Tried to track the number of tokens seen, however could the current model is "
+                            "Tried to track the number of tokens seen, however the current model is "
                             "not configured properly to know what item is the input. To fix this, add "
                             "a `main_input_name` attribute to the model class you are using."
                         )
