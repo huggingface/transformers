@@ -73,33 +73,30 @@ def get_same_padding(kernel_size):
 
 
 class TextNetConvLayer(nn.Module):
-    def __init__(
-        self,
-        num_channels,
-        out_channels,
-        kernel_size=3,
-        stride=1,
-        act_func="relu",
-    ):
+    def __init__(self, config):
         super().__init__()
 
-        self.kernel_size = kernel_size
-        self.stride = stride
-        self.activation_function = act_func
+        self.kernel_size = config.kernel_size
+        self.stride = config.stride
+        self.activation_function = config.act_func
 
-        padding = get_same_padding(self.kernel_size)
+        padding = (
+            (config.kernel_size[0] // 2, config.kernel_size[1] // 2)
+            if isinstance(config.kernel_size, tuple)
+            else config.kernel_size // 2
+        )
 
         self.conv = nn.Conv2d(
-            num_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
+            config.num_channels,
+            config.out_channels,
+            kernel_size=config.kernel_size,
+            stride=config.stride,
             padding=padding,
             bias=False,
         )
         self.batch_norm = nn.Identity()
 
-        self.batch_norm = nn.BatchNorm2d(out_channels)
+        self.batch_norm = nn.BatchNorm2d(config.out_channels)
 
         self.activation = nn.Identity()
         if self.activation_function is not None:
@@ -360,13 +357,7 @@ class TextNetPreTrainedModel(PreTrainedModel):
 class TextNetModel(TextNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.stem = TextNetConvLayer(
-            config.num_channels,
-            config.out_channels,
-            config.kernel_size,
-            config.stride,
-            config.act_func,
-        )
+        self.stem = TextNetConvLayer(config)
 
         self.encoder = TextNetEncoder(config)
 
@@ -414,7 +405,7 @@ class TextNetModel(TextNetPreTrainedModel):
 
         if not return_dict:
             output = (pooled_output, last_hidden_state)
-            return output + (hidden_states,) if output_hidden_states else output
+            return output + (tuple(hidden_states),) if output_hidden_states else output
 
         return BaseModelOutputWithPoolingAndNoAttention(
             pooler_output=pooled_output,
@@ -457,19 +448,19 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
         Examples:
 
         ```python
-        # >>> from transformers import AutoImageProcessor, AutoBackbone
-        # >>> import torch
-        # >>> from PIL import Image
-        # >>> import requests
-        #
-        # >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        # >>> image = Image.open(requests.get(url, stream=True).raw)
-        #
-        # >>> processor = AutoImageProcessor.from_pretrained("google/resnetnv2-50")
-        # >>> model = AutoBackbone.from_pretrained("google/resnetnv2-50")
-        #
-        # >>> inputs = processor(image, return_tensors="pt")
-        # >>> outputs = model(**inputs)
+        >>> from transformers import AutoImageProcessor, AutoBackbone
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> processor = AutoImageProcessor.from_pretrained("Raghavan/textnet-base")
+        >>> model = AutoBackbone.from_pretrained("Raghavan/textnet-base")
+
+        >>> inputs = processor(image, return_tensors="pt")
+        >>> outputs = model(**inputs)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
@@ -507,14 +498,15 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
     TEXTNET_START_DOCSTRING,
 )
 class TextNetForImageClassification(TextNetPreTrainedModel):
+    # Copied from transformers.models.bit.modeling_bit.BitForImageClassification.__init__ with Bit->TextNet
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.textnet = TextNetModel(config)
+        self.bit = TextNetModel(config)
         # classification head
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1] * 2 * 2, config.num_labels) if config.num_labels > 0 else nn.Identity(),
+            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity(),
         )
         # initialize weights and apply final processing
         self.post_init()

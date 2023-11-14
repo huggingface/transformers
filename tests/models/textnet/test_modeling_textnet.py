@@ -32,7 +32,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
 
     from transformers import (
         TextNetBackbone,
@@ -60,15 +59,15 @@ class TextNetModelTester:
         stage1_kernel_size=[[3, 3]],
         stage1_stride=[1],
         stage2_in_channels=[64],
-        stage2_out_channels=[128],
+        stage2_out_channels=[64],
         stage2_kernel_size=[[3, 1]],
         stage2_stride=[2],
-        stage3_in_channels=[128],
-        stage3_out_channels=[256],
+        stage3_in_channels=[64],
+        stage3_out_channels=[64],
         stage3_kernel_size=[[1, 3]],
         stage3_stride=[2],
-        stage4_in_channels=[256],
-        stage4_out_channels=[512],
+        stage4_in_channels=[64],
+        stage4_out_channels=[64],
         stage4_kernel_size=[[3, 3]],
         stage4_stride=[2],
         out_features=["stage1", "stage2", "stage3", "stage4"],
@@ -80,7 +79,7 @@ class TextNetModelTester:
         use_labels=True,
         hidden_act="relu",
         num_labels=3,
-        hidden_sizes=[64, 64, 128, 256, 512],
+        hidden_sizes=[64, 64, 64, 64, 64],
     ):
         self.parent = parent
         self.kernel_size = kernel_size
@@ -210,7 +209,7 @@ class TextNetModelTester:
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, 512, 2, 2])
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, 64, 2, 2])
 
         # verify channels
         self.parent.assertEqual(len(model.channels), 1)
@@ -287,22 +286,6 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, module in model.named_modules():
-                if isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
-                    self.assertTrue(
-                        torch.all(module.weight == 1),
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-                    self.assertTrue(
-                        torch.all(module.bias == 0),
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -335,17 +318,6 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 config.output_hidden_states = True
 
                 check_hidden_states_output(inputs_dict, config, model_class)
-
-    def test_model_is_small(self):
-        # Just a consistency check to make sure we are not running tests on 80M parameter models.
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            num_params = model.num_parameters()
-            assert (
-                num_params < 3000000
-            ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
 
     @unittest.skip(reason="TextNet does not use feedforward chunking")
     def test_feed_forward_chunking(self):
