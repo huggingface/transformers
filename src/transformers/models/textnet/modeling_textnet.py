@@ -15,7 +15,6 @@
 """ PyTorch TextNet model."""
 from typing import Any, List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.nn as nn
 from torch import Tensor
@@ -53,7 +52,7 @@ TEXTNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`TextNetImageProcessor.__call__`] for details.
+            [`ClipImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -63,14 +62,6 @@ TEXTNET_INPUTS_DOCSTRING = r"""
 """
 
 TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST = ["Raghavan/textnet-base"]
-
-
-def get_same_padding(kernel_size):
-    if isinstance(kernel_size, tuple):
-        padding1 = get_same_padding(kernel_size[0])
-        padding2 = get_same_padding(kernel_size[1])
-        return padding1, padding2
-    return kernel_size // 2
 
 
 class TextNetConvLayer(nn.Module):
@@ -102,31 +93,9 @@ class TextNetConvLayer(nn.Module):
             self.activation = ACT2CLS[self.activation_function](inplace=True)
 
     def forward(self, hidden_states):
-        if self.training:
-            if hasattr(self, "fused_conv"):
-                delattr(self, "fused_conv")
-            hidden_states = self.conv(hidden_states)
-            hidden_states = self.batch_norm(hidden_states)
-            return self.activation(hidden_states)
-        else:
-            if not hasattr(self, "fused_conv"):
-                setattr(self, "fused_conv", self.fuse_conv_batch_norm(self.conv, self.batch_norm))
-            hidden_states = self.fused_conv(hidden_states)
-            if self.activation is not None:
-                hidden_states = self.activation(hidden_states)
-            return hidden_states
-
-    def fuse_conv_batch_norm(self, conv, batch_norm):
-        """During inference, the functionary of batch norm layers is turned off but
-        only the mean and var alone channels are used, which exposes the chance to fuse it with the preceding conv
-        layers to save computations and simplify network structures."""
-        conv_w = conv.weight
-        conv_b = conv.bias if conv.bias is not None else torch.zeros_like(batch_norm.running_mean)
-
-        factor = batch_norm.weight / torch.sqrt(batch_norm.running_var + batch_norm.eps)
-        conv.weight = nn.Parameter(conv_w * factor.reshape([conv.out_channels, 1, 1, 1]))
-        conv.bias = nn.Parameter((conv_b - batch_norm.running_mean) * factor + batch_norm.bias)
-        return conv
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.batch_norm(hidden_states)
+        return self.activation(hidden_states)
 
 
 class TextNetRepConvLayer(nn.Module):
@@ -188,100 +157,26 @@ class TextNetRepConvLayer(nn.Module):
         )
 
     def forward(self, hidden_states):
-        if self.training:
-            if hasattr(self, "fused_conv"):
-                self.__delattr__("fused_conv")
+        if hasattr(self, "fused_conv"):
+            self.__delattr__("fused_conv")
 
-            main_outputs = self.main_conv(hidden_states)
-            main_outputs = self.main_batch_norm(main_outputs)
+        main_outputs = self.main_conv(hidden_states)
+        main_outputs = self.main_batch_norm(main_outputs)
 
-            vertical_outputs = 0
-            if self.vertical_conv is not None:
-                vertical_outputs = self.vertical_conv(hidden_states)
-                vertical_outputs = self.vertical_batch_norm(vertical_outputs)
-            horizontal_outputs = 0
-            if self.horizontal_conv is not None:
-                horizontal_outputs = self.horizontal_conv(hidden_states)
-                horizontal_outputs = self.horizontal_batch_norm(horizontal_outputs)
-
-            id_out = 0
-            if self.rbr_identity is not None:
-                id_out = self.rbr_identity(hidden_states)
-
-            return self.nonlinearity(main_outputs + vertical_outputs + horizontal_outputs + id_out)
-        else:
-            if not hasattr(self, "fused_conv"):
-                self.prepare_for_eval()
-            return self.nonlinearity(self.fused_conv(hidden_states))
-
-    def _identity_to_conv(self, identity):
-        if identity is None:
-            return 0, 0
-        if not hasattr(self, "id_tensor"):
-            input_dim = self.num_channels
-            kernel_value = np.zeros((self.num_channels, input_dim, 1, 1), dtype=np.float32)
-            for i in range(self.num_channels):
-                kernel_value[i, i % input_dim, 0, 0] = 1
-            id_tensor = torch.from_numpy(kernel_value).to(identity.weight.device)
-            self.id_tensor = self._pad_to_mxn_tensor(id_tensor)
-        kernel = self.id_tensor
-        running_mean = identity.running_mean
-        running_var = identity.running_var
-        gamma = identity.weight
-        beta = identity.bias
-        eps = identity.eps
-        std = (running_var + eps).sqrt()
-        t = (gamma / std).reshape(-1, 1, 1, 1)
-        return kernel * t, beta - running_mean * gamma / std
-
-    def _fuse_batch_norm_tensor(self, conv, batch_norm):
-        kernel = conv.weight
-        kernel = self._pad_to_mxn_tensor(kernel)
-        running_mean = batch_norm.running_mean
-        running_var = batch_norm.running_var
-        gamma = batch_norm.weight
-        beta = batch_norm.bias
-        eps = batch_norm.eps
-        std = (running_var + eps).sqrt()
-        t = (gamma / std).reshape(-1, 1, 1, 1)
-        return kernel * t, beta - running_mean * gamma / std
-
-    def get_equivalent_kernel_bias(self):
-        kernel_mxn, bias_mxn = self._fuse_batch_norm_tensor(self.main_conv, self.main_batch_norm)
+        vertical_outputs = 0
         if self.vertical_conv is not None:
-            kernel_mx1, bias_mx1 = self._fuse_batch_norm_tensor(self.vertical_conv, self.vertical_batch_norm)
-        else:
-            kernel_mx1, bias_mx1 = 0, 0
+            vertical_outputs = self.vertical_conv(hidden_states)
+            vertical_outputs = self.vertical_batch_norm(vertical_outputs)
+        horizontal_outputs = 0
         if self.horizontal_conv is not None:
-            kernel_1xn, bias_1xn = self._fuse_batch_norm_tensor(self.horizontal_conv, self.horizontal_batch_norm)
-        else:
-            kernel_1xn, bias_1xn = 0, 0
-        kernel_id, bias_id = self._identity_to_conv(self.rbr_identity)
-        kernel_mxn = kernel_mxn + kernel_mx1 + kernel_1xn + kernel_id
-        bias_mxn = bias_mxn + bias_mx1 + bias_1xn + bias_id
-        return kernel_mxn, bias_mxn
+            horizontal_outputs = self.horizontal_conv(hidden_states)
+            horizontal_outputs = self.horizontal_batch_norm(horizontal_outputs)
 
-    def _pad_to_mxn_tensor(self, kernel):
-        kernel_height, kernel_width = self.kernel_size
-        height, width = kernel.shape[2:]
-        pad_left_right = (kernel_width - width) // 2
-        pad_top_down = (kernel_height - height) // 2
-        return torch.nn.functional.pad(kernel, [pad_left_right, pad_left_right, pad_top_down, pad_top_down])
+        id_out = 0
+        if self.rbr_identity is not None:
+            id_out = self.rbr_identity(hidden_states)
 
-    def prepare_for_eval(self):
-        kernel, bias = self.get_equivalent_kernel_bias()
-        self.fused_conv = nn.Conv2d(
-            in_channels=self.main_conv.in_channels,
-            out_channels=self.main_conv.out_channels,
-            kernel_size=self.main_conv.kernel_size,
-            stride=self.main_conv.stride,
-            padding=self.main_conv.padding,
-            bias=True,
-        )
-        self.fused_conv.weight.data = kernel
-        self.fused_conv.bias.data = bias
-        for para in self.fused_conv.parameters():
-            para.detach_()
+        return self.nonlinearity(main_outputs + vertical_outputs + horizontal_outputs + id_out)
 
 
 class TextNetStage(nn.Module):

@@ -39,13 +39,6 @@ else:
         "TextNetForImageClassification",
     ]
 
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["image_processing_textnet"] = ["TextNetImageProcessor"]
 
 if TYPE_CHECKING:
     from .configuration_textnet import TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP, TextNetConfig
@@ -63,13 +56,6 @@ if TYPE_CHECKING:
             TextNetPreTrainedModel,
         )
 
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .image_processing_textnet import TextNetImageProcessor
 
 else:
     import sys

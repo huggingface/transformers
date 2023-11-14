@@ -24,11 +24,6 @@ The TextNet model was proposed in [FAST: Faster Arbitrarily-Shaped Text Detector
 
 [[autodoc]] TextNetConfig
 
-## TextNetImageProcessor
-
-[[autodoc]] TextNetImageProcessor
-    - preprocess
-
 ## TextNetModel
 
 [[autodoc]] TextNetModel
