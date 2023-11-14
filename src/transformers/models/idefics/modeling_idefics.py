@@ -888,8 +888,7 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
             image_attention_mask (`torch.FloatTensor`, *optional*): image attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             cross_attention_gate (`torch.FloatTensor`, *optional*):
-                gate of size `(batch, seq_len)` used to zero-out cross-attention output for tokens attending no
-                images.
+                gate of size `(batch, seq_len)` used to zero-out cross-attention output for tokens attending no images.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
