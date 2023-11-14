@@ -563,6 +563,8 @@ class PatchTSTEncoderLayer(nn.Module):
         Parameters:
             hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`, *required*):
                 Past values of the time series
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the output attention of all layers
         Return:
             `torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`
 
