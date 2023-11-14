@@ -15,12 +15,14 @@
 """ Testing suite for the PyTorch PatchTSMixer model. """
 
 import inspect
+import itertools
 import random
 import tempfile
 import unittest
 from typing import Dict, List, Optional, Tuple, Union
 
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.models.auto import get_values
@@ -707,81 +709,105 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             samples = mdl.generate(self.__class__.data)
             self.assertEqual(samples.sequences.shape, ref_samples.shape)
 
-    def test_forecast(self):
-        for mode in ["common_channel", "mix_channel"]:
-            for self_attn in [True, False]:
-                for scaling in [True, False, "mean", "std"]:
-                    for gated_attn in [True, False]:
-                        for forecast_channel_indices in [None, [0, 2]]:
-                            for loss in ["mse", "nll"]:
-                                params = self.__class__.params.copy()
-                                params.update(
-                                    mode=mode,
-                                    self_attn=self_attn,
-                                    scaling=scaling,
-                                    forecast_channel_indices=forecast_channel_indices,
-                                    gated_attn=gated_attn,
-                                    loss=loss,
-                                )
+    @parameterized.expand(
+        list(
+            itertools.product(
+                ["common_channel", "mix_channel"],
+                [True, False],
+                [True, False, "mean", "std"],
+                [True, False],
+                [None, [0, 2]],
+                ["mse", "nll"],
+            )
+        )
+    )
+    def test_forecast(self, mode, self_attn, scaling, gated_attn, forecast_channel_indices, loss):
+        params = self.__class__.params.copy()
+        params.update(
+            mode=mode,
+            self_attn=self_attn,
+            scaling=scaling,
+            forecast_channel_indices=forecast_channel_indices,
+            gated_attn=gated_attn,
+            loss=loss,
+        )
 
-                                self.check_module(task="forecast", params=params)
+        self.check_module(task="forecast", params=params)
 
-    def test_classification(self):
-        for mode in ["common_channel", "mix_channel"]:
-            for self_attn in [True, False]:
-                for scaling in [True, False, "mean", "std"]:
-                    for gated_attn in [True, False]:
-                        for head_aggregation in ["max_pool", "avg_pool"]:
-                            params = self.__class__.params.copy()
-                            params.update(
-                                mode=mode,
-                                self_attn=self_attn,
-                                scaling=scaling,
-                                head_aggregation=head_aggregation,
-                                gated_attn=gated_attn,
-                            )
+    @parameterized.expand(
+        list(
+            itertools.product(
+                ["common_channel", "mix_channel"],
+                [True, False],
+                [True, False, "mean", "std"],
+                [True, False],
+                ["max_pool", "avg_pool"],
+            )
+        )
+    )
+    def test_classification(self, mode, self_attn, scaling, gated_attn, head_aggregation):
+        params = self.__class__.params.copy()
+        params.update(
+            mode=mode,
+            self_attn=self_attn,
+            scaling=scaling,
+            head_aggregation=head_aggregation,
+            gated_attn=gated_attn,
+        )
 
-                            self.check_module(task="classification", params=params)
+        self.check_module(task="classification", params=params)
 
-    def test_regression(self):
-        for mode in ["common_channel", "mix_channel"]:
-            for self_attn in [True, False]:
-                for scaling in [True, False, "mean", "std"]:
-                    for gated_attn in [True, False]:
-                        for head_aggregation in ["max_pool", "avg_pool"]:
-                            for loss in ["mse", "nll"]:
-                                params = self.__class__.params.copy()
-                                params.update(
-                                    mode=mode,
-                                    self_attn=self_attn,
-                                    scaling=scaling,
-                                    head_aggregation=head_aggregation,
-                                    gated_attn=gated_attn,
-                                    loss=loss,
-                                )
+    @parameterized.expand(
+        list(
+            itertools.product(
+                ["common_channel", "mix_channel"],
+                [True, False],
+                [True, False, "mean", "std"],
+                [True, False],
+                ["max_pool", "avg_pool"],
+                ["mse", "nll"],
+            )
+        )
+    )
+    def test_regression(self, mode, self_attn, scaling, gated_attn, head_aggregation, loss):
+        params = self.__class__.params.copy()
+        params.update(
+            mode=mode,
+            self_attn=self_attn,
+            scaling=scaling,
+            head_aggregation=head_aggregation,
+            gated_attn=gated_attn,
+            loss=loss,
+        )
 
-                                self.check_module(task="regression", params=params)
+        self.check_module(task="regression", params=params)
 
-    def test_pretrain(self):
-        for mode in ["common_channel", "mix_channel"]:
-            for self_attn in [True, False]:
-                for scaling in [True, False, "mean", "std"]:
-                    for gated_attn in [True, False]:
-                        for mask_type in ["random", "forecast"]:
-                            for masked_loss in [True, False]:
-                                for channel_consistent_masking in [True, False]:
-                                    params = self.__class__.params.copy()
-                                    params.update(
-                                        mode=mode,
-                                        self_attn=self_attn,
-                                        scaling=scaling,
-                                        gated_attn=gated_attn,
-                                        mask_type=mask_type,
-                                        masked_loss=masked_loss,
-                                        channel_consistent_masking=channel_consistent_masking,
-                                    )
+    @parameterized.expand(
+        list(
+            itertools.product(
+                ["common_channel", "mix_channel"],
+                [True, False],
+                [True, False, "mean", "std"],
+                [True, False],
+                ["random", "forecast"],
+                [True, False],
+                [True, False],
+            )
+        )
+    )
+    def test_pretrain(self, mode, self_attn, scaling, gated_attn, mask_type, masked_loss, channel_consistent_masking):
+        params = self.__class__.params.copy()
+        params.update(
+            mode=mode,
+            self_attn=self_attn,
+            scaling=scaling,
+            gated_attn=gated_attn,
+            mask_type=mask_type,
+            masked_loss=masked_loss,
+            channel_consistent_masking=channel_consistent_masking,
+        )
 
-                                    self.check_module(task="pretrain", params=params)
+        self.check_module(task="pretrain", params=params)
 
     def forecast_full_module(self, params=None, output_hidden_states=False, return_dict=None):
         config = PatchTSMixerConfig(**params)
