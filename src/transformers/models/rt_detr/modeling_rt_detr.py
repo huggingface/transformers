@@ -991,9 +991,9 @@ class RTDetrLoss(nn.Module):
 
         self.eos_coef = eos_coef
         self.losses = losses
-        empty_weight = torch.ones(self.num_classes + 1)
-        empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
+        class_weight = torch.ones(self.num_classes + 1)
+        class_weight[-1] = self.eos_coef
+        self.register_buffer("class_weight", class_weight)
 
         self.alpha = alpha
         self.gamma = gamma
@@ -1045,7 +1045,7 @@ class RTDetrLoss(nn.Module):
         )
         target_classes[idx] = target_classes_o
 
-        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.class_weight)
         losses = {"loss_ce": loss_ce}
         return losses
 
