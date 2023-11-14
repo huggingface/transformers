@@ -201,9 +201,11 @@ class PatchTSTAttention(nn.Module):
 
 class PatchTSTBatchNorm(nn.Module):
     """
+    Compute batch normalization over the sequence length (time) dimension.
+
     Parameters:
-    Compute batch normalization
         d_model (`int`): model dimension
+        eps (`float`, *optional*, defaults to 1e-5): epsilon to use for numerical stability while normalizing.
     """
 
     def __init__(self, config: PatchTSTConfig):
