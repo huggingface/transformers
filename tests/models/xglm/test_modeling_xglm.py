@@ -357,7 +357,7 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_model_parallelism(self):
         super().test_model_parallelism()
 
-    @unnittest.skip("This test is currently broken because of safetensors.")
+    @unittest.skip("This test is currently broken because of safetensors.")
     def test_tf_from_pt_safetensors(self):
         pass
 
