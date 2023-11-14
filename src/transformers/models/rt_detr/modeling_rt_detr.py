@@ -1451,27 +1451,22 @@ class RTDetrHungarianMatcher(nn.Module):
         """
         bs, num_queries = outputs["logits"].shape[:2]
 
-        # We flatten to compute the cost matrices in a batch
-        if self.use_focal_loss:
-            out_prob = F.sigmoid(outputs["logits"].flatten(0, 1))
-        else:
-            out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
-
+        # We flatten to compute the cost matrices in a batch        
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
-
         # Also concat the target labels and boxes
         tgt_ids = torch.cat([v["class_labels"] for v in targets])
         tgt_bbox = torch.cat([v["boxes"] for v in targets])
-
         # Compute the classification cost. Contrary to the loss, we don't use the NLL,
         # but approximate it in 1 - proba[target class].
         # The 1 is a constant that doesn't change the matching, it can be ommitted.
         if self.use_focal_loss:
+            out_prob = F.sigmoid(outputs["logits"].flatten(0, 1))
             out_prob = out_prob[:, tgt_ids]
             neg_cost_class = (1 - self.alpha) * (out_prob**self.gamma) * (-(1 - out_prob + 1e-8).log())
             pos_cost_class = self.alpha * ((1 - out_prob) ** self.gamma) * (-(out_prob + 1e-8).log())
             cost_class = pos_cost_class - neg_cost_class
         else:
+            out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
             cost_class = -out_prob[:, tgt_ids]
 
         # Compute the L1 cost between boxes

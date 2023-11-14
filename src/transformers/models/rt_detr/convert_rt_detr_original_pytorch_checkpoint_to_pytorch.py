@@ -23,8 +23,6 @@ from PIL import Image
 
 from transformers import RTDetrConfig, RTDetrImageProcessor, RTDetrModel
 
-
-# TODO: (Rafael) Make this dictionary more efficient/shorter. Too many repetitive parts.
 replaces = {
     "backbone.conv1.conv1_1.conv.weight": "model.backbone._backbone.conv1.0.weight",
     "backbone.conv1.conv1_1.norm.weight": "model.backbone._backbone.conv1.1.weight",
