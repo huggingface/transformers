@@ -1470,7 +1470,7 @@ class RTDetrHungarianMatcher(nn.Module):
         """
         bs, num_queries = outputs["logits"].shape[:2]
 
-        # We flatten to compute the cost matrices in a batch        
+        # We flatten to compute the cost matrices in a batch
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
         # Also concat the target labels and boxes
         tgt_ids = torch.cat([v["class_labels"] for v in targets])
@@ -1501,6 +1501,7 @@ class RTDetrHungarianMatcher(nn.Module):
 
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
+
 @add_start_docstrings(
     """
     RT-DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further
@@ -1522,11 +1523,11 @@ class RTDetrModel(RTDetrPreTrainedModel):
         self.post_init()
 
     def freeze_backbone(self):
-        for _, param in self.backbone.conv_encoder.model.named_parameters():
+        for param in self.backbone.parameters():
             param.requires_grad_(False)
 
     def unfreeze_backbone(self):
-        for _, param in self.backbone.conv_encoder.model.named_parameters():
+        for param in self.backbone.parameters():
             param.requires_grad_(True)
 
     @add_start_docstrings_to_model_forward(RT_DETR_INPUTS_DOCSTRING)
@@ -1535,8 +1536,8 @@ class RTDetrModel(RTDetrPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         labels: Optional[List[dict]] = None,
-        return_dict: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], RTDetrModelOutput]:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
@@ -1667,4 +1668,3 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         output = (logits, pred_boxes, encoder_states)
         return ((loss, loss_dict) + output) if loss is not None else output
-
