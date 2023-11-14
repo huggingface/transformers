@@ -626,7 +626,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             if attention_mask is not None:
                 if batch_size <= 0:
                     raise ValueError("batch_size has to be defined and > 0")
-                attention_mask = attention_mask[:, None, None, :]
+                attention_mask = attention_mask.view(batch_size, -1, 1, 1)
 
                 # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
                 # masked positions, this operation will create a tensor which is 0.0 for
