@@ -78,13 +78,16 @@ class GroundingDINOTextPrenetConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import GroundingDINOTextPrenetConfig, GroundingDINOTextPrenetModel
+    >>> from transformers import GroundingDINOTextPrenetConfig, GroundingDINOConfig, GroundingDINOForObjectDetection
 
     >>> # Initializing a BERT bert-base-uncased style configuration
     >>> configuration = GroundingDINOTextPrenetConfig()
 
-    >>> # Initializing a model (with random weights) from the bert-base-uncased style configuration
-    >>> model = GroundingDINOTextPrenetModel(configuration)
+    >>> # Initializing a GroundingDINOConfig with generated bert-like config
+    >>> config = GroundingDINOConfig(text_backbone_config=configuration)
+
+    >>> # Initializing a model from the ground-up with a config
+    >>> model = GroundingDINOForObjectDetection(config)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
