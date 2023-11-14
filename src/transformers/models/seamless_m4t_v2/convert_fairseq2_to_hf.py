@@ -261,7 +261,7 @@ def load_model(save_dir, model_type, repo_id):
         for i, code in enumerate(UNIT_SUPPORTED_LANGUAGES)
     }
     vocoder_lang_code_to_id = {code.replace("__", ""): i for i, code in enumerate(VOCODER_SUPPORTED_LANGUAGES)}
-
+    
     ######### FE
 
     fe = SeamlessM4TFeatureExtractor(language_code=langs)
@@ -277,13 +277,22 @@ def load_model(save_dir, model_type, repo_id):
 
     ######## Model
 
-    # init model
+    # init config
     hf_config = _load_hf_config()
+    
+    ######## get id_to_text and char_to_id from original model tokenizers
+    id_to_text = {i: original_model.text_tokenizer.model.index_to_token(i) for i in range(hf_config.vocab_size)}
+    char_to_id = {original_model.model.t2u_model.decoder_frontend.char_tokenizer.model.index_to_token(i): i for i in range(10904)}
+
+    
+    # init model
     hf_model = SeamlessM4Tv2Model(hf_config)
 
     hf_model.generation_config.__setattr__("text_decoder_lang_to_code_id", text_decoder_lang_code_to_id)
     hf_model.generation_config.__setattr__("t2u_lang_code_to_id", t2u_lang_code_to_id)
     hf_model.generation_config.__setattr__("vocoder_lang_code_to_id", vocoder_lang_code_to_id)
+    hf_model.generation_config.__setattr__("id_to_text", id_to_text)
+    hf_model.generation_config.__setattr__("char_to_id", char_to_id)
 
     # -1. take care of vocoder
     # similarly to speech T5 must apply and remove weight norm
