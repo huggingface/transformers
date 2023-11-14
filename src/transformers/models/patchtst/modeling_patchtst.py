@@ -994,27 +994,13 @@ class PatchTSTForClassificationOutput(ModelOutput):
 
 
 @dataclass
-class SamplePatchTSTPredictionOutput(ModelOutput):
+class SamplePatchTSTOutput(ModelOutput):
     """
     Base class for time series model's predictions outputs that contains the sampled values from the chosen
     distribution.
 
     Parameters:
         sequences `(batch_size, num_samples, prediction_length, num_targets)`):
-                Sampled values from the chosen distribution.
-    """
-
-    sequences: torch.FloatTensor = None
-
-
-@dataclass
-class SamplePatchTSTRegressionOutput(ModelOutput):
-    """
-    Base class for time series model's predictions outputs that contains the sampled values from the chosen
-    distribution.
-
-    Parameters:
-        sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, num_targets)`
                 Sampled values from the chosen distribution.
     """
 
@@ -1707,7 +1693,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_observed_mask: Optional[torch.Tensor] = None,
-    ) -> SamplePatchTSTPredictionOutput:
+    ) -> SamplePatchTSTOutput:
         """
         Generate sequences of sample predictions from a model with a probability distribution head.
 
@@ -1723,7 +1709,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Return:
-            [`SamplePatchTSTPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
+            [`SamplePatchTSTOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
             number of samples, prediction_length, 1)` or `(batch_size, number of samples, prediction_length,
             num_input_channels)` for multivariate predictions.
         """
@@ -1746,7 +1732,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         samples = [distribution.sample() for _ in range(num_parallel_samples)]
         # stack tensors
         samples = torch.stack(samples, dim=1)  # [bs x num_samples x forecast_len x num_channels]
-        return SamplePatchTSTPredictionOutput(sequences=samples)
+        return SamplePatchTSTOutput(sequences=samples)
 
 
 class PatchTSTRegressionHead(nn.Module):
@@ -1798,7 +1784,7 @@ class PatchTSTRegressionHead(nn.Module):
         # projection
         # output: bs x output_dim or a tuple of this shape for distribution head
         output = self.projection(pooled_embedding)
-        #
+        # apply sigmoid to bound the output if required
         if (self.distribution_output is None) & (self.y_range is not None):  # linear head
             output = torch.sigmoid(output) * (self.y_range[1] - self.y_range[0]) + self.y_range[0]
         return output
@@ -1900,7 +1886,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_observed_mask: Optional[torch.Tensor] = None,
-    ) -> SamplePatchTSTRegressionOutput:
+    ) -> SamplePatchTSTOutput:
         """
         Generate sequences of sample predictions from a model with a probability distribution head.
 
@@ -1916,7 +1902,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Return:
-            [`SamplePatchTSTRegressionOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
+            [`SamplePatchTSTOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
             number of samples, num_targets)`.
         """
         # get number of samples
@@ -1936,4 +1922,4 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         samples = [distribution.sample() for _ in range(num_parallel_samples)]
         # stack tensors
         samples = torch.stack(samples, dim=1)  # [bs x num_samples x num_targets]
-        return SamplePatchTSTRegressionOutput(sequences=samples)
+        return SamplePatchTSTOutput(sequences=samples)
