@@ -422,7 +422,7 @@ class PatchTSTPatchify(nn.Module):
         """
         Parameters:
             past_values (`torch.Tensor` of shape `(batch_size, sequence_length, num_channels)`, *required*):
-                Input to be patchified
+                Input for patchification
 
         Returns:
             `torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`
@@ -1238,6 +1238,8 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
 
                 - 1 for values that are **observed**,
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+            future_values (`torch.BoolTensor` of shape `(batch_size, prediction_length, num_input_channels)`, *optional*):
+                Future target values associated with the `past_values`
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
             output_attentions (`bool`, *optional*):
@@ -1431,7 +1433,8 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
                 Whether or not to return the hidden states of all layers
             output_attentions (`bool`, *optional*):
                 Whether or not to return the output attention of all layers
-            return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
             `PatchTSTForClassificationOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
@@ -1711,7 +1714,6 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         Parameters:
             past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
                 Past values of the time series that serves as context in order to predict the future.
-
             past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
                 Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
                 in `[0, 1]`:
@@ -1844,14 +1846,14 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         Parameters:
             past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
                 Input sequence to the model
+            target_values (`torch.Tensor` of shape `(bs, num_input_channels)`):
+                Target values associates with the `past_values`
             past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
                 Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
                 in `[0, 1]`:
 
                 - 1 for values that are **observed**,
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            target_values (`torch.Tensor` of shape `(bs, num_input_channels)`):
-                Target values associates with the `past_values`
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
             output_attentions (`bool`, *optional*):
@@ -1907,7 +1909,6 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         Parameters:
             past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
                 Past values of the time series that serves as context in order to predict the future.
-
             past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
                 Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
                 in `[0, 1]`:

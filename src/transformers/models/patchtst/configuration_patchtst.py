@@ -73,7 +73,7 @@ class PatchTSTConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for the attention probabilities.
         dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the encoder, and decoder.
+            The dropout probability for all fully connected layers in the Transformer.
         positional_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability in the positional embedding layer.
         path_dropout (`float`, *optional*, defaults to 0.0):
