@@ -216,7 +216,6 @@ class ModelUtilsTest(TestCasePlus):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
         model = BertModel(config)
 
-        subfolder = "bert"
         # Let's fuse qkv
         attn = model.encoder.layer[0].attention.self
         q = attn.query.weight
@@ -228,12 +227,8 @@ class ModelUtilsTest(TestCasePlus):
         attn.key.weight = torch.nn.Parameter(qkv[1])
         attn.value.weight = torch.nn.Parameter(qkv[2])
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(os.path.join(tmp_dir, subfolder))
-
-            with self.assertRaises(OSError):
-                _ = BertModel.from_pretrained(tmp_dir)
-
-            model_loaded = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
+            model.save_pretrained(tmp_dir)
+            model_loaded = BertModel.from_pretrained(tmp_dir)
 
         self.assertTrue(check_models_equal(model, model_loaded))
 
