@@ -1111,6 +1111,11 @@ class WhisperEncoder(WhisperPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
+
+        expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
+        if input_features.shape[-1] != expected_seq_length:
+            raise ValueError(f"Whisper expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}.")
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1734,6 +1739,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         language=None,
         is_multilingual=None,
         prompt_ids: Optional[torch.Tensor] = None,
+        num_segment_frames: Optional[int] = None,
         return_token_timestamps=None,
         **kwargs,
     ):
@@ -1828,6 +1834,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         """
         if generation_config is None:
             generation_config = self.generation_config
+
+        if num_segment_frames is None:
+            num_segment_frames = 2 * self.config.max_source_positions
 
         if return_timestamps is not None:
             if not hasattr(generation_config, "no_timestamps_token_id"):
@@ -1979,23 +1988,112 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             if kwargs.get("num_frames") is not None:
                 generation_config.num_frames = kwargs.pop("num_frames")
 
-        outputs = super().generate(
-            inputs,
-            generation_config,
-            logits_processor,
-            stopping_criteria,
-            prefix_allowed_tokens_fn,
-            synced_gpus,
-            **kwargs,
-        )
+        seek = 0
+        total_input_frames = inputs.shape[-1]
+        sequence = None
+        timestamp_begin = getattr(self.generation_config, "no_timestamps_token_id", 50362) + 1
+        # input stride is mel frames per encoder output vector which is the product of all conv strides
+        input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv1.stride[1]
 
-        if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
-            num_frames = getattr(generation_config, "num_frames", None)
-            outputs["token_timestamps"] = self._extract_token_timestamps(
-                outputs, generation_config.alignment_heads, num_frames=num_frames
+        while seek < total_input_frames:
+            segment_input = inputs[:, :, seek : seek + num_segment_frames]
+
+            seek_outputs = super().generate(
+                segment_input,
+                generation_config,
+                logits_processor,
+                stopping_criteria,
+                prefix_allowed_tokens_fn,
+                synced_gpus,
+                **kwargs,
             )
 
-        return outputs
+            if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
+                num_frames = getattr(generation_config, "num_frames", None)
+                seek_outputs["token_timestamps"] = self._extract_token_timestamps(
+                    seek_outputs, generation_config.alignment_heads, num_frames=num_frames
+                )
+
+            seek_sequence = seek_outputs["sequence"] if kwargs.get("return_dict_in_generate", False) else seek_outputs
+
+            # cut EOS if necessary
+            if (seek + num_segment_frames) < total_input_frames and seek_sequence[:, -1] == self.generation_config.eos_token_id:
+                seek_sequence = seek_sequence[:, :-1]
+
+            timestamp_tokens: torch.Tensor = seek_sequence.ge(timestamp_begin)
+            single_timestamp_ending = timestamp_tokens[-2:].tolist() == [False, True]
+
+            consecutive = torch.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
+            consecutive.add_(1)
+
+            if len(consecutive) > 0:
+                # if the output contains two consecutive timestamp tokens
+                slices = consecutive.tolist()
+                if single_timestamp_ending:
+                    slices.append(len(seek_sequence))
+
+                last_slice = 0
+                for current_slice in slices:
+                    sliced_tokens = seek_sequence[last_slice:current_slice]
+                    # start_timestamp_pos = (
+                    #     sliced_tokens[0].item() - timestamp_begin 
+                    # )
+                    # end_timestamp_pos = (
+                    #     sliced_tokens[-1].item() - timestamp_begin 
+                    # )
+                    # current_segments.append(
+                    #     new_segment(
+                    #         start=time_offset + start_timestamp_pos * time_precision,
+                    #         end=time_offset + end_timestamp_pos * time_precision,
+                    #         tokens=sliced_tokens,
+                    #         result=result,
+                    #     )
+                    # )
+                    last_slice = current_slice
+
+                if single_timestamp_ending:
+                    # single timestamp at the end means no speech after the last timestamp.
+                    seek += num_segment_frames
+                else:
+                    # otherwise, ignore the unfinished segment and seek to the last timestamp
+                    last_timestamp_pos = (
+                        seek_sequence[last_slice - 1].item() - timestamp_begin
+                    )
+                    seek += last_timestamp_pos * input_stride
+                    seek_sequence = seek_sequence[:, :last_slice]
+            else:
+                # duration = segment_duration
+                timestamps = seek_sequence[timestamp_tokens.nonzero().flatten()]
+                if (
+                    len(timestamps) > 0
+                    and timestamps[-1].item() != timestamp_begin
+                ):
+                    # no consecutive timestamps but it has a timestamp; use the last one.
+                    last_timestamp_pos = (
+                        timestamps[-1].item() - timestamp_begin
+                    )
+                    # duration = last_timestamp_pos * time_precision
+
+                # current_segments.append(
+                #     new_segment(
+                #         start=time_offset,
+                #         end=time_offset + duration,
+                #         tokens=tokens,
+                #         result=result,
+                #     )
+                # )
+                seek += num_segment_frames
+
+
+            print(seek)
+            import ipdb; ipdb.set_trace()
+
+            if sequence is None:
+                sequence = seek_sequence
+            else:
+                sequence = torch.cat([sequence, seek_sequence], dim=-1)
+
+        return sequence
 
     def prepare_inputs_for_generation(
         self,
