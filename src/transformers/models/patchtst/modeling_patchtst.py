@@ -450,7 +450,7 @@ class PatchTSTMasking(nn.Module):
 
     Returns:
         x_mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`)
-                Masked patched input
+            Masked patched input
         mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches)`)
             Bool tensor indicating True on masked points
 
@@ -528,18 +528,22 @@ class PatchTSTEncoderLayer(nn.Module):
 
         # Add & Norm of the sublayer 1
         self.dropout_path1 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
-        if "batch" in config.norm_layer.lower():
+        if config.norm_type == "batchnorm":
             self.norm_sublayer1 = PatchTSTBatchNorm(config)
-        else:
+        elif config.norm_type == "layernorm":
             self.norm_sublayer1 = nn.LayerNorm(config.d_model, eps=config.norm_eps)
+        else:
+            raise ValueError(f"{config.norm_type} is not a supported norm layer type.")
 
         # Add & Norm of the sublayer 2
         if self.channel_attention:
             self.dropout_path2 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
-            if "batch" in config.norm_layer.lower():
+            if config.norm_type == "batchnorm":
                 self.norm_sublayer2 = PatchTSTBatchNorm(config)
-            else:
+            elif config.norm_type == "layernorm":
                 self.norm_sublayer2 = nn.LayerNorm(config.d_model, eps=config.norm_eps)
+            else:
+                raise ValueError(f"{config.norm_type} is not a supported norm layer type.")
 
         # Position-wise Feed-Forward
         self.ff = nn.Sequential(
@@ -551,10 +555,12 @@ class PatchTSTEncoderLayer(nn.Module):
 
         # Add & Norm of sublayer 3
         self.dropout_path3 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
-        if "batch" in config.norm_layer.lower():
+        if config.norm_type == "batchnorm":
             self.norm_sublayer3 = PatchTSTBatchNorm(config)
-        else:
+        elif config.norm_type == "layernorm":
             self.norm_sublayer3 = nn.LayerNorm(config.d_model, eps=config.norm_eps)
+        else:
+            raise ValueError(f"{config.norm_type} is not a supported norm layer type.")
 
         self.pre_norm = config.pre_norm
 

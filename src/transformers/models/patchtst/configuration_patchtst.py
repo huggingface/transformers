@@ -44,7 +44,7 @@ class PatchTSTConfig(PretrainedConfig):
         context_length (`int`, *optional*, defaults to 32):
             The context length for the encoder.
         distribution_output (`str`, *optional*, defaults to `"student_t"`):
-            The distribution emission head for the model when loss is "nll". Could be either "student_t", "norm_layeral" or
+            The distribution emission head for the model when loss is "nll". Could be either "student_t", "normal" or
             "negative_binomial".
         loss (`str`, *optional*, defaults to `"mse"`):
             The loss function for the model corresponding to the `distribution_output` head. For parametric
@@ -66,7 +66,7 @@ class PatchTSTConfig(PretrainedConfig):
             Activate channel attention block in the Transformer to allow channels to attend each other.
         encoder_ffn_dim (`int`, *optional*, defaults to 256):
             Dimension of the "intermediate" (often named feed-forward) layer in encoder.
-        norm_layer (`str` , *optional*, defaults to `"BatchNorm"`):
+        norm_type (`str` , *optional*, defaults to `"BatchNorm"`):
             Normalization at each Transformer layer. Can be `"BatchNorm"` or `"LayerNorm"`.
         norm_eps (`float`, *optional*, defaults to 1e-05):
             A value added to the denominator for numerical stability of normalization.
@@ -171,7 +171,7 @@ class PatchTSTConfig(PretrainedConfig):
         share_embedding: bool = True,
         channel_attention: bool = False,
         encoder_ffn_dim: int = 256,
-        norm_layer: str = "BatchNorm",
+        norm_type: str = "BatchNorm",
         norm_eps: float = 1e-5,
         attention_dropout: float = 0.0,
         dropout: float = 0.0,
@@ -223,7 +223,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.share_embedding = share_embedding
         self.channel_attention = channel_attention
-        self.norm_layer = norm_layer
+        self.norm_type = norm_type
         self.norm_eps = norm_eps
         self.positional_dropout = positional_dropout
         self.dropout_path = dropout_path
