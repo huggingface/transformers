@@ -4741,7 +4741,7 @@ class GenerationMixin:
 
             # Update attention_mask for the assistant's next round of generations
             if n_matches > 0:
-                model_kwargs = self._extend_attention_mask(model_kwargs, n_matches - 1)
+                model_kwargs = self._extend_attention_mask(model_kwargs, n_matches)
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id_tensor is not None:
