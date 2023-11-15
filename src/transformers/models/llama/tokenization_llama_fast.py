@@ -118,7 +118,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         add_bos_token=True,
         add_eos_token=False,
-        legacy=True,
         use_default_system_prompt=False,
         **kwargs,
     ):
@@ -134,7 +133,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             use_default_system_prompt=use_default_system_prompt,
             **kwargs,
         )
-        self.legacy = True
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
         self.update_post_processor()
