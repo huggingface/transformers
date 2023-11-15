@@ -6,7 +6,6 @@ on:
   push:
     branches:
       - run_amd_scheduled_ci_caller*
-      - rocm-scheduled-ci  # temporary, to remove
 
 jobs:
   run_amd_ci_mi210:
