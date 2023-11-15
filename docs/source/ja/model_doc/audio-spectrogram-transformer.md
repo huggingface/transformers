@@ -27,7 +27,7 @@ Audio Spectrogram Transformerモデルは、「[AST: Audio Spectrogram Transform
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/audio_spectogram_transformer_architecture.png"
 alt="drawing" width="600"/>
 
-<small> Audio pectrogram Transformerのアーキテクチャ。<a href="https://arxiv.org/abs/2104.01778">元論文</a>より抜粋。</small>
+<small> Audio Spectrogram Transformerのアーキテクチャ。<a href="https://arxiv.org/abs/2104.01778">元論文</a>より抜粋。</small>
 
 このモデルは[nielsr](https://huggingface.co/nielsr)より提供されました。
 オリジナルのコードは[こちら](https://github.com/YuanGongND/ast)で見ることができます。
