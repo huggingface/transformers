@@ -2101,7 +2101,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 for name, module in model_to_save.named_modules():
                     if name == "":
                         continue
-                    if hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook):
+                    if (
+                        hasattr(module, "_hf_hook")
+                        and isinstance(module._hf_hook, AlignDevicesHook)
+                        and module._hf_hook.offload
+                    ):
                         original_device = module._hf_hook.execution_device
                         # assign hook execution device to cpu
                         module._hf_hook.execution_device = "cpu"
