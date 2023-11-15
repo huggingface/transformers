@@ -840,7 +840,7 @@ class SpecialTokensMixin:
         self._cls_token = None
         self._mask_token = None
         self._pad_token_type_id = 0
-        self._additional_special_tokens: List[AddedToken] = []
+        self._additional_special_tokens = []
         self.verbose = verbose
 
         # We directly set the hidden value to allow initialization with special tokens
@@ -1319,7 +1319,16 @@ class SpecialTokensMixin:
         Don't convert tokens of `tokenizers.AddedToken` type to string so they can be used to control more finely how
         special tokens are tokenized.
         """
-        return [tok for tok in self.added_tokens_decoder.values() if tok.special]
+        all_tokens = []
+        seen = set()
+        for value in self.special_tokens_map_extended.values():
+            if isinstance(value, (list, tuple)):
+                tokens_to_add = [token for token in value if str(token) not in seen]
+            else:
+                tokens_to_add = [value] if str(value) not in seen else []
+            seen.update(map(str, tokens_to_add))
+            all_tokens.extend(tokens_to_add)
+        return all_tokens
 
     @property
     def all_special_tokens(self) -> List[str]:
@@ -1328,7 +1337,7 @@ class SpecialTokensMixin:
 
         Convert tokens of `tokenizers.AddedToken` type to string.
         """
-        all_toks = [str(tok) for tok in self.added_tokens_decoder.values() if tok.special]
+        all_toks = [str(s) for s in self.all_special_tokens_extended]
         return all_toks
 
     @property
