@@ -519,7 +519,7 @@ class SpmConverter(Converter):
 
     def pre_tokenizer(self, replacement, add_prefix_space):
         prepend_scheme = "always"
-        if hasattr(self.original_tokenizer, "legacy") and self.original_tokenizer.legacy == False:
+        if hasattr(self.original_tokenizer, "legacy") and not self.original_tokenizer.legacy:
             prepend_scheme = "first"
         return pre_tokenizers.Metaspace(
             replacement=replacement, add_prefix_space=add_prefix_space, prepend_scheme=prepend_scheme
