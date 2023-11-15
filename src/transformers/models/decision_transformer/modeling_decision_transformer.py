@@ -339,46 +339,60 @@ class DecisionTransformerGPT2FlashAttention(DecisionTransformerGPT2Attention):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
+        hidden_states: Optional[Tuple[torch.FloatTensor]],
         layer_past: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    ):
+    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         # Prepare query, key, and value
-        if layer_past is not None:
-            past_key, past_value = layer_past
-            key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
-            key = torch.cat((past_key, key), dim=-2)
-            value = torch.cat((past_value, value), dim=-2)
+        if encoder_hidden_states is not None:
+            if not hasattr(self, "q_attn"):
+                raise ValueError(
+                    "If class is used as cross attention, the weights `q_attn` have to be defined. "
+                    "Please make sure to instantiate class with `GPT2Attention(..., is_cross_attention=True)`."
+                )
+
+            query = self.q_attn(hidden_states)
+            key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
+            attention_mask = encoder_attention_mask
         else:
-            key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
+            query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
 
-        query = self.q_attn(hidden_states)
-
-        # Reshape and permute Q, K, V for multi-head attention
         query = self._split_heads(query, self.num_heads, self.head_dim)
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
-        # Apply Flash Attention Forward
-        attn_output = self._flash_attention_forward(
-            query, key, value, attention_mask, dropout=self.attn_dropout.rate, softmax_scale=1 / (self.head_dim**0.5)
-        )
+        if layer_past is not None:
+            past_key, past_value = layer_past
+            key = torch.cat((past_key, key), dim=-2)
+            value = torch.cat((past_value, value), dim=-2)
 
-        # Merge heads and project output
+        if use_cache is True:
+            present = (key, value)
+        else:
+            present = None
+
+        # Apply Flash Attention Forward
+        if self.reorder_and_upcast_attn:
+            attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
+        else:
+            # Flash Attention forward pass
+            attn_output = self._flash_attention_forward(
+                query, key, value, attention_mask, query.size(-2), self.attn_dropout.p, softmax_scale=None
+            )
+
+        # Merge heads and project back to hidden size
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
-        # Prepare outputs
-        outputs = (attn_output,)
-        if use_cache:
-            outputs += ((key, value),)
+        outputs = (attn_output, present)
         if output_attentions:
-            # Flash Attention doesn't return individual attention weights
-            outputs += (None,)
+            outputs += (attn_weights,)
 
         return outputs
 
