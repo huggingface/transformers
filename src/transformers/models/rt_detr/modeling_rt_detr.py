@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Facebook AI Research The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -432,7 +432,6 @@ class RTDetrTransformerEncoder(nn.Module):
 
         num_layers = config.num_encoder_layers
         self.layers = nn.ModuleList([RTDetrTransformerEncoderLayer(config) for _ in range(num_layers)])
-        self.num_layers = num_layers
 
     def forward(self, src, src_mask=None, pos_embed=None) -> torch.Tensor:
         output = src
@@ -1003,7 +1002,6 @@ class RTDetrLoss(nn.Module):
             Number of object categories, omitting the special no-object category.
     """
 
-    # def __init__(self, matcher, weight_dict, losses, alpha, gamma, eos_coef, num_classes):
     def __init__(self, config):
         super().__init__()
 

@@ -59,7 +59,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 640, "longest_edge": 640}`):
             Size of the image's `(height, width)` dimensions after resizing. Can be overridden by the `size` parameter
             in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to 2):
             Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Controls whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
