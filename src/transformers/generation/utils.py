@@ -4741,16 +4741,7 @@ class GenerationMixin:
 
             # Update attention_mask for the assistant's next round of generations
             if n_matches > 0:
-                if self.config.is_encoder_decoder and model_kwargs.get("decoder_attention_mask", None) is not None:
-                    attention_mask = model_kwargs["decoder_attention_mask"]
-                    model_kwargs["decoder_attention_mask"] = torch.cat(
-                        [attention_mask, attention_mask.new_ones((attention_mask.shape[0], n_matches))], dim=-1
-                    )
-                elif not self.config.is_encoder_decoder and model_kwargs.get("attention_mask", None) is not None:
-                    attention_mask = model_kwargs["attention_mask"]
-                    model_kwargs["attention_mask"] = torch.cat(
-                        [attention_mask, attention_mask.new_ones((attention_mask.shape[0], n_matches))], dim=-1
-                    )
+                model_kwargs = self._extend_attention_mask(model_kwargs, n_matches - 1)
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id_tensor is not None:
