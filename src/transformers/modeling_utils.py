@@ -2094,7 +2094,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the model
         if state_dict is None:
             # if model parameters are offloaded, onload and send state dicts to CPU
-            if hasattr(model_to_save, "_hf_hook") and isinstance(model_to_save._hf_hook, AlignDevicesHook):
+            if (
+                hasattr(model_to_save, "_hf_hook")
+                and isinstance(model_to_save._hf_hook, AlignDevicesHook)
+                and True
+                in {
+                    module._hf_hook.offload
+                    for _, module in model_to_save.named_modules()
+                    if hasattr(module, "_hf_hook")
+                }
+            ):
                 state_dict = {}
                 placeholders = []
                 for name, module in model_to_save.named_modules():
