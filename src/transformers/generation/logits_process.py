@@ -1514,9 +1514,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
         self.timestamp_begin = generate_config.no_timestamps_token_id + 1
 
-        self.begin_index = len(generate_config.forced_decoder_ids) + 1
-        if generate_config.forced_decoder_ids[-1][1] == self.no_timestamps_token_id:
-            self.begin_index -= 1
+        self.begin_index = len(generate_config.forced_decoder_ids) + 1 if generate_config.forced_decoder_ids is not None else 1
         self.max_initial_timestamp_index = generate_config.max_initial_timestamp_index
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -1550,13 +1548,13 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
                 scores[k, self.timestamp_begin : timestamp_last] = -float("inf")
 
-            # apply the `max_initial_timestamp` option
-            if input_ids.shape[1] == self.begin_index:
-                scores[:, :self.timestamp_begin] = -float("inf")
+        # apply the `max_initial_timestamp` option
+        if input_ids.shape[1] == self.begin_index:
+            scores[:, :self.timestamp_begin] = -float("inf")
 
-                if self.max_initial_timestamp_index is not None:
-                    last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
-                    scores[:, last_allowed + 1 :] = -float("inf")
+            if self.max_initial_timestamp_index is not None:
+                last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
+                scores[:, last_allowed + 1 :] = -float("inf")
 
         # if sum of probability over timestamps is above any other token, sample timestamp
         logprobs = torch.nn.functional.log_softmax(scores.float(), dim=-1)

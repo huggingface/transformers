@@ -1998,6 +1998,13 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 generation_config.num_frames = kwargs.pop("num_frames")
 
         if generation_config.return_timestamps:
+            if generation_config.forced_decoder_ids[-1][-1] == self.generation_config.no_timestamps_token_id:
+                # remove no_timestamp to be forcefully generated if we want to return timestamps
+                # this is also important to make sure `WhisperTimeStampLogitsProcessor` functions correctly
+                forced_decoder_ids = generation_config.forced_decoder_ids[:-1]
+                # Make sure that if list is empty we set it to None
+                generation_config.forced_decoder_ids = None if len(forced_decoder_ids) == 0 else forced_decoder_ids 
+
             logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
 
         if is_shortform :
@@ -2023,7 +2030,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         # if input is longer than 30 seconds we default to long-form generation
         seek = 0
         sequence = None
-        timestamp_begin = getattr(self.generation_config, "no_timestamps_token_id", 50362) + 1
+        timestamp_begin = self.generation_config.no_timestamps_token_id + 1
         # input stride is mel frames per encoder output vector which is the product of all conv strides
         input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
 
