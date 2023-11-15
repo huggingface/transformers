@@ -162,6 +162,7 @@ else:
             ("ernie", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("ernie_m", ("ErnieMTokenizer" if is_sentencepiece_available() else None, None)),
             ("esm", ("EsmTokenizer", None)),
+            ("falcon", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("flaubert", ("FlaubertTokenizer", None)),
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("fsmt", ("FSMTTokenizer", None)),

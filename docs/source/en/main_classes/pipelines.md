@@ -225,7 +225,7 @@ For users, a rule of thumb is:
 
 - **Measure performance on your load, with your hardware. Measure, measure, and keep measuring. Real numbers are the
   only way to go.**
-- If you are latency constrained (live product doing inference), don't batch
+- If you are latency constrained (live product doing inference), don't batch.
 - If you are using CPU, don't batch.
 - If you are using throughput (you want to run your model on a bunch of static data), on GPU, then:
 

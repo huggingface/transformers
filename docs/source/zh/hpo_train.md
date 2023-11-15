@@ -13,25 +13,27 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Hyperparameter Search using Trainer API
+# 使用Trainer API进行超参数搜索
 
-🤗 Transformers provides a [`Trainer`] class optimized for training 🤗 Transformers models, making it easier to start training without manually writing your own training loop. The [`Trainer`] provides API for hyperparameter search. This doc shows how to enable it in example. 
+🤗 Transformers库提供了一个优化过的[`Trainer`]类，用于训练🤗 Transformers模型，相比于手动编写自己的训练循环，这更容易开始训练。[`Trainer`]提供了超参数搜索的API。本文档展示了如何在示例中启用它。 
 
-## Hyperparameter Search backend
 
-[`Trainer`] supports four hyperparameter search backends currently:
-[optuna](https://optuna.org/), [sigopt](https://sigopt.com/), [raytune](https://docs.ray.io/en/latest/tune/index.html) and [wandb](https://wandb.ai/site/sweeps).
+## 超参数搜索后端
 
-you should install them before using them as the hyperparameter search backend
+[`Trainer`] 目前支持四种超参数搜索后端：[optuna](https://optuna.org/)，[sigopt](https://sigopt.com/)，[raytune](https://docs.ray.io/en/latest/tune/index.html)，[wandb](https://wandb.ai/site/sweeps)
+
+在使用它们之前，您应该先安装它们作为超参数搜索后端。
+
 ```bash
 pip install optuna/sigopt/wandb/ray[tune] 
 ```
 
-## How to enable Hyperparameter search in example
+## 如何在示例中启用超参数搜索
 
-Define the hyperparameter search space, different backends need different format.
+定义超参数搜索空间，不同的后端需要不同的格式。
 
-For sigopt, see sigopt [object_parameter](https://docs.sigopt.com/ai-module-api-references/api_reference/objects/object_parameter), it's like following:
+对于sigopt，请参阅sigopt [object_parameter](https://docs.sigopt.com/ai-module-api-references/api_reference/objects/object_parameter)，它类似于以下内容：
+
 ```py
 >>> def sigopt_hp_space(trial):
 ...     return [
@@ -44,7 +46,7 @@ For sigopt, see sigopt [object_parameter](https://docs.sigopt.com/ai-module-api-
 ...     ]
 ```
 
-For optuna, see optuna [object_parameter](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html#sphx-glr-tutorial-10-key-features-002-configurations-py), it's like following:
+对于optuna，请参阅optuna [object_parameter](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html#sphx-glr-tutorial-10-key-features-002-configurations-py)，它类似于以下内容：
 
 ```py
 >>> def optuna_hp_space(trial):
@@ -54,7 +56,7 @@ For optuna, see optuna [object_parameter](https://optuna.readthedocs.io/en/stabl
 ...     }
 ```
 
-Optuna provides multi-objective HPO. You can pass `direction` in `hyperparameter_search` and define your own compute_objective to return multiple objective values. The Pareto Front (`List[BestRun]`) will be returned in hyperparameter_search, you should refer to the test case `TrainerHyperParameterMultiObjectOptunaIntegrationTest` in [test_trainer](https://github.com/huggingface/transformers/blob/main/tests/trainer/test_trainer.py). It's like following
+Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direction`参数，并定义自己的`compute_objective`以返回多个目标值。在`hyperparameter_search`中将返回Pareto Front（`List[BestRun]`），您应该参考[test_trainer](https://github.com/huggingface/transformers/blob/main/tests/trainer/test_trainer.py)中的测试用例`TrainerHyperParameterMultiObjectOptunaIntegrationTest`。它类似于以下内容：
 
 ```py
 >>> best_trials = trainer.hyperparameter_search(
@@ -66,7 +68,7 @@ Optuna provides multi-objective HPO. You can pass `direction` in `hyperparameter
 ... )
 ```
 
-For raytune, see raytune [object_parameter](https://docs.ray.io/en/latest/tune/api/search_space.html), it's like following:
+对于raytune，可以参考raytune的[object_parameter](https://docs.ray.io/en/latest/tune/api/search_space.html)，它类似于以下内容：
 
 ```py
 >>> def ray_hp_space(trial):
@@ -76,7 +78,7 @@ For raytune, see raytune [object_parameter](https://docs.ray.io/en/latest/tune/a
 ...     }
 ```
 
-For wandb, see wandb [object_parameter](https://docs.wandb.ai/guides/sweeps/configuration), it's like following:
+对于wandb，可以参考wandb的[object_parameter](https://docs.wandb.ai/guides/sweeps/configuration)，它类似于以下内容：
 
 ```py
 >>> def wandb_hp_space(trial):
@@ -90,7 +92,8 @@ For wandb, see wandb [object_parameter](https://docs.wandb.ai/guides/sweeps/conf
 ...     }
 ```
 
-Define a `model_init` function and pass it to the [`Trainer`], as an example:
+定义一个`model_init`函数并将其传递给[Trainer]，作为示例：
+
 ```py
 >>> def model_init(trial):
 ...     return AutoModelForSequenceClassification.from_pretrained(
@@ -99,11 +102,11 @@ Define a `model_init` function and pass it to the [`Trainer`], as an example:
 ...         config=config,
 ...         cache_dir=model_args.cache_dir,
 ...         revision=model_args.model_revision,
-...         token=True if model_args.use_auth_token else None,
+...         use_auth_token=True if model_args.use_auth_token else None,
 ...     )
 ```
 
-Create a [`Trainer`] with your `model_init` function, training arguments, training and test datasets, and evaluation function:
+使用你的`model_init`函数、训练参数、训练和测试数据集以及评估函数创建一个[`Trainer`]。
 
 ```py
 >>> trainer = Trainer(
@@ -118,9 +121,9 @@ Create a [`Trainer`] with your `model_init` function, training arguments, traini
 ... )
 ```
 
-Call hyperparameter search, get the best trial parameters, backend could be `"optuna"`/`"sigopt"`/`"wandb"`/`"ray"`. direction can be`"minimize"` or `"maximize"`, which indicates whether to optimize greater or lower objective.
+调用超参数搜索，获取最佳试验参数，后端可以是`"optuna"`/`"sigopt"`/`"wandb"`/`"ray"`。方向可以是`"minimize"`或`"maximize"`，表示是否优化更大或更低的目标。
 
-You could define your own compute_objective function, if not defined, the default compute_objective will be called, and the sum of eval metric like f1 is returned as objective value.
+您可以定义自己的compute_objective函数，如果没有定义，将调用默认的compute_objective，并将评估指标（如f1）之和作为目标值返回。
 
 ```py
 >>> best_trial = trainer.hyperparameter_search(
@@ -132,5 +135,5 @@ You could define your own compute_objective function, if not defined, the defaul
 ... )
 ```
 
-## Hyperparameter search For DDP finetune
-Currently, Hyperparameter search for DDP is enabled for optuna and sigopt. Only the rank-zero process will generate the search trial and pass the argument to other ranks.
+## 针对DDP微调的超参数搜索
+目前，Optuna和Sigopt已启用针对DDP的超参数搜索。只有rank-zero进程会进行超参数搜索并将参数传递给其他进程。

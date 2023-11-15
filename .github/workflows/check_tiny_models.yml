@@ -14,7 +14,7 @@ env:
 jobs:
   check_tiny_models:
     name: Check tiny models
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout transformers
         uses: actions/checkout@v3
