@@ -15,13 +15,13 @@
 """ PyTorch CLIP model."""
 
 
+import math
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-import math
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
@@ -868,7 +868,7 @@ class CLIPVisionTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -933,7 +933,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -964,7 +964,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
 
@@ -1058,7 +1058,7 @@ class CLIPModel(CLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False
+        interpolate_pos_encoding: bool = False,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1094,7 +1094,7 @@ class CLIPModel(CLIPPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         pooled_output = vision_outputs[1]  # pooled_output
@@ -1114,7 +1114,7 @@ class CLIPModel(CLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, CLIPOutput]:
         r"""
         Returns:
@@ -1152,7 +1152,7 @@ class CLIPModel(CLIPPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         text_outputs = self.text_model(
@@ -1310,7 +1310,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, CLIPVisionModelOutput]:
         r"""
         Returns:
@@ -1340,7 +1340,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         pooled_output = vision_outputs[1]  # pooled_output
