@@ -224,9 +224,8 @@ class BeamSearchScorer(BeamScorer):
         group_index: Optional[int] = 0,
         decoder_prompt_len: Optional[int] = 0,
     ) -> Dict[str, torch.Tensor]:
-        cur_len = (
-            input_ids.shape[-1] - decoder_prompt_len + 1
-        )  # add up to the length which the next_scores is calculated on
+        # add up to the length which the next_scores is calculated on
+        cur_len = input_ids.shape[-1] - decoder_prompt_len + 1
         batch_size = len(self._beam_hyps) // self.num_beam_groups
 
         if not (batch_size == (input_ids.shape[0] // self.group_size)):
@@ -545,7 +544,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             beam_indices (`torch.LongTensor`, *optional*):
                 Beam indices indicating to which beam hypothesis each token correspond.
-
+            decoder_prompt_len (`int`, *optional*):
+                The length of prompt that is included in the input to decoder.
         Return:
             `UserDict`: A dictionary composed of the fields as defined above:
 
@@ -560,9 +560,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 indicating to which beam the next tokens shall be added.
         """
 
-        cur_len = (
-            input_ids.shape[-1] - decoder_prompt_len + 1
-        )  # add up to the length which the next_scores is calculated on
+        # add up to the length which the next_scores is calculated on
+        cur_len = input_ids.shape[-1] - decoder_prompt_len + 1
         batch_size = len(self._beam_hyps)
         if not (batch_size == (input_ids.shape[0] // self.group_size)):
             if self.num_beam_groups > 1:
