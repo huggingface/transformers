@@ -1223,7 +1223,7 @@ class UdopTokenizer(PreTrainedTokenizer):
                 overflowing_tokens,
                 overflowing_token_boxes,
                 overflowing_labels,
-            ) = self.truncate_sequences_boxes(
+            ) = self.truncate_sequences(
                 ids,
                 token_boxes,
                 pair_ids=pair_ids,
