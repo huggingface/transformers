@@ -48,6 +48,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
+    require_torch_non_multi_gpu,
     require_usr_bin_time,
     slow,
     torch_device,
@@ -791,6 +792,7 @@ class ModelUtilsTest(TestCasePlus):
             "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/pytorch_model.bin", config=config
         )
 
+    @require_torch_non_multi_gpu
     def test_save_offloaded_model(self):
         model_id = "bigscience/bloomz-560m"
         config = AutoConfig.from_pretrained(model_id)
