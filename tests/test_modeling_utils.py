@@ -58,7 +58,6 @@ from transformers.utils import (
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
-    is_accelerate_available,
 )
 from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torchdynamo_available
 
@@ -150,9 +149,6 @@ if is_torch_available():
         def tie_weights(self):
             self.decoder.weight = self.base.linear.weight
 
-
-if is_accelerate_available():
-    from accelerate import infer_auto_device_map, init_empty_weights
 
 if is_flax_available():
     from transformers import FlaxBertModel
@@ -794,20 +790,25 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_torch_non_multi_gpu
     def test_save_offloaded_model(self):
-        model_id = "bigscience/bloomz-560m"
-        config = AutoConfig.from_pretrained(model_id)
-        with init_empty_weights():
-            model = AutoModelForCausalLM.from_config(config)
-
-        device_map = infer_auto_device_map(model, max_memory={0: "2GIB", "cpu": "10GIB"})
-        assert 0 in device_map.values()
-        assert "cpu" in device_map.values()
-
-        offloaded_model = AutoModelForCausalLM.from_pretrained(model_id, device_map=device_map)
+        device_map = {
+            "transformer.wte": 0,
+            "transformer.wpe": 0,
+            "transformer.h.0": "cpu",
+            "transformer.h.1": "cpu",
+            "transformer.h.2": "cpu",
+            "transformer.h.3": "disk",
+            "transformer.h.4": "disk",
+            "transformer.ln_f": 0,
+            "lm_head": 0,
+        }
 
         # check_models_equal requires onloaded tensors
-        onloaded_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu")
+        onloaded_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2", device_map="cpu")
         with tempfile.TemporaryDirectory() as tmp_dir:
+            offload_folder = os.path.join(tmp_dir, "offload")
+            offloaded_model = AutoModelForCausalLM.from_pretrained(
+                "hf-internal-testing/tiny-random-gpt2", device_map=device_map, offload_folder=offload_folder
+            )
             offloaded_model.save_pretrained(tmp_dir)
             saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map="cpu")
 
