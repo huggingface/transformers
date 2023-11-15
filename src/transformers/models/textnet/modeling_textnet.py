@@ -90,7 +90,7 @@ class TextNetConvLayer(nn.Module):
 
         self.activation = nn.Identity()
         if self.activation_function is not None:
-            self.activation = ACT2CLS[self.activation_function](inplace=True)
+            self.activation = ACT2CLS[self.activation_function]()
 
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
@@ -109,7 +109,7 @@ class TextNetRepConvLayer(nn.Module):
 
         padding = ((kernel_size[0] - 1) // 2, (kernel_size[1] - 1) // 2)
 
-        self.nonlinearity = nn.ReLU(inplace=True)
+        self.nonlinearity = nn.ReLU()
 
         self.main_conv = nn.Conv2d(
             in_channels=num_channels,
