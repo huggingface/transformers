@@ -4528,10 +4528,10 @@ class GenerationMixin:
         # prepare assistant model's keys of inputs
         if assistant_model.config.is_encoder_decoder:
             input_ids_key = "decoder_input_ids"
-            attention_mask_key = "decoder_attention_mask"
+            attention_key = "decoder_attention_mask"
         else:
             input_ids_key = "input_ids"
-            attention_mask_key = "attention_mask"
+            attention_key = "attention_mask"
 
         # keep track of which sequences are already finished
         unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
@@ -4558,37 +4558,41 @@ class GenerationMixin:
             # `.generate()` call if we decide to add `past_key_values` as a possible output of generate, as we
             # need access to the assistant cache to secure strong speedups.
             candidate_input_ids = input_ids
-            assistant_inputs = assistant_model.prepare_inputs_for_generation(
-                candidate_input_ids,
-                attention_mask=model_kwargs.get("attention_mask", None),
-                decoder_attention_mask=model_kwargs.get("decoder_attention_mask", None),
-                encoder_outputs=(model_kwargs.get("assistant_encoder_outputs", None),),
-                past_key_values=model_kwargs.get("assistant_past_key_values", None),
-            )
+            assistant_kwargs = copy.copy(model_kwargs)
+            # import pdb; pdb.set_trace()
             for _ in range(int(num_assistant_tokens)):
-                # 1.1. check if the input ids length is correct
+                # 1.1 prepare assistant model inputs
+                assistant_inputs = assistant_model.prepare_inputs_for_generation(
+                    candidate_input_ids,
+                    attention_mask=assistant_kwargs.get("attention_mask", None),
+                    decoder_attention_mask=assistant_kwargs.get("decoder_attention_mask", None),
+                    encoder_outputs=(assistant_kwargs.get("assistant_encoder_outputs", None),),
+                    past_key_values=assistant_kwargs.get("assistant_past_key_values", None),
+                )
+
+                # 1.2. check if the input ids length is correct
                 has_pkv = assistant_inputs.get("past_key_values", None) is not None
                 if has_pkv and assistant_inputs[input_ids_key].shape[-1] not in (1, 2):
                     raise ValueError("The length of the input ids in assistant inputs should be 1 or 2")
 
-                # 1.2. use the assistant model to obtain the next candidate logits
+                # 1.3. use the assistant model to obtain the next candidate logits
                 assistant_model_outputs = assistant_model(**assistant_inputs)
 
-                # 1.3. greedily select the next candidate token
+                # 1.4. greedily select the next candidate token
                 if len(logits_processor) > 0:
                     assistant_model_outputs.logits[:, -1, :] = logits_processor(
                         candidate_input_ids, assistant_model_outputs.logits[:, -1, :]
                     )
 
-                # 1.4. update assistant model inputs
+                # 1.5. update assistant model inputs
                 new_token = assistant_model_outputs.logits[:, -1, :].argmax(dim=-1)
                 candidate_input_ids = torch.cat((candidate_input_ids, new_token[:, None]), dim=-1)
-                assistant_inputs[input_ids_key] = new_token[:, None]
-                mask = assistant_inputs[attention_mask_key]
-                assistant_inputs[attention_mask_key] = torch.cat([mask, mask.new_ones((mask.shape[0], 1))], dim=-1)
-                assistant_inputs["past_key_values"] = assistant_model_outputs.past_key_values
+                if assistant_kwargs.get(attention_key, None) is not None:
+                    mask = assistant_kwargs[attention_key]
+                    assistant_kwargs[attention_key] = torch.cat([mask, mask.new_ones((mask.shape[0], 1))], dim=-1)
+                assistant_kwargs["assistant_past_key_values"] = assistant_model_outputs.past_key_values
 
-                # 1.5. stop assistant generation on EOS
+                # 1.6. stop assistant generation on EOS
                 if eos_token_id_tensor is not None:
                     last_assistant_token_is_eos = new_token.tile(eos_token_id_tensor.shape[0], 1)
                     last_assistant_token_is_eos = (
@@ -4599,7 +4603,7 @@ class GenerationMixin:
                 else:
                     last_assistant_token_is_eos = False
 
-            model_kwargs["assistant_past_key_values"] = assistant_inputs["past_key_values"]
+            model_kwargs["assistant_past_key_values"] = assistant_kwargs["assistant_past_key_values"]
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
 
             # 2. Use the original model to obtain the next token logits given the candidate sequence. We obtain
