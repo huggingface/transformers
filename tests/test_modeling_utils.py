@@ -23,6 +23,7 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
+from accelerate import infer_auto_device_map, init_empty_weights
 from huggingface_hub import HfFolder, delete_repo
 from huggingface_hub.file_download import http_get
 from pytest import mark
@@ -786,6 +787,27 @@ class ModelUtilsTest(TestCasePlus):
         _ = BertModel.from_pretrained(
             "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/pytorch_model.bin", config=config
         )
+
+    def test_save_offloaded_model(self):
+        model_id = "bigscience/bloomz-560m"
+        config = AutoConfig.from_pretrained(model_id)
+        with init_empty_weights():
+            model = AutoModelForCausalLM.from_config(config)
+
+        device_map = infer_auto_device_map(model, max_memory={0: "2GIB", "cpu": "10GIB"})
+        assert 0 in device_map.values()
+        assert "cpu" in device_map.values()
+
+        offloaded_model = AutoModelForCausalLM.from_pretrained(model_id, device_map=device_map)
+        assert len({p.device for p in model.parameters()}) == 2
+
+        # check_models_equal requires onloaded tensors
+        onloaded_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            offloaded_model.save_pretrained(tmp_dir)
+            saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map="cpu")
+
+        self.assertTrue(check_models_equal(onloaded_model, saved_model))
 
     @require_safetensors
     def test_use_safetensors(self):
