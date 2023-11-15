@@ -355,7 +355,7 @@ if __name__ == "__main__":
             processor.save_pretrained(args.pytorch_dump_folder_path)
 
             # save fast tokenizer as well
-            fast_tokenizer = WhisperTokenizerFast(__slow_tokenizer=tokenizer)
+            fast_tokenizer = WhisperTokenizerFast.from_pretrained(args.pytorch_dump_folder_path)
             fast_tokenizer.save_pretrained(args.pytorch_dump_folder_path, legacy_format=False)
 
     model.save_pretrained(args.pytorch_dump_folder_path)
