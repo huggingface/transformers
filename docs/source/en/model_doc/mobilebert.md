@@ -37,7 +37,9 @@ natural language inference tasks of GLUE, MobileBERT achieves a GLUEscore o 77.7
 latency on a Pixel 4 phone. On the SQuAD v1.1/v2.0 question answering task, MobileBERT achieves a dev F1 score of
 90.0/79.2 (1.5/2.1 higher than BERT_BASE).*
 
-Tips:
+This model was contributed by [vshampor](https://huggingface.co/vshampor). The original code can be found [here](https://github.com/google-research/google-research/tree/master/mobilebert).
+
+## Usage tips
 
 - MobileBERT is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather
   than the left.
@@ -45,9 +47,8 @@ Tips:
   efficient at predicting masked tokens and at NLU in general, but is not optimal for text generation. Models trained
   with a causal language modeling (CLM) objective are better in that regard.
 
-This model was contributed by [vshampor](https://huggingface.co/vshampor). The original code can be found [here](https://github.com/google-research/mobilebert).
 
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
@@ -72,6 +73,9 @@ This model was contributed by [vshampor](https://huggingface.co/vshampor). The o
 [[autodoc]] models.mobilebert.modeling_mobilebert.MobileBertForPreTrainingOutput
 
 [[autodoc]] models.mobilebert.modeling_tf_mobilebert.TFMobileBertForPreTrainingOutput
+
+<frameworkcontent>
+<pt>
 
 ## MobileBertModel
 
@@ -113,6 +117,9 @@ This model was contributed by [vshampor](https://huggingface.co/vshampor). The o
 [[autodoc]] MobileBertForQuestionAnswering
     - forward
 
+</pt>
+<tf>
+
 ## TFMobileBertModel
 
 [[autodoc]] TFMobileBertModel
@@ -152,3 +159,6 @@ This model was contributed by [vshampor](https://huggingface.co/vshampor). The o
 
 [[autodoc]] TFMobileBertForQuestionAnswering
     - call
+
+</tf>
+</frameworkcontent>

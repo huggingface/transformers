@@ -486,7 +486,6 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     config_class = EfficientNetConfig
     base_model_prefix = "efficientnet"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -499,11 +498,6 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, EfficientNetBlock):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 @add_start_docstrings(

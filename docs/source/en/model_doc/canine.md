@@ -37,7 +37,9 @@ To use its finer-grained input effectively and efficiently, CANINE combines down
 sequence length, with a deep transformer stack, which encodes context. CANINE outperforms a comparable mBERT model by
 2.8 F1 on TyDi QA, a challenging multilingual benchmark, despite having 28% fewer model parameters.*
 
-Tips:
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/google-research/language/tree/master/language/canine).
+
+## Usage tips
 
 - CANINE uses no less than 3 Transformer encoders internally: 2 "shallow" encoders (which only consist of a single
   layer) and 1 "deep" encoder (which is a regular BERT encoder). First, a "shallow" encoder is used to contextualize
@@ -50,19 +52,18 @@ Tips:
   (which has a predefined Unicode code point). For token classification tasks however, the downsampled sequence of
   tokens needs to be upsampled again to match the length of the original character sequence (which is 2048). The
   details for this can be found in the paper.
--  Models:
+
+Model checkpoints:
 
   - [google/canine-c](https://huggingface.co/google/canine-c): Pre-trained with autoregressive character loss,
     12-layer, 768-hidden, 12-heads, 121M parameters (size ~500 MB).
   - [google/canine-s](https://huggingface.co/google/canine-s): Pre-trained with subword loss, 12-layer,
     768-hidden, 12-heads, 121M parameters (size ~500 MB).
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/google-research/language/tree/master/language/canine).
 
+## Usage example
 
-### Example
-
-CANINE works on raw characters, so it can be used without a tokenizer:
+CANINE works on raw characters, so it can be used **without a tokenizer**:
 
 ```python
 >>> from transformers import CanineModel
@@ -96,16 +97,12 @@ sequences to the same length):
 >>> sequence_output = outputs.last_hidden_state
 ```
 
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
 - [Question answering task guide](../tasks/question_answering)
 - [Multiple choice task guide](../tasks/multiple_choice)
-
-## CANINE specific outputs
-
-[[autodoc]] models.canine.modeling_canine.CanineModelOutputWithPooling
 
 ## CanineConfig
 
@@ -117,6 +114,10 @@ sequences to the same length):
     - build_inputs_with_special_tokens
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
+
+## CANINE specific outputs
+
+[[autodoc]] models.canine.modeling_canine.CanineModelOutputWithPooling
 
 ## CanineModel
 
