@@ -508,25 +508,18 @@ class SpmConverter(Converter):
 
         return tokenizer
 
-    # def normalizer(self, proto):
-    #     precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-    #     if not precompiled_charsmap:
-    #         return normalizers.Sequence([normalizers.Replace(Regex(" {2,}"), " ")])
-    #     else:
-    #         return normalizers.Sequence(
-    #             [normalizers.Precompiled(precompiled_charsmap), normalizers.Replace(Regex(" {2,}"), " ")]
-    #         )
-
     def normalizer(self, proto):
-        return normalizers.Sequence(
-            [
-                normalizers.Replace(pattern=" ", content="▁"),
-            ]
-        )
+        precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
+        if not precompiled_charsmap:
+            return normalizers.Sequence([normalizers.Replace(Regex(" {2,}"), " ")])
+        else:
+            return normalizers.Sequence(
+                [normalizers.Precompiled(precompiled_charsmap), normalizers.Replace(Regex(" {2,}"), " ")]
+            )
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        pre_tokenizer = pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
-        pre_tokenizer.legacy = self.original_tokenizer.legacy
+        pre_tokenizer = pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space )
+        # pre_tokenizer.legacy = self.original_tokenizer.legacy
         return pre_tokenizer
 
     def post_processor(self):
@@ -1217,6 +1210,7 @@ class LlamaConverter(SpmConverter):
     def normalizer(self, proto):
         return normalizers.Sequence(
             [
+                normalizers.Prepend(prepend="▁"),
                 normalizers.Replace(pattern=" ", content="▁"),
             ]
         )
