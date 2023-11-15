@@ -226,10 +226,12 @@ def get_indent(code: str) -> str:
 
 
 async def run_ruff(code):
-    command = ["echo", code, "|", "ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
-    process = await asyncio.create_subprocess_exec(*command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    stdout, _ = await process.communicate()
-    return stdout
+    command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
+    process = await asyncio.create_subprocess_exec(
+        *command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE
+    )
+    stdout, _ = await process.communicate(input=code.encode())
+    return stdout.decode()
 
 
 def stylify(code: str) -> str:
