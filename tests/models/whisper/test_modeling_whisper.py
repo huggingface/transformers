@@ -16,6 +16,7 @@
 
 import copy
 import inspect
+import random
 import os
 import tempfile
 import unittest
@@ -25,6 +26,7 @@ import pytest
 
 import transformers
 from transformers import WhisperConfig
+from transformers.generation.logits_process import LogitsProcessor
 from transformers.testing_utils import (
     is_pt_flax_cross_test,
     require_flash_attn,
@@ -1236,6 +1238,61 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         model.generate(input_features, max_new_tokens=1, prompt_ids=prompt_ids)
 
+    def test_longform_generate_single_batch(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        class DummyTimestampLogitProcessor(LogitsProcessor):
+            """ This processor fakes the correct timestamps tokens pattern [TOK_1] [TOK_2] ... [TOK_N] [TIME_STAMP_TOK_1] [TIME_STAMP_TOK_2] [TOK_N+1] ... """
+
+            def __init__(self, timestamp_begin, vocab_size, batch_size):
+                self.timestamp_begin = timestamp_begin
+                self.vocab_size = vocab_size
+
+                self.min_space_between_timestamps = 5
+                self.timestamp_tokens = torch.arange(self.vocab_size - self.timestamp_begin, self.vocab_size)
+                self.timestamp_tokens.to(torch_device)
+
+                self.no_time_stamp_counter = batch_size * [0]
+                self.num_timestamps_used = batch_size * [0]
+                self.batch_size = batch_size
+
+
+            def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+                # first let's make sure to timestamp was produced
+                scores[:, self.timestamp_begin :] = -float("inf")
+                self.no_time_stamp_counter += 1
+
+                self.no_time_stamp_counter = [x + 1 for x in self.no_time_stamp_counter]
+                for k in range(self.batch_size):
+                    if self.no_time_stamp_counter[k] > 4 and random.randint(1, 10) <= 5:
+                        self.no_time_stamp_counter[k] = 0
+                        self.num_timestamps_used[k] += 1
+
+                        # force a timestamp
+                        scores[k, :] = -float("inf")
+                        scores[k, self.timestamp_tokens[self.num_timestamps_used[k]]] = 10.0
+
+                        if input_ids.shape[-1] > 2 and input_ids[k, -1].item() in self.timestamp_tokens and input_ids[k, -2].item() not in self.timestamp_tokens:
+                            # force the same as before
+                            scores[k, :] = -float("inf")
+                            scores[k, self.timestamp_tokens[input_ids[k, -1].item()]] = 10.0
+
+                return scores
+
+        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
+        input_features = input_dict["input_features"]
+
+        # len = 250 with num_input_frames = 60
+        long_input_features = torch.cat([input_features.repeat(1, 1, 4), input_features[:, :, :10]], dim=-1)
+        
+        # force bsz=1
+        long_input_features = long_input_features[0]
+        vocab_size = model.config.vocab_size
+
+        batch_size = 1
+        logits_processor = [DummyTimestampLogitProcessor(vocab_size - 10, vocab_size, batch_size=batch_size)]
+
+        output = model.generate(input_features, max_new_tokens=1, logits_processor=logits_processor)
 
 @require_torch
 @require_torchaudio

@@ -1514,7 +1514,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
         self.timestamp_begin = generate_config.no_timestamps_token_id + 1
 
-        self.begin_index = len(generate_config.forced_decoder_ids) + 2
+        self.begin_index = len(generate_config.forced_decoder_ids) + 1
         if generate_config.forced_decoder_ids[-1][1] == self.no_timestamps_token_id:
             self.begin_index -= 1
         self.max_initial_timestamp_index = generate_config.max_initial_timestamp_index
@@ -1524,14 +1524,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         # suppress <|notimestamps|> which is handled by without_timestamps
         scores[:, self.no_timestamps_token_id] = -float("inf")
 
-        if input_ids.shape[1] == self.begin_index - 1:
-            scores[:, :] = -float("inf")
-            scores[:, self.timestamp_begin] = 0
-            return scores
-
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
         for k in range(input_ids.shape[0]):
-            sampled_tokens = input_ids[k, self.begin_index :]
+            sampled_tokens = input_ids[k, self.begin_index:]
             seq = list(sampled_tokens.tolist())
 
             last_was_timestamp = len(seq) >= 1 and seq[-1] >= self.timestamp_begin
@@ -1543,22 +1538,25 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                 else:  # cannot be normal text tokens
                     scores[k, : self.eos_token_id] = -float("inf")
 
-            # `timestamps` shouldn't decrease; forbid timestamp tokens smaller than the last
-            # The following lines of code are copied from: https://github.com/openai/whisper/pull/914/files#r1137085090
             timestamps = sampled_tokens[sampled_tokens.ge(self.timestamp_begin)]
             if timestamps.numel() > 0:
+                # `timestamps` shouldn't decrease; forbid timestamp tokens smaller than the last
+                # The following lines of code are copied from: https://github.com/openai/whisper/pull/914/files#r1137085090
                 if last_was_timestamp and not penultimate_was_timestamp:
                     timestamp_last = timestamps[-1]
                 else:
                     # Avoid to emit <|0.00|> again
                     timestamp_last = timestamps[-1] + 1
 
-                scores[k, self.timestamp_begin : timestamp_last] = -np.inf
+                scores[k, self.timestamp_begin : timestamp_last] = -float("inf")
 
             # apply the `max_initial_timestamp` option
-            if input_ids.shape[1] == self.begin_index and self.max_initial_timestamp_index is not None:
-                last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
-                scores[:, last_allowed + 1 :] = -float("inf")
+            if input_ids.shape[1] == self.begin_index:
+                scores[:, :self.timestamp_begin] = -float("inf")
+
+                if self.max_initial_timestamp_index is not None:
+                    last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
+                    scores[:, last_allowed + 1 :] = -float("inf")
 
         # if sum of probability over timestamps is above any other token, sample timestamp
         logprobs = torch.nn.functional.log_softmax(scores.float(), dim=-1)

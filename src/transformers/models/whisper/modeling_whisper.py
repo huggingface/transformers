@@ -1741,6 +1741,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         prompt_ids: Optional[torch.Tensor] = None,
         num_segment_frames: Optional[int] = None,
         return_token_timestamps=None,
+        return_dict_in_generate=False,
         **kwargs,
     ):
         """
@@ -1838,15 +1839,26 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if num_segment_frames is None:
             num_segment_frames = 2 * self.config.max_source_positions
 
-        if return_timestamps is not None:
+        total_input_frames = inputs.shape[-1]
+        is_shortform = total_input_frames <= num_segment_frames
+
+        if return_timestamps is True:
             if not hasattr(generation_config, "no_timestamps_token_id"):
                 raise ValueError(
                     "You are trying to return timestamps, but the generation config is not properly set. "
                     "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`. "
                     "For more details on how to generate the approtiate config, refer to https://github.com/huggingface/transformers/issues/21878#issuecomment-1451902363"
                 )
-
             generation_config.return_timestamps = return_timestamps
+        elif is_shortform:
+            if return_timestamps is False:
+                raise ValueError(
+                    "You are passing more than 3000 mel input features (> 30 seconds) which automatically enables long-form generation which "
+                    "requires the model to predict timestamp tokens. Please either pass `return_timestamps=True` or make sure to pass no more than 3000 mel input features."
+                )
+
+            logger.info("Setting `return_timestamps=True` for long-form generation.")
+            generation_config.return_timestamps = True
         else:
             generation_config.return_timestamps = False
 
@@ -1970,12 +1982,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_decoder_ids)]
             generation_config.forced_decoder_ids = forced_decoder_ids
 
-        if generation_config.return_timestamps:
-            logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
-
         if return_token_timestamps:
             kwargs["output_attentions"] = True
-            kwargs["return_dict_in_generate"] = True
+            return_dict_in_generate = True
 
             if getattr(generation_config, "task", None) == "translate":
                 logger.warning("Token-level timestamps may not be reliable for task 'translate'.")
@@ -1988,8 +1997,31 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             if kwargs.get("num_frames") is not None:
                 generation_config.num_frames = kwargs.pop("num_frames")
 
+        if generation_config.return_timestamps:
+            logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
+
+        if is_shortform :
+            outputs = super().generate(
+                inputs,
+                generation_config,
+                logits_processor,
+                stopping_criteria,
+                prefix_allowed_tokens_fn,
+                synced_gpus,
+                return_dict_in_generate=return_dict_in_generate,
+                **kwargs,
+            )
+
+            if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
+                num_frames = getattr(generation_config, "num_frames", None)
+                outputs["token_timestamps"] = self._extract_token_timestamps(
+                    outputs, generation_config.alignment_heads, num_frames=num_frames
+                )
+
+            return outputs
+
+        # if input is longer than 30 seconds we default to long-form generation
         seek = 0
-        total_input_frames = inputs.shape[-1]
         sequence = None
         timestamp_begin = getattr(self.generation_config, "no_timestamps_token_id", 50362) + 1
         # input stride is mel frames per encoder output vector which is the product of all conv strides
@@ -2010,6 +2042,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 stopping_criteria,
                 prefix_allowed_tokens_fn,
                 synced_gpus,
+                return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
             )
 
@@ -2019,7 +2052,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     seek_outputs, generation_config.alignment_heads, num_frames=num_frames
                 )
 
-            seek_sequence = seek_outputs["sequence"] if kwargs.get("return_dict_in_generate", False) else seek_outputs
+            seek_sequence = seek_outputs["sequences"] if return_dict_in_generate else seek_outputs
 
             # cut EOS if necessary
             if (seek + num_segment_frames) < total_input_frames and seek_sequence[:, -1] == self.generation_config.eos_token_id:
@@ -2030,6 +2063,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             consecutive = torch.where(timestamp_tokens[:, :-1] & timestamp_tokens[:, 1:])[-1]
 
+            last_timestamp_pos = -1 # TODO(PVP delete, just for debugging
             if len(consecutive) > 0:
                 # if the output contains two consecutive timestamp tokens
                 slices = consecutive.tolist()
@@ -2087,12 +2121,15 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 # )
                 seek += seek_num_frames
 
-            print(seek)
+            if seek_num_frames == 0 or last_timestamp_pos == 0:
+                import ipdb; ipdb.set_trace()
 
             if sequence is None:
                 sequence = seek_sequence
             else:
                 sequence = torch.cat([sequence, seek_sequence], dim=-1)
+
+            print(seek)
 
         return sequence
 
