@@ -23,7 +23,6 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from accelerate import infer_auto_device_map, init_empty_weights
 from huggingface_hub import HfFolder, delete_repo
 from huggingface_hub.file_download import http_get
 from pytest import mark
@@ -58,6 +57,7 @@ from transformers.utils import (
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    is_accelerate_available,
 )
 from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torchdynamo_available
 
@@ -149,6 +149,9 @@ if is_torch_available():
         def tie_weights(self):
             self.decoder.weight = self.base.linear.weight
 
+
+if is_accelerate_available():
+    from accelerate import infer_auto_device_map, init_empty_weights
 
 if is_flax_available():
     from transformers import FlaxBertModel
