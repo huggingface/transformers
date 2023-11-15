@@ -445,7 +445,7 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
 class TFMPNetMainLayer(tf.keras.layers.Layer):
     config_class = MPNetConfig
 
-    def __init__(self, config, add_pooling_layer=True, **kwargs):
+    def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         self.config = config
@@ -455,7 +455,7 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         self.output_hidden_states = config.output_hidden_states
         self.return_dict = config.use_return_dict
         self.encoder = TFMPNetEncoder(config, name="encoder")
-        self.pooler = TFMPNetPooler(config, name="pooler") if add_pooling_layer else None
+        self.pooler = TFMPNetPooler(config, name="pooler")
         # The embeddings must be the last declaration in order to follow the weights order
         self.embeddings = TFMPNetEmbeddings(config, name="embeddings")
 
@@ -546,7 +546,7 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        pooled_output = self.pooler(sequence_output)
 
         if not return_dict:
             return (
@@ -659,7 +659,7 @@ MPNET_INPUTS_DOCSTRING = r"""
 class TFMPNetModel(TFMPNetPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.mpnet = TFMPNetMainLayer(config, add_pooling_layer=True, name="mpnet")
+        self.mpnet = TFMPNetMainLayer(config, name="mpnet")
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -753,7 +753,7 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.mpnet = TFMPNetMainLayer(config, add_pooling_layer=False, name="mpnet")
+        self.mpnet = TFMPNetMainLayer(config, name="mpnet")
         self.lm_head = TFMPNetLMHead(config, self.mpnet.embeddings, name="lm_head")
 
     def get_lm_head(self):
@@ -816,12 +816,6 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
             attentions=outputs.attentions,
         )
 
-    def tf_to_pt_weight_rename(self, tf_weight):
-        if tf_weight == "cls.predictions.decoder.weight":
-            return tf_weight, "mobilebert.embeddings.word_embeddings.weight"
-        else:
-            return (tf_weight,)
-
 
 class TFMPNetClassificationHead(tf.keras.layers.Layer):
     """Head for sentence-level classification tasks."""
@@ -862,7 +856,7 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.mpnet = TFMPNetMainLayer(config, add_pooling_layer=False, name="mpnet")
+        self.mpnet = TFMPNetMainLayer(config, name="mpnet")
         self.classifier = TFMPNetClassificationHead(config, name="classifier")
 
     @unpack_inputs
@@ -1020,7 +1014,7 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.mpnet = TFMPNetMainLayer(config, add_pooling_layer=False, name="mpnet")
+        self.mpnet = TFMPNetMainLayer(config, name="mpnet")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -1094,7 +1088,7 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.mpnet = TFMPNetMainLayer(config, add_pooling_layer=False, name="mpnet")
+        self.mpnet = TFMPNetMainLayer(config, name="mpnet")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
