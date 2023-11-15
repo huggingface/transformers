@@ -1525,7 +1525,9 @@ class PatchTSTPredictionHead(nn.Module):
         self.num_input_channels = config.num_input_channels
         self.use_cls_token = config.use_cls_token
         self.pooling_type = config.pooling_type
-        head_dim = config.d_model if self.pooling_type else config.d_model * config.num_patches
+        if self.pooling_type or self.use_cls_token:
+            head_dim = config.d_model
+        else: head_dim = config.d_model * config.num_patches
 
         if not self.share_projection:
             # if each channel has its own head
