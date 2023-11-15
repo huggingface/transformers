@@ -45,6 +45,12 @@
 - sections:
   - local: performance
     title: 综述
+  - sections:
+    - local: perf_hardware
+      title: 用于训练的定制硬件
+    - local: hpo_train
+      title: 使用Trainer API 进行超参数搜索
+    title: 高效训练技术
   - local: big_models
     title: 实例化大模型
   - local: debugging

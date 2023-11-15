@@ -19,7 +19,7 @@ env:
 jobs:
   check_runner_status:
     name: Check Runner Status
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout transformers
         uses: actions/checkout@v3
@@ -241,7 +241,7 @@ jobs:
 
   send_results:
     name: Send results to webhook
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: always()
     needs: [
         check_runner_status,
