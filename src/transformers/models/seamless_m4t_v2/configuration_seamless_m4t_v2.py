@@ -25,11 +25,10 @@ SEAMLESS_M4T_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class SeamlessM4Tv2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~SeamlessM4Tv2Model`]. It is used to instantiate an
-    SeamlessM4Tv2 model according to the specified arguments, defining the model architecture. Instantiating a
+    This is the configuration class to store the configuration of a [`~SeamlessM4Tv2Model`]. It is used to instantiate
+    an SeamlessM4Tv2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SeamlessM4Tv2
     [""](https://huggingface.co/"") architecture.
 
@@ -39,8 +38,8 @@ class SeamlessM4Tv2Config(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 256102):
-            Vocabulary size of the SeamlessM4Tv2 model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`~SeamlessM4Tv2Model`], [`~SeamlessM4Tv2ForTextToSpeech`] or
+            Vocabulary size of the SeamlessM4Tv2 model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`~SeamlessM4Tv2Model`], [`~SeamlessM4Tv2ForTextToSpeech`] or
             [`~SeamlessM4Tv2ForTextToText`].
         t2u_vocab_size (`int`, *optional*, defaults to 10082):
             Unit vocabulary size of the SeamlessM4Tv2 model. Defines the number of different unit tokens that can be
@@ -142,8 +141,8 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             Number of convolutional layers that should be used in the adapter network. Only relevant if `add_adapter is
             True`.
         position_embeddings_type (`str`, *optional*, defaults to `"relative_key"`):
-            Can be specified to `relative`, `rotary`, `relative_key`. If left to `None`, no relative position embedding is applied. 
-            Only applied to the speech encoder. For more information on `"relative_key"`, please refer to
+            Can be specified to `relative`, `rotary`, `relative_key`. If left to `None`, no relative position embedding
+            is applied. Only applied to the speech encoder. For more information on `"relative_key"`, please refer to
             [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
         rotary_embedding_base (`int`, *optional*, defaults to 10000):
             If `"rotary"` position embeddings are used, defines the size of the embedding base. Only applied to the
@@ -292,10 +291,10 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         rotary_embedding_base=10000,
         max_source_positions=4096,
         conv_depthwise_kernel_size=31,
-        left_max_position_embeddings = 64,
-        right_max_position_embeddings = 8,
-        speech_encoder_chunk_size = 20000,
-        speech_encoder_left_chunk_num = 128,
+        left_max_position_embeddings=64,
+        right_max_position_embeddings=8,
+        speech_encoder_chunk_size=20000,
+        speech_encoder_left_chunk_num=128,
         # t2u config
         t2u_bos_token_id=0,
         t2u_pad_token_id=1,
@@ -336,7 +335,7 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         # overall_config
         self.vocab_size = vocab_size
         self.t2u_vocab_size = t2u_vocab_size
-        self.char_vocab_size = char_vocab_size# TODO: add to docstrings
+        self.char_vocab_size = char_vocab_size  # TODO: add to docstrings
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
@@ -381,10 +380,10 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         self.max_source_positions = max_source_positions
         self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
         self.add_adapter = add_adapter
-        self.left_max_position_embeddings = left_max_position_embeddings# TODO: add to docstrings
-        self.right_max_position_embeddings = right_max_position_embeddings# TODO: add to docstrings
-        self.speech_encoder_chunk_size = speech_encoder_chunk_size# TODO: add to docstrings
-        self.speech_encoder_left_chunk_num = speech_encoder_left_chunk_num# TODO: add to docstrings
+        self.left_max_position_embeddings = left_max_position_embeddings  # TODO: add to docstrings
+        self.right_max_position_embeddings = right_max_position_embeddings  # TODO: add to docstrings
+        self.speech_encoder_chunk_size = speech_encoder_chunk_size  # TODO: add to docstrings
+        self.speech_encoder_left_chunk_num = speech_encoder_left_chunk_num  # TODO: add to docstrings
 
         # t2u config
         self.t2u_bos_token_id = t2u_bos_token_id
@@ -399,10 +398,10 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         self.t2u_decoder_ffn_dim = t2u_decoder_ffn_dim
         self.t2u_decoder_attention_heads = t2u_decoder_attention_heads
         self.t2u_max_position_embeddings = t2u_max_position_embeddings
-        self.t2u_variance_predictor_embed_dim = t2u_variance_predictor_embed_dim# TODO: add to docstrings
-        self.t2u_variance_predictor_hidden_dim = t2u_variance_predictor_hidden_dim# TODO: add to docstrings
-        self.t2u_variance_predictor_kernel_size = t2u_variance_predictor_kernel_size# TODO: add to docstrings
-        self.t2u_variance_pred_dropout = t2u_variance_pred_dropout# TODO: add to docstrings
+        self.t2u_variance_predictor_embed_dim = t2u_variance_predictor_embed_dim  # TODO: add to docstrings
+        self.t2u_variance_predictor_hidden_dim = t2u_variance_predictor_hidden_dim  # TODO: add to docstrings
+        self.t2u_variance_predictor_kernel_size = t2u_variance_predictor_kernel_size  # TODO: add to docstrings
+        self.t2u_variance_pred_dropout = t2u_variance_pred_dropout  # TODO: add to docstrings
 
         # hifi-gan vocoder config
         # original parameters specific to Hifi-Gan
