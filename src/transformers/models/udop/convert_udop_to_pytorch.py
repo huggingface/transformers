@@ -83,7 +83,7 @@ def prepare_dummy_inputs(tokenizer, image_processor):
 
 def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
     model_name_to_checkpoint_path = {
-        "udop-large": "/Users/nielsrogge/Downloads/udop-unimodel-large-224/pytorch_model.bin",
+        "udop-large": "/home/arthur/transformers/udop-unimodel-large-224/pytorch_model.bin",
         "udop-dual-large": "",
     }
 
