@@ -88,9 +88,7 @@ class PatchTSTConfig(PretrainedConfig):
             Normalization is applied before self-attention if pre_norm is set to `True`. Otherwise, normalization is
             applied after residual block.
         positional_encoding_type (`str`, *optional*, defaults to `"sincos"`):
-            Positional encodings. `"zeros"`, `"normal"`, `"uniform"' and `"sincos"` are supported.
-        learn_pe (`bool`, *optional*, defaults to `False`):
-            Whether the positional encoding is updated during training.
+            Positional encodings. Options `"random"` and `"sincos"` are supported.
         use_cls_token (`bool`, *optional*, defaults to `False`):
             Whether cls token is used.
         init_std (`float`, *optional*, defaults to 0.02):
@@ -182,7 +180,6 @@ class PatchTSTConfig(PretrainedConfig):
         activation_function: str = "gelu",
         pre_norm: bool = True,
         positional_encoding_type: str = "sincos",
-        learn_pe: bool = False,
         use_cls_token: bool = False,
         init_std: float = 0.02,
         share_projection: bool = True,
@@ -232,7 +229,6 @@ class PatchTSTConfig(PretrainedConfig):
         self.activation_function = activation_function
         self.pre_norm = pre_norm
         self.positional_encoding_type = positional_encoding_type
-        self.learn_pe = learn_pe
         self.use_cls_token = use_cls_token
         self.init_std = init_std
         self.scaling = scaling

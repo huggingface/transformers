@@ -627,12 +627,13 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
         """
         Initialize weights
         """
-        # initialize positional encoding
-
-        # initialize cls_token
         if isinstance(module, PatchTSTPositionalEncoding):
+            # initialize cls_token
             if self.config.use_cls_token:
                 nn.init.normal_(module.cls_token, std=0.02)
+            # initialize positional encoding
+            if self.config.positional_encoding_type == "random":
+                nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -707,20 +708,8 @@ class PatchTSTPositionalEncoding(nn.Module):
     @staticmethod
     def _init_pe(config: PatchTSTConfig, num_patches: int) -> nn.Parameter:
         # Positional encoding
-        if config.positional_encoding_type is None:
-            # positional_encoding_type = None and learned = False can be used to measure impact of positional encoding
-            position_enc = torch.empty((num_patches, config.d_model))
-            nn.init.uniform_(position_enc, -0.02, 0.02)
-            learned = False
-        elif config.positional_encoding_type == "zeros":
-            position_enc = torch.empty((num_patches, config.d_model))
-            nn.init.uniform_(position_enc, -0.02, 0.02)
-        elif config.positional_encoding_type == "normal":
-            position_enc = torch.zeros((num_patches, 1))
-            nn.init.normal_(position_enc, mean=0.0, std=0.1)
-        elif config.positional_encoding_type == "uniform":
-            position_enc = torch.zeros((num_patches, 1))
-            nn.init.uniform_(position_enc, a=0.0, b=0.1)
+        if config.positional_encoding_type == "random":
+            position_enc = nn.Parameter(torch.randn(num_patches, config.d_model), requires_grad=True)
         elif config.positional_encoding_type == "sincos":
             position_enc = torch.zeros(num_patches, config.d_model)
             position = torch.arange(0, num_patches).unsqueeze(1)
@@ -729,11 +718,12 @@ class PatchTSTPositionalEncoding(nn.Module):
             position_enc[:, 1::2] = torch.cos(position * div_term)
             position_enc = position_enc - position_enc.mean()
             position_enc = position_enc / (position_enc.std() * 10)
+            position_enc = nn.Parameter(position_enc, requires_grad=False)
         else:
             raise ValueError(
-                f"{config.positional_encoding_type} is not a valid positional encoder. Available types are 'normal', 'zeros', 'zero', uniform', 'sincos', None."
+                f"{config.positional_encoding_type} is not a valid positional encoder. Available types are 'random' and 'sincos'."
             )
-        return nn.Parameter(position_enc, requires_grad=config.learn_pe)
+        return position_enc
 
     def forward(self, patch_input: torch.Tensor):
         if self.use_cls_token:
@@ -1453,7 +1443,6 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
             `config.return_dict`=False)
 
         """
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         model_output = self.model(
