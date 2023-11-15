@@ -34,14 +34,7 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
 
 論文の要旨は以下の通りです：
 
-*Increasing model size when pretraining natural language representations often results in improved performance on
-downstream tasks. However, at some point further model increases become harder due to GPU/TPU memory limitations,
-longer training times, and unexpected model degradation. To address these problems, we present two parameter-reduction
-techniques to lower memory consumption and increase the training speed of BERT. Comprehensive empirical evidence shows
-that our proposed methods lead to models that scale much better compared to the original BERT. We also use a
-self-supervised loss that focuses on modeling inter-sentence coherence, and show it consistently helps downstream tasks
-with multi-sentence inputs. As a result, our best model establishes new state-of-the-art results on the GLUE, RACE, and
-SQuAD benchmarks while having fewer parameters compared to BERT-large.*
+*自然言語表現の事前学習時にモデルのサイズを増やすと、下流タスクのパフォーマンスが向上することがしばしばあります。しかし、ある時点でさらなるモデルの増大は、GPU/TPUのメモリ制限、長い訓練時間、予期せぬモデルの劣化といった問題のために困難になります。これらの問題に対処するために、我々はBERTのメモリ消費を低減し、訓練速度を高めるための2つのパラメータ削減技術を提案します。包括的な実証的証拠は、我々の提案方法が元のBERTに比べてはるかによくスケールするモデルを生み出すことを示しています。また、文間の一貫性をモデリングに焦点を当てた自己教師あり損失を使用し、複数の文が含まれる下流タスクに一貫して助けとなることを示します。その結果、我々の最良のモデルは、BERT-largeに比べてパラメータが少ないにもかかわらず、GLUE、RACE、SQuADベンチマークで新たな最先端の結果を確立します。*
 
 このモデルは[lysandre](https://huggingface.co/lysandre)により提供されました。このモデルのjaxバージョンは[kamalkraj](https://huggingface.co/kamalkraj)により提供されました。オリジナルのコードは[こちら](https://github.com/google-research/ALBERT)で見ることができます。
 

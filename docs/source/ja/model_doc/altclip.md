@@ -23,12 +23,7 @@ AltCLIPモデルは、「[AltCLIP: Altering the Language Encoder in CLIP for Ext
 
 論文の要旨は以下の通りです：
 
-*In this work, we present a conceptually simple and effective method to train a strong bilingual multimodal representation model. 
-Starting from the pretrained multimodal representation model CLIP released by OpenAI, we switched its text encoder with a pretrained 
-multilingual text encoder XLM-R, and aligned both languages and image representations by a two-stage training schema consisting of 
-teacher learning and contrastive learning. We validate our method through evaluations of a wide range of tasks. We set new state-of-the-art 
-performances on a bunch of tasks including ImageNet-CN, Flicker30k- CN, and COCO-CN. Further, we obtain very close performances with 
-CLIP on almost all tasks, suggesting that one can simply alter the text encoder in CLIP for extended capabilities such as multilingual understanding.*
+*この研究では、強力なバイリンガルマルチモーダル表現モデルを訓練するための概念的に単純で効果的な方法を提案します。OpenAIによってリリースされたマルチモーダル表現モデルCLIPから開始し、そのテキストエンコーダを事前学習済みの多言語テキストエンコーダXLM-Rに交換し、教師学習と対照学習からなる2段階のトレーニングスキーマを用いて言語と画像の表現を整合させました。幅広いタスクの評価を通じて、我々の方法を検証します。ImageNet-CN、Flicker30k-CN、COCO-CNを含む多くのタスクで新たな最先端の性能を達成しました。さらに、ほぼすべてのタスクでCLIPに非常に近い性能を得ており、これはCLIPのテキストエンコーダを変更するだけで、多言語理解などの拡張を実現できることを示唆しています。*
 
 このモデルは[jongjyh](https://huggingface.co/jongjyh)により提供されました。
 
