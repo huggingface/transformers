@@ -25,9 +25,39 @@ Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
+
+This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The original code can be found [here](https://github.com/facebookresearch/seamless_communication).
+
+## SeamlessM4Tv2Model
+
+[[autodoc]] SeamlessM4Tv2Model
+    - generate
+
+
+## SeamlessM4Tv2ForTextToSpeech
+
+[[autodoc]] SeamlessM4Tv2ForTextToSpeech
+    - generate
+
+
+## SeamlessM4Tv2ForSpeechToSpeech
+
+[[autodoc]] SeamlessM4Tv2ForSpeechToSpeech
+    - generate
+
+
+## SeamlessM4Tv2ForTextToText
+
+[[autodoc]] transformers.SeamlessM4Tv2ForTextToText
+    - forward
+    - generate
+
+## SeamlessM4Tv2ForSpeechToText
+
+[[autodoc]] transformers.SeamlessM4Tv2ForSpeechToText
+    - forward
+    - generate
 
 ## SeamlessM4Tv2Config
 
@@ -38,17 +68,14 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] SeamlessM4Tv2CodeHifiGan
 
-
 ## SeamlessM4Tv2HifiGan
 
 [[autodoc]] SeamlessM4Tv2HifiGan
 
-## SeamlessM4Tv2NARTextToUnitModel
+## SeamlessM4Tv2TextToUnitModel
 
-[[autodoc]] SeamlessM4Tv2NARTextToUnitModel
+[[autodoc]] SeamlessM4Tv2TextToUnitModel
 
-## SeamlessM4Tv2NARTextToUnitForConditionalGeneration
+## SeamlessM4Tv2TextToUnitForConditionalGeneration
 
-[[autodoc]] SeamlessM4Tv2NARTextToUnitForConditionalGeneration
-
-
+[[autodoc]] SeamlessM4Tv2TextToUnitForConditionalGeneration
