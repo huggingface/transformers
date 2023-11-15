@@ -93,7 +93,7 @@ device_map = {"shared": 0, "encoder": 0, "decoder": 1, "lm_head": 1}
 
 ### 模型实例化 dtype
 
-在 PyTorch 下，模型通常以 `torch.float32` 格式实例化。如果尝试加载权重为 fp16 的模型，这可能会导致问题，因为它将需要两倍的内存。为了克服此限制，您可以使用 `torch_dtype`` 参数显式传递所需的 `dtype`：
+在 PyTorch 下，模型通常以 `torch.float32` 格式实例化。如果尝试加载权重为 fp16 的模型，这可能会导致问题，因为它将需要两倍的内存。为了克服此限制，您可以使用 `torch_dtype` 参数显式传递所需的 `dtype`：
 
 ```python
 model = T5ForConditionalGeneration.from_pretrained("t5", torch_dtype=torch.float16)
