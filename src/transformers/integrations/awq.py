@@ -252,6 +252,8 @@ def fuse_awq_modules(model, quantization_config):
                 use_alibi=fusing_mapping["use_alibi"],
             )
 
+            fused_attention_layer.is_hf_transformers = True
+
             parent_name, child_name = name.rsplit(".", 1)
             parent = model.get_submodule(parent_name)
             setattr(parent, child_name, fused_attention_layer.to(previous_device))
