@@ -2029,7 +2029,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             single_timestamp_ending = timestamp_tokens[:, -2:].tolist() == [False, True]
 
             consecutive = torch.where(timestamp_tokens[:, :-1] & timestamp_tokens[:, 1:])[-1]
-            print(consecutive)
 
             if len(consecutive) > 0:
                 # if the output contains two consecutive timestamp tokens
@@ -2088,6 +2087,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 # )
                 seek += seek_num_frames
 
+            print(seek)
 
             if sequence is None:
                 sequence = seek_sequence
