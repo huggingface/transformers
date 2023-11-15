@@ -2373,14 +2373,6 @@ class T5ForEncoderBasedSequenceClassification(T5PreTrainedModel):
 
         self.model_parallel = False
 
-    def prepare_for_fine_tuning(self):
-        r"""
-        Prepare for fine-tuning by re-initializing the necessary weights. This step should be performed after loading
-        the pre-trained T5 model but before fine-tuning.
-        """
-        self.transformer.get_decoder().apply(self._init_weights)
-        self._init_weights(self.classification_head)
-
     @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
