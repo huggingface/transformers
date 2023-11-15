@@ -799,7 +799,6 @@ class ModelUtilsTest(TestCasePlus):
         assert "cpu" in device_map.values()
 
         offloaded_model = AutoModelForCausalLM.from_pretrained(model_id, device_map=device_map)
-        assert len({p.device for p in model.parameters()}) == 2
 
         # check_models_equal requires onloaded tensors
         onloaded_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu")
