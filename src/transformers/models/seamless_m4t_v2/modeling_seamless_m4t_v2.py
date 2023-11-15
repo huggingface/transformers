@@ -1691,7 +1691,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Conv1d):
+        elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
