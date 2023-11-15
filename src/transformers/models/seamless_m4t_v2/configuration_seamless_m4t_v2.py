@@ -46,8 +46,8 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             represented by the `inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4Tv2Model`],
             [`~SeamlessM4Tv2ForSpeechToSpeech`] or [`~SeamlessM4Tv2ForTextToSpeech`].
 
-        > Parameters shared across sub-models
 
+        char_vocab_size (`<fill_type>`, *optional*, defaults to 10943): <fill_docstring>
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the "intermediate" layers in the architecture.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -79,7 +79,6 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         scale_embedding (`bool`, *optional*, defaults to `True`):
             Scale embeddings by diving by sqrt(d_model).
 
-        > Text encoder and text decoder specific parameters
 
         encoder_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer text encoder.
@@ -105,7 +104,6 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         eos_token_id (`int`, *optional*, defaults to 3):
             The id of the _end-of-stream_ text token. Only applied to the text-decoder model.
 
-        > Speech encoder specific parameters
 
         speech_encoder_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer speech encoder.
@@ -153,8 +151,11 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         conv_depthwise_kernel_size (`int`, *optional*, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks. Only applied to the speech encoder.
 
-        > Text-To-Unit (t2u) model specific parameters
 
+        left_max_position_embeddings (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
+        right_max_position_embeddings (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
+        speech_encoder_chunk_size (`<fill_type>`, *optional*, defaults to 20000): <fill_docstring>
+        speech_encoder_left_chunk_num (`<fill_type>`, *optional*, defaults to 128): <fill_docstring>
         t2u_bos_token_id (`int`, *optional*, defaults to 0):
             The id of the _beginning-of-stream_ unit token. Only applied to the text-to-unit seq2seq model.
         t2u_pad_token_id (`int`, *optional*, defaults to 1):
@@ -185,6 +186,10 @@ class SeamlessM4Tv2Config(PretrainedConfig):
 
          > Hifi-Gan Vocoder specific parameters
 
+        t2u_variance_predictor_embed_dim (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
+        t2u_variance_predictor_hidden_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        t2u_variance_predictor_kernel_size (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+        t2u_variance_pred_dropout (`<fill_type>`, *optional*, defaults to 0.5): <fill_docstring>
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the output audio will be generated, expressed in hertz (Hz).
         upsample_initial_channel (`int`, *optional*, defaults to 512):

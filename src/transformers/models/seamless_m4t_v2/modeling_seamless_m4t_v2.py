@@ -619,7 +619,6 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
     Can be enhanced with rotary or relative position embeddings.
     """
 
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4Tv2ConformerSelfAttention.__init__
     def __init__(self, config, use_position_embeddings=True):
         super().__init__()
 
@@ -723,7 +722,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
 
         return hidden_states, probs
 
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4Tv2ConformerSelfAttention._apply_rotary_embedding
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerSelfAttention._apply_rotary_embedding
     def _apply_rotary_embedding(self, hidden_states, relative_position_embeddings):
         batch_size, sequence_length, hidden_size = hidden_states.size()
         hidden_states = hidden_states.view(batch_size, sequence_length, self.num_heads, self.head_size)
@@ -743,7 +742,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
 
         return hidden_states
 
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4Tv2ConformerSelfAttention._apply_relative_embeddings
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerSelfAttention._apply_relative_embeddings
     def _apply_relative_embeddings(self, query, key, relative_position_embeddings):
         # 1. project positional embeddings
         # => (batch, head, 2*time1-1, d_k)
@@ -784,10 +783,10 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
         return scores
 
 
-# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerEncoderLayer with SeamlessM4T->SeamlessM4Tv2
 class SeamlessM4Tv2ConformerEncoderLayer(nn.Module):
     """Conformer block based on https://arxiv.org/abs/2005.08100."""
 
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoderLayer.__init__ with Wav2Vec2->SeamlessM4Tv2, attention_dropout->speech_encoder_dropout, torch.nn->nn
     def __init__(self, config):
         super().__init__()
         embed_dim = config.hidden_size
@@ -810,6 +809,7 @@ class SeamlessM4Tv2ConformerEncoderLayer(nn.Module):
         self.ffn2 = SeamlessM4Tv2ConformerFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerEncoderLayer.forward
     def forward(
         self,
         hidden_states,
@@ -1668,7 +1668,6 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
         "SeamlessM4Tv2NARDecoderLayer",
     ]
 
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
         std = self.config.initializer_range
@@ -2690,7 +2689,7 @@ class SeamlessM4Tv2NARTextToUnitModel(SeamlessM4Tv2PreTrainedModel):
 
 
 @add_start_docstrings(
-    "Transformer text-to-unit encoder-decoder with a language model head. The base encoder-decoder model is a [`SeamlessM4Tv2TextToUnit`].",
+    "Transformer text-to-unit encoder-decoder with a language model head. The base encoder-decoder model is a [`SeamlessM4Tv2NARTextToUnitModel`].",
     SEAMLESS_M4T_V2_START_DOCSTRING,
     """
         embed_tokens_decoder (`nn.Embedding`, *optional*): input embedding of the decoder.
@@ -2705,7 +2704,7 @@ class SeamlessM4Tv2NARTextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrained
     ]
     _tied_weights_keys = ["decoder.embed_tokens.weight", "lm_head.weight"]
 
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TTextToUnitForConditionalGeneration.__init__ with SeamlessM4T->SeamlessM4Tv2NAR
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TTextToUnitForConditionalGeneration.__init__ with SeamlessM4T->SeamlessM4Tv2, TextToUnit->NARTextToUnit
     def __init__(
         self,
         config: SeamlessM4Tv2Config,
@@ -3085,7 +3084,7 @@ class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
 
         return input_lengths
 
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TCodeHifiGan.forward
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TCodeHifiGan.forward with SeamlessM4T->SeamlessM4Tv2NAR
     def forward(
         self, input_ids: torch.LongTensor, spkr_id: torch.Tensor, lang_id: torch.Tensor
     ) -> Tuple[torch.Tensor]:
@@ -3173,7 +3172,7 @@ class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
     "The text-to-text SeamlessM4Tv2 Model transformer which can be used for T2TT.",
     SEAMLESS_M4T_V2_START_DOCSTRING,
 )
-# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToText with SeamlessM4T->SeamlessM4Tv2,SeamlessM4TTokenizer->SeamlessM4TTokenizer
+# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToText with SeamlessM4T->SeamlessM4Tv2,SeamlessM4Tv2Tokenizer->SeamlessM4TTokenizer, SeamlessM4Tv2Processor->SeamlessM4TProcessor
 class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["speech_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_ids"
@@ -3470,7 +3469,6 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel):
     "The speech-to-text SeamlessM4Tv2 Model transformer which can be used for S2TT.",
     SEAMLESS_M4T_V2_START_DOCSTRING,
 )
-# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText with SeamlessM4T->SeamlessM4Tv2,SeamlessM4TProcessor->SeamlessM4TProcessor
 class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["text_decoder", "t2u_model", "vocoder"]
     main_input_name = "input_features"
@@ -3480,6 +3478,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel):
         "text_decoder.embed_tokens.weight",
     ]
 
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.__init__ with SeamlessM4T->SeamlessM4Tv2
     def __init__(self, config: SeamlessM4Tv2Config):
         super().__init__(config)
 
@@ -3491,25 +3490,32 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.get_encoder
     def get_encoder(self):
         return self.speech_encoder
 
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.get_decoder
     def get_decoder(self):
         return self.text_decoder
 
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.get_output_embeddings
     def get_output_embeddings(self):
         return self.lm_head
 
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.get_input_embeddings
     def get_input_embeddings(self):
         return self.text_decoder.embed_tokens
 
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.set_input_embeddings
     def set_input_embeddings(self, value):
         self.text_decoder.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(M4T_SPEECH_INPUTS_DOCSTRING)
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.forward
     def forward(
         self,
         input_features: torch.LongTensor = None,
@@ -3614,6 +3620,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.generate
     def generate(
         self,
         input_features=None,
@@ -3728,6 +3735,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel):
             **kwargs,
         )
 
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
@@ -3757,6 +3765,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel):
         }
 
     @staticmethod
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText._reorder_cache
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
@@ -3824,7 +3833,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
         self.shared = value
 
     @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.forward
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.forward with SeamlessM4T->SeamlessM4Tv2, TextToUnit->NARTextToUnit
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -4214,7 +4223,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel):
         self.text_decoder.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(M4T_SPEECH_INPUTS_DOCSTRING)
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.forward
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.forward with SeamlessM4T->SeamlessM4Tv2
     def forward(
         self,
         input_features: torch.LongTensor = None,
@@ -4645,7 +4654,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
 
     @add_start_docstrings_to_model_forward(M4T_MODEL_INPUTS_DOCSTRING)
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TModel.forward
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TModel.forward with SeamlessM4T->SeamlessM4Tv2
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

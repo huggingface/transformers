@@ -2793,8 +2793,8 @@ else:
             "SeamlessM4Tv2HifiGan",
             "SeamlessM4Tv2Model",
             "SeamlessM4Tv2PreTrainedModel",
-            "SeamlessM4Tv2TextToUnitForConditionalGeneration",
-            "SeamlessM4Tv2TextToUnitModel",
+            "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
+            "SeamlessM4Tv2NARTextToUnitModel",
         ]
     )
     _import_structure["models.segformer"].extend(
@@ -6711,8 +6711,8 @@ if TYPE_CHECKING:
             SeamlessM4Tv2HifiGan,
             SeamlessM4Tv2Model,
             SeamlessM4Tv2PreTrainedModel,
-            SeamlessM4Tv2TextToUnitForConditionalGeneration,
-            SeamlessM4Tv2TextToUnitModel,
+            SeamlessM4Tv2NARTextToUnitForConditionalGeneration,
+            SeamlessM4Tv2NARTextToUnitModel,
         )
         from .models.segformer import (
             SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

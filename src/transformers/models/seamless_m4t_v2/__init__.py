@@ -40,8 +40,8 @@ else:
         "SeamlessM4Tv2PreTrainedModel",
         "SeamlessM4Tv2CodeHifiGan",
         "SeamlessM4Tv2HifiGan",
-        "SeamlessM4Tv2TextToUnitForConditionalGeneration",
-        "SeamlessM4Tv2TextToUnitModel",
+        "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
+        "SeamlessM4Tv2NARTextToUnitModel",
     ]
 
 if TYPE_CHECKING:
@@ -63,8 +63,8 @@ if TYPE_CHECKING:
             SeamlessM4Tv2HifiGan,
             SeamlessM4Tv2Model,
             SeamlessM4Tv2PreTrainedModel,
-            SeamlessM4Tv2TextToUnitForConditionalGeneration,
-            SeamlessM4Tv2TextToUnitModel,
+            SeamlessM4Tv2NARTextToUnitForConditionalGeneration,
+            SeamlessM4Tv2NARTextToUnitModel,
         )
 
 else:
