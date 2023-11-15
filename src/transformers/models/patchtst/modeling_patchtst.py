@@ -649,6 +649,7 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
 class PatchTSTEmbedding(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
+        self.num_input_channels = config.num_input_channels
         # Input encoding: projection of feature vectors onto a d-dim vector space
         if not config.share_embedding:
             self.input_embedding = nn.ModuleList()
@@ -667,6 +668,11 @@ class PatchTSTEmbedding(nn.Module):
         """
         # Input encoding
         num_input_channels = patch_input.shape[1]
+        if num_input_channels != self.num_input_channels:
+            raise ValueError(
+                f"The defined number of input channels ({self.num_input_channels}) in the config "
+                f"has to be the same as the number of channels in the batch input ({num_input_channels})"
+            )
         if isinstance(self.input_embedding, nn.ModuleList):
             embeddings = [self.input_embedding[i](patch_input[:, i, :, :]) for i in range(num_input_channels)]
             embeddings = torch.stack(embeddings, dim=1)
