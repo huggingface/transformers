@@ -4727,9 +4727,10 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
 
-            # Update attention_mask for the assistant's next round of generations
+            # Update model_kwargs for the assistant's next round of generations
             if n_matches > 0:
                 model_kwargs = self._extend_attention_mask(model_kwargs, new_cur_len)
+                model_kwargs = self._extend_token_type_ids(model_kwargs, new_cur_len)
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id_tensor is not None:
