@@ -4037,19 +4037,14 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
         # prepare second generation
         num_return_sequences = len(sequences) // batch_size
         attention_mask = kwargs_speech.get("attention_mask", kwargs_text.get("attention_mask", None))
-
+        
+        if attention_mask is not None:
+            # repeat attention mask alongside batch dimension
+            attention_mask = torch.repeat_interleave(attention_mask, num_return_sequences, dim=0)
         encoder_hidden_states = text_generation_output.encoder_hidden_states[-1]
-
-        # take care of num_return_sequences
-        # take most probable hidden states per batch of return_sequences
-        # (batch_size*num_return_sequences, ...) -> (batch_size,...)
-        if num_return_sequences > 1:
-            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores.view(batch_size, -1)
-            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch.argmax(-1)
-            idx_most_probable_sequences_per_batch = (
-                idx_most_probable_sequences_per_batch + torch.arange(batch_size).to(self.device) * num_return_sequences
-            )
-            sequences = sequences[idx_most_probable_sequences_per_batch]
+        
+        # repeat attention mask alongside batch dimension
+        encoder_hidden_states = torch.repeat_interleave(encoder_hidden_states, num_return_sequences, dim=0)
 
         # get decoder last hidden state - must do a pass through the text decoder
         t2u_input_embeds = self.text_decoder(
@@ -4443,17 +4438,12 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel):
             attention_mask = _compute_new_attention_mask(
                 hidden_states=encoder_hidden_states, seq_lens=sub_sampled_lengths
             )
-
-        # take care of num_return_sequences
-        # take most probable hidden states per batch of return_sequences
-        # (batch_size*num_return_sequences, ...) -> (batch_size,...)
-        if num_return_sequences > 1:
-            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores.view(batch_size, -1)
-            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch.argmax(-1)
-            idx_most_probable_sequences_per_batch = (
-                idx_most_probable_sequences_per_batch + torch.arange(batch_size).to(self.device) * num_return_sequences
-            )
-            sequences = sequences[idx_most_probable_sequences_per_batch]
+            
+            # repeat attention mask alongside batch dimension
+            attention_mask = torch.repeat_interleave(attention_mask, num_return_sequences, dim=0)
+        
+        # repeat attention mask alongside batch dimension
+        encoder_hidden_states = torch.repeat_interleave(encoder_hidden_states, num_return_sequences, dim=0)
 
         # get decoder last hidden state - must do a pass through the text decoder
         t2u_input_embeds = self.text_decoder(
@@ -4955,18 +4945,14 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
                 )
         else:
             encoder_hidden_states = text_generation_output.encoder_hidden_states[-1]
+            
+        if attention_mask is not None:
+            # repeat attention mask alongside batch dimension
+            attention_mask = torch.repeat_interleave(attention_mask, num_return_sequences, dim=0)
 
-        # take care of num_return_sequences
-        # take most probable hidden states per batch of return_sequences
-        # (batch_size*num_return_sequences, ...) -> (batch_size,...)
-        if num_return_sequences > 1:
-            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores.view(batch_size, -1)
-            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch.argmax(-1)
-            idx_most_probable_sequences_per_batch = (
-                idx_most_probable_sequences_per_batch + torch.arange(batch_size).to(self.device) * num_return_sequences
-            )
-            sequences = sequences[idx_most_probable_sequences_per_batch]
-
+        # repeat attention mask alongside batch dimension
+        encoder_hidden_states = torch.repeat_interleave(encoder_hidden_states, num_return_sequences, dim=0)
+        
         # get decoder last hidden state - must do a pass through the text decoder
         t2u_input_embeds = self.text_decoder(
             input_ids=sequences[:, :-1],  # Manually trim the final EOS token

@@ -172,12 +172,6 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             The id of the _padding_ unit token. Only applied to the text-to-unit seq2seq model.
         t2u_eos_token_id (`int`, *optional*, defaults to 2):
             The id of the _end-of-stream_ unit token. Only applied to the text-to-unit seq2seq model.
-        t2u_decoder_start_token_id (`int`, *optional*, defaults to 2):
-            If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token. Only
-            applied to the text-to-unit seq2seq model.
-        t2u_max_new_tokens (`int`, *optional*, defaults to 1024):
-            The maximum numbers of unit tokens to generate, ignoring the number of tokens in the prompt. Only applied
-            to the text-to-unit seq2seq model.
         t2u_encoder_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer text-to-unit encoder.
         t2u_encoder_ffn_dim (`int`, *optional*, defaults to 8192):
@@ -194,7 +188,7 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             The maximum sequence length that this model text-to-unit component might ever be used with. Typically set
             this to something large just in case (e.g., 512 or 1024 or 2048).
         t2u_variance_predictor_embed_dim (`int`, *optional*, defaults to 1024):
-            Kernel size of the text-to-unit's duration predictor.
+            The projection dimension of the text-to-unit's duration predictor.
         t2u_variance_predictor_hidden_dim (`int`, *optional*, defaults to 256):
             Internal dimension of the text-to-unit's duration predictor.
         t2u_variance_predictor_kernel_size (`int`, *optional*, defaults to 3):
@@ -318,8 +312,6 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         t2u_bos_token_id=0,
         t2u_pad_token_id=1,
         t2u_eos_token_id=2,
-        t2u_decoder_start_token_id=2,
-        t2u_max_new_tokens=1024,
         t2u_encoder_layers=6,
         t2u_encoder_ffn_dim=8192,
         t2u_encoder_attention_heads=16,
@@ -408,8 +400,6 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         self.t2u_bos_token_id = t2u_bos_token_id
         self.t2u_pad_token_id = t2u_pad_token_id
         self.t2u_eos_token_id = t2u_eos_token_id
-        self.t2u_decoder_start_token_id = t2u_decoder_start_token_id
-        self.t2u_max_new_tokens = t2u_max_new_tokens
         self.t2u_encoder_layers = t2u_encoder_layers
         self.t2u_encoder_ffn_dim = t2u_encoder_ffn_dim
         self.t2u_encoder_attention_heads = t2u_encoder_attention_heads
