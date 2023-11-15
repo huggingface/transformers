@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Union, Optional, Tuple
+from typing import Optional, Tuple, Union
+
 import numpy as np
 import torch
 
@@ -21,28 +22,74 @@ from transformers.utils import (
     ExplicitEnum,
 )
 
+
 class BoundingBoxFormat(ExplicitEnum):
-    """Coordinate formats to represent a bounding box"""
+    """Coordinate formats to represent a bounding box."""
+
     XYXY = "xyxy"  # absolute coordinates
     XYWH = "xywh"  # absolute coordinates
     XCYCWH = "xcycwh"  # absolute coordinates
-    RELATIVE_XYWH  = "relative_xywh"  # relative coordinates
+    RELATIVE_XYWH = "relative_xywh"  # relative coordinates
+    RELATIVE_XCYCWH = "relative_xcycwh"  # relative coordinates
+
 
 def _is_relative_format(format):
+    """
+    Check if the bounding box format is relative.
+
+    Args:
+        format (str): The format of the bounding box.
+
+    Returns:
+        bool: True if the format is relative, False otherwise.
+    """
     return format.startswith("relative")
 
+
 def _xywh_to_xyxy(xywh: torch.Tensor, inplace: bool) -> torch.Tensor:
+    """
+    Convert bounding box format from XYWH to XYXY.
+
+    Args:
+        xywh (torch.Tensor): The bounding box in XYWH format.
+        inplace (bool): If True, perform operation in-place.
+
+    Returns:
+        torch.Tensor: The bounding box in XYXY format.
+    """
     xyxy = xywh if inplace else xywh.clone()
     xyxy[..., 2:].add_(xyxy[..., :2])
     return xyxy
 
+
 def _xyxy_to_xywh(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
+    """
+    Convert bounding box format from XYXY to XYWH.
+
+    Args:
+        xyxy (torch.Tensor): The bounding box in XYXY format.
+        inplace (bool): If True, perform operation in-place.
+
+    Returns:
+        torch.Tensor: The bounding box in XYWH format.
+    """
     xywh = xyxy if inplace else xyxy.clone()
     xywh[..., 2:].sub_(xywh[..., :2])
     return xywh
 
+
 # adapted from https://github.com/pytorch/vision/blob/main/torchvision/transforms/v2/functional/_meta.py
 def _xcycwh_to_xyxy(xcycwh: torch.Tensor, inplace: bool) -> torch.Tensor:
+    """
+    Convert bounding box format from XCYCWH to XYXY.
+
+    Args:
+        xcycwh (torch.Tensor): The bounding box in XCYCWH format.
+        inplace (bool): If True, perform operation in-place.
+
+    Returns:
+        torch.Tensor: The bounding box in XYXY format.
+    """
     xcycwh = xcycwh if inplace else xcycwh.clone()
     # Trick to do fast division by 2 and ceil
     rounding_mode = None if xcycwh.is_floating_point() else "floor"
@@ -53,19 +100,42 @@ def _xcycwh_to_xyxy(xcycwh: torch.Tensor, inplace: bool) -> torch.Tensor:
     xcycwh[..., 2:].add_(xcycwh[..., :2])
     return xcycwh
 
+
 # adapted from https://github.com/pytorch/vision/blob/main/torchvision/transforms/v2/functional/_meta.py
 def _xyxy_to_xcycwh(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
+    """
+    Convert bounding box format from XYXY to XCYCWH.
+
+    Args:
+        xyxy (torch.Tensor): The bounding box in XYXY format.
+        inplace (bool): If True, perform operation in-place.
+
+    Returns:
+        torch.Tensor: The bounding box in XCYCWH format.
+    """
     xyxy = xyxy if inplace else xyxy.clone()
     # (x2 - x1) = width and (y2 - y1) = height
     xyxy[..., 2:].sub_(xyxy[..., :2])  # => x, y, width, height
     # cx and cy can be written with different terms
     # (x1 * 2 + width)/2 = x1 + width/2 = x1 + (x2-x1)/2 = (x1 + x2)/2 = cy
     # (y1 * 2 + height)/2 = y1 + height/2 = y1 + (y2-y1)/2 = (y1 + y2)/2 = cy
-    rounding_mode=None if xyxy.is_floating_point() else "floor"
+    rounding_mode = None if xyxy.is_floating_point() else "floor"
     xyxy[..., :2].mul_(2).add_(xyxy[..., 2:]).div_(2, rounding_mode=rounding_mode)
     return xyxy
 
+
 def _relxywh_to_xyxy(relxywh: torch.Tensor, img_shape: Tuple[int, int], inplace: bool) -> torch.Tensor:
+    """
+    Convert relative XYWH bounding box format to absolute XYXY format.
+
+    Args:
+        relxywh (torch.Tensor): The bounding box in relative XYWH format.
+        img_shape (Tuple[int, int]): The shape of the image (height, width).
+        inplace (bool): If True, perform operation in-place.
+
+    Returns:
+        torch.Tensor: The bounding box in absolute XYXY format.
+    """
     relxywh = relxywh if inplace else relxywh.clone()
     # convert to xywh
     relxywh.multiply_(img_shape.repeat(2).flip(0))
@@ -73,11 +143,48 @@ def _relxywh_to_xyxy(relxywh: torch.Tensor, img_shape: Tuple[int, int], inplace:
     relxywh[..., 2:].add_(relxywh[..., :2])
     return relxywh
 
-def transform_box_format(bbox: Union[torch.Tensor, np.ndarray], orig_format: BoundingBoxFormat, dest_format: BoundingBoxFormat, img_shape: Optional[Tuple[int, int]] = None, inplace: bool = False):
+
+def _relxcycwh_to_xyxy(relxcycwh: torch.Tensor, img_shape: Tuple[int, int], inplace: bool) -> torch.Tensor:
+    # TODO
+    pass
+
+
+def _xyxy_to_relxywh(xyxy: torch.Tensor, img_shape: Tuple[int, int], inplace: bool) -> torch.Tensor:
+    # TODO
+    pass
+
+
+def _xyxy_to_relxcycwh(xyxy: torch.Tensor, img_shape: Tuple[int, int], inplace: bool) -> torch.Tensor:
+    # TODO
+    pass
+
+
+def transform_box_format(
+    bbox: Union[torch.Tensor, np.ndarray],
+    orig_format: BoundingBoxFormat,
+    dest_format: BoundingBoxFormat,
+    img_shape: Optional[Tuple[int, int]] = None,
+    inplace: bool = False,
+):
+    """
+    Transform a bounding box from one format to another.
+
+    Args:s
+        bbox (Union[torch.Tensor, np.ndarray]): The bounding box to transform. orig_format (BoundingBoxFormat): The
+        original format of the bounding box. dest_format (BoundingBoxFormat): The desired destination format of the
+        bounding box. img_shape (Optional[Tuple[int, int]]): The shape of the image (height, width), required for
+        relative formats. inplace (bool): If True, perform operation in-place.
+
+    Returns:
+        Union[torch.Tensor, np.ndarray]: The transformed bounding box.
+
+    Raises:
+        ValueError: If image shape is required but not provided.
+    """
     # no transformation is needed
     if orig_format == dest_format:
         return bbox
-    
+
     if _is_relative_format(orig_format) and img_shape is None:
         raise ValueError(f"Image shape (height, width) is required if the input format format is {dest_format}")
 
@@ -92,25 +199,18 @@ def transform_box_format(bbox: Union[torch.Tensor, np.ndarray], orig_format: Bou
         bbox = _xcycwh_to_xyxy(bbox, inplace)
     elif orig_format == BoundingBoxFormat.RELATIVE_XYWH:
         bbox = _relxywh_to_xyxy(bbox, img_shape, inplace)
-    elif orig_format == BoundingBoxFormat.RELATIVE_XYXY:
-        # bbox = _relxyxy_to_xyxy(bbox, inplace)
-        pass
     elif orig_format == BoundingBoxFormat.RELATIVE_XCYCWH:
-        # bbox = _relxcycwh_to_xyxy(bbox, inplace)
-        pass
+        bbox = _relxcycwh_to_xyxy(bbox, inplace)
+
     # boxes are now in xyxy format
+
     if dest_format == BoundingBoxFormat.XYWH:
         bbox = _xyxy_to_xywh(bbox, inplace)
     elif dest_format == BoundingBoxFormat.XCYCWH:
         bbox = _xyxy_to_xcycwh(bbox, inplace)
     elif dest_format == BoundingBoxFormat.RELATIVE_XYWH:
-        # bbox = _xyxy_to_relxywh(bbox, inplace)
-        pass
-    elif dest_format == BoundingBoxFormat.RELATIVE_XYXY:
-        # bbox = _xyxy_to_relxyxy(bbox, inplace)
-        pass
+        bbox = _xyxy_to_relxywh(bbox, inplace)
     elif dest_format == BoundingBoxFormat.RELATIVE_XCYCWH:
-        # bbox = _xyxy_to_relxcycwh(bbox, inplace)
-        pass
+        bbox = _xyxy_to_relxcycwh(bbox, inplace)
 
     return bbox
