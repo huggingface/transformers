@@ -246,6 +246,31 @@
       title: 画像処理プロセッサ
     title: 主要なクラス
   - sections:
+    - isExpanded: false
+      sections:
+      - local: model_doc/bart
+        title: BART
+      - local: model_doc/barthez
+        title: BARThez
+      - local: model_doc/bartpho
+        title: BARTpho
+      - local: model_doc/bert
+        title: BERT
+      - local: model_doc/bert-generation
+        title: BertGeneration
+      - local: model_doc/bert-japanese
+        title: BertJapanese
+      - local: model_doc/bertweet
+        title: Bertweet
+      - local: model_doc/big_bird
+        title: BigBird
+      - local: model_doc/bigbird_pegasus
+        title: BigBirdPegasus
+      - local: model_doc/biogpt
+        title: BioGpt
+      - local: model_doc/blenderbot
+        title: Blenderbot
+  - sections:
     - local: internal/modeling_utils
       title: カスタムレイヤーとユーティリティ
     - local: internal/pipelines_utils
