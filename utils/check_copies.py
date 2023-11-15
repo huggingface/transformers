@@ -227,11 +227,11 @@ def get_indent(code: str) -> str:
     return ""
 
 
-async def run_ruff(filepath):
-    command = ["ruff", "format", str(filepath), "--config", "pyproject.toml", "--silent"]
-    process = await asyncio.create_subprocess_exec(*command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    await process.communicate()
-
+async def run_ruff(code):
+    command = ["echo", code, "|","ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
+    process = await asyncio.create_subprocess_exec(*command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    stdout, _ = await process.communicate()
+    return stdout
 
 def stylify(code: str) -> str:
     """
@@ -248,15 +248,8 @@ def stylify(code: str) -> str:
     if has_indent:
         pass
         code = f"class Bla:\n{code}"
-
-    # Format with ruff
-    with tempfile.TemporaryDirectory() as tmpdir:
-        filepath = Path(tmpdir) / "__init__.py"
-        filepath.write_text(code)
-        asyncio.run(run_ruff(filepath))
-        result = filepath.read_text()
-
-    return result[len("class Bla:\n") :] if has_indent else result
+    formatted_code = asyncio.run(run_ruff(code))
+    return formatted_code[len("class Bla:\n") :] if has_indent else formatted_code
 
 
 def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int]:
