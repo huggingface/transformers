@@ -1017,9 +1017,9 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
 
 @require_torch
 class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
-    repo_id = ""
+    repo_id = "ylacombe/m4t_v2"
 
-    def assertListAlmostEqual(self, list1, list2, tol=1e-3):
+    def assertListAlmostEqual(self, list1, list2, tol=1e-4):
         self.assertEqual(len(list1), len(list2))
         for a, b in zip(list1, list2):
             self.assertAlmostEqual(a, b, delta=tol)
@@ -1033,7 +1033,7 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         # corresponds to "C'est un test." with seamlessM4T_medium checkpoint
 
         # fmt: off
-        input_ids = torch.tensor([[256057, 152, 248116, 354, 159, 7356, 248075, 3]])
+        input_ids = torch.tensor([[256026, 109, 247729, 171, 128, 6816, 247676, 3]])
         # fmt: on
 
         input_ids = input_ids.to(torch_device)
@@ -1081,31 +1081,32 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         # test text - tgt lang: eng
 
         # fmt: off
-        expected_text_tokens = [3, 256047, 3291, 248116, 248066, 9, 7356, 248075, 3]
+        expected_text_tokens = [3, 256022, 3080, 1, 247669, 10, 6816, 247676, 3]
         # fmt: on
 
         # fmt: off
         expected_unit_tokens = [
-            2,10051,8980,8212,949,1270,4311,1123,5918,2333,5311,3882,2415,5284,1123,612,8816,6370,5386,7334,4345,5645,
-            9437,5748,1378,9818,4319,7968,7375,2909,9119,5151,8728,5335,3896,4013,8939,8885,6048,9530,3167,5833,1072,693,
-            431,9867,364,7909,4608,5938,1889,9984,7947,4944,6171,3767,9861,9169,1187,8365,4571,7635,7784,7635,800,2393,
-            32,5380,5852,8289,2530,2762,1833,2056,3553,4641,3553,5683,370,2288,1344,1518,7534,703,8359,7699,2
+            4746,7163,3656,8208,1315,1266,1266,1119,9594,9594,8975,5382,4341,1288,7631,7631,7631,521,4061,9092,3191,7509,
+            1715,5280,5280,3554,8812,8197,6366,5382,7330,7330,2758,9433,9433,6863,7510,5800,5800,5286,1948,1825,1825,3956,
+            8724,8724,5331,8914,8914,9315,5288,2588,8167,8787,8787,8063,2621,2621,2621,2621,5696
         ]
         # fmt: on
 
         # fmt: off
-        expected_wav_slice = [-3e-05, -0.0004, -0.00037, -0.00013, -6e-05, 0.00012, -0.00016, 0.00025, 7e-05, -3e-05]
+        expected_wav_slice = [9.23e-04, 7.54e-04, 4.98e-04, 5.41e-04, 5.73e-04, 5.35e-04, 8.07e-04, 9.10e-04, 9.09e-04, 8.08e-04]
         # fmt: on
 
         set_seed(0)
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="eng", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
-        # FOR NOW, only first units correspondance
-        self.assertListEqual(expected_unit_tokens[:10], output.unit_sequences.squeeze().tolist()[:10])
+        self.assertListEqual(expected_unit_tokens, (output.unit_sequences - model.config.vocoder_offset).squeeze().tolist())
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
 
+        # assert mean and std equality
+        self.assertListAlmostEqual([-0.0002, 0.0714], [output.waveform.mean().item(), output.waveform.std().item()])
+        
     @slow
     def test_to_swh_text(self):
         model = SeamlessM4Tv2Model.from_pretrained(self.repo_id).to(torch_device)
@@ -1113,28 +1114,32 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         # test text - tgt lang: swh
 
         # fmt: off
-        expected_text_tokens = [3, 256168, 1665, 188589, 7040, 248075, 3]
+        expected_text_tokens = [3, 256084, 109, 247729, 171, 10, 6816, 247676, 3]
         # fmt: on
 
         # fmt: off
         expected_unit_tokens = [
-            2,10071,5729,9995,3089,7546,1204,1721,2532,4340,5623,3496,432,7730,9096,7677,3143,8211,6447,8399,4248,3565,
-            4529,7700,9308,217,6476,3485,9667,3194,8476,4923,5593,1148,4466,7416,4872,463,4872,253,2348,4640,3450,2133,
-            6318,2806,817,7613,2698,6563,8712,8344,9286,6878,6387,4281,6387,640,6387,3200,640,8355,640,6708,979,1738,2
+            5725,7163,7472,7472,2728,3099,3099,9921,3145,6515,6515,1374,1374,1347,8252,3881,9854,5662,2420,6600,2216,1593,
+            7708,7208,6107,7298,7850,9123,9402,9663,8472,8472,6366,575,575,2758,2052,2052,5788,1000,5800,5286,5286,1948,
+            1825,3956,3956,8724,8724,5331,5331,8914,8914,9315,9315,2821,8167,8787,8787,8787,8700,8700,8700,2175,2175,3196,
+            3196,2621,2621,1725,7507,5696
         ]
         # fmt: on
 
         # fmt: off
-        expected_wav_slice = [1e-05, -7e-05, -4e-05, -4e-05, -6e-05, -9e-05, -0.0001, -2e-05, -7e-05, -2e-05]
+        expected_wav_slice = [4.60e-04, 3.92e-04, 3.66e-04, 3.76e-04, 4.10e-04, 3.90e-04, 4.13e-04, 4.05e-04, 4.18e-04, 4.08e-04]
         # fmt: on
 
         set_seed(0)
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="swh", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
-        self.assertListEqual(expected_unit_tokens[:10], output.unit_sequences.squeeze().tolist()[:10])
+        self.assertListEqual(expected_unit_tokens, (output.unit_sequences - model.config.vocoder_offset).squeeze().tolist())
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
+
+        # assert mean and std equality
+        self.assertListAlmostEqual([-0.0002, 0.0871], [output.waveform.mean().item(), output.waveform.std().item()])
 
     @slow
     def test_to_rus_speech(self):
@@ -1143,29 +1148,30 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         # test audio - tgt lang: rus
 
         # fmt: off
-        expected_text_tokens = [3, 256147, 1197, 73565, 3413, 537, 233331, 248075, 3]
+        expected_text_tokens = [3, 256074, 147, 3]
         # fmt: on
 
         # fmt: off
         expected_unit_tokens = [
-            2, 10067, 5729, 4798, 9631, 8378, 4446, 2393, 6901, 5983, 2817, 4629, 8532, 1991, 2931, 8576, 8857, 5936, 4317,
-            9000, 7740, 7995, 1225, 5980, 6094, 1420, 5373, 8771, 6600, 4487, 7029, 3630, 6740, 4870, 1483, 3003, 5585, 5511,
-            7465, 3222, 32, 6272, 1950, 3120, 5368, 639, 3713, 5935, 7943, 567, 6129, 6822, 1226, 5063, 9878, 7756, 8825, 1078, 5943,
-            457, 9282, 9668, 817, 7613, 2698, 6563, 8712, 8704, 9286, 8704, 6387, 4281, 6387, 640, 3200, 6387, 640, 8355, 6708, 979, 1738, 2
+            8976,9886,9886,9886,9886,1498,1498,1498,4567,4567,5037,4418,4418,6750,6750,1514,1514,1514,1514,1514,1514,1514,
+            1514,8063,8063,8063,8063,8063,8063,8063,8063,2066,8063,4199
         ]
         # fmt: on
 
         # fmt: off
-        expected_wav_slice = [0.00013, 0.00012, 0.00014, 3e-05, 0.0, -6e-05, -0.00018, -0.00016, -0.00021, -0.00018]
+        expected_wav_slice = [9.30e-04, 8.23e-04, 6.44e-04, 6.44e-04, 6.46e-04, 6.19e-04, 6.91e-04, 7.98e-04, 7.80e-04, 6.97e-04]
         # fmt: on
 
         set_seed(0)
         output = model.generate(**self.input_audio, num_beams=1, tgt_lang="rus", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
-        self.assertListEqual(expected_unit_tokens[:10], output.unit_sequences.squeeze().tolist()[:10])
+        self.assertListEqual(expected_unit_tokens, (output.unit_sequences - model.config.vocoder_offset).squeeze().tolist())
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
+        
+        # assert mean and std equality - higher tolerance for speech
+        self.assertListAlmostEqual([-0.00078, 0.11356], [output.waveform.mean().item(), output.waveform.std().item()], tol=0.003)
 
     @slow
     def test_text_to_text_model(self):
