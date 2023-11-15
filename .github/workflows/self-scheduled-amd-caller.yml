@@ -11,7 +11,7 @@ on:
 jobs:
   run_amd_ci_mi210:
     name: AMD mi210
-    if: (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_amd_scheduled_ci_caller')) || ((github.event_name == 'push') && startsWith(github.ref_name, 'rocm-scheduled-ci')))
+    if: (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_amd_scheduled_ci_caller')))
     uses: ./.github/workflows/self-scheduled-amd.yml
     with:
       gpu_flavor: mi210
@@ -19,7 +19,7 @@ jobs:
 
   run_amd_ci_mi250:
     name: AMD mi250
-    if: (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_amd_scheduled_ci_caller')) || ((github.event_name == 'push') && startsWith(github.ref_name, 'rocm-scheduled-ci')))
+    if: (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_amd_scheduled_ci_caller')))
     uses: ./.github/workflows/self-scheduled-amd.yml
     with:
       gpu_flavor: mi250

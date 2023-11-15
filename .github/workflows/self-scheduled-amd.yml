@@ -33,7 +33,7 @@ jobs:
           fetch-depth: 2
 
       - name: Check Runner Status
-        run: python utils/check_self_hosted_runner.py --target_runners single-gpu-scheduled-ci-runner-docker,multi-gpu-scheduled-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+        run: python utils/check_self_hosted_runner.py --target_runners hf-amd-mi210-ci-1gpu-1,hf-amd-mi250-ci-1gpu-1 --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
 
   check_runners:
     name: Check Runners
@@ -100,7 +100,7 @@ jobs:
   run_tests_single_gpu:
     name: Single GPU tests
     strategy:
-      max-parallel: 2  # We do not want to parallelize over the 4 runners, in order to leave room for the push CI.
+      max-parallel: 1  # For now, not to parallelize. Can change later if it works well.
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
@@ -166,7 +166,7 @@ jobs:
   run_tests_multi_gpu:
     name: Multi GPU tests
     strategy:
-      max-parallel: 1  # Only 2 runners for multi-GPU tests are available. Leave one for push CI.
+      max-parallel: 1
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
@@ -175,7 +175,7 @@ jobs:
     container:
       image: huggingface/transformers-pytorch-amd-gpu
       options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: [setup, run_tests_single_gpu]
+    needs: setup
     steps:
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
@@ -240,6 +240,7 @@ jobs:
       image: huggingface/transformers-pytorch-amd-gpu
       options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     needs: [setup, run_tests_single_gpu, run_tests_multi_gpu]
+    if: always()
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -295,6 +296,7 @@ jobs:
       image: huggingface/transformers-pytorch-amd-gpu
       options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     needs: [setup, run_tests_single_gpu, run_tests_multi_gpu, run_examples_gpu]
+    if: always()
     steps:
       - name: Update clone
         working-directory: /transformers
