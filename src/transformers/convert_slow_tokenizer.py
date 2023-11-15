@@ -1215,7 +1215,7 @@ class LlamaConverter(SpmConverter):
         )
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        prepend_scheme = "first" if self.original_tokenizer.legacy else "always"
+        prepend_scheme = "always" if self.original_tokenizer.legacy else "first"
         pre_tokenizer = pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space, prepend_scheme=prepend_scheme)
         return pre_tokenizer
 
