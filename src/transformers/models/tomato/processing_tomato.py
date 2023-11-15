@@ -377,6 +377,8 @@ class TomatoProcessor(ProcessorMixin):
         for key in batched_keys:
             batched_inputs[key] = torch.cat(batched_inputs[key], dim=0)
 
+        batched_inputs["labels"] = self.get_labels(batched_inputs["input_ids"], batched_inputs["image_patches_indices"])
+
         return batched_inputs
 
     def get_sample_encoding(
@@ -567,6 +569,19 @@ class TomatoProcessor(ProcessorMixin):
             model_inputs=all_encodings, return_attention_mask=return_attention_mask
         )
         return TomatoBatchFeature(data=batch_encoding)
+    
+    def get_labels(self, input_ids, image_patches_indices, special_token_id=-1, masking_number=-100):
+        """
+        Mask the labels of image part.
+        """
+        labels = torch.full_like(input_ids, masking_number)
+        for i in range(input_ids.shape[0]):
+            seq = image_patches_indices[i]
+            for j in range(input_ids.shape[1]):
+                if seq[j] == special_token_id and (seq[j-1] == special_token_id or seq[j+1] == special_token_id):
+                    labels[i, j] = input_ids[i, j]
+        return labels
+            
 
     def post_process_box_coordinates(self, outputs, target_sizes=None):
         """
