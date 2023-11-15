@@ -18,7 +18,15 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-MADLAD-400 models were released in the paper [MADLAD-400: A Multilingual And Document-Level Large Audited Dataset](MADLAD-400: A Multilingual And Document-Level Large Audited Dataset) and converted to transformers' format by [Juarez Bochi](https://github.com/jbochi). - These are machine translation models based on the T5 architecture.
+MADLAD-400 models were released in the paper [MADLAD-400: A Multilingual And Document-Level Large Audited Dataset](MADLAD-400: A Multilingual And Document-Level Large Audited Dataset). 
+
+The abstract from the paper is the following: 
+
+*abstract here*
+
+This model was added by  [Juarez Bochi](https://huggingface.co/jbochi). The original checkpoints can be found [here](https://github.com/google-research/google-research/tree/master/madlad_400). 
+
+[Simple description of the model in a few sentences here]
 
 One can directly use MADLAD-400 weights without finetuning the model:
 
