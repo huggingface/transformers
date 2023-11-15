@@ -42,8 +42,6 @@ import glob
 import os
 import re
 import subprocess
-import tempfile
-from pathlib import Path
 from typing import List, Optional, Tuple
 
 from transformers.utils import direct_transformers_import
@@ -228,10 +226,11 @@ def get_indent(code: str) -> str:
 
 
 async def run_ruff(code):
-    command = ["echo", code, "|","ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
+    command = ["echo", code, "|", "ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
     process = await asyncio.create_subprocess_exec(*command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     stdout, _ = await process.communicate()
     return stdout
+
 
 def stylify(code: str) -> str:
     """
