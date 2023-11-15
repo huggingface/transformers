@@ -45,9 +45,12 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             Unit vocabulary size of the SeamlessM4Tv2 model. Defines the number of different unit tokens that can be
             represented by the `inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4Tv2Model`],
             [`~SeamlessM4Tv2ForSpeechToSpeech`] or [`~SeamlessM4Tv2ForTextToSpeech`].
+        char_vocab_size (`int`, *optional*, defaults to 10943): Character vocabulary size of the SeamlessM4Tv2 model. Defines the number of different characters tokens that can be
+            represented by the `char_inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4Tv2Model`],
+            [`~SeamlessM4Tv2ForSpeechToSpeech`] or [`~SeamlessM4Tv2ForTextToSpeech`].
 
+        > Parameters shared across sub-models
 
-        char_vocab_size (`<fill_type>`, *optional*, defaults to 10943): <fill_docstring>
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the "intermediate" layers in the architecture.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -79,6 +82,7 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         scale_embedding (`bool`, *optional*, defaults to `True`):
             Scale embeddings by diving by sqrt(d_model).
 
+        > Text encoder and text decoder specific parameters
 
         encoder_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer text encoder.
@@ -104,6 +108,7 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         eos_token_id (`int`, *optional*, defaults to 3):
             The id of the _end-of-stream_ text token. Only applied to the text-decoder model.
 
+        > Speech encoder specific parameters
 
         speech_encoder_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer speech encoder.
@@ -150,12 +155,13 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             the speech encoder.
         conv_depthwise_kernel_size (`int`, *optional*, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks. Only applied to the speech encoder.
-
-
-        left_max_position_embeddings (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
-        right_max_position_embeddings (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
-        speech_encoder_chunk_size (`<fill_type>`, *optional*, defaults to 20000): <fill_docstring>
-        speech_encoder_left_chunk_num (`<fill_type>`, *optional*, defaults to 128): <fill_docstring>
+        left_max_position_embeddings (`int`, *optional*, defaults to 64): The left clipping value for relative positions.
+        right_max_position_embeddings (`int`, *optional*, defaults to 8): The right clipping value for relative positions.
+        speech_encoder_chunk_size (`int`, *optional*, defaults to 20000): The size of each attention chunk.
+        speech_encoder_left_chunk_num (`int`, *optional*, defaults to 128): Number of chunks on the left up to which lookahead is allowed.
+        
+        > Text-To-Unit (t2u) model specific parameters
+        
         t2u_bos_token_id (`int`, *optional*, defaults to 0):
             The id of the _beginning-of-stream_ unit token. Only applied to the text-to-unit seq2seq model.
         t2u_pad_token_id (`int`, *optional*, defaults to 1):
@@ -183,13 +189,13 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         t2u_max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model text-to-unit component might ever be used with. Typically set
             this to something large just in case (e.g., 512 or 1024 or 2048).
+        t2u_variance_predictor_embed_dim (`int`, *optional*, defaults to 1024): Kernel size of the text-to-unit's duration predictor.
+        t2u_variance_predictor_hidden_dim (`int`, *optional*, defaults to 256): Internal dimension of the text-to-unit's duration predictor.
+        t2u_variance_predictor_kernel_size (`int`, *optional*, defaults to 3): Kernel size of the convolutional layers of the text-to-unit's duration predictor.
+        t2u_variance_pred_dropout (`float`, *optional*, defaults to 0.5): The dropout probabilitiy of the text-to-unit's duration predictor.
 
          > Hifi-Gan Vocoder specific parameters
 
-        t2u_variance_predictor_embed_dim (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
-        t2u_variance_predictor_hidden_dim (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
-        t2u_variance_predictor_kernel_size (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-        t2u_variance_pred_dropout (`<fill_type>`, *optional*, defaults to 0.5): <fill_docstring>
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the output audio will be generated, expressed in hertz (Hz).
         upsample_initial_channel (`int`, *optional*, defaults to 512):
@@ -340,7 +346,7 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         # overall_config
         self.vocab_size = vocab_size
         self.t2u_vocab_size = t2u_vocab_size
-        self.char_vocab_size = char_vocab_size  # TODO: add to docstrings
+        self.char_vocab_size = char_vocab_size
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
@@ -385,10 +391,10 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         self.max_source_positions = max_source_positions
         self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
         self.add_adapter = add_adapter
-        self.left_max_position_embeddings = left_max_position_embeddings  # TODO: add to docstrings
-        self.right_max_position_embeddings = right_max_position_embeddings  # TODO: add to docstrings
-        self.speech_encoder_chunk_size = speech_encoder_chunk_size  # TODO: add to docstrings
-        self.speech_encoder_left_chunk_num = speech_encoder_left_chunk_num  # TODO: add to docstrings
+        self.left_max_position_embeddings = left_max_position_embeddings
+        self.right_max_position_embeddings = right_max_position_embeddings
+        self.speech_encoder_chunk_size = speech_encoder_chunk_size
+        self.speech_encoder_left_chunk_num = speech_encoder_left_chunk_num
 
         # t2u config
         self.t2u_bos_token_id = t2u_bos_token_id
