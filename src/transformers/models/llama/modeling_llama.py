@@ -23,6 +23,7 @@ import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
+import torch.fx
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
