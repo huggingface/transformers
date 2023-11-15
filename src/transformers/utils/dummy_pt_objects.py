@@ -7265,13 +7265,6 @@ class SeamlessM4Tv2Model(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class SeamlessM4Tv2PreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class SeamlessM4Tv2NARTextToUnitForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7280,6 +7273,13 @@ class SeamlessM4Tv2NARTextToUnitForConditionalGeneration(metaclass=DummyObject):
 
 
 class SeamlessM4Tv2NARTextToUnitModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SeamlessM4Tv2PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

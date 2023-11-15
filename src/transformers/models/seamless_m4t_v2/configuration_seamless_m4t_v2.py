@@ -45,9 +45,10 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             Unit vocabulary size of the SeamlessM4Tv2 model. Defines the number of different unit tokens that can be
             represented by the `inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4Tv2Model`],
             [`~SeamlessM4Tv2ForSpeechToSpeech`] or [`~SeamlessM4Tv2ForTextToSpeech`].
-        char_vocab_size (`int`, *optional*, defaults to 10943): Character vocabulary size of the SeamlessM4Tv2 model. Defines the number of different characters tokens that can be
-            represented by the `char_inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4Tv2Model`],
-            [`~SeamlessM4Tv2ForSpeechToSpeech`] or [`~SeamlessM4Tv2ForTextToSpeech`].
+        char_vocab_size (`int`, *optional*, defaults to 10943):
+            Character vocabulary size of the SeamlessM4Tv2 model. Defines the number of different characters tokens
+            that can be represented by the `char_inputs_ids` passed when calling the Text-To-Units sub-model of
+            [`~SeamlessM4Tv2Model`], [`~SeamlessM4Tv2ForSpeechToSpeech`] or [`~SeamlessM4Tv2ForTextToSpeech`].
 
         > Parameters shared across sub-models
 
@@ -155,13 +156,16 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             the speech encoder.
         conv_depthwise_kernel_size (`int`, *optional*, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks. Only applied to the speech encoder.
-        left_max_position_embeddings (`int`, *optional*, defaults to 64): The left clipping value for relative positions.
-        right_max_position_embeddings (`int`, *optional*, defaults to 8): The right clipping value for relative positions.
+        left_max_position_embeddings (`int`, *optional*, defaults to 64):
+            The left clipping value for relative positions.
+        right_max_position_embeddings (`int`, *optional*, defaults to 8):
+            The right clipping value for relative positions.
         speech_encoder_chunk_size (`int`, *optional*, defaults to 20000): The size of each attention chunk.
-        speech_encoder_left_chunk_num (`int`, *optional*, defaults to 128): Number of chunks on the left up to which lookahead is allowed.
-        
+        speech_encoder_left_chunk_num (`int`, *optional*, defaults to 128):
+            Number of chunks on the left up to which lookahead is allowed.
+
         > Text-To-Unit (t2u) model specific parameters
-        
+
         t2u_bos_token_id (`int`, *optional*, defaults to 0):
             The id of the _beginning-of-stream_ unit token. Only applied to the text-to-unit seq2seq model.
         t2u_pad_token_id (`int`, *optional*, defaults to 1):
@@ -189,10 +193,14 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         t2u_max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model text-to-unit component might ever be used with. Typically set
             this to something large just in case (e.g., 512 or 1024 or 2048).
-        t2u_variance_predictor_embed_dim (`int`, *optional*, defaults to 1024): Kernel size of the text-to-unit's duration predictor.
-        t2u_variance_predictor_hidden_dim (`int`, *optional*, defaults to 256): Internal dimension of the text-to-unit's duration predictor.
-        t2u_variance_predictor_kernel_size (`int`, *optional*, defaults to 3): Kernel size of the convolutional layers of the text-to-unit's duration predictor.
-        t2u_variance_pred_dropout (`float`, *optional*, defaults to 0.5): The dropout probabilitiy of the text-to-unit's duration predictor.
+        t2u_variance_predictor_embed_dim (`int`, *optional*, defaults to 1024):
+            Kernel size of the text-to-unit's duration predictor.
+        t2u_variance_predictor_hidden_dim (`int`, *optional*, defaults to 256):
+            Internal dimension of the text-to-unit's duration predictor.
+        t2u_variance_predictor_kernel_size (`int`, *optional*, defaults to 3):
+            Kernel size of the convolutional layers of the text-to-unit's duration predictor.
+        t2u_variance_pred_dropout (`float`, *optional*, defaults to 0.5):
+            The dropout probabilitiy of the text-to-unit's duration predictor.
 
          > Hifi-Gan Vocoder specific parameters
 
