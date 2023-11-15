@@ -574,7 +574,7 @@ class TrainingArguments:
             Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
-        gradient_checkpointing_args (`dict`, *optional*, defaults to `None`):
+        gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
             Key word arguments to be passed to the `gradient_checkpointing_enable` method.
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
             Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
@@ -637,6 +637,12 @@ class TrainingArguments:
             This will iterate over the entire training dataloader once beforehand,
 
             and will slow down the entire process.
+
+        include_num_input_tokens_seen (`bool`, *optional*):
+            Whether or not to track the number of input tokens seen throughout training.
+
+            May be slower in distributed training as gather operations must be called.
+
         neftune_noise_alpha (`Optional[float]`):
             If not `None`, this will activate NEFTune noise embeddings. This can drastically improve model performance
             for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
@@ -1144,7 +1150,7 @@ class TrainingArguments:
             "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
         },
     )
-    gradient_checkpointing_kwargs: dict = field(
+    gradient_checkpointing_kwargs: Optional[dict] = field(
         default=None,
         metadata={
             "help": "Gradient checkpointing key word arguments such as `use_reentrant`. Will be passed to `torch.utils.checkpoint.checkpoint` through `model.gradient_checkpointing_enable`."
@@ -1256,6 +1262,13 @@ class TrainingArguments:
     include_tokens_per_second: Optional[bool] = field(
         default=False,
         metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
+    )
+
+    include_num_input_tokens_seen: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "If set to `True`, will track the number of input tokens seen throughout training. (May be slower in distributed training)"
+        },
     )
 
     neftune_noise_alpha: float = field(
