@@ -333,7 +333,7 @@ def forecast_masking(
 
     for patch_length, ratio in zip(forecast_mask_patches, forecast_mask_ratios):
         if patch_length <= 0 or patch_length >= sequence_length:
-            raise Exception("masked_patch_len should be greater than 0 and less than total patches.")
+            raise ValueError(f"masked_patch_len {patch_length} should be greater than 0 and less than total patches.")
         temp_len = int(batch_size * ratio / total_ratio)
         t_list.append([patch_length, ratio, temp_len])
         total_length += temp_len
@@ -471,7 +471,7 @@ class PatchTSTMasking(nn.Module):
                 seed_number=self.seed_number,
             )
         else:
-            raise Exception("Invalid mask type")
+            raise ValueError(f"Invalid mask type {self.mask_type}.")
 
         mask = mask.bool()  # mask: [bs x num_input_channels x num_patch]
 
@@ -1498,7 +1498,7 @@ class PatchTSTClassificationHead(nn.Module):
             # pooled_embedding: [bs x num_channels x d_model]
             pooled_embedding = embedding.max(dim=2)
         else:
-            raise Exception(f"pooling operator {self.pooling_type} is not implemented yet")
+            raise ValueError(f"pooling operator {self.pooling_type} is not implemented yet")
         # pooled_embedding: bs x num_channels * d_model
         pooled_embedding = self.flatten(pooled_embedding)
         # output: bs x n_classes
@@ -1793,7 +1793,7 @@ class PatchTSTRegressionHead(nn.Module):
             # pooled_embedding: [bs x num_channels x d_model]
             pooled_embedding = embedding.max(dim=2)
         else:
-            raise Exception(f"pooling operator {self.pooling_type} is not implemented yet")
+            raise ValueError(f"pooling operator {self.pooling_type} is not implemented yet")
         # flatten the input
         # pooled_embedding: bs x (num_channels * d_model)
         pooled_embedding = self.dropout(self.flatten(pooled_embedding))
