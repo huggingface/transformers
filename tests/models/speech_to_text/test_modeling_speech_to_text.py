@@ -763,6 +763,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_tf_from_pt_safetensors(self):
         pass
 
+
 @require_torch
 @require_torchaudio
 @require_sentencepiece

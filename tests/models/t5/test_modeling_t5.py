@@ -1040,6 +1040,7 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     def test_assisted_decoding_sample(self):
         pass
 
+
 def use_task_specific_params(model, task):
     model.config.update(model.config.task_specific_params[task])
 
