@@ -716,7 +716,7 @@ class GenerationConfig(PushToHubMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
-                    use_auth_token=token,
+                    token=token,
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
@@ -750,9 +750,14 @@ class GenerationConfig(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
-        config = cls.from_dict(config_dict, **kwargs)
-        config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
-        return config
+        if kwargs.get("return_unused_kwargs") is True:
+            config, unused_kwargs = cls.from_dict(config_dict, **kwargs)
+            config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
+            return config, unused_kwargs
+        else:
+            config = cls.from_dict(config_dict, **kwargs)
+            config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
+            return config
 
     @classmethod
     def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
