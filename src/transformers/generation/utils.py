@@ -4567,8 +4567,8 @@ class GenerationMixin:
             )
             for _ in range(int(num_assistant_tokens)):
                 # 1.1. check if the input ids length is correct
-                has_pkv = assistant_inputs.get("past_key_values", None) is None
-                if not has_pkv and assistant_inputs[input_ids_key].shape[-1] not in (1, 2):
+                has_pkv = assistant_inputs.get("past_key_values", None) is not None
+                if has_pkv and assistant_inputs[input_ids_key].shape[-1] not in (1, 2):
                     raise ValueError("The length of the input ids in assistant inputs should be 1 or 2")
 
                 # 1.2. use the assistant model to obtain the next candidate logits
