@@ -53,6 +53,7 @@ if is_torch_available():
         TypicalLogitsWarper,
         UnbatchedClassifierFreeGuidanceLogitsProcessor,
     )
+    from transformers.generation.logits_process import BarkEosPrioritizerLogitsProcessor
 
 
 @require_torch
@@ -800,3 +801,19 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertAlmostEqual(out[0].item(), res[0].item())
         self.assertAlmostEqual(out[1].item(), res[1].item())
         self.assertAlmostEqual(out[2].item(), res[2].item())
+
+    def test_early_stop_processor(self):
+        input_ids = None
+        eos_token_id = 2
+        min_eos_p = 0.1  ## some small float
+
+        scores = self._get_uniform_logits(2, 4)
+        scores[0][eos_token_id] = -6  ## less than log(min_eos_p)
+
+        esp = BarkEosPrioritizerLogitsProcessor(eos_token_id=eos_token_id, min_eos_p=min_eos_p)
+        actual_scores = esp(input_ids, scores)
+        expected_scores_list = [
+            scores[0].tolist(),
+            [float("-inf"), float("-inf"), scores[0][0], float("-inf")],
+        ]
+        self.assertListEqual(actual_scores.tolist(), expected_scores_list)
