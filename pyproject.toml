@@ -21,3 +21,6 @@ known-first-party = ["transformers"]
 [tool.pytest.ini_options]
 doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"
 doctest_glob="**/*.md"
+markers = [
+    "flash_attn_test: marks tests related to flash attention (deselect with '-m \"not flash_attn_test\"')",
+]
