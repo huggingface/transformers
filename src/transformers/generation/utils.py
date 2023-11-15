@@ -4584,10 +4584,8 @@ class GenerationMixin:
                 new_token = assistant_model_outputs.logits[:, -1, :].argmax(dim=-1)
                 candidate_input_ids = torch.cat((candidate_input_ids, new_token[:, None]), dim=-1)
                 assistant_inputs[input_ids_key] = new_token[:, None]
-                assist_mask = assistant_inputs[attention_mask_key]
-                assistant_inputs[attention_mask_key] = torch.cat(
-                    [assist_mask, assist_mask.new_ones((assist_mask.shape[0], 1))], dim=-1
-                )
+                mask = assistant_inputs[attention_mask_key]
+                assistant_inputs[attention_mask_key] = torch.cat([mask, mask.new_ones((mask.shape[0], 1))], dim=-1)
                 assistant_inputs["past_key_values"] = assistant_model_outputs.past_key_values
 
                 # 1.5. stop assistant generation on EOS
