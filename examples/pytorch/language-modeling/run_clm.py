@@ -499,6 +499,8 @@ def main():
             )
     if hasattr(config, "max_position_embeddings"):
         max_pos_embeddings = config.max_position_embeddings
+        if max_pos_embeddings < 0:
+            max_pos_embeddings = 1024
     else:
         # Define a default value if the attribute is missing in the config.
         max_pos_embeddings = 1024
