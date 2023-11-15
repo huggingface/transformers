@@ -624,9 +624,15 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
-        """Initialize weights"""
-        if self.config.use_cls_token:
-            nn.init.normal_(self.config.cls_token, std=0.02)
+        """
+        Initialize weights
+        """
+        # initialize positional encoding
+
+        # initialize cls_token
+        if isinstance(module, PatchTSTPositionalEncoding):
+            if self.config.use_cls_token:
+                nn.init.normal_(module.cls_token, std=0.02)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -680,11 +686,12 @@ class PatchTSTPositionalEncoding(nn.Module):
         self.pe_type = config.positional_encoding_type
         self.d_model = config.d_model
         if config.use_cls_token:
-            self.cls_token = nn.Parameter(torch.zeros(1, 1, 1, config.d_model))
+            # cls_token: [1 x num_input_channels x 1 x d_model]
+            self.cls_token = nn.Parameter(torch.zeros(1, config.num_input_channels, 1, config.d_model))
             num_patches = config.num_patches + 1
         else:
             num_patches = config.num_patches
-        # postional encoding
+        # postional encoding: [num_patches x d_model]
         self.position_enc = self._init_pe(config, num_patches)
         # Positional dropout
         self.positional_dropout = (
@@ -726,12 +733,12 @@ class PatchTSTPositionalEncoding(nn.Module):
         if self.use_cls_token:
             # patch_input: [bs x num_channels x num_patches x d_model]
             patch_input = self.positional_dropout(patch_input + self.position_enc[1:, :])
-            # append cls token where cls_token: [1 x 1 x 1 x d_model]
+            # append cls token where cls_token: [1 x num_channels x 1 x d_model]
             cls_token = self.cls_token + self.position_enc[:1, :]
-            # get the same copy of cls_token for all the samples in batch
-            cls_tokens = cls_token.expand(patch_input.shape[0], -1, -1)
+            # get the same copy of cls_token for all the samples in batch: [bs x num_channels x 1 x d_model]
+            cls_tokens = cls_token.expand(patch_input.shape[0], -1, -1, -1)
             # hidden_state: [bs x num_channels x (num_patches+1) x d_model]
-            hidden_state = torch.cat((cls_tokens, patch_input), dim=1)
+            hidden_state = torch.cat((cls_tokens, patch_input), dim=2)
         else:
             # hidden_state: [bs x num_channels x num_patches x d_model]
             hidden_state = self.positional_dropout(patch_input + self.position_enc)
@@ -1206,7 +1213,6 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         self.scaler = PatchTSTScaler(config)
         self.patchifier = PatchTSTPatchify(config)
         self.mask_input = config.mask_input
-
         # get num_patches information from PatchTSTPatchify
         config.num_patches = self.patchifier.num_patches
 
