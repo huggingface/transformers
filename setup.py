@@ -321,6 +321,7 @@ extras["testing"] = (
         "rjieba",
         "beautifulsoup4",
         "tensorboard",
+        "pydantic",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
