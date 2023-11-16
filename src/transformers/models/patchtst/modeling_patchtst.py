@@ -693,9 +693,10 @@ class PatchTSTPositionalEncoding(nn.Module):
         self.use_cls_token = config.use_cls_token
         self.pe_type = config.positional_encoding_type
         self.d_model = config.d_model
+        self.num_input_channels = config.num_input_channels
         if config.use_cls_token:
             # cls_token: [1 x num_input_channels x 1 x d_model]
-            self.cls_token = nn.Parameter(torch.zeros(1, config.num_input_channels, 1, config.d_model))
+            self.cls_token = nn.Parameter(torch.zeros(1, 1, 1, config.d_model))
             num_patches = config.num_patches + 1
         else:
             num_patches = config.num_patches
@@ -733,7 +734,7 @@ class PatchTSTPositionalEncoding(nn.Module):
             # append cls token where cls_token: [1 x num_channels x 1 x d_model]
             cls_token = self.cls_token + self.position_enc[:1, :]
             # get the same copy of cls_token for all the samples in batch: [bs x num_channels x 1 x d_model]
-            cls_tokens = cls_token.expand(patch_input.shape[0], -1, -1, -1)
+            cls_tokens = cls_token.expand(patch_input.shape[0], self.num_input_channels, -1, -1)
             # hidden_state: [bs x num_channels x (num_patches+1) x d_model]
             hidden_state = torch.cat((cls_tokens, patch_input), dim=2)
         else:
