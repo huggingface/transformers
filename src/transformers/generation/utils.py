@@ -4743,9 +4743,10 @@ class GenerationMixin:
             if n_matches > 0:
                 model_kwargs = self._extend_attention_mask(model_kwargs, new_cur_len)
                 model_kwargs = self._extend_token_type_ids(model_kwargs, new_cur_len)
-            assistant_kwargs[attention_key] = model_kwargs[attention_key]
+            if attention_key in assistant_kwargs:
+                assistant_kwargs[attention_key] = model_kwargs.get(attention_key, None)
             if "token_type_ids" in assistant_kwargs:
-                assistant_kwargs["token_type_ids"] = model_kwargs["token_type_ids"]
+                assistant_kwargs["token_type_ids"] = model_kwargs.get("token_type_ids", None)
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id_tensor is not None:
