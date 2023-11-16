@@ -140,6 +140,8 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_du
     model = TextNetBackbone(config)
     textnet_image_processor = CLIPImageProcessor(
         size={"shortest_edge": size},
+        do_center_crop=False,
+        use_square_size=True
     )
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)["ema"]
     state_dict_changed = OrderedDict()

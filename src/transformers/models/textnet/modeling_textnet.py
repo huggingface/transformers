@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)
 # General docstring
 _CONFIG_FOR_DOC = "TextNetConfig"
 _CHECKPOINT_FOR_DOC = "Raghavan/textnet-base"
-_EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
+_EXPECTED_OUTPUT_SHAPE = [1, 512, 7, 7]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "Raghavan/textnet-base"
