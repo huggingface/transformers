@@ -26,8 +26,7 @@ from torch.nn.modules.utils import _ntuple
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
-from ...utils.backbone_utils import get_aligned_output_features_output_indices
-
+from ...utils.backbone_utils import get_aligned_output_features_output_indices, BackboneConfigMixin
 
 logger = logging.get_logger(__name__)
 
@@ -42,7 +41,7 @@ PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class PvtV2Config(PretrainedConfig):
+class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`PvtV2Model`]. It is used to instantiate an Pvt
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -172,7 +171,7 @@ class PvtV2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
-        self.num_labels = num_labels
+        self.num_labels = num_labels if self.id2label is None else len(self.id2label)
         self.qkv_bias = qkv_bias
         self.attn_reduce = attn_reduce
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]

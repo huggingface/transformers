@@ -392,7 +392,7 @@ class PvtV2Encoder(nn.Module):
             for block in block_layer:
                 layer_outputs = block(hidden_states, height, width, output_attentions)
                 hidden_states = layer_outputs[0]
-                if output_attentions and idx in self.config._out_indices:
+                if output_attentions and idx in self.config.out_indices:
                     all_self_attentions = all_self_attentions + (layer_outputs[1],)
             # third, apply layer norm
             hidden_states = norm_layer(hidden_states)
@@ -401,7 +401,7 @@ class PvtV2Encoder(nn.Module):
                 idx == len(self.patch_embeddings) - 1 and self.config.reshape_last_stage
             ):
                 hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
-            if output_hidden_states and idx in self.config._out_indices:
+            if output_hidden_states and idx in self.config.out_indices:
                 all_hidden_states = all_hidden_states + (hidden_states,)
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
