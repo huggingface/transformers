@@ -77,35 +77,30 @@ class CustomTrainer(Trainer):
 
 ## Trainer
 
-[[autodoc]] Trainer
-    - all
+[[autodoc]] Trainer - all
 
 ## Seq2SeqTrainer
 
-[[autodoc]] Seq2SeqTrainer
-    - evaluate
-    - predict
+[[autodoc]] Seq2SeqTrainer - evaluate - predict
 
 ## TrainingArguments
 
-[[autodoc]] TrainingArguments
-    - all
+[[autodoc]] TrainingArguments - all
 
 ## Seq2SeqTrainingArguments
 
-[[autodoc]] Seq2SeqTrainingArguments
-    - all
+[[autodoc]] Seq2SeqTrainingArguments - all
 
 ## Checkpoints
 
 默认情况下，[`Trainer`] 会将所有checkpoints保存在你使用的 [`TrainingArguments`] 中设置的 `output_dir` 中。这些checkpoints将位于名为 `checkpoint-xxx` 的子文件夹中，xxx 是训练的步骤。
 
-从checkpoints恢复训练可以在调用 [`Trainer.train`] 时使用以下任一方式进行：
+从checkpoints恢复训练可以通过调用 [`Trainer.train`] 时使用以下任一方式进行：
 
 - `resume_from_checkpoint=True`，这将从最新的checkpoint恢复训练。
 - `resume_from_checkpoint=checkpoint_dir`，这将从指定目录中的特定checkpoint恢复训练。
 
-此外，当使用 `push_to_hub=True` 时，你可以轻松将checkpoints保存在 Model Hub 中。默认情况下，保存在中间checkpoints中的所有模型都保存在不同的提交中，但不包括优化器状态。你可以根据需要调整 [`TrainingArguments`] 的 `hub-strategy` 值：
+此外，当使用 `push_to_hub=True` 时，你可以轻松将checkpoints保存在 Model Hub 中。默认情况下，保存在训练中间过程的checkpoints中的所有模型都保存在不同的提交中，但不包括优化器状态。你可以根据需要调整 [`TrainingArguments`] 的 `hub-strategy` 值：
 
 - `"checkpoint"`: 最新的checkpoint也被推送到一个名为 last-checkpoint 的子文件夹中，让你可以通过 `trainer.train(resume_from_checkpoint="output_dir/last-checkpoint")` 轻松恢复训练。
 - `"all_checkpoints"`: 所有checkpoints都像它们出现在输出文件夹中一样被推送（因此你将在最终存储库中的每个文件夹中获得一个checkpoint文件夹）。
@@ -151,7 +146,7 @@ trainer = Trainer(...)
 my_app.py ... --log_level warning --log_level_replica error
 ```
 
-在多节点环境中，如果你也不希望每个节点的主进程的日志重复，你需要将上面的代码更改为：
+在多节点环境中，如果你也不希望每个节点的主进程的日志重复输出，你需要将上面的代码更改为：
 
 ```bash
 my_app.py ... --log_level warning --log_level_replica error --log_on_each_node 0
@@ -159,19 +154,19 @@ my_app.py ... --log_level warning --log_level_replica error --log_on_each_node 0
 
 然后，只有第一个节点的主进程将以 "warning" 级别记录日志，主节点上的所有其他进程和其他节点上的所有进程将以 "error" 级别记录日志。
 
-如果你希望应用程序尽可能安静，可以执行以下操作：
+如果你希望应用程序尽可能”安静“，可以执行以下操作：
 
 
 ```bash
 my_app.py ... --log_level error --log_level_replica error --log_on_each_node 0
 ```
 
-(add `--log_on_each_node 0` if on multi-node environment)
+(如果在多节点环境，添加 `--log_on_each_node 0`)
 
 
-## Randomness
+## 随机性
 
-当从 [`Trainer`] 生成的checkpoint恢复时，会尽一切努力将 _python_、_numpy_ 和 _pytorch_ 的 RNG（随机数生成器）状态恢复为保存检查点时的状态，这样可以使“停止和恢复”式训练尽可能接近“非停止式”训练。
+当从 [`Trainer`] 生成的checkpoint恢复训练时，程序会尽一切努力将 _python_、_numpy_ 和 _pytorch_ 的 RNG（随机数生成器）状态恢复为保存检查点时的状态，这样可以使“停止和恢复”式训练尽可能接近“非停止式”训练。
 
 然而，由于各种默认的非确定性 PyTorch 设置，这可能无法完全实现。如果你想要完全确定性，请参阅[控制随机源](https://pytorch.org/docs/stable/notes/randomness)。正如文档中所解释的那样，使事物变得确定的一些设置（例如 `torch.backends.cudnn.deterministic`）可能会减慢速度，因此不能默认执行，但如果需要，你可以自行启用这些设置。
 
@@ -180,14 +175,14 @@ my_app.py ... --log_level error --log_level_replica error --log_on_each_node 0
 
 让我们讨论一下如何告诉你的程序应该使用哪些 GPU 以及使用的顺序。
 
-当使用 [`DistributedDataParallel`](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) 仅使用 GPU 子集时，你只需指定要使用的 GPU 数量。例如，如果你有 4 个 GPU，但只想使用前 2 个，可以执行以下操作：
+当使用 [`DistributedDataParallel`](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) 且仅使用部分 GPU 时，你只需指定要使用的 GPU 数量。例如，如果你有 4 个 GPU，但只想使用前 2 个，可以执行以下操作：
 
 
 ```bash
 python -m torch.distributed.launch --nproc_per_node=2  trainer-program.py ...
 ```
 
-如果你安装了 [`accelerate`](https://github.com/huggingface/accelerate) 或 [`deepspeed`](https://github.com/microsoft/DeepSpeed)，你还可以通过以下之一实现相同的效果：
+如果你安装了 [`accelerate`](https://github.com/huggingface/accelerate) 或 [`deepspeed`](https://github.com/microsoft/DeepSpeed)，你还可以通过以下任一方法实现相同的效果：
 
 
 ```bash
@@ -240,7 +235,7 @@ CUDA_VISIBLE_DEVICES=2,0 python trainer-program.py ...
 CUDA_VISIBLE_DEVICES= python trainer-program.py ...
 ```
 
-与任何环境变量一样，你当然可以将其导出而不是将其添加到命令行，如下所示：
+与任何环境变量一样，你当然可以将其export到环境变量而不是将其添加到命令行，如下所示：
 
 
 ```bash
@@ -248,14 +243,14 @@ export CUDA_VISIBLE_DEVICES=0,2
 python -m torch.distributed.launch trainer-program.py ...
 ```
 
-这种方法可能会令人困惑，因为你可能会忘记之前设置了环境变量，而不明白为什么会使用错误的 GPU。因此，在同一命令行中仅为特定运行设置环境变量是一种常见做法，正如本节大多数示例所示。
+这种方法可能会令人困惑，因为你可能会忘记之前设置了环境变量，进而不明白为什么会使用错误的 GPU。因此，在同一命令行中仅为特定运行设置环境变量是一种常见做法，正如本节大多数示例所示。
 
 
 **`CUDA_DEVICE_ORDER`**
 
 还有一个额外的环境变量 `CUDA_DEVICE_ORDER`，用于控制物理设备的排序方式。有两个选择：
 
-1. 按 PCIe 总线 ID 排序（与 nvidia-smi 的顺序相匹配）- 默认选项。
+1. 按 PCIe 总线 ID 排序（与 nvidia-smi 的顺序相匹配）- 这是默认选项。
 
 
 ```bash
@@ -268,9 +263,9 @@ export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export CUDA_DEVICE_ORDER=FASTEST_FIRST
 ```
 
-大多数情况下，你不需要关心这个环境变量，但如果你的设置不均匀，例如，您的旧 GPU 和新 GPU 物理上安装在一起，以使较慢的旧卡表现为第一个，那么这将非常有用。解决这个问题的一种方法是交换卡的位置。但如果不能交换卡（例如，如果设备的冷却受到影响），那么设置 `CUDA_DEVICE_ORDER=FASTEST_FIRST` 将始终将较新、更快的卡片放在第一位。但这可能会有点混乱，因为 `nvidia-smi` 仍然会按照 PCIe 顺序报告它们。
+大多数情况下，你不需要关心这个环境变量，但如果你的设置不均匀，那么这将非常有用，例如，您的旧 GPU 和新 GPU 物理上安装在一起，但让速度较慢的旧卡排在运行的第一位。解决这个问题的一种方法是交换卡的位置。但如果不能交换卡（例如，如果设备的散热受到影响），那么设置 `CUDA_DEVICE_ORDER=FASTEST_FIRST` 将始终将较新、更快的卡放在第一位。但这可能会有点混乱，因为 `nvidia-smi` 仍然会按照 PCIe 顺序报告它们。
 
-解决此问题的另一种方法是使用：
+交换卡的顺序的另一种方法是使用：
 
 
 ```bash
@@ -279,17 +274,16 @@ export CUDA_VISIBLE_DEVICES=1,0
 
 在此示例中，我们只使用了 2 个 GPU，但是当然，对于计算机上有的任何数量的 GPU，都适用相同的方法。
 
-此外，如果你设置了这个环境变量，最好将其设置在 `~/.bashrc` 文件或其他启动配置文件中，并将其忘记。
+此外，如果你设置了这个环境变量，最好将其设置在 `~/.bashrc` 文件或其他启动配置文件中，然后就可以忘记它了。
 
 
 ## Trainer集成
 
-[`Trainer`] 已经扩展以支持可能显著提高训练时间并适应更大模型的库。
+[`Trainer`] 已经被扩展，以支持可能显著提高训练时间并适应更大模型的库。
 
-目前，它支持第三方解决方案 [DeepSpeed](https://github.com/microsoft/DeepSpeed) 和 [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html)，它们实现了论文 [ZeRO: Memory Optimizations
-Toward Training Trillion Parameter Models，作者为 Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He](https://arxiv.org/abs/1910.02054) 的部分内容。
+目前，它支持第三方解决方案 [DeepSpeed](https://github.com/microsoft/DeepSpeed) 和 [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html)，它们实现了论文 [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He](https://arxiv.org/abs/1910.02054) 的部分内容。
 
-截至撰写本文，此提供的支持是新的且实验性的。尽管我们欢迎围绕 DeepSpeed 和 PyTorch FSDP 的问题，但我们不再支持 FairScale 集成，因为它已经集成到了 PyTorch 主要部分（参见 [PyTorch FSDP 集成](#pytorch-fully-sharded-data-parallel)）。
+截至撰写本文，此提供的支持是新的且实验性的。尽管我们欢迎围绕 DeepSpeed 和 PyTorch FSDP 的issues，但我们不再支持 FairScale 集成，因为它已经集成到了 PyTorch 主线（参见 [PyTorch FSDP 集成](#pytorch-fully-sharded-data-parallel)）。
 
 
 <a id='zero-install-notes'></a>
@@ -299,7 +293,7 @@ Toward Training Trillion Parameter Models，作者为 Samyam Rajbhandari, Jeff R
 
 撰写时，Deepspeed 需要在使用之前编译 CUDA C++ 代码。
 
-虽然所有安装问题都应通过 [Deepspeed 的 GitHub Issues](https://github.com/microsoft/DeepSpeed/issues) 处理，但在构建需要构建 CUDA 扩展的任何 PyTorch 扩展时，可能会遇到一些常见问题。
+虽然所有安装问题都应通过 [Deepspeed](https://github.com/microsoft/DeepSpeed/issues) 的 GitHub Issues处理，但在构建依赖CUDA 扩展的任何 PyTorch 扩展时，可能会遇到一些常见问题。
 
 因此，如果在执行以下操作时遇到与 CUDA 相关的构建问题：
 
@@ -339,7 +333,7 @@ which nvcc
 /usr/local/cuda-11.0
 ```
 
-在这种情况下，你需要确保 `PATH` 和 `LD_LIBRARY_PATH` 环境变量包含所需 CUDA 版本的正确路径。通常，软件包安装程序将设置这些变量，以包含最后安装的版本。如果遇到构建失败的问题，因为软件包找不到正确的 CUDA 版本，尽管你已经在整个系统上安装了它，这意味着你需要调整这两个环境变量。
+在这种情况下，你需要确保 `PATH` 和 `LD_LIBRARY_PATH` 环境变量包含所需 CUDA 版本的正确路径。通常，软件包安装程序将设置这些变量以包含最新安装的版本。如果遇到构建失败的问题，且是因为在整个系统安装但软件仍找不到正确的 CUDA 版本，这意味着你需要调整这两个环境变量。
 
 首先，你以查看它们的内容：
 
@@ -376,7 +370,7 @@ export LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:$LD_LIBRARY_PATH
 
 如果你可以安装最新的 CUDA 工具包，通常它应该支持更新的编译器。
 
-或者，你可以在已经拥有的编译器版本之外安装较低版本，或者你可能已经安装了它，但它不是默认的编译器，因此构建系统无法找到它。如果你已经安装了 `gcc-7` 但构建系统抱怨找不到它，以下操作可能会解决问题：
+或者，你可以在已经拥有的编译器版本之外安装较低版本，或者你可能已经安装了它但它不是默认的编译器，因此构建系统无法找到它。如果你已经安装了 `gcc-7` 但构建系统找不到它，以下操作可能会解决问题：
 
 
 ```bash
@@ -384,51 +378,40 @@ sudo ln -s /usr/bin/gcc-7  /usr/local/cuda-10.2/bin/gcc
 sudo ln -s /usr/bin/g++-7  /usr/local/cuda-10.2/bin/g++
 ```
 
-这里，我们正在从 `/usr/local/cuda-10.2/bin/gcc` 创建到 `gcc-7` 的符号链接，由于 `/usr/local/cuda-10.2/bin/` 应该在 `PATH` 环境变量中（参见前一个问题的解决方案），它应该能够找到 `gcc-7`（和 `g++7`），然后构建将成功。
+这里，我们正在从 `/usr/local/cuda-10.2/bin/gcc` 创建到 `gcc-7` 的软链接，由于 `/usr/local/cuda-10.2/bin/` 应该在 `PATH` 环境变量中（参见前一个问题的解决方案），它应该能够找到 `gcc-7`（和 `g++7`），然后构建将成功。
 
 与往常一样，请确保编辑示例中的路径以匹配你的情况。
 
 
 
-### PyTorch Fully Sharded Data parallel
+### PyTorch完全分片数据并行（FSDP)
 
 为了加速在更大批次大小上训练庞大模型，我们可以使用完全分片的数据并行模型。这种数据并行范例通过对优化器状态、梯度和参数进行分片，实现了在更多数据和更大模型上的训练。要了解更多信息以及其优势，请查看[完全分片的数据并行博客](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/)。我们已经集成了最新的PyTorch完全分片的数据并行（FSDP）训练功能。您只需通过配置启用它。
 
-**FSDP支持所需的PyTorch版本**: PyTorch Nightly（或者如果您在发布后阅读这个，使用1.12.0版本），
-因为带有激活的FSDP的模型保存仅在最近的修复中可用。
+**FSDP支持所需的PyTorch版本**: PyTorch Nightly（或者如果你在发布后阅读这个，使用1.12.0版本，因为带有激活的FSDP的模型保存仅在最近的修复中可用。
 
 
 **用法**:
 
-- 确保你已经添加了分布式启动器 `-m torch.distributed.launch --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE`，如果你尚未使用它的话。
+- 如果你尚未使用过分布式启动器，确保你已经添加了它 `-m torch.distributed.launch --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE`。
 
 - **分片策略**：
-  - FULL_SHARD：在数据并行工作者/GPU之间对优化器状态、梯度和模型参数进行分片。
+  - FULL_SHARD：在数据并行线程/GPU之间，对优化器状态、梯度和模型参数进行分片。
     为此，请在命令行参数中添加 `--fsdp full_shard`。
-  - SHARD_GRAD_OP：在数据并行工作者/GPU之间对优化器状态和梯度进行分片。
+  - SHARD_GRAD_OP：在数据并行线程/GPU之间对优化器状态和梯度进行分片。
     为此，请在命令行参数中添加 `--fsdp shard_grad_op`。
   - NO_SHARD：不进行分片。为此，请在命令行参数中添加 `--fsdp no_shard`。
 - 要将参数和梯度卸载到CPU，添加 `--fsdp "full_shard offload"` 或 `--fsdp "shard_grad_op offload"` 到命令行参数中。
-- 要使用 `default_auto_wrap_policy` 自动递归包装层，请添加 `--fsdp "full_shard auto_wrap"` 或 `--fsdp "shard_grad_op auto_wrap"` 到命令行参数中。
-- 要同时启用CPU卸载和自动包装，请添加 `--fsdp "full_shard offload auto_wrap"` 或 `--fsdp "shard_grad_op offload auto_wrap"` 到命令行参数中。
+- 要使用 `default_auto_wrap_policy` 自动递归地用FSDP包装层，请添加 `--fsdp "full_shard auto_wrap"` 或 `--fsdp "shard_grad_op auto_wrap"` 到命令行参数中。
+- 要同时启用CPU卸载和自动包装层工具，请添加 `--fsdp "full_shard offload auto_wrap"` 或 `--fsdp "shard_grad_op offload auto_wrap"` 到命令行参数中。
 - 其余的FSDP配置通过 `--fsdp_config <path_to_fsdp_config.json>` 传递。它可以是FSDP json配置文件的位置（例如，`fsdp_config.json`）或已加载的json文件作为 `dict`。
   - 如果启用了自动包装，您可以使用基于transformer的自动包装策略或基于大小的自动包装策略。
-    - 对于基于transformer的自动包装策略，建议在配置文件中指定 `fsdp_transformer_layer_cls_to_wrap`。如果未指定，则默认值为 `model._no_split_modules`（如果可用）。
-      这指定要包装的transformer层类名（区分大小写），例如 [`BertLayer`]、[`GPTJBlock`]、[`T5Block`] 等。
-      这很重要，因为共享权重的子模块（例如，嵌入层）不应最终出现在不同的FSDP包装单元中。
-      使用此策略，每个包含多头注意力后跟几个MLP层的块都会包装。
-      剩余层，包括共享的嵌入层，都方便地包装在同一个最外层的FSDP单元中。
-      因此，对于基于transformer的模型，请使用这个。
+    - 对于基于transformer的自动包装策略，建议在配置文件中指定 `fsdp_transformer_layer_cls_to_wrap`。如果未指定，则默认值为 `model._no_split_modules`（如果可用）。这将指定要包装的transformer层类名（区分大小写），例如 [`BertLayer`]、[`GPTJBlock`]、[`T5Block`] 等。这很重要，因为共享权重的子模块（例如，embedding层）不应最终出现在不同的FSDP包装单元中。使用此策略，每个包装的块将包含多头注意力和后面的几个MLP层。剩余的层，包括共享的embedding层，都将被方便地包装在同一个最外层的FSDP单元中。因此，对于基于transformer的模型，请使用这个方法。
     - 对于基于大小的自动包装策略，请在配置文件中添加 `fsdp_min_num_params`。它指定了FSDP进行自动包装的最小参数数量。
-  - 可以在配置文件中指定 `fsdp_backward_prefetch`。它控制何时预取下一组参数。
-    `backward_pre` 和 `backward_pos` 是可用的选项。
-    有关更多信息，请参阅 `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`
-  - 可以在配置文件中指定 `fsdp_forward_prefetch`。它控制何时预取下一组参数。
-    如果是`"True"`，在执行前向传递时，FSDP明确地预取下一次即将发生的全局聚集。
-  - 可以在配置文件中指定 `limit_all_gathers`。
-    如果是`"True"`，FSDP明确地同步CPU线程，以防止太多的在途全局聚集。
-  - 可以在配置文件中指定 `activation_checkpointing`。
-    如果是`"True"`，FSDP激活检查点是一种通过清除某些层的激活并在反向传递期间重新计算它们来减少内存使用的技术。实际上，这以更多的计算时间为代价减少了内存使用。
+  - 可以在配置文件中指定 `fsdp_backward_prefetch`。它控制何时预取下一组参数。`backward_pre` 和 `backward_pos` 是可用的选项。有关更多信息，请参阅 `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`
+  - 可以在配置文件中指定 `fsdp_forward_prefetch`。它控制何时预取下一组参数。如果是`"True"`，在执行前向传递时，FSDP明确地预取下一次即将发生的全局聚集。
+  - 可以在配置文件中指定 `limit_all_gathers`。如果是`"True"`，FSDP明确地同步CPU线程，以防止太多的进行中的全局聚集。
+  - 可以在配置文件中指定 `activation_checkpointing`。如果是`"True"`，FSDP activation checkpoint是一种通过清除某些层的激活值并在反向传递期间重新计算它们来减少内存使用的技术。实际上，这以更多的计算时间为代价减少了内存使用。
 
 
 **需要注意几个注意事项**
@@ -437,7 +420,7 @@ sudo ln -s /usr/bin/g++-7  /usr/local/cuda-10.2/bin/g++
 
 ### PyTorch/XLA 完全分片数据并行
 
-对于所有TPU用户，有个好消息！PyTorch/XLA现在支持FSDP。所有最新的完全分片数据并行（FSDP）训练都受支持。有关更多信息，请参阅[在云TPU上使用FSDP扩展PyTorch模型](https://pytorch.org/blog/scaling-pytorch-models-on-cloud-tpus-with-fsdp/)和[PyTorch/XLA FSDP的实现](https://github.com/pytorch/xla/tree/master/torch_xla/distributed/fsdp)。使用它只需通过配置启用。
+对于所有TPU用户，有个好消息！PyTorch/XLA现在支持FSDP。所有最新的完全分片数据并行（FSDP）训练都受支持。有关更多信息，请参阅[在云端TPU上使用FSDP扩展PyTorch模型](https://pytorch.org/blog/scaling-pytorch-models-on-cloud-tpus-with-fsdp/)和[PyTorch/XLA FSDP的实现](https://github.com/pytorch/xla/tree/master/torch_xla/distributed/fsdp)。使用它只需通过配置启用。
 
 **需要的 PyTorch/XLA 版本以支持 FSDP**：>=2.0
 
@@ -445,50 +428,35 @@ sudo ln -s /usr/bin/g++-7  /usr/local/cuda-10.2/bin/g++
 
 传递 `--fsdp "full shard"`，同时对 `--fsdp_config <path_to_fsdp_config.json>` 进行以下更改：
 - `xla` 应设置为 `True` 以启用 PyTorch/XLA FSDP。
-- `xla_fsdp_settings` 的值是一个字典，存储 XLA FSDP 封装参数。
-  完整的选项列表，请参见[此处](https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py)。
-- `xla_fsdp_grad_ckpt`。当 `True` 时，在每个嵌套的 XLA FSDP 封装层上使用梯度检查点。
-  该设置只能在将 xla 标志设置为 true，并通过 `fsdp_min_num_params` 或 `fsdp_transformer_layer_cls_to_wrap` 指定自动包装策略时使用。
-- 您可以使用基于变压器的自动包装策略或基于大小的自动包装策略。
-  - 对于基于变压器的自动包装策略，建议在配置文件中指定 `fsdp_transformer_layer_cls_to_wrap`。如果未指定，默认值为 `model._no_split_modules`（如果可用）。
-    这指定了要包装的变压器层类名列表（区分大小写），例如 [`BertLayer`]、[`GPTJBlock`]、[`T5Block`] 等。
-    这很重要，因为共享权重的子模块（例如嵌入层）不应最终出现在不同的 FSDP 包装单元中。
-    使用此策略，每个包含多头注意力和几个MLP层的块都很容易包装。
-    剩余的层，包括共享的嵌入，都方便地包装在同一个最外层的 FSDP 单元中。
-    因此，对于基于变压器的模型，请使用这个。
+- `xla_fsdp_settings` 的值是一个字典，存储 XLA FSDP 封装参数。完整的选项列表，请参见[此处](https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py)。
+- `xla_fsdp_grad_ckpt`。当 `True` 时，在每个嵌套的 XLA FSDP 封装层上使用梯度checkpoint。该设置只能在将 xla 标志设置为 true，并通过 `fsdp_min_num_params` 或 `fsdp_transformer_layer_cls_to_wrap` 指定自动包装策略时使用。
+- 您可以使用基于transformer的自动包装策略或基于大小的自动包装策略。
+  - 对于基于transformer的自动包装策略，建议在配置文件中指定 `fsdp_transformer_layer_cls_to_wrap`。如果未指定，默认值为 `model._no_split_modules`（如果可用）。这指定了要包装的transformer层类名列表（区分大小写），例如 [`BertLayer`]、[`GPTJBlock`]、[`T5Block`] 等。这很重要，因为共享权重的子模块（例如，embedding层）不应最终出现在不同的FSDP包装单元中。使用此策略，每个包装的块将包含多头注意力和后面的几个MLP层。剩余的层，包括共享的embedding层，都将被方便地包装在同一个最外层的FSDP单元中。因此，对于基于transformer的模型，请使用这个方法。
   - 对于基于大小的自动包装策略，请在配置文件中添加 `fsdp_min_num_params`。它指定了自动包装的 FSDP 的最小参数数量。
 
 
 ### 在 Mac 上使用 Trainer 进行加速的 PyTorch 训练
 
-随着 PyTorch v1.12 版本的发布，开发人员和研究人员可以利用 Apple Silicon GPU 进行显著更快的模型训练。
-这使得可以在 Mac 上本地执行原型设计和微调等机器学习工作流程。
-Apple 的 Metal Performance Shaders（MPS）作为 PyTorch 的后端实现了这一点，并且可以通过新的 `"mps"` 设备来使用。
-这将在 MPS 图形框架上映射计算图和原语，并使用 MPS 提供的优化内核。
-更多信息，请参阅官方文档 [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/)
-和 [MPS 后端](https://pytorch.org/docs/stable/notes/mps.html)。
+随着 PyTorch v1.12 版本的发布，开发人员和研究人员可以利用 Apple Silicon GPU 进行显著更快的模型训练。这使得可以在 Mac 上本地执行原型设计和微调等机器学习工作流程。Apple 的 Metal Performance Shaders（MPS）作为 PyTorch 的后端实现了这一点，并且可以通过新的 `"mps"` 设备来使用。
+这将在 MPS 图形框架上映射计算图和神经图元，并使用 MPS 提供的优化内核。更多信息，请参阅官方文档 [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/) 和 [MPS BACKEND](https://pytorch.org/docs/stable/notes/mps.html)。
 
 
 <Tip warning={false}>
 
-我们强烈建议在您的 MacOS 机器上安装 PyTorch >= 1.13（在撰写本文时为最新版本）。
-它包含了与模型正确性和基于 transformer 的模型性能改进相关的重大修复。
-有关更多详细信息，请参阅 https://github.com/pytorch/pytorch/issues/82707。
+我们强烈建议在你的 MacOS 机器上安装 PyTorch >= 1.13（在撰写本文时为最新版本）。对于基于 transformer 的模型， 它提供与模型正确性和性能改进相关的重大修复。有关更多详细信息，请参阅[pytorch/pytorch#82707](https://github.com/pytorch/pytorch/issues/82707)。
 
 </Tip>
 
 **使用 Apple Silicon 芯片进行训练和推理的好处**
 
-1. 使用户能够在本地训练更大的网络或批量大小。
-2. 由于统一内存架构，减少数据检索延迟，并为 GPU 提供对完整内存存储的直接访问。因此，提高端到端性能。
+1. 使用户能够在本地训练更大的网络或批量数据。
+2. 由于统一内存架构，减少数据检索延迟，并为 GPU 提供对完整内存存储的直接访问。从而提高端到端性能。
 3. 降低与基于云的开发或需要额外本地 GPU 的成本。
 
 **先决条件**：要安装带有 mps 支持的 torch，请按照这篇精彩的 Medium 文章操作 [GPU-Acceleration Comes to PyTorch on M1 Macs](https://medium.com/towards-data-science/gpu-acceleration-comes-to-pytorch-on-m1-macs-195c399efcc1)。
 
 **用法**：
-如果可用，`mps` 设备将默认使用，类似于使用 `cuda` 设备的方式。
-因此，用户无需采取任何操作。
-例如，您可以使用以下命令在 Apple Silicon GPU 上运行官方的 Glue 文本分类任务（从根文件夹运行）：
+如果可用，`mps` 设备将默认使用，类似于使用 `cuda` 设备的方式。因此，用户无需采取任何操作。例如，您可以使用以下命令在 Apple Silicon GPU 上运行官方的 Glue 文本分类任务（从根文件夹运行）：
 
 ```bash
 export TASK_NAME=mrpc
@@ -508,27 +476,24 @@ python examples/pytorch/text-classification/run_glue.py \
 
 **需要注意的一些注意事项**
 
-1. 一些 PyTorch 操作尚未在 mps 中实现，将引发错误。
-解决此问题的一种方法是设置环境变量 `PYTORCH_ENABLE_MPS_FALLBACK=1`，
-它将对这些操作回退到 CPU。然而，它仍然会引发 UserWarning。
-2. 分布式设置 `gloo` 和 `nccl` 在 `mps` 设备上不起作用。
-这意味着当前只能使用 `mps` 设备类型的单个 GPU。
+1. 一些 PyTorch 操作尚未在 mps 中实现，将引发错误。解决此问题的一种方法是设置环境变量 `PYTORCH_ENABLE_MPS_FALLBACK=1`，它将把这些操作回退到 CPU 进行。然而，它仍然会抛出 UserWarning 信息。
+2. 分布式设置 `gloo` 和 `nccl` 在 `mps` 设备上不起作用。这意味着当前只能使用 `mps` 设备类型的单个 GPU。
 
-最后，请记住，🤗 `Trainer` 仅集成了 MPS 后端，因此如果您
-在使用 MPS 后端时遇到任何问题或有疑问，请
-在 [PyTorch GitHub](https://github.com/pytorch/pytorch/issues) 上提交问题。
+最后，请记住，🤗 `Trainer` 仅集成了 MPS 后端，因此如果你在使用 MPS 后端时遇到任何问题或有疑问，请在 [PyTorch GitHub](https://github.com/pytorch/pytorch/issues) 上提交问题。
 
 
-## 使用 Accelerate Launcher 与 Trainer
+## 通过 Accelerate Launcher 使用 Trainer
 
 Accelerate 现在支持 Trainer。用户可以期待以下内容：
 - 他们可以继续使用 Trainer 的迭代，如 FSDP、DeepSpeed 等，而无需做任何更改。
 - 现在可以在 Trainer 中使用 Accelerate Launcher（建议使用）。
 
-使用 Accelerate Launcher 与 Trainer 的步骤：
-1. 确保已安装 🤗 Accelerate，无论如何，如果没有它，你无法使用 `Trainer`。如果没有，请执行 `pip install accelerate`。您可能还需要更新 Accelerate 的版本：`pip install accelerate --upgrade`。
-2. 运行 `accelerate config` 并填写问卷。以下是一些加速配置的示例：
+通过 Accelerate Launcher 使用 Trainer 的步骤：
+1. 确保已安装 🤗 Accelerate，无论如何，如果没有它，你无法使用 `Trainer`。如果没有，请执行 `pip install accelerate`。你可能还需要更新 Accelerate 的版本：`pip install accelerate --upgrade`。
+2. 运行 `accelerate config` 并填写问题。以下是一些加速配置的示例：
+   
   a. DDP 多节点多 GPU 配置：
+
     ```yaml
     compute_environment: LOCAL_MACHINE                                                                                             
     distributed_type: MULTI_GPU                                                                                                    
@@ -550,6 +515,7 @@ Accelerate 现在支持 Trainer。用户可以期待以下内容：
     ```
 
   b. FSDP 配置：
+
     ```yaml
     compute_environment: LOCAL_MACHINE
     distributed_type: FSDP
@@ -576,7 +542,9 @@ Accelerate 现在支持 Trainer。用户可以期待以下内容：
     tpu_use_sudo: false
     use_cpu: false
     ```
+ 
   c. 指向文件的 DeepSpeed 配置：
+
     ```yaml
     compute_environment: LOCAL_MACHINE
     deepspeed_config:
@@ -597,6 +565,7 @@ Accelerate 现在支持 Trainer。用户可以期待以下内容：
     ```
 
   d. 使用 accelerate 插件的 DeepSpeed 配置：
+
     ```yaml
     compute_environment: LOCAL_MACHINE                                                                                             
     deepspeed_config:                                                                                                              
@@ -621,8 +590,7 @@ Accelerate 现在支持 Trainer。用户可以期待以下内容：
     use_cpu: false
     ```
 
-3. 使用accelerate配置或启动器参数以外的参数运行Trainer脚本。
-以下是一个使用上述FSDP配置从accelerate启动器运行`run_glue.py`的示例。
+3. 使用accelerate配置文件参数或启动器参数以外的参数运行Trainer脚本。以下是一个使用上述FSDP配置从accelerate启动器运行`run_glue.py`的示例。
 
 ```bash
 cd transformers
@@ -670,43 +638,20 @@ accelerate launch --num_processes=2 \
 
 已移动的部分：
 
-[ <a href="./deepspeed#deepspeed-trainer-integration">DeepSpeed</a><a id="deepspeed"></a>
-| <a href="./deepspeed#deepspeed-installation">Installation</a><a id="installation"></a>
-| <a href="./deepspeed#deepspeed-multi-gpu">Deployment with multiple GPUs</a><a id="deployment-with-multiple-gpus"></a>
-| <a href="./deepspeed#deepspeed-one-gpu">Deployment with one GPU</a><a id="deployment-with-one-gpu"></a>
-| <a href="./deepspeed#deepspeed-notebook">Deployment in Notebooks</a><a id="deployment-in-notebooks"></a>
-| <a href="./deepspeed#deepspeed-config">Configuration</a><a id="configuration"></a>
-| <a href="./deepspeed#deepspeed-config-passing">Passing Configuration</a><a id="passing-configuration"></a>
-| <a href="./deepspeed#deepspeed-config-shared">Shared Configuration</a><a id="shared-configuration"></a>
-| <a href="./deepspeed#deepspeed-zero">ZeRO</a><a id="zero"></a>
-| <a href="./deepspeed#deepspeed-zero2-config">ZeRO-2 Config</a><a id="zero-2-config"></a>
-| <a href="./deepspeed#deepspeed-zero3-config">ZeRO-3 Config</a><a id="zero-3-config"></a>
-| <a href="./deepspeed#deepspeed-nvme">NVMe Support</a><a id="nvme-support"></a>
-| <a href="./deepspeed#deepspeed-zero2-zero3-performance">ZeRO-2 vs ZeRO-3 Performance</a><a id="zero-2-vs-zero-3-performance"></a>
-| <a href="./deepspeed#deepspeed-zero2-example">ZeRO-2 Example</a><a id="zero-2-example"></a>
-| <a href="./deepspeed#deepspeed-zero3-example">ZeRO-3 Example</a><a id="zero-3-example"></a>
-| <a href="./deepspeed#deepspeed-optimizer">Optimizer</a><a id="optimizer"></a>
-| <a href="./deepspeed#deepspeed-scheduler">Scheduler</a><a id="scheduler"></a>
-| <a href="./deepspeed#deepspeed-fp32">fp32 Precision</a><a id="fp32-precision"></a>
-| <a href="./deepspeed#deepspeed-amp">Automatic Mixed Precision</a><a id="automatic-mixed-precision"></a>
-| <a href="./deepspeed#deepspeed-bs">Batch Size</a><a id="batch-size"></a>
-| <a href="./deepspeed#deepspeed-grad-acc">Gradient Accumulation</a><a id="gradient-accumulation"></a>
-| <a href="./deepspeed#deepspeed-grad-clip">Gradient Clipping</a><a id="gradient-clipping"></a>
-| <a href="./deepspeed#deepspeed-weight-extraction">Getting The Model Weights Out</a><a id="getting-the-model-weights-out"></a>
-]
+[ <a href="./deepspeed#deepspeed-trainer-integration">DeepSpeed</a><a id="deepspeed"></a> | <a href="./deepspeed#deepspeed-installation">Installation</a><a id="installation"></a> | <a href="./deepspeed#deepspeed-multi-gpu">Deployment with multiple GPUs</a><a id="deployment-with-multiple-gpus"></a> | <a href="./deepspeed#deepspeed-one-gpu">Deployment with one GPU</a><a id="deployment-with-one-gpu"></a> | <a href="./deepspeed#deepspeed-notebook">Deployment in Notebooks</a><a id="deployment-in-notebooks"></a> | <a href="./deepspeed#deepspeed-config">Configuration</a><a id="configuration"></a> | <a href="./deepspeed#deepspeed-config-passing">Passing Configuration</a><a id="passing-configuration"></a> | <a href="./deepspeed#deepspeed-config-shared">Shared Configuration</a><a id="shared-configuration"></a> | <a href="./deepspeed#deepspeed-zero">ZeRO</a><a id="zero"></a> | <a href="./deepspeed#deepspeed-zero2-config">ZeRO-2 Config</a><a id="zero-2-config"></a> | <a href="./deepspeed#deepspeed-zero3-config">ZeRO-3 Config</a><a id="zero-3-config"></a> | <a href="./deepspeed#deepspeed-nvme">NVMe Support</a><a id="nvme-support"></a> | <a href="./deepspeed#deepspeed-zero2-zero3-performance">ZeRO-2 vs ZeRO-3 Performance</a><a id="zero-2-vs-zero-3-performance"></a> | <a href="./deepspeed#deepspeed-zero2-example">ZeRO-2 Example</a><a id="zero-2-example"></a> | <a href="./deepspeed#deepspeed-zero3-example">ZeRO-3 Example</a><a id="zero-3-example"></a> | <a href="./deepspeed#deepspeed-optimizer">Optimizer</a><a id="optimizer"></a> | <a href="./deepspeed#deepspeed-scheduler">Scheduler</a><a id="scheduler"></a> | <a href="./deepspeed#deepspeed-fp32">fp32 Precision</a><a id="fp32-precision"></a> | <a href="./deepspeed#deepspeed-amp">Automatic Mixed Precision</a><a id="automatic-mixed-precision"></a> | <a href="./deepspeed#deepspeed-bs">Batch Size</a><a id="batch-size"></a> | <a href="./deepspeed#deepspeed-grad-acc">Gradient Accumulation</a><a id="gradient-accumulation"></a> | <a href="./deepspeed#deepspeed-grad-clip">Gradient Clipping</a><a id="gradient-clipping"></a> | <a href="./deepspeed#deepspeed-weight-extraction">Getting The Model Weights Out</a><a id="getting-the-model-weights-out"></a>]
 
 
 ## 通过 NEFTune 提升微调性能
 
-NEFTune 是一种提升聊天模型性能的技术，由 Jain 等人在论文“NEFTune: Noisy Embeddings Improve Instruction Finetuning” 中引入。该技术在训练过程中向嵌入向量添加噪音。根据论文摘要：
+NEFTune 是一种提升聊天模型性能的技术，由 Jain 等人在论文“NEFTune: Noisy Embeddings Improve Instruction Finetuning” 中引入。该技术在训练过程中向embedding向量添加噪音。根据论文摘要：
 
-> 使用 Alpaca 对 LLaMA-2-7B 进行标准微调，可以在 AlpacaEval 上达到 29.79%，而使用带有噪音嵌入的情况下，性能提高至 64.69%。NEFTune 还在现代指令数据集上优于强基线。Evol-Instruct 训练的模型表现提高了 10%，ShareGPT 提高了 8%，OpenPlatypus 提高了 8%。即使像 LLaMA-2-Chat 这样通过 RLHF 进一步细化的强大模型，通过 NEFTune 的额外训练也能受益。
+> 使用 Alpaca 对 LLaMA-2-7B 进行标准微调，可以在 AlpacaEval 上达到 29.79%，而使用带有噪音embedding的情况下，性能提高至 64.69%。NEFTune 还在modern instruction数据集上大大优于基线。Evol-Instruct 训练的模型表现提高了 10%，ShareGPT 提高了 8%，OpenPlatypus 提高了 8%。即使像 LLaMA-2-Chat 这样通过 RLHF 进一步细化的强大模型，通过 NEFTune 的额外训练也能受益。
 
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/trl-internal-testing/example-images/resolve/main/images/neft-screenshot.png">
 </div>
 
-要在 `Trainer` 中使用它，只需在创建 `TrainingArguments` 实例时传递 `neftune_noise_alpha`。请注意，为了避免任何意外行为，在训练后禁用 NEFTune 以恢复嵌入层的原始行为。
+要在 `Trainer` 中使用它，只需在创建 `TrainingArguments` 实例时传递 `neftune_noise_alpha`。请注意，为了避免任何意外行为，NEFTune在训练后被禁止，以此恢复原始的embedding层。
 
 ```python
 from transformers import Trainer, TrainingArguments

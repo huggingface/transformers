@@ -66,3 +66,9 @@
   - local: tokenizer_summary
     title: 分词器的摘要
   title: 概念指南
+- sections:
+  - sections:
+    - local: main_classes/trainer
+      title: Trainer
+    title: 主要类
+  title: API
