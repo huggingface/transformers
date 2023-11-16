@@ -1036,6 +1036,10 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
+    @unittest.skip("Test does not fail individually but fails on the CI @ArthurZucker looking into it")
+    def test_assisted_decoding_sample(self):
+        pass
+
 
 def use_task_specific_params(model, task):
     model.config.update(model.config.task_specific_params[task])
