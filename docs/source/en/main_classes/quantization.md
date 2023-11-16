@@ -103,6 +103,57 @@ From the results it appears that AWQ quantization method is the fastest quantiza
 
 Check out how to use this integration throughout this [Google Colab demo](https://colab.research.google.com/drive/1HzZH89yAXJaZgwJDhQj9LqSBux932BvY)!
 
+### Make use of fused modules
+
+You can benefit from fused modules by passing an `AwqConfig` with `fuse_modules=True` and your expected maximum sequence length for generation to `fuse_max_seq_len`. For architectures that do not support `fused_modules=True`, you can still fuse the modules, however you need to pass a custom `fusing_mapping` to `AwqConfig()`. Let's dive into these specific usecases.
+
+#### Fusing modules for supported architectures
+
+...
+
+#### Fusing modules for unsupported architectures
+
+...
+
+#### Benchmarks
+
+We benchmarked the model with and without fused modules first using only `batch_size=1` on the `TheBloke/Mistral-7B-OpenOrca-AWQ` model and below are the results:
+
+*unfused case*
+
+|   Batch Size |   Prefill Length |   Decode Length |   Prefill tokens/s |   Decode tokens/s | Memory (VRAM)   |
+|-------------:|-----------------:|----------------:|-------------------:|------------------:|:----------------|
+|            1 |               32 |              32 |            60.0984 |           38.4537 | 4.50 GB (5.68%) |
+|            1 |               64 |              64 |          1333.67   |           31.6604 | 4.50 GB (5.68%) |
+|            1 |              128 |             128 |          2434.06   |           31.6272 | 4.50 GB (5.68%) |
+|            1 |              256 |             256 |          3072.26   |           38.1731 | 4.50 GB (5.68%) |
+|            1 |              512 |             512 |          3184.74   |           31.6819 | 4.59 GB (5.80%) |
+|            1 |             1024 |            1024 |          3148.18   |           36.8031 | 4.81 GB (6.07%) |
+|            1 |             2048 |            2048 |          2927.33   |           35.2676 | 5.73 GB (7.23%) |
+
+*fused case*
+
+|   Batch Size |   Prefill Length |   Decode Length |   Prefill tokens/s |   Decode tokens/s | Memory (VRAM)   |
+|-------------:|-----------------:|----------------:|-------------------:|------------------:|:----------------|
+|            1 |               32 |              32 |            81.4899 |           80.2569 | 4.00 GB (5.05%) |
+|            1 |               64 |              64 |          1756.1    |          106.26   | 4.00 GB (5.05%) |
+|            1 |              128 |             128 |          2479.32   |          105.631  | 4.00 GB (5.06%) |
+|            1 |              256 |             256 |          1813.6    |           85.7485 | 4.01 GB (5.06%) |
+|            1 |              512 |             512 |          2848.9    |           97.701  | 4.11 GB (5.19%) |
+|            1 |             1024 |            1024 |          3044.35   |           87.7323 | 4.41 GB (5.57%) |
+|            1 |             2048 |            2048 |          2715.11   |           89.4709 | 5.57 GB (7.04%) |
+
+We also performed benchmarks with [`optimum-benchmark`](https://github.com/huggingface/optimum-benchmark) library. And below are the results:
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/fused_forward_memory_plot.png">
+</div>
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/fused_generate_throughput.png">
+</div>
+
+
 ### AwqConfig
 
 [[autodoc]] AwqConfig
