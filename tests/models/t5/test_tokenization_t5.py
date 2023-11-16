@@ -429,18 +429,32 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_fast_slow_edge_cases(self):
         slow_tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
         fast_tokenizer = T5TokenizerFast.from_pretrained("t5-base", legacy=False, from_slow=True)
-        slow_tokenizer.add_tokens("<new_token_test_>")
-        fast_tokenizer.add_tokens("<new_token_test_>")
+        slow_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=False))
+        fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=False))
         edge_case = "Hey!<new_token_test_>. How</s>Hey <new_token_test_>!"
-        self.assertEqual(
-            slow_tokenizer.tokenize(edge_case),
-            ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "▁", "<new_token_test_>", "!"],
-        )
-        self.assertEqual(
-            fast_tokenizer.tokenize(edge_case),
-            ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "▁", "<new_token_test_>", "!"],
-        )
+        with self.subTest("Slow edge case"):
+            self.assertEqual(
+                slow_tokenizer.tokenize(edge_case),
+                ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "<new_token_test_>", "!"],
+            )
+        with self.subTest("Fast edge case"):
+            self.assertEqual(
+                fast_tokenizer.tokenize(edge_case),
+                ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "<new_token_test_>", "!"],
+            )
 
+        hard_case = "Hey! <new_token_test_>. How</s>   Hey   <new_token_test_>  !     .     "
+        with self.subTest("Slow hard edge case"):
+            self.assertEqual(
+                slow_tokenizer.tokenize(hard_case),
+                ['▁Hey', '!', '<new_token_test_>', '.', '▁How', '</s>', '▁Hey', '<new_token_test_>', '▁', '!', '▁', '.'],
+            )
+        with self.subTest("Fast hard edge case"):
+
+            self.assertEqual(
+                fast_tokenizer.tokenize(hard_case),
+                ['▁Hey', '!', '<new_token_test_>', '.', '▁How', '</s>', '▁Hey', '<new_token_test_>', '▁', '!', '▁', '.'],
+            )
 
 @require_sentencepiece
 @require_tokenizers
