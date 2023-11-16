@@ -521,6 +521,14 @@ def main():
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
 
+        # Since we are training from scratch, resize model's vocab embeddings to accomodate the new FIM tokens
+        special_tokens = [data_args.fim_prefix_token, data_args.fim_middle_token, data_args.fim_suffix_token]
+        if data_args.truncate_or_pad:
+            special_tokens.append(data_args.fim_pad_token)
+
+        tokenizer.add_tokens(special_tokens)
+        model.resize_token_embeddings(len(tokenizer))
+
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
     embedding_size = model.get_input_embeddings().weight.shape[0]
@@ -610,6 +618,7 @@ def main():
 
     # The two functions below perform the FIM transformation on the data (either PSM or SPM or PSM+SPM)
     # Don't call fim_transform directly in .map()
+    # Adapted from https://github.com/loubnabnl/santacoder-finetuning/blob/main/fim.py#L22C13-L83
     def fim_transform(example):
         """
         This function performs FIM transformation on a single example (list of tokens)
