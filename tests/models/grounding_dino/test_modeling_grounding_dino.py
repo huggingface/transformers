@@ -727,6 +727,20 @@ class GroundingDINOModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-3))
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-2))
 
+        # verify grounded postprocessing
+        expected_labels = ["a cat", "a cat"]
+        results = processor.post_process_grounded_object_detection(
+            outputs=outputs,
+            input_ids=encoding.input_ids,
+            box_threshold=0.35,
+            text_threshold=0.3,
+            target_sizes=[image.size[::-1]],
+        )[0]
+
+        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-3))
+        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-2))
+        self.assertListEqual(results["labels"], expected_labels)
+
     @require_torch_gpu
     def test_inference_object_detection_head_equivalence_cpu_gpu(self):
         processor = self.default_processor
