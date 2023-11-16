@@ -312,6 +312,54 @@ M4T_TEXT_INPUTS_DOCSTRING = SEAMLESS_M4T_V2_INPUTS_DOCSTRING_TEXT_PART + SEAMLES
 
 M4T_SPEECH_INPUTS_DOCSTRING = SEAMLESS_M4T_V2_INPUTS_DOCSTRING_SPEECH_PART + SEAMLESS_M4T_V2_INPUTS_DOCSTRING_LAST_PART
 
+M4T_T2U_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        char_input_ids (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`):
+            Character indices. The correspondence between characters and indices can be found in `char_to_id`, a
+            dictionary in the generation configuration.
+        char_sequence_length (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`):
+            Length of each character.
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        inputs_embeds (`torch.FloatTensor` of shape`(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
 
 ############ UTILS ################
 
@@ -2483,20 +2531,24 @@ class SeamlessM4Tv2NARDecoder(SeamlessM4Tv2PreTrainedModel):
 
         return unit_lengths
 
-    # TODO: update docstrings
     def forward(
         self,
-        char_input_ids: torch.LongTensor = None,  # TODO: add to docstrings
-        char_sequence_length: torch.LongTensor = None,  # TODO: add to docstrings
+        char_input_ids: torch.LongTensor = None,
+        char_sequence_length: torch.LongTensor = None,
         encoder_hidden_states: torch.FloatTensor = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[Tuple, SeamlessM4Tv2NARDecoderOutput]:
         r"""
         Args:
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            char_input_ids (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`):
+                Character indices. The correspondence between characters and indices can be found in `char_to_id`, a
+                dictionary in the generation configuration.
+            char_sequence_length (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`):
+                Length of each character.
+            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
             head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
@@ -2519,33 +2571,25 @@ class SeamlessM4Tv2NARDecoder(SeamlessM4Tv2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # TODO: probably something with attention mask
-        # _compute_new_attention_mask(t2u_char_input_ids, t2u_char_sequence_length).shape
-        # THIS IS WHERE DIFFERENT !
+        # create padding mask for character lengths
+        char_padding_mask = _compute_new_attention_mask(char_input_ids, char_sequence_length.sum(1))
+
         # upsample hidden states according to characters sequence lengths
         char_hidden_states = self._hard_upsample(encoder_hidden_states, char_sequence_length)
         # embed char positions
         char_positions = self.pos_emb_alpha_char * self.embed_char_positions(inputs_embeds=char_hidden_states)
-
-        # TODO: I'm verifying shape in original code (here seq len char input ids = 116 and other = 3712)
+        # update char hidden states with positions and char embeddings
         char_hidden_states = self.embed_char(char_input_ids) * self.embed_scale + char_positions + char_hidden_states
 
-        # TODO: probably needs to do something with attention mask
-        # TODO: should probably modify dur_predictor to take padding_mask as well :)
-        # should probably do:
-        # dur_out = dur_out.masked_fill(~padding_mask.bool().unsqueeze(-1), 0.0)
-        # upsampled_seq_lens = dur_out.sum(dim=1)
-
-        char_padding_mask = _compute_new_attention_mask(char_input_ids, char_sequence_length.sum(1))
-
+        # predict duration
         log_dur_pred = self.duration_predictor(char_hidden_states, padding_mask=char_padding_mask)
         dur_out = torch.clamp(torch.round((torch.exp(log_dur_pred) - 1)).long(), min=1)
         dur_out = dur_out.masked_fill(~char_padding_mask.bool(), 0.0)
 
+        # upsample char hidden states according to predicted duration
         char_hidden_states = self._hard_upsample(char_hidden_states, dur_out)
 
         positions = self.pos_emb_alpha * self.embed_positions(inputs_embeds=char_hidden_states)
-
         hidden_states = char_hidden_states + positions
 
         padding_mask = _compute_new_attention_mask(hidden_states, dur_out.sum(1))
@@ -2573,7 +2617,6 @@ class SeamlessM4Tv2NARDecoder(SeamlessM4Tv2PreTrainedModel):
                     attention_mask,
                     padding_mask,
                     head_mask[idx] if head_mask is not None else None,
-                    # None, TODO: keep or not ?
                     output_attentions,
                 )
             else:
@@ -2630,8 +2673,8 @@ class SeamlessM4Tv2NARTextToUnitModel(SeamlessM4Tv2PreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        char_input_ids: torch.LongTensor = None,  # TODO: add to docstrings
-        char_sequence_length: torch.LongTensor = None,  # TODO: add to docstrings
+        char_input_ids: torch.LongTensor = None,
+        char_sequence_length: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
@@ -2748,13 +2791,12 @@ class SeamlessM4Tv2NARTextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrained
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
-    # TODO: update docstrings - removed anything related to cross attention and decoder inputs
-    @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(M4T_T2U_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        char_input_ids: torch.LongTensor = None,  # TODO: add to docstrings
-        char_sequence_length: torch.LongTensor = None,  # TODO: add to docstrings
+        char_input_ids: torch.LongTensor = None,
+        char_sequence_length: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
