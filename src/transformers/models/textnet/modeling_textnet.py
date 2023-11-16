@@ -291,7 +291,7 @@ class TextNetModel(TextNetPreTrainedModel):
         pooled_output = self.pooler(last_hidden_state)
 
         if not return_dict:
-            output = (pooled_output, last_hidden_state)
+            output = (last_hidden_state, pooled_output)
             return output + (tuple(hidden_states),) if output_hidden_states else output
 
         return BaseModelOutputWithPoolingAndNoAttention(
@@ -313,10 +313,13 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.textnet = TextNetModel(config)
+        scale = config.image_size // 32
         # classification head
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1] * 2 * 2, config.num_labels) if config.num_labels > 0 else nn.Identity(),
+            nn.Linear(config.hidden_sizes[-1] * scale * scale * 2 * 2, config.num_labels)
+            if config.num_labels > 0
+            else nn.Identity(),
         )
         # initialize weights and apply final processing
         self.post_init()

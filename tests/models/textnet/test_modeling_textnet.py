@@ -119,6 +119,7 @@ class TextNetModelTester:
             out_features=self.out_features,
             out_indices=self.out_indices,
             hidden_sizes=self.hidden_sizes,
+            image_size=self.image_size,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -126,9 +127,10 @@ class TextNetModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
+        scale = self.image_size // 32
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_sizes[-1], 2, 2),
+            (self.batch_size, self.hidden_sizes[-1], 2 * scale, 2 * scale),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -158,8 +160,9 @@ class TextNetModelTester:
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        scale = self.image_size // 32
         self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 16, 16]
+            list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 16 * scale, 16 * scale]
         )
 
         # verify channels
@@ -175,7 +178,8 @@ class TextNetModelTester:
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, 64, 2, 2])
+        scale = self.image_size // 32
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, 64, 2 * scale, 2 * scale])
 
         # verify channels
         self.parent.assertEqual(len(model.channels), 1)
