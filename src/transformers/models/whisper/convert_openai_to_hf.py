@@ -201,6 +201,9 @@ def convert_openai_whisper_to_tfms(
     tie_embeds = True
     ffn_dim = state_dict["decoder.layers.0.fc1.weight"].shape[0]
 
+    # a hacky way to properly set up the bos/eos/pad token ids in the model
+    endoftext_id = 50257 if dimensions["n_vocab"] > 51865 else 50256
+
     config = WhisperConfig(
         vocab_size=dimensions["n_vocab"],
         encoder_ffn_dim=ffn_dim,
@@ -213,6 +216,9 @@ def convert_openai_whisper_to_tfms(
         decoder_layers=dimensions["n_text_layer"],
         decoder_attention_heads=dimensions["n_text_head"],
         max_source_positions=dimensions["n_audio_ctx"],
+        eos_token_id=endoftext_id,
+        bos_token_id=endoftext_id,
+        pad_token_id=endoftext_id,
     )
 
     model = WhisperForConditionalGeneration(config)
