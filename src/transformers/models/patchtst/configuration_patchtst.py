@@ -106,18 +106,17 @@ class PatchTSTConfig(PretrainedConfig):
             Masking type. Only `"random"` and `"forecast"` are currently supported.
         random_mask_ratio (`float`, *optional*, defaults to 0.5):
             Masking ratio applied to mask the input data during random pretraining.
-        forecast_mask_patches (`list`, *optional*, defaults to `[2, 3]`):
-            List of patch lengths to mask in the end of the data.
-        forecast_mask_ratios (`list`, *optional*, defaults to `[1, 1]`):
-            List of weights to use for each patch length. For Ex. if patch_lengths is [5,4] and mix_ratio is [1,1],
-            then equal weights to both patch lengths. Defaults to None.
+        num_mask_patches (`int` or `list`, *optional*, defaults to `[2]`):
+            Number of patches to be masked at the end of each batch sample. If it is an integer,
+            all the samples in the batch will have the same number of masked patches. If it is a list,
+            samples in the batch will be randomly masked by numbers defined in the list.
         channel_consistent_masking (`bool`, *optional*, defaults to `False`):
-            If channel consistent masking is True, all the channels will have the same masking.
+            If channel consistent masking is True, all the channels will have the same masking pattern.
         unmasked_channel_indices (`list`, *optional*):
             Indices of channels that are not masked during pretraining. Values in the list are number between 1 and
             `num_input_channels`
         mask_value (`int`, *optional*, defaults to 0):
-            Define the value of masked patches for pretraining.
+            Values in the masked patches will be filled by `mask_value`.
         pooling_type (`str`, *optional*, defaults to `"mean"`):
             Pooling of the embedding. `"mean"`, `"max"` and `None` are supported.
         head_dropout (`float`, *optional*, defaults to 0.0):
@@ -191,8 +190,7 @@ class PatchTSTConfig(PretrainedConfig):
         mask_input: Optional[bool] = None,
         mask_type: str = "random",
         random_mask_ratio: float = 0.5,
-        forecast_mask_patches: List[int] = [2, 3],
-        forecast_mask_ratios: List[int] = [1, 1],
+        num_mask_patches: Optional[Union[List[int], int]] = [2],
         channel_consistent_masking: Optional[bool] = False,
         unmasked_channel_indices: Optional[List[int]] = None,
         mask_value: int = 0,
@@ -244,8 +242,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.mask_input = mask_input
         self.mask_type = mask_type
         self.random_mask_ratio = random_mask_ratio  # for random masking
-        self.forecast_mask_patches = forecast_mask_patches  # for forecast masking
-        self.forecast_mask_ratios = forecast_mask_ratios
+        self.num_mask_patches = num_mask_patches  # for forecast masking
         self.channel_consistent_masking = channel_consistent_masking
         self.unmasked_channel_indices = unmasked_channel_indices
         self.mask_value = mask_value
