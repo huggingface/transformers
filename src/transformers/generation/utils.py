@@ -1737,6 +1737,7 @@ class GenerationMixin:
                 input_ids,
                 assistant_model=assistant_model,
                 do_sample=generation_config.do_sample,
+                seed=generation_config.seed,
                 logits_processor=logits_processor,
                 logits_warper=self._get_logits_warper(generation_config) if generation_config.do_sample else None,
                 stopping_criteria=stopping_criteria,
@@ -1798,6 +1799,7 @@ class GenerationMixin:
             # 13. run sample
             return self.sample(
                 input_ids,
+                seed=generation_config.seed,
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
                 stopping_criteria=stopping_criteria,
@@ -1869,6 +1871,7 @@ class GenerationMixin:
             return self.beam_sample(
                 input_ids,
                 beam_scorer,
+                seed=generation_config.seed,
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
                 stopping_criteria=stopping_criteria,
@@ -2707,6 +2710,7 @@ class GenerationMixin:
     def sample(
         self,
         input_ids: torch.LongTensor,
+        seed: Optional[int] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         logits_warper: Optional[LogitsProcessorList] = None,
@@ -2736,6 +2740,9 @@ class GenerationMixin:
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
+            seed (`int`, *optional*, defaults to None):
+                If specified, our system will make a best effort to sample deterministically, such that with the same
+                `seed` and parameters should return the same result.
             logits_processor (`LogitsProcessorList`, *optional*):
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
@@ -2929,7 +2936,9 @@ class GenerationMixin:
 
             # sample
             probs = nn.functional.softmax(next_token_scores, dim=-1)
-            next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+            next_tokens = torch.multinomial(
+                probs, num_samples=1, generator=_random_generator(probs.device, seed)
+            ).squeeze(1)
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
@@ -3321,6 +3330,7 @@ class GenerationMixin:
         self,
         input_ids: torch.LongTensor,
         beam_scorer: BeamScorer,
+        seed: Optional[int] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         logits_warper: Optional[LogitsProcessorList] = None,
@@ -3352,6 +3362,9 @@ class GenerationMixin:
             beam_scorer (`BeamScorer`):
                 A derived instance of [`BeamScorer`] that defines how beam hypotheses are constructed, stored and
                 sorted during generation. For more information, the documentation of [`BeamScorer`] should be read.
+            seed (`int`, *optional*, defaults to None):
+                If specified, our system will make a best effort to sample deterministically, such that with the same
+                `seed` and parameters should return the same result.
             logits_processor (`LogitsProcessorList`, *optional*):
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
@@ -3566,7 +3579,9 @@ class GenerationMixin:
 
             probs = nn.functional.softmax(next_token_scores, dim=-1)
 
-            next_tokens = torch.multinomial(probs, num_samples=2 * num_beams)
+            next_tokens = torch.multinomial(
+                probs, num_samples=2 * num_beams, generator=_random_generator(probs.device, seed)
+            )
             next_token_scores = torch.gather(next_token_scores, -1, next_tokens)
 
             next_token_scores, _indices = torch.sort(next_token_scores, descending=True, dim=1)
@@ -4383,6 +4398,7 @@ class GenerationMixin:
         input_ids: torch.LongTensor,
         assistant_model: "PreTrainedModel",
         do_sample: bool = False,
+        seed: Optional[int] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         logits_warper: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
@@ -4419,6 +4435,9 @@ class GenerationMixin:
                 assistant model should be much smaller.
             do_sample (`bool`, *optional*, defaults to `False`):
                 Whether or not to use sampling ; use greedy decoding otherwise.
+            seed (`int`, *optional*, defaults to None):
+                If specified, our system will make a best effort to sample deterministically, such that with the same
+                `seed` and parameters should return the same result.
             logits_processor (`LogitsProcessorList`, *optional*):
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
@@ -4664,7 +4683,9 @@ class GenerationMixin:
             # 3. Obtain the next tokens from the original model logits.
             if do_sample:
                 probs = new_logits.softmax(dim=-1)
-                selected_tokens = torch.multinomial(probs[0, :, :], num_samples=1).squeeze(1)[None, :]
+                selected_tokens = torch.multinomial(
+                    probs[0, :, :], num_samples=1, generator=_random_generator(probs.device, seed)
+                ).squeeze(1)[None, :]
             else:
                 selected_tokens = new_logits.argmax(dim=-1)
 
@@ -4939,3 +4960,9 @@ def _ranking_fast(
     contrastive_score = torch.stack(torch.split(contrastive_score, beam_width))  # [B, K]
     _, selected_idx = contrastive_score.max(dim=-1)  # [B]
     return selected_idx
+
+
+def _random_generator(device: torch.device, seed: Optional[int] = None):
+    if seed is None:
+        return None
+    return torch.Generator(device).manual_seed(seed)

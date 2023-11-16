@@ -110,6 +110,9 @@ class GenerationConfig(PushToHubMixin):
         top_p (`float`, *optional*, defaults to 1.0):
             If set to float < 1, only the smallest set of most probable tokens with probabilities that add up to
             `top_p` or higher are kept for generation.
+        seed (`int`, *optional*, defaults to None):
+            If specified, our system will make a best effort to sample deterministically, such that with the same
+            `seed` and parameters should return the same result.
         typical_p (`float`, *optional*, defaults to 1.0):
             Local typicality measures how similar the conditional probability of predicting a target token next is to
             the expected conditional probability of predicting a random token next, given the partial text already
@@ -269,6 +272,7 @@ class GenerationConfig(PushToHubMixin):
         self.temperature = kwargs.pop("temperature", 1.0)
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
+        self.seed = kwargs.pop("seed", None)
         self.typical_p = kwargs.pop("typical_p", 1.0)
         self.epsilon_cutoff = kwargs.pop("epsilon_cutoff", 0.0)
         self.eta_cutoff = kwargs.pop("eta_cutoff", 0.0)
