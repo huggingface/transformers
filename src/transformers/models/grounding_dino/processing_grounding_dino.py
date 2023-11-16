@@ -151,7 +151,9 @@ class GroundingDINOProcessor(ProcessorMixin):
             text_encoding = None
 
         if text_encoding is not None:
-            encoding_image_processor.update(text_encoding)
+            # Keeping same order of model_input_names when both images and text
+            text_encoding.update(encoding_image_processor)
+            encoding_image_processor = text_encoding
 
         return encoding_image_processor
 
