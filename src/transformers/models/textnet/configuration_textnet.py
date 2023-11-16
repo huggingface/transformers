@@ -52,10 +52,10 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
             The list of stagewise conv layer's kernel strides.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        conv_layer_kernel_sizes (`<fill_type>`, *optional*, defaults to `[[[3, 3], [3, 3], [3, 3]], [[3, 3], [1, 3], [3, 3], [3, 1]], [[3, 3], [3, 3], [3, 1], [1, 3]], [[3, 3], [3, 1], [1, 3], [3, 3]]]`):
-            <fill_docstring>
-        conv_layer_strides (`<fill_type>`, *optional*, defaults to `[[1, 2, 1], [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1]]`):
-            <fill_docstring>
+        conv_layer_kernel_sizes (`List[List[List[int]]]`, *optional*, defaults to `[[[3, 3], [3, 3], [3, 3]], [[3, 3], [1, 3], [3, 3], [3, 1]], [[3, 3], [3, 3], [3, 1], [1, 3]], [[3, 3], [3, 1], [1, 3], [3, 3]]]`):
+            A list of stage wise kernel sizes.
+        conv_layer_strides (`List[List[int]]`, *optional*, defaults to `[[1, 2, 1], [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1]]`):
+            A list of stage wise strides.
         hidden_sizes (`List[int]`, *optional*, defaults to `[64, 64, 128, 256, 512]`):
             Dimensionality (hidden size) at each stage.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
