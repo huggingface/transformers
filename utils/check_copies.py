@@ -37,7 +37,6 @@ for a check that will fix all inconsistencies automatically (used by `make fix-c
 """
 
 import argparse
-import asyncio
 import glob
 import os
 import re
@@ -225,12 +224,10 @@ def get_indent(code: str) -> str:
     return ""
 
 
-async def run_ruff(code):
+def run_ruff(code):
     command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
-    process = await asyncio.create_subprocess_exec(
-        *command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE
-    )
-    stdout, _ = await process.communicate(input=code.encode())
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    stdout, _ = process.communicate(input=code.encode())
     return stdout.decode()
 
 
@@ -248,7 +245,7 @@ def stylify(code: str) -> str:
     has_indent = len(get_indent(code)) > 0
     if has_indent:
         code = f"class Bla:\n{code}"
-    formatted_code = asyncio.run(run_ruff(code))
+    formatted_code = run_ruff(code)
     return formatted_code[len("class Bla:\n") :] if has_indent else formatted_code
 
 
