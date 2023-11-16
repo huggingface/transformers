@@ -809,7 +809,8 @@ src/transformers/models/t5/modeling_flax_t5.py
 src/transformers/models/t5/modeling_t5.py
 src/transformers/models/t5/modeling_tf_t5.py
 src/transformers/models/table_transformer/configuration_table_transformer.py
-src/transformers/models/table_transformer/convert_table_transformer_original_pytorch_checkpoint_to_pytorch.py
+src/transformers/models/table_transformer/convert_table_transformer_to_hf.py
+src/transformers/models/table_transformer/convert_table_transformer_to_hf_no_timm.py
 src/transformers/models/tapas/configuration_tapas.py
 src/transformers/models/tapas/convert_tapas_original_tf_checkpoint_to_pytorch.py
 src/transformers/models/tapas/modeling_tapas.py

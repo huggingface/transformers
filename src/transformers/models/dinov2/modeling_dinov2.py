@@ -835,11 +835,12 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
                 if self.config.apply_layernorm:
                     hidden_state = self.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
+                    hidden_state = hidden_state[:, 1:]
+                    # this was actually a bug in the original implementation that we copied here,
+                    # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
                     patch_size = self.config.patch_size
-                    hidden_state = hidden_state[:, 1:, :].reshape(
-                        batch_size, width // patch_size, height // patch_size, -1
-                    )
+                    hidden_state = hidden_state.reshape(batch_size, height // patch_size, width // patch_size, -1)
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
 
