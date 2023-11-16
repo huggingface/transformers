@@ -1524,7 +1524,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         self.begin_index = (
             len(generate_config.forced_decoder_ids) + 1 if generate_config.forced_decoder_ids is not None else 1
         )
-        self.max_initial_timestamp_index = generate_config.max_initial_timestamp_index
+        self.max_initial_timestamp_index = getattr(generate_config, "max_initial_timestamp_index", None)
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
