@@ -456,6 +456,36 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ['▁Hey', '!', '<new_token_test_>', '.', '▁How', '</s>', '▁Hey', '<new_token_test_>', '▁', '!', '▁', '.'],
             )
 
+
+        fast_tokenizer = T5TokenizerFast.from_pretrained("t5-base", legacy=False, from_slow=True)
+        # True is the default normalization schene when adding a token
+        fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=True))
+        edge_case = "Hey!<new_token_test_>. How</s>Hey <new_token_test_>!"
+        with self.subTest("Slow edge case"):
+            self.assertEqual(
+                slow_tokenizer.tokenize(edge_case),
+                ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "<new_token_test_>", "!"],
+            )
+        with self.subTest("Fast edge case"):
+            self.assertEqual(
+                fast_tokenizer.tokenize(edge_case),
+                ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y",'▁', "<new_token_test_>", "!"],
+            )
+
+        hard_case = "Hey! <new_token_test_>. How</s>   Hey   <new_token_test_>  !     .     "
+        with self.subTest("Slow hard edge case"):
+            self.assertEqual(
+                slow_tokenizer.tokenize(hard_case),
+                ['▁Hey', '!', '<new_token_test_>', '.', '▁How', '</s>', '▁Hey', '<new_token_test_>', '▁', '!', '▁', '.'],
+            )
+        with self.subTest("Fast hard edge case"):
+
+            self.assertEqual(
+                fast_tokenizer.tokenize(hard_case),
+                ['▁Hey', '!', '▁', '<new_token_test_>', '.', '▁How', '</s>', '▁Hey','▁', '<new_token_test_>', '▁', '!', '▁', '.'],
+            )
+
+
 @require_sentencepiece
 @require_tokenizers
 class CommonSpmIntegrationTests(unittest.TestCase):
