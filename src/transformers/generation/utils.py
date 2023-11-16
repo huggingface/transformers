@@ -4526,9 +4526,11 @@ class GenerationMixin:
             )
 
         # prepare assistant model's keys of inputs
+        assistant_kwargs = copy.copy(model_kwargs)
         if assistant_model.config.is_encoder_decoder:
             input_ids_key = "decoder_input_ids"
             attention_key = "decoder_attention_mask"
+            assistant_kwargs["encoder_outputs"] = assistant_kwargs.pop("assistant_encoder_outputs")
         else:
             input_ids_key = "input_ids"
             attention_key = "attention_mask"
@@ -4558,21 +4560,16 @@ class GenerationMixin:
             # `.generate()` call if we decide to add `past_key_values` as a possible output of generate, as we
             # need access to the assistant cache to secure strong speedups.
             candidate_input_ids = input_ids
-            assistant_kwargs = copy.copy(model_kwargs)
-            # import pdb; pdb.set_trace()
             for _ in range(int(num_assistant_tokens)):
                 # 1.1 prepare assistant model inputs
                 assistant_inputs = assistant_model.prepare_inputs_for_generation(
                     candidate_input_ids,
-                    attention_mask=assistant_kwargs.get("attention_mask", None),
-                    decoder_attention_mask=assistant_kwargs.get("decoder_attention_mask", None),
-                    encoder_outputs=(assistant_kwargs.get("assistant_encoder_outputs", None),),
-                    past_key_values=assistant_kwargs.get("assistant_past_key_values", None),
+                    **assistant_kwargs,
                 )
 
                 # 1.2. check if the input ids length is correct
-                has_pkv = assistant_inputs.get("past_key_values", None) is not None
-                if has_pkv and assistant_inputs[input_ids_key].shape[-1] not in (1, 2):
+                has_past_key_values = assistant_inputs.get("past_key_values", None) is not None
+                if has_past_key_values and assistant_inputs[input_ids_key].shape[-1] not in (1, 2):
                     raise ValueError("The length of the input ids in assistant inputs should be 1 or 2")
 
                 # 1.3. use the assistant model to obtain the next candidate logits
@@ -4583,14 +4580,14 @@ class GenerationMixin:
                     assistant_model_outputs.logits[:, -1, :] = logits_processor(
                         candidate_input_ids, assistant_model_outputs.logits[:, -1, :]
                     )
-
-                # 1.5. update assistant model inputs
                 new_token = assistant_model_outputs.logits[:, -1, :].argmax(dim=-1)
                 candidate_input_ids = torch.cat((candidate_input_ids, new_token[:, None]), dim=-1)
+
+                # 1.5. update assistant model inputs
                 if assistant_kwargs.get(attention_key, None) is not None:
                     mask = assistant_kwargs[attention_key]
                     assistant_kwargs[attention_key] = torch.cat([mask, mask.new_ones((mask.shape[0], 1))], dim=-1)
-                assistant_kwargs["assistant_past_key_values"] = assistant_model_outputs.past_key_values
+                assistant_kwargs["past_key_values"] = assistant_model_outputs.past_key_values
 
                 # 1.6. stop assistant generation on EOS
                 if eos_token_id_tensor is not None:
@@ -4603,7 +4600,6 @@ class GenerationMixin:
                 else:
                     last_assistant_token_is_eos = False
 
-            model_kwargs["assistant_past_key_values"] = assistant_kwargs["assistant_past_key_values"]
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
 
             # 2. Use the original model to obtain the next token logits given the candidate sequence. We obtain
@@ -4665,8 +4661,8 @@ class GenerationMixin:
             # 5.3. Discard past key values relative to unused assistant tokens
             new_cache_size = new_cur_len - 1
             outputs.past_key_values = _crop_past_key_values(self, outputs.past_key_values, new_cache_size)
-            model_kwargs["assistant_past_key_values"] = _crop_past_key_values(
-                assistant_model, model_kwargs["assistant_past_key_values"], new_cache_size - 1
+            assistant_kwargs["past_key_values"] = _crop_past_key_values(
+                assistant_model, assistant_kwargs["past_key_values"], new_cache_size - 1
             )  # the assistant does not have the token after the last match, hence the -1
 
             # 6. Adjust the max number of assistant tokens to use in the next iteration. This is a simple heuristic,
@@ -4727,10 +4723,13 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
 
-            # Update model_kwargs for the assistant's next round of generations
+            # Update assistant_kwargs for the assistant's next round of generations
             if n_matches > 0:
                 model_kwargs = self._extend_attention_mask(model_kwargs, new_cur_len)
                 model_kwargs = self._extend_token_type_ids(model_kwargs, new_cur_len)
+            assistant_kwargs[attention_key] = model_kwargs[attention_key]
+            if "token_type_ids" in assistant_kwargs:
+                assistant_kwargs["token_type_ids"] = model_kwargs["token_type_ids"]
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id_tensor is not None:
