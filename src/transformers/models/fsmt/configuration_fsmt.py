@@ -28,6 +28,7 @@ class DecoderConfig(PretrainedConfig):
     r"""
     Configuration class for FSMT's decoder specific things. note: this is a private helper class
     """
+
     model_type = "fsmt_decoder"
 
     def __init__(self, vocab_size=0, bos_token_id=0):
@@ -132,6 +133,7 @@ class FSMTConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "fsmt"
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
