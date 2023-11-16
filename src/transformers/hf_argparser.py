@@ -176,7 +176,7 @@ class HfArgumentParser(ArgumentParser):
         # so that we can init a `no_*` complement argument (see below)
         bool_kwargs = {}
         origin_type_is_literal = origin_type is Literal
-        field_typs_is_bool = field.type is bool
+        field_type_is_bool = field.type is bool
         if origin_type_is_literal or isinstance(field.type, (type, Enum)):
             if origin_type_is_literal:
                 kwargs["choices"] = field.type.__args__
