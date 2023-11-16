@@ -100,31 +100,26 @@ def transform_state_encoder_block(state_dict, i):
         prefix + "layernorm_before.weight": state["LayerNorm_0"]["scale"],
         prefix + "layernorm_after.bias": state["LayerNorm_1"]["bias"],
         prefix + "layernorm_after.weight": state["LayerNorm_1"]["scale"],
-        prefix
-        + "attention.attention.query.bias": transform_attention(
+        prefix + "attention.attention.query.bias": transform_attention(
             state["MultiHeadDotProductAttention_0"]["query"]["bias"]
         ),
-        prefix
-        + "attention.attention.query.weight": transform_attention(
+        prefix + "attention.attention.query.weight": transform_attention(
             state["MultiHeadDotProductAttention_0"]["query"]["kernel"]
         ),
-        prefix
-        + "attention.attention.key.bias": transform_attention(state["MultiHeadDotProductAttention_0"]["key"]["bias"]),
-        prefix
-        + "attention.attention.key.weight": transform_attention(
+        prefix + "attention.attention.key.bias": transform_attention(
+            state["MultiHeadDotProductAttention_0"]["key"]["bias"]
+        ),
+        prefix + "attention.attention.key.weight": transform_attention(
             state["MultiHeadDotProductAttention_0"]["key"]["kernel"]
         ),
-        prefix
-        + "attention.attention.value.bias": transform_attention(
+        prefix + "attention.attention.value.bias": transform_attention(
             state["MultiHeadDotProductAttention_0"]["value"]["bias"]
         ),
-        prefix
-        + "attention.attention.value.weight": transform_attention(
+        prefix + "attention.attention.value.weight": transform_attention(
             state["MultiHeadDotProductAttention_0"]["value"]["kernel"]
         ),
         prefix + "attention.output.dense.bias": state["MultiHeadDotProductAttention_0"]["out"]["bias"],
-        prefix
-        + "attention.output.dense.weight": transform_attention_output_weight(
+        prefix + "attention.output.dense.weight": transform_attention_output_weight(
             state["MultiHeadDotProductAttention_0"]["out"]["kernel"]
         ),
     }

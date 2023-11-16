@@ -1469,9 +1469,7 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
         >>> import torch
 
         >>> tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
-        >>> model = XLMProphetNetDecoder.from_pretrained(
-        ...     "patrickvonplaten/xprophetnet-large-uncased-standalone", add_cross_attention=False
-        ... )
+        >>> model = XLMProphetNetDecoder.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone", add_cross_attention=False)
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
@@ -1948,9 +1946,7 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
         >>> from transformers import AutoTokenizer, XLMProphetNetForConditionalGeneration
 
         >>> tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
-        >>> model = XLMProphetNetForConditionalGeneration.from_pretrained(
-        ...     "patrickvonplaten/xprophetnet-large-uncased-standalone"
-        ... )
+        >>> model = XLMProphetNetForConditionalGeneration.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"

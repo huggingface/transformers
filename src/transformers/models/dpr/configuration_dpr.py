@@ -109,6 +109,7 @@ class DPRConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "dpr"
 
     def __init__(
