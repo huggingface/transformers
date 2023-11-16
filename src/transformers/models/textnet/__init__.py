@@ -56,7 +56,6 @@ if TYPE_CHECKING:
             TextNetPreTrainedModel,
         )
 
-
 else:
     import sys
 

@@ -46,12 +46,12 @@ class TextNetModelTester:
     def __init__(
         self,
         parent,
-        kernel_size=3,
-        stride=2,
-        in_channels=3,
-        out_channels=64,
-        use_bn=True,
-        act_func="relu",
+        stem_kernel_size=3,
+        stem_stride=2,
+        stem_in_channels=3,
+        stem_out_channels=64,
+        # use_bn=True,
+        stem_act_func="relu",
         dropout_rate=0,
         ops_order="weight_bn_act",
         conv_layer_kernel_sizes=[[[3, 3]], [[3, 1]], [[1, 3]], [[3, 3]]],
@@ -81,12 +81,12 @@ class TextNetModelTester:
         hidden_sizes=[64, 64, 64, 64, 64],
     ):
         self.parent = parent
-        self.kernel_size = kernel_size
-        self.stride = stride
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.use_bn = use_bn
-        self.act_func = act_func
+        self.stem_kernel_size = stem_kernel_size
+        self.stem_stride = stem_stride
+        self.stem_in_channels = stem_in_channels
+        self.stem_out_channels = stem_out_channels
+        # self.use_bn = use_bn
+        self.act_func = stem_act_func
         self.dropout_rate = dropout_rate
         self.ops_order = ops_order
         self.conv_layer_kernel_sizes = conv_layer_kernel_sizes
@@ -107,11 +107,10 @@ class TextNetModelTester:
 
     def get_config(self):
         return TextNetConfig(
-            kernel_size=self.kernel_size,
-            stride=self.stride,
-            in_channels=self.in_channels,
-            out_channels=self.out_channels,
-            use_bn=self.use_bn,
+            stem_kernel_size=self.stem_kernel_size,
+            stem_stride=self.stem_stride,
+            stem_num_channels=self.stem_in_channels,
+            stem_out_channels=self.stem_out_channels,
             act_func=self.act_func,
             dropout_rate=self.dropout_rate,
             ops_order=self.ops_order,
@@ -300,7 +299,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model = TextNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-
+# copied from tests.test_modeling_bit
 @require_torch
 class TextNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
     all_model_classes = (TextNetBackbone,) if is_torch_available() else ()

@@ -68,25 +68,25 @@ class TextNetConvLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.kernel_size = config.kernel_size
-        self.stride = config.stride
-        self.activation_function = config.act_func
+        self.kernel_size = config.stem_kernel_size
+        self.stride = config.stem_stride
+        self.activation_function = config.stem_act_func
 
         padding = (
             (config.kernel_size[0] // 2, config.kernel_size[1] // 2)
-            if isinstance(config.kernel_size, tuple)
-            else config.kernel_size // 2
+            if isinstance(config.stem_kernel_size, tuple)
+            else config.stem_kernel_size // 2
         )
 
         self.conv = nn.Conv2d(
-            config.num_channels,
-            config.out_channels,
-            kernel_size=config.kernel_size,
-            stride=config.stride,
+            config.stem_num_channels,
+            config.stem_out_channels,
+            kernel_size=config.stem_kernel_size,
+            stride=config.stem_stride,
             padding=padding,
             bias=False,
         )
-        self.batch_norm = nn.BatchNorm2d(config.out_channels, config.batch_norm_eps)
+        self.batch_norm = nn.BatchNorm2d(config.stem_out_channels, config.batch_norm_eps)
 
         self.activation = nn.Identity()
         if self.activation_function is not None:

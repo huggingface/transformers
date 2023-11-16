@@ -35,15 +35,15 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
     for more information.
 
     Args:
-        kernel_size (`int`, *optional*, defaults to 3):
+        stem_kernel_size (`int`, *optional*, defaults to 3):
             The kernel size for the initial convolution layer.
-        stride (`int`, *optional*, defaults to 2):
+        stem_stride (`int`, *optional*, defaults to 2):
             The stride for the initial convolution layer.
-        num_channels (`int`, *optional*, defaults to 3):
+        stem_num_channels (`int`, *optional*, defaults to 3):
             The num of channels in input for the initial convolution layer.
-        out_channels (`int`, *optional*, defaults to 64):
+        stem_out_channels (`int`, *optional*, defaults to 64):
             The num of channels in out for the initial convolution layer.
-        act_func (`str`, *optional*, defaults to `"relu"`):
+        stem_act_func (`str`, *optional*, defaults to `"relu"`):
             The activation function for the initial convolution layer.
                                      [[3, 3], [1, 3], [3, 3], [3, 1]], [[3, 3], [3, 3], [3, 1], [1, 3]], [[3, 3], [3,
                                      1], [1, 3], [3, 3]]]`):
@@ -88,11 +88,11 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
 
     def __init__(
         self,
-        kernel_size=3,
-        stride=2,
-        num_channels=3,
-        out_channels=64,
-        act_func="relu",
+        stem_kernel_size=3,
+        stem_stride=2,
+        stem_num_channels=3,
+        stem_out_channels=64,
+        stem_act_func="relu",
         conv_layer_kernel_sizes=[
             [[3, 3], [3, 3], [3, 3]],
             [[3, 3], [1, 3], [3, 3], [3, 1]],
@@ -109,11 +109,11 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        self.kernel_size = kernel_size
-        self.stride = stride
-        self.num_channels = num_channels
-        self.out_channels = out_channels
-        self.act_func = act_func
+        self.stem_kernel_size = stem_kernel_size
+        self.stem_stride = stem_stride
+        self.stem_num_channels = stem_num_channels
+        self.stem_out_channels = stem_out_channels
+        self.stem_act_func = stem_act_func
 
         self.conv_layer_kernel_sizes = conv_layer_kernel_sizes
         self.conv_layer_strides = conv_layer_strides
