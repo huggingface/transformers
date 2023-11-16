@@ -525,12 +525,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             processor.feature_extractor,
             max_source_positions,
         )
-        # fmt: off
         self.assertEqual(
             merge,
             [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51832],
-        )
-        # fmt: on
+        )  # fmt: skip
         self.assertEqual(
             processor.decode(merge, output_offsets=True),
             {
@@ -548,23 +546,19 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             },
         )
         # last case is when the sequence is not in the first next predicted start and end of timestamp
-        # fmt: off
         next_sequences_3 = [
             [50364, 2812, 9836, 14783, 390, 406, 3163, 1953, 466, 13, 50634, 50634, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50934]
-        ]
-        # fmt: on
+        ]  # fmt: skip
         merge = _find_timestamp_sequence(
             [[previous_sequence, (480_000, 0, 0)], [next_sequences_3, (480_000, 167_000, 0)]],
             processor.tokenizer,
             processor.feature_extractor,
             max_source_positions,
         )
-        # fmt: off
         self.assertEqual(
             merge,
             [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51912]
-        )
-        # fmt: on
+        )  # fmt: skip
         self.assertEqual(
             processor.decode(merge, output_offsets=True),
             {
