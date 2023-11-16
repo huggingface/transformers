@@ -72,10 +72,10 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 
 [[autodoc]] SeamlessM4Tv2HifiGan
 
-## SeamlessM4Tv2TextToUnitModel
+## SeamlessM4Tv2NARTextToUnitModel
 
-[[autodoc]] SeamlessM4Tv2TextToUnitModel
+[[autodoc]] SeamlessM4Tv2NARTextToUnitModel
 
-## SeamlessM4Tv2TextToUnitForConditionalGeneration
+## SeamlessM4Tv2NARTextToUnitForConditionalGeneration
 
-[[autodoc]] SeamlessM4Tv2TextToUnitForConditionalGeneration
+[[autodoc]] SeamlessM4Tv2NARTextToUnitForConditionalGeneration
