@@ -522,7 +522,7 @@ class RTDetrMSDeformableAttention(nn.Module):
         attention_weights = F.softmax(attention_weights, dim=-1).reshape(
             batch_size, query_length, self.num_heads, self.num_levels, self.num_points
         )
-
+        # reference_points is a point type to sample feature
         if reference_points.shape[-1] == 2:
             offset_normalizer = torch.tensor(value_spatial_shapes)
             offset_normalizer = offset_normalizer.flip([1]).reshape(1, 1, 1, self.num_levels, 1, 2)
@@ -530,6 +530,7 @@ class RTDetrMSDeformableAttention(nn.Module):
                 reference_points.reshape(batch_size, query_length, 1, self.num_levels, 1, 2)
                 + sampling_offsets / offset_normalizer
             )
+        # reference_points is a box type to sample feature
         elif reference_points.shape[-1] == 4:
             sampling_locations = (
                 reference_points[:, :, None, :, None, :2]
