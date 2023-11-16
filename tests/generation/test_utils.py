@@ -159,7 +159,7 @@ class GenerationTesterMixin:
             )
             + [NoBadWordsLogitsProcessor(process_kwargs["bad_words_ids"], eos_token_id)]
             + (
-                NoRepeatNGramLogitsProcessor(process_kwargs["no_repeat_ngram_size"])
+                [NoRepeatNGramLogitsProcessor(process_kwargs["no_repeat_ngram_size"])]
                 if forced_bos_token_id is None and forced_eos_token_id is None
                 else []
             )
