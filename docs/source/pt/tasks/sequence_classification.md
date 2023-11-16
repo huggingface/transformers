@@ -70,7 +70,7 @@ Crie uma função de pré-processamento para tokenizar o campo `text` e truncar 
 ...     return tokenizer(examples["text"], truncation=True)
 ```
 
-Use a função [`map`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map) do 🤗 Datasets para aplicar a função de pré-processamento em todo o conjunto de dados. Você pode acelerar a função `map` definindo `batched=True` para processar vários elementos do conjunto de dados de uma só vez:
+Use a função [`map`](https://huggingface.co/docs/datasets/process#map) do 🤗 Datasets para aplicar a função de pré-processamento em todo o conjunto de dados. Você pode acelerar a função `map` definindo `batched=True` para processar vários elementos do conjunto de dados de uma só vez:
 
 ```py
 tokenized_imdb = imdb.map(preprocess_function, batched=True)

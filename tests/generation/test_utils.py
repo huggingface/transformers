@@ -15,13 +15,14 @@
 
 
 import inspect
+import tempfile
 import unittest
 import warnings
 
 import numpy as np
 
 from transformers import is_torch_available, pipeline
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_accelerate, require_torch, require_torch_multi_gpu, slow, torch_device
 
 from ..test_modeling_common import floats_tensor, ids_tensor
 from .test_framework_agnostic import GenerationIntegrationTestsMixin
@@ -1015,6 +1016,27 @@ class GenerationTesterMixin:
             for output in (output_beam, output_generate):
                 self._check_outputs(
                     output, input_ids, model.config, use_cache=True, num_return_sequences=beam_scorer.num_beams
+                )
+
+    @require_accelerate
+    @require_torch_multi_gpu
+    def test_model_parallel_beam_search(self):
+        for model_class in self.all_generative_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+
+            model = model_class(config).eval()
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+                new_model = model_class.from_pretrained(tmp_dir, device_map="auto")
+
+                new_model.generate(
+                    input_ids,
+                    attention_mask=attention_mask,
+                    max_length=max_length,
+                    num_beams=2,
                 )
 
     def test_beam_sample_generate(self):
@@ -2880,7 +2902,105 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         # Generation config max_length != 20 -> no warning
         with warnings.catch_warnings(record=True) as warning_list:
+            # generation_config is modified -> legacy mode is disabled = generation_config takes precedence
             model.generation_config.max_length = 10
-            model.generation_config._from_model_config = False  # otherwise model.config.max_length=20 takes precedence
             model.generate(input_ids)
             self.assertEqual(len(warning_list), 0)
+
+    def test_model_kwarg_assisted_decoding_decoder_only(self):
+        # PT-only test: TF doesn't support assisted decoding yet.
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model.config.pad_token_id = tokenizer.eos_token_id
+
+        text = "Hello world"
+        tokenized_inputs = tokenizer([text], return_tensors="pt")
+        input_ids = tokenized_inputs.input_ids.to(torch_device)
+
+        # Traditional way of generating text
+        outputs_normal = model.generate(input_ids)
+        self.assertEqual(outputs_normal.shape, (1, 20))
+
+        # Should be different with token_type_ids
+        outputs_tti = model.generate(
+            input_ids,
+            token_type_ids=torch.zeros(input_ids.shape, dtype=torch.long).to(torch_device),
+        )
+        with self.assertRaises(AssertionError):
+            self.assertListEqual(outputs_tti.tolist(), outputs_normal.tolist())
+
+        # Assistant model
+        assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        assistant.config.pad_token_id = tokenizer.eos_token_id
+
+        # If assisted generation passes model_kwargs correctly, should be same as previous
+        outputs_assisted = model.generate(
+            input_ids,
+            token_type_ids=torch.zeros(input_ids.shape, dtype=torch.long).to(torch_device),
+            assistant_model=assistant,
+        )
+        self.assertListEqual(outputs_assisted.tolist(), outputs_tti.tolist())
+
+    def test_model_kwarg_assisted_decoding_encoder_decoder(self):
+        # PT-only test: TF doesn't support assisted decoding yet.
+        # Bart subclass with a kwarg that distorts the output
+        class FakeBart(BartForConditionalGeneration):
+            def forward(self, input_ids, foo=False, **kwargs):
+                outs = super().forward(input_ids, **kwargs)
+
+                if foo:
+                    outs["logits"][:, :, :] = 0.0
+
+                return outs
+
+            def prepare_inputs_for_generation(self, *args, foo=False, encoder_outputs=None, **kwargs):
+                kwargs["encoder_outputs"] = encoder_outputs
+                inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+
+                inputs["foo"] = foo
+                return inputs
+
+        model = FakeBart.from_pretrained("hf-internal-testing/tiny-random-BartForConditionalGeneration").to(
+            torch_device
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-BartForConditionalGeneration")
+
+        text = "Hello world"
+        tokenized_inputs = tokenizer([text], return_tensors="pt")
+        input_ids = tokenized_inputs.input_ids.to(torch_device)
+
+        # Traditional way of generating text
+        outputs_normal = model.generate(input_ids)
+        self.assertEqual(outputs_normal.shape, (1, 20))
+
+        # Should be different with foo
+        outputs_foo = model.generate(
+            input_ids,
+            foo=True,
+        )
+        with self.assertRaises(AssertionError):
+            self.assertListEqual(outputs_foo.tolist(), outputs_normal.tolist())
+
+        # Assistant model
+        assistant = AutoModelForSeq2SeqLM.from_pretrained(
+            "hf-internal-testing/tiny-random-BartForConditionalGeneration"
+        ).to(torch_device)
+
+        # If assisted generation passes model_kwargs correctly, should be same as previous
+        outputs_assisted = model.generate(
+            input_ids,
+            foo=True,
+            assistant_model=assistant,
+        )
+        self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
+
+        # Check that passing encoder_outputs directly also works as expected
+        encoder_outputs = assistant.get_encoder()(input_ids)
+
+        outputs_assisted = model.generate(
+            foo=True,
+            assistant_model=assistant,
+            encoder_outputs=encoder_outputs,
+            assistant_encoder_outputs=encoder_outputs,
+        )
+        self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())

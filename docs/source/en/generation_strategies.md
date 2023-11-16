@@ -55,12 +55,10 @@ When you load a model explicitly, you can inspect the generation configuration t
 >>> from transformers import AutoModelForCausalLM
 
 >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
->>> model.generation_config  # doctest: +IGNORE_RESULT
+>>> model.generation_config
 GenerationConfig {
-    "_from_model_config": true,
     "bos_token_id": 50256,
     "eos_token_id": 50256,
-    "transformers_version": "4.26.0.dev0"
 }
 ```
 
@@ -84,7 +82,8 @@ Even if the default decoding strategy mostly works for your task, you can still 
 commonly adjusted parameters include:
 
 - `max_new_tokens`: the maximum number of tokens to generate. In other words, the size of the output sequence, not
-including the tokens in the prompt.
+including the tokens in the prompt. As an alternative to using the output's length as a stopping criteria, you can choose 
+to stop generation whenever the full generation exceeds some amount of time. To learn more, check [`StoppingCriteria`].
 - `num_beams`: by specifying a number of beams higher than 1, you are effectively switching from greedy search to
 beam search. This strategy evaluates several hypotheses at each time step and eventually chooses the hypothesis that
 has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
@@ -92,7 +91,7 @@ sequences that start with a lower probability initial tokens and would've been i
 - `do_sample`: if set to `True`, this parameter enables decoding strategies such as multinomial sampling, beam-search
 multinomial sampling, Top-K sampling and Top-p sampling. All these strategies select the next token from the probability
 distribution over the entire vocabulary with various strategy-specific adjustments.
-- `num_return_sequences`: the number of sequence candidates to return for each input. This options is only available for
+- `num_return_sequences`: the number of sequence candidates to return for each input. This option is only available for
 the decoding strategies that support multiple sequence candidates, e.g. variations of beam search and sampling. Decoding
 strategies like greedy search and contrastive search return a single output sequence.
 
@@ -146,7 +145,7 @@ one for summarization with beam search). You must have the right Hub permissions
 
 ## Streaming
 
-The `generate()` supports streaming, through its `streamer` input. The `streamer` input is compatible any instance
+The `generate()` supports streaming, through its `streamer` input. The `streamer` input is compatible with any instance
 from a class that has the following methods: `put()` and `end()`. Internally, `put()` is used to push new tokens and
 `end()` is used to flag the end of text generation.
 
@@ -301,7 +300,7 @@ the `num_beams` greater than 1, and set `do_sample=True` to use this decoding st
 The diverse beam search decoding strategy is an extension of the beam search strategy that allows for generating a more diverse
 set of beam sequences to choose from. To learn how it works, refer to [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf).
 This approach has three main parameters: `num_beams`, `num_beam_groups`, and `diversity_penalty`.
-The diversily penalty ensures the outputs are distinct across groups, and beam search is used within each group.
+The diversity penalty ensures the outputs are distinct across groups, and beam search is used within each group.
 
 
 ```python
@@ -332,7 +331,8 @@ The diversily penalty ensures the outputs are distinct across groups, and beam s
 
 >>> outputs = model.generate(**inputs, num_beams=5, num_beam_groups=5, max_new_tokens=30, diversity_penalty=1.0)
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-'The aim of this project is to create a new type of living system, one that is more sustainable and efficient than the current one.'
+'The Design Principles are a set of universal design principles that can be applied to any location, climate and
+culture, and they allow us to design the'
 ```
 
 This guide illustrates the main parameters that enable various decoding strategies. More advanced parameters exist for the
@@ -366,7 +366,7 @@ To enable assisted decoding, set the `assistant_model` argument with a model.
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
 
-When using assisted decoding with sampling methods, you can use the `temperarure` argument to control the randomness
+When using assisted decoding with sampling methods, you can use the `temperature` argument to control the randomness
 just like in multinomial sampling. However, in assisted decoding, reducing the temperature will help improving latency.
 
 ```python

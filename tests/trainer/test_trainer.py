@@ -26,6 +26,7 @@ import tempfile
 import unittest
 from itertools import product
 from pathlib import Path
+from typing import Dict, List
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -139,9 +140,9 @@ class RegressionTrainingArguments(TrainingArguments):
     b: float = 0.0
 
     def __post_init__(self):
+        super().__post_init__()
         # save resources not dealing with reporting (also avoids the warning when it's not set)
         self.report_to = []
-        super().__post_init__()
 
 
 class RepeatDataset:
@@ -529,8 +530,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         self.check_trained_model(trainer.model)
 
         # Re-training should restart from scratch, thus lead the same results and new seed should be used.
-        args = TrainingArguments("./regression", learning_rate=0.1, seed=314)
-        trainer = Trainer(args=args, train_dataset=train_dataset, model_init=lambda: RegressionModel())
+        trainer.args.seed = 314
         trainer.train()
         self.check_trained_model(trainer.model, alternate_seed=True)
 
@@ -2309,6 +2309,62 @@ class TrainerHyperParameterOptunaIntegrationTest(unittest.TestCase):
                 model_init=model_init,
             )
             trainer.hyperparameter_search(direction="minimize", hp_space=hp_space, hp_name=hp_name, n_trials=4)
+
+
+@require_torch
+@require_optuna
+class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        args = TrainingArguments("..")
+        self.n_epochs = args.num_train_epochs
+        self.batch_size = args.train_batch_size
+
+    def test_hyperparameter_search(self):
+        class MyTrialShortNamer(TrialShortNamer):
+            DEFAULTS = {"a": 0, "b": 0}
+
+        def hp_space(trial):
+            return {}
+
+        def model_init(trial):
+            if trial is not None:
+                a = trial.suggest_int("a", -4, 4)
+                b = trial.suggest_int("b", -4, 4)
+            else:
+                a = 0
+                b = 0
+            config = RegressionModelConfig(a=a, b=b, double_output=False)
+
+            return RegressionPreTrainedModel(config)
+
+        def hp_name(trial):
+            return MyTrialShortNamer.shortname(trial.params)
+
+        def compute_objective(metrics: Dict[str, float]) -> List[float]:
+            return metrics["eval_loss"], metrics["eval_accuracy"]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                learning_rate=0.1,
+                logging_steps=1,
+                evaluation_strategy=IntervalStrategy.EPOCH,
+                save_strategy=IntervalStrategy.EPOCH,
+                num_train_epochs=10,
+                disable_tqdm=True,
+                load_best_model_at_end=True,
+                logging_dir="runs",
+                run_name="test",
+                model_init=model_init,
+                compute_metrics=AlmostAccuracy(),
+            )
+            trainer.hyperparameter_search(
+                direction=["minimize", "maximize"],
+                hp_space=hp_space,
+                hp_name=hp_name,
+                n_trials=4,
+                compute_objective=compute_objective,
+            )
 
 
 @require_torch
