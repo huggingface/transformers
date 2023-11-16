@@ -130,11 +130,6 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         feature_projection_input_dim (`int`, *optional*, defaults to 160):
             Input dimension of the input feature projection of the speech encoder, i.e the dimension after processing
             input audios with [`SeamlessM4TFeatureExtractor`].
-        num_conv_pos_embeddings (`int`, *optional*, defaults to 128):
-            Number of convolutional positional embeddings. Defines the kernel size of 1D convolutional positional
-            embeddings layer of the speech encoder.
-        num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
-            Number of groups of 1D convolutional positional embeddings layer of the speech encoder.
         adaptor_kernel_size (`int`, *optional*, defaults to 8):
             Kernel size of the convolutional layers in the adapter network. Only relevant if `add_adapter is True`.
         adaptor_stride (`int`, *optional*, defaults to 8):
@@ -294,8 +289,6 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         add_adapter=True,
         speech_encoder_layerdrop=0.1,
         feature_projection_input_dim=160,
-        num_conv_pos_embeddings=128,
-        num_conv_pos_embedding_groups=16,
         adaptor_kernel_size=8,
         adaptor_stride=8,
         adaptor_dropout=0.1,
@@ -380,8 +373,6 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         self.speech_encoder_layerdrop = speech_encoder_layerdrop
         self.speech_encoder_intermediate_size = speech_encoder_intermediate_size
         self.feature_projection_input_dim = feature_projection_input_dim
-        self.num_conv_pos_embeddings = num_conv_pos_embeddings
-        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
         self.adaptor_kernel_size = adaptor_kernel_size
         self.adaptor_stride = adaptor_stride
         self.adaptor_dropout = adaptor_dropout
