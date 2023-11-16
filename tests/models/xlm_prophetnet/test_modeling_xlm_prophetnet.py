@@ -114,9 +114,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
             " этой системы не смогут получать обновления безопасности, из-за чего их компьютеры могут стать уязвимыми"
             " к кибератакам."
         )
-        ZH_SENTENCE = (
-            "根据该组织的官方门户网站，微软公司打算在2020年1月14日之后正式终止对Windows 7操作系统的免费支持。从那时起，该系统的用户将无法接收安全更新，这可能会使他们的计算机容易受到网络攻击。"
-        )
+        ZH_SENTENCE = "根据该组织的官方门户网站，微软公司打算在2020年1月14日之后正式终止对Windows 7操作系统的免费支持。从那时起，该系统的用户将无法接收安全更新，这可能会使他们的计算机容易受到网络攻击。"
 
         input_ids = tokenizer(
             [EN_SENTENCE, RU_SENTENCE, ZH_SENTENCE], padding=True, max_length=255, return_tensors="pt"
