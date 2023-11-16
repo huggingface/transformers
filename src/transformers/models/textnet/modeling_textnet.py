@@ -28,7 +28,12 @@ from transformers.modeling_outputs import (
     ImageClassifierOutputWithNoAttention,
 )
 from transformers.models.textnet.configuration_textnet import TextNetConfig
-from transformers.utils import add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from transformers.utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from transformers.utils.backbone_utils import BackboneMixin
 
 
@@ -36,6 +41,12 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "TextNetConfig"
+_CHECKPOINT_FOR_DOC = "Raghavan/textnet-base"
+_EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
+
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "Raghavan/textnet-base"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
 TEXTNET_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
@@ -256,30 +267,16 @@ class TextNetModel(TextNetPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(TEXTNET_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=BaseModelOutputWithPoolingAndNoAttention,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
     ) -> Union[Tuple[Any, List[Any]], Tuple[Any], BaseModelOutputWithPoolingAndNoAttention]:
-        """
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoImageProcessor, AutoBackbone
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> processor = AutoImageProcessor.from_pretrained("Raghavan/textnet-base")
-        >>> model = AutoBackbone.from_pretrained("Raghavan/textnet-base")
-
-        >>> inputs = processor(image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -325,6 +322,12 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TEXTNET_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        output_type=ImageClassifierOutputWithNoAttention,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    )
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
