@@ -426,6 +426,21 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(tokens, [])
         self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
 
+    def test_fast_slow_edge_cases(self):
+        slow_tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
+        fast_tokenizer = T5TokenizerFast.from_pretrained("t5-base", legacy=False, from_slow=True)
+        slow_tokenizer.add_tokens("<new_token_test_>")
+        fast_tokenizer.add_tokens("<new_token_test_>")
+        edge_case = "Hey!<new_token_test_>. How</s>Hey <new_token_test_>!"
+        self.assertEqual(
+            slow_tokenizer.tokenize(edge_case),
+            ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "▁", "<new_token_test_>", "!"],
+        )
+        self.assertEqual(
+            fast_tokenizer.tokenize(edge_case),
+            ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "▁", "<new_token_test_>", "!"],
+        )
+
 
 @require_sentencepiece
 @require_tokenizers
