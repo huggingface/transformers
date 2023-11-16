@@ -15,12 +15,15 @@
 
 from typing import Optional, Tuple, Union
 
-import numpy as np
-import torch
-
 from transformers.utils import (
     ExplicitEnum,
 )
+
+from .utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 class BoundingBoxFormat(ExplicitEnum):
@@ -73,9 +76,9 @@ def _xyxy_to_xywh(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
     Returns:
         torch.Tensor: The bounding box in XYWH format.
     """
-    xywh = xyxy if inplace else xyxy.clone()
-    xywh[..., 2:].sub_(xywh[..., :2])
-    return xywh
+    xyxy = xyxy if inplace else xyxy.clone()
+    xyxy[..., 2:].sub_(xyxy[..., :2])
+    return xyxy
 
 
 # adapted from https://github.com/pytorch/vision/blob/main/torchvision/transforms/v2/functional/_meta.py
@@ -137,43 +140,57 @@ def _relxywh_to_xyxy(relxywh: torch.Tensor, img_shape: Tuple[int, int], inplace:
         torch.Tensor: The bounding box in absolute XYXY format.
     """
     relxywh = relxywh if inplace else relxywh.clone()
+    # convert to relative_xyxy
+    relxywh[..., 2:].add_(relxywh[..., :2])
     # convert to xywh
     relxywh.multiply_(img_shape.repeat(2).flip(0))
-    # convert to xyxy
-    relxywh[..., 2:].add_(relxywh[..., :2])
     return relxywh
 
 
 def _relxcycwh_to_xyxy(relxcycwh: torch.Tensor, img_shape: Tuple[int, int], inplace: bool) -> torch.Tensor:
-    # TODO
-    pass
+    relxcycwh = relxcycwh if inplace else relxcycwh.clone()
+    # convert to relative_xyxy
+    relxyxy = _xcycwh_to_xyxy(relxcycwh, inplace)
+    # convert to xyxy
+    relxyxy.multiply_(img_shape.repeat(2).flip(0))
+    return relxyxy
 
 
 def _xyxy_to_relxywh(xyxy: torch.Tensor, img_shape: Tuple[int, int], inplace: bool) -> torch.Tensor:
-    # TODO
-    pass
+    xyxy = xyxy if inplace else xyxy.clone()
+    # to xywh
+    xyxy = _xyxy_to_xywh(xyxy, inplace)
+    # divide by (height, width) to make coordinates in relative format (rel_xywh)
+    xyxy.divide_(img_shape.repeat(2).flip(0))
+    return xyxy
 
 
 def _xyxy_to_relxcycwh(xyxy: torch.Tensor, img_shape: Tuple[int, int], inplace: bool) -> torch.Tensor:
-    # TODO
-    pass
+    xyxy = xyxy if inplace else xyxy.clone()
+    # to xcycwh
+    xyxy = _xyxy_to_xcycwh(xyxy, inplace)
+    # divide by (height, width) to make coordinates in relative format (rel_xcycwh)
+    xyxy.divide_(img_shape.repeat(2).flip(0))
+    return xyxy
 
 
 def transform_box_format(
-    bbox: Union[torch.Tensor, np.ndarray],
+    bbox: torch.Tensor,
     orig_format: BoundingBoxFormat,
     dest_format: BoundingBoxFormat,
-    img_shape: Optional[Tuple[int, int]] = None,
+    img_shape: Optional[Union[Tuple[int, int], torch.Tensor]] = None,
     inplace: bool = False,
+    do_round: bool = False,
 ):
     """
     Transform a bounding box from one format to another.
 
-    Args:s
-        bbox (Union[torch.Tensor, np.ndarray]): The bounding box to transform. orig_format (BoundingBoxFormat): The
+    Args:
+        bbox (torch.Tensor): The bounding box to transform. orig_format (BoundingBoxFormat): The
         original format of the bounding box. dest_format (BoundingBoxFormat): The desired destination format of the
         bounding box. img_shape (Optional[Tuple[int, int]]): The shape of the image (height, width), required for
         relative formats. inplace (bool): If True, perform operation in-place.
+        do_round (bool): If True, and the destination format is not a relative format, the coordinates of boxes are rounded.
 
     Returns:
         Union[torch.Tensor, np.ndarray]: The transformed bounding box.
@@ -185,11 +202,26 @@ def transform_box_format(
     if orig_format == dest_format:
         return bbox
 
-    if _is_relative_format(orig_format) and img_shape is None:
-        raise ValueError(f"Image shape (height, width) is required if the input format format is {dest_format}")
+    bbx_format_members = BoundingBoxFormat.__members__.values()
+    if orig_format not in bbx_format_members:
+        raise ValueError("orig_format is not a valid BoundingBoxFormat.")
+    if dest_format not in bbx_format_members:
+        raise ValueError("dest_format is not a valid BoundingBoxFormat.")
 
-    if _is_relative_format(dest_format) and img_shape is None:
-        raise ValueError(f"Image shape (height, width) is required if the desired destination format is {dest_format}")
+    if _is_relative_format(orig_format):
+        bbox = bbox.type(torch.float32)
+        if img_shape is None:
+            raise ValueError(f"Image shape (height, width) is required if the input format format is {dest_format}")
+        if not isinstance(img_shape, torch.Tensor):
+            img_shape = torch.Tensor(img_shape)
+
+    if _is_relative_format(dest_format):
+        if img_shape is None:
+            raise ValueError(
+                f"Image shape (height, width) is required if the desired destination format is {dest_format}"
+            )
+        if not isinstance(img_shape, torch.Tensor):
+            img_shape = torch.Tensor(img_shape)
 
     bbox = bbox.type(torch.float)
     # convert to xyxy
@@ -200,7 +232,7 @@ def transform_box_format(
     elif orig_format == BoundingBoxFormat.RELATIVE_XYWH:
         bbox = _relxywh_to_xyxy(bbox, img_shape, inplace)
     elif orig_format == BoundingBoxFormat.RELATIVE_XCYCWH:
-        bbox = _relxcycwh_to_xyxy(bbox, inplace)
+        bbox = _relxcycwh_to_xyxy(bbox, img_shape, inplace)
 
     # boxes are now in xyxy format
 
@@ -209,8 +241,12 @@ def transform_box_format(
     elif dest_format == BoundingBoxFormat.XCYCWH:
         bbox = _xyxy_to_xcycwh(bbox, inplace)
     elif dest_format == BoundingBoxFormat.RELATIVE_XYWH:
-        bbox = _xyxy_to_relxywh(bbox, inplace)
+        bbox = _xyxy_to_relxywh(bbox, img_shape, inplace)
     elif dest_format == BoundingBoxFormat.RELATIVE_XCYCWH:
-        bbox = _xyxy_to_relxcycwh(bbox, inplace)
+        bbox = _xyxy_to_relxcycwh(bbox, img_shape, inplace)
+
+    # If rounded is requested and destination format is not a relative format, round coordinates.
+    if do_round and not _is_relative_format(dest_format):
+        bbox = torch.round(bbox, decimals=1)
 
     return bbox
