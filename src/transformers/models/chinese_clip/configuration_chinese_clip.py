@@ -106,6 +106,7 @@ class ChineseCLIPTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "chinese_clip_text_model"
 
     def __init__(

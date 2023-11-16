@@ -652,9 +652,7 @@ class MaskedBertModel(MaskedBertPreTrainedModel):
         outputs = (
             sequence_output,
             pooled_output,
-        ) + encoder_outputs[
-            1:
-        ]  # add hidden_states and attentions if they are here
+        ) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
 
 

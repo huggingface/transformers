@@ -44,6 +44,7 @@ class TFMT5Model(TFT5Model):
     >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=labels["input_ids"])
     >>> hidden_states = outputs.last_hidden_state
     ```"""
+
     model_type = "mt5"
     config_class = MT5Config
 

@@ -117,6 +117,7 @@ class PerceiverConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "perceiver"
 
     def __init__(
