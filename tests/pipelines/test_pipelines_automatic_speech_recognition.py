@@ -517,9 +517,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
 
         # Merge when the previous sequence is not included in the current sequence
-        # fmt: off
-        next_sequences_3 = [[50364, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50584, 50257]]
-        # fmt: on
+        next_sequences_3 = [[50364, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50584, 50257]]  # fmt: skip
         # {'text': ' His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
         merge = _find_timestamp_sequence(
             [[previous_sequence, (480_000, 0, 0)], [next_sequences_3, (480_000, 120_000, 0)]],

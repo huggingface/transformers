@@ -343,9 +343,7 @@ class FuyuModelIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_model_8b_chat_greedy_generation_chart_vqa(self):
-        # fmt: off
-        EXPECTED_TEXT_TOKENS = ["The","life expectancy","at","birth","of male","s in","","20","18","is","","80",".","7",".","\n","|ENDOFTEXT|",]
-        # fmt: on
+        EXPECTED_TEXT_TOKENS = ["The","life expectancy","at","birth","of male","s in","","20","18","is","","80",".","7",".","\n","|ENDOFTEXT|",]  # fmt: skip
         expected_text_completion = " ".join(EXPECTED_TEXT_TOKENS)  # TODO make sure the end string matches
 
         text_prompt_chart_vqa = "What is the highest life expectancy at birth of male?\n"

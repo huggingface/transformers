@@ -152,9 +152,7 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer(normalize=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        # fmt: off
-        self.assertListEqual(tokens, [SPIECE_UNDERLINE, 'T', 'h', 'i', 's', SPIECE_UNDERLINE, 'i', 's', SPIECE_UNDERLINE, 'a', SPIECE_UNDERLINE, 't', 'e', 's', 't'])
-        # fmt: on
+        self.assertListEqual(tokens, [SPIECE_UNDERLINE, 'T', 'h', 'i', 's', SPIECE_UNDERLINE, 'i', 's', SPIECE_UNDERLINE, 'a', SPIECE_UNDERLINE, 't', 'e', 's', 't'])  # fmt: skip
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),
