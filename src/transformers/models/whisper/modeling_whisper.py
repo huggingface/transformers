@@ -1743,7 +1743,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         prompt_ids: Optional[torch.Tensor] = None,
         num_segment_frames: Optional[int] = None,
         return_token_timestamps=None,
-        return_dict_in_generate=False,
+        return_segments=False,
+        time_precision=0.02,
+        return_dict_in_generate: Optional[bool] = None,
         **kwargs,
     ):
         """
@@ -1835,6 +1837,12 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     - [`~generation.BeamSearchEncoderDecoderOutput`],
                     - [`~generation.BeamSampleEncoderDecoderOutput`]
         """
+        return_dict_in_generate = (
+            return_dict_in_generate
+            if return_dict_in_generate is not None
+            else self.generation_config.return_dict_in_generate
+        )
+
         if generation_config is None:
             generation_config = self.generation_config
 
@@ -2047,6 +2055,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         current_segments = []
         while seek < total_input_frames:
+            time_offset = float(seek * time_precision / input_stride)
             seek_num_frames = min(num_segment_frames, total_input_frames - seek)
             segment_input = inputs[:, :, seek : seek + seek_num_frames]
 
@@ -2092,7 +2101,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                 last_slice = 0
                 for current_slice in slices:
-                    sliced_tokens = seek_sequence[:, last_slice:current_slice]
+                    sliced_tokens = seek_sequence[:, last_slice+1:current_slice+1]
                     start_timestamp_pos = (
                         sliced_tokens[:, 0].item() - timestamp_begin
                     )
@@ -2101,8 +2110,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     )
                     current_segments.append(
                         dict(
-                            start=seek + start_timestamp_pos,
-                            end=seek + end_timestamp_pos,
+                            start=time_offset + start_timestamp_pos * time_precision,
+                            end=time_offset + end_timestamp_pos * time_precision,
                             tokens=sliced_tokens,
                             result=seek_outputs,
                         )
@@ -2126,8 +2135,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                 current_segments.append(
                     dict(
-                        start=seek,
-                        end=seek + last_timestamp_pos,
+                        start=time_offset,
+                        end=time_offset + last_timestamp_pos * time_precision,
                         tokens=seek_sequence,
                         result=seek_outputs,
                     )
@@ -2139,10 +2148,12 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                 ipdb.set_trace()
 
-        # merge tokens of all sequeences
-        sequence = torch.cat([d["tokens"] for d in current_segments], dim=-1)
+        sequences = torch.cat([d["tokens"] for d in current_segments], dim=-1)
+        
+        if return_segments:
+            return {"sequences": sequences, "segments": current_segments}
 
-        return sequence
+        return sequences
 
     def prepare_inputs_for_generation(
         self,
