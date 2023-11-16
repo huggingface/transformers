@@ -51,7 +51,7 @@ _CHECKPOINT_FOR_DOC = ""
 _CONFIG_FOR_DOC = "SeamlessM4Tv2Config"
 
 SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "",
+    "ylacombe/m4t_v2",
     # See all SeamlessM4T-v2 models at https://huggingface.co/models?filter=seamless_m4t_v2
 ]
 

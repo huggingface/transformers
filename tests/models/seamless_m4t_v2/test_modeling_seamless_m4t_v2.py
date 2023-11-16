@@ -396,7 +396,7 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST:
             model = SeamlessM4Tv2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -667,7 +667,7 @@ class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixi
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST:
             model = SeamlessM4Tv2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
