@@ -126,8 +126,9 @@ class GenerationTesterMixin:
             "repetition_penalty": 1.2,
             "remove_invalid_values": True,
         }
+        # NoRepeatNGramLogitsProcessor + forced tokens may result in no valid continuations
         if forced_bos_token_id is None and forced_eos_token_id is None:
-            process_kwargs["no_repeat_ngram_size"] = (2,)
+            process_kwargs["no_repeat_ngram_size"] = 2
 
         logits_processor = LogitsProcessorList(
             (
