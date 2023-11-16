@@ -146,6 +146,7 @@ class PatchTSTConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "patchtst"
     attribute_map = {
         "hidden_size": "d_model",
