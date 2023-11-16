@@ -153,7 +153,7 @@ class SeamlessM4Tv2ModelTester:
         self.t2u_num_langs = t2u_num_langs
         self.t2u_offset_tgt_lang = t2u_offset_tgt_lang
         self.vocoder_offset = vocoder_offset
-        
+
         self.t2u_variance_predictor_hidden_dim = t2u_variance_predictor_hidden_dim
         self.char_vocab_size = char_vocab_size
         self.left_max_position_embeddings = left_max_position_embeddings
@@ -804,16 +804,14 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
             "fra": 4,
             "eng": 4,
         }
-        
-        id_to_text = {
-            str(i): "a" for i in range(model.config.vocab_size)
-        }
+
+        id_to_text = {str(i): "a" for i in range(model.config.vocab_size)}
         id_to_text["0"] = "ab"
         id_to_text["1"] = "_b"
         id_to_text["3"] = ","
         id_to_text["4"] = "_cd"
-        
-        char_to_id = {char:i for (i,char) in enumerate("abcd")}
+
+        char_to_id = {char: i for (i, char) in enumerate("abcd")}
 
         generation_config = copy.deepcopy(model.generation_config)
 
@@ -821,9 +819,8 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
         generation_config.__setattr__("t2u_lang_code_to_id", lang_code_to_id)
         generation_config.__setattr__("vocoder_lang_code_to_id", lang_code_to_id)
         generation_config.__setattr__("id_to_text", id_to_text)
-        generation_config.__setattr__("char_to_id", char_to_id)        
+        generation_config.__setattr__("char_to_id", char_to_id)
         generation_config.__setattr__("eos_token_id", 0)
-
 
         generation_config._from_model_config = False
 
@@ -1100,13 +1097,15 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="eng", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
-        self.assertListEqual(expected_unit_tokens, (output.unit_sequences - model.config.vocoder_offset).squeeze().tolist())
+        self.assertListEqual(
+            expected_unit_tokens, (output.unit_sequences - model.config.vocoder_offset).squeeze().tolist()
+        )
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
 
         # assert mean and std equality
         self.assertListAlmostEqual([-0.0002, 0.0714], [output.waveform.mean().item(), output.waveform.std().item()])
-        
+
     @slow
     def test_to_swh_text(self):
         model = SeamlessM4Tv2Model.from_pretrained(self.repo_id).to(torch_device)
@@ -1134,7 +1133,9 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="swh", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
-        self.assertListEqual(expected_unit_tokens, (output.unit_sequences - model.config.vocoder_offset).squeeze().tolist())
+        self.assertListEqual(
+            expected_unit_tokens, (output.unit_sequences - model.config.vocoder_offset).squeeze().tolist()
+        )
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
 
@@ -1166,12 +1167,16 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         output = model.generate(**self.input_audio, num_beams=1, tgt_lang="rus", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
-        self.assertListEqual(expected_unit_tokens, (output.unit_sequences - model.config.vocoder_offset).squeeze().tolist())
+        self.assertListEqual(
+            expected_unit_tokens, (output.unit_sequences - model.config.vocoder_offset).squeeze().tolist()
+        )
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
-        
+
         # assert mean and std equality - higher tolerance for speech
-        self.assertListAlmostEqual([-0.00078, 0.11356], [output.waveform.mean().item(), output.waveform.std().item()], tol=0.003)
+        self.assertListAlmostEqual(
+            [-0.00078, 0.11356], [output.waveform.mean().item(), output.waveform.std().item()], tol=0.003
+        )
 
     @slow
     def test_text_to_text_model(self):

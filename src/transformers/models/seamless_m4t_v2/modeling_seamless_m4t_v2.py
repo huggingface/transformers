@@ -3215,6 +3215,12 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel):
         self.text_decoder.embed_tokens = value
         self.shared = value
 
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.text_encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.lm_head, self.shared)
+
     @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -3513,6 +3519,12 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel):
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.set_input_embeddings
     def set_input_embeddings(self, value):
         self.text_decoder.embed_tokens = value
+
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText._tie_weights
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.lm_head, self.shared)
 
     @add_start_docstrings_to_model_forward(M4T_SPEECH_INPUTS_DOCSTRING)
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.forward
@@ -3832,6 +3844,13 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
         self.text_decoder.embed_tokens = value
         self.shared = value
 
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech._tie_weights
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.text_encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.lm_head, self.shared)
+
     @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.forward with SeamlessM4T->SeamlessM4Tv2, TextToUnit->NARTextToUnit
     def forward(
@@ -4037,12 +4056,12 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
         # prepare second generation
         num_return_sequences = len(sequences) // batch_size
         attention_mask = kwargs_speech.get("attention_mask", kwargs_text.get("attention_mask", None))
-        
+
         if attention_mask is not None:
             # repeat attention mask alongside batch dimension
             attention_mask = torch.repeat_interleave(attention_mask, num_return_sequences, dim=0)
         encoder_hidden_states = text_generation_output.encoder_hidden_states[-1]
-        
+
         # repeat attention mask alongside batch dimension
         encoder_hidden_states = torch.repeat_interleave(encoder_hidden_states, num_return_sequences, dim=0)
 
@@ -4216,6 +4235,12 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel):
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.set_input_embeddings
     def set_input_embeddings(self, value):
         self.text_decoder.embed_tokens = value
+
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech._tie_weights
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.lm_head, self.shared)
 
     @add_start_docstrings_to_model_forward(M4T_SPEECH_INPUTS_DOCSTRING)
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.forward with SeamlessM4T->SeamlessM4Tv2
@@ -4438,10 +4463,10 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel):
             attention_mask = _compute_new_attention_mask(
                 hidden_states=encoder_hidden_states, seq_lens=sub_sampled_lengths
             )
-            
+
             # repeat attention mask alongside batch dimension
             attention_mask = torch.repeat_interleave(attention_mask, num_return_sequences, dim=0)
-        
+
         # repeat attention mask alongside batch dimension
         encoder_hidden_states = torch.repeat_interleave(encoder_hidden_states, num_return_sequences, dim=0)
 
@@ -4642,6 +4667,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
         if self.config.tie_word_embeddings:
             self._tie_or_clone_weights(self.text_encoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.lm_head, self.shared)
 
     @add_start_docstrings_to_model_forward(M4T_MODEL_INPUTS_DOCSTRING)
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TModel.forward with SeamlessM4T->SeamlessM4Tv2
@@ -4945,14 +4971,14 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
                 )
         else:
             encoder_hidden_states = text_generation_output.encoder_hidden_states[-1]
-            
+
         if attention_mask is not None:
             # repeat attention mask alongside batch dimension
             attention_mask = torch.repeat_interleave(attention_mask, num_return_sequences, dim=0)
 
         # repeat attention mask alongside batch dimension
         encoder_hidden_states = torch.repeat_interleave(encoder_hidden_states, num_return_sequences, dim=0)
-        
+
         # get decoder last hidden state - must do a pass through the text decoder
         t2u_input_embeds = self.text_decoder(
             input_ids=sequences[:, :-1],  # Manually trim the final EOS token
