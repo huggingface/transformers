@@ -106,15 +106,15 @@ class PatchTSTConfig(PretrainedConfig):
             Masking type. Only `"random"` and `"forecast"` are currently supported.
         random_mask_ratio (`float`, *optional*, defaults to 0.5):
             Masking ratio applied to mask the input data during random pretraining.
-        forecast_mask_patches (`List`, *optional*, defaults to `[2, 3]`):
+        forecast_mask_patches (`list`, *optional*, defaults to `[2, 3]`):
             List of patch lengths to mask in the end of the data.
-        forecast_mask_ratios (`List`, *optional*, defaults to `[1, 1]`):
+        forecast_mask_ratios (`list`, *optional*, defaults to `[1, 1]`):
             List of weights to use for each patch length. For Ex. if patch_lengths is [5,4] and mix_ratio is [1,1],
             then equal weights to both patch lengths. Defaults to None.
         channel_consistent_masking (`bool`, *optional*, defaults to `False`):
             If channel consistent masking is True, all the channels will have the same masking.
         unmasked_channel_indices (`list`, *optional*):
-            Channels that are not masked during pretraining.
+            Indices of channels that are not masked during pretraining. Values in the list are number between 1 and `num_input_channels`
         mask_value (`int`, *optional*, defaults to 0):
             Define the value of masked patches for pretraining.
         pooling_type (`str`, *optional*, defaults to `"mean"`):
@@ -191,15 +191,15 @@ class PatchTSTConfig(PretrainedConfig):
         random_mask_ratio: float = 0.5,
         forecast_mask_patches: List[int] = [2, 3],
         forecast_mask_ratios: List[int] = [1, 1],
-        channel_consistent_masking: bool = False,
+        channel_consistent_masking: Optional[bool] = False,
         unmasked_channel_indices: Optional[List[int]] = None,
-        mask_value=0,
+        mask_value: int=0,
         # head
         pooling_type: str = "mean",
         head_dropout: float = 0.0,
         prediction_length: int = 24,
         num_targets: int = 1,
-        output_range: List = None,
+        output_range: Optional[List] = None,
         # distribution head
         num_parallel_samples: int = 100,
         **kwargs,

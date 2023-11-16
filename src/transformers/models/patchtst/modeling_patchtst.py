@@ -239,14 +239,14 @@ def random_masking(
         inputs (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, num_features)`):
             The input tensor to mask.
         mask_ratio (`float`):
-            Mask ratio.
+            Masking ratio applied to mask the input data during random pretraining. It is the number between 0 and 1.
         unmasked_channel_indices (list, *optional*):
-            indices of unmasked channels. These channels will not be masked.
+            Indices of channels that will not be masked.
         channel_consistent_masking (bool, *optional* defaults to False):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
             across channels.
         mask_value (int, *optional*, defaults to 0):
-            Value to use for masking.
+            Define the value of masked patches for pretraining.
         seed_number (int, *optional*):
             Value to set for the random seed.
 
@@ -254,6 +254,8 @@ def random_masking(
         `tuple(torch.Tensor)`: inputs_mask, masked input, same shape as input Tensor and mask tensor of shape [bs x c x
         n]
     """
+    if mask_ratio < 0 or mask_ratio >= 1:
+        raise ValueError(f"Mask ratio {mask_ratio} has to be between 0 and 1.")
     if seed_number:
         set_seed(seed_number)
 
@@ -416,15 +418,12 @@ class PatchTSTMasking(nn.Module):
 
     Parameters:
         config (`PatchTSTConfig`): model config
-
     Returns:
         x_mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`)
             Masked patched input
         mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches)`)
             Bool tensor indicating True on masked points
-
     """
-
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
         self.random_mask_ratio = config.random_mask_ratio
@@ -451,7 +450,6 @@ class PatchTSTMasking(nn.Module):
                 Bool tensor indicating True on masked points
 
         """
-
         if self.mask_type == "random":
             masked_input, mask = random_masking(
                 inputs=patch_input,
@@ -473,8 +471,8 @@ class PatchTSTMasking(nn.Module):
         else:
             raise ValueError(f"Invalid mask type {self.mask_type}.")
 
-        mask = mask.bool()  # mask: [bs x num_input_channels x num_patch]
-
+        # mask: [bs x num_input_channels x num_patch]
+        mask = mask.bool()
         return masked_input, mask
 
 
@@ -482,12 +480,10 @@ class PatchTSTEncoderLayer(nn.Module):
     """
     PatchTST encoder layer
     """
-
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
 
         self.channel_attention = config.channel_attention
-
         # Multi-Head attention
         self.self_attn = PatchTSTAttention(
             embed_dim=config.d_model,
@@ -637,6 +633,9 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, PatchTSTBatchNorm):
+            module.batchnorm.bias.data.zero_()
+            module.batchnorm.weight.data.fill_(1.0)
         elif isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
