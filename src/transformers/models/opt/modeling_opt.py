@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch OPT model."""
-import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -115,15 +114,34 @@ class OPTAttention(nn.Module):
     def __init__(
         self,
         config: OPTConfig,
-        is_decoder: bool,
+        is_decoder: bool = False,
+        **kwargs,
     ):
         super().__init__()
         self.config = config
 
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.dropout = config.attention_dropout
-        self.head_dim = config.hidden_size // config.num_attention_heads
+        def _handle_deprecated_argument(config_arg_name, config, fn_arg_name, kwargs):
+            """
+            If a the deprecated argument `fn_arg_name` is passed, raise a deprecation
+            warning and return that value, otherwise take the equivalent config.config_arg_name
+            """
+            val = None
+            if fn_arg_name in kwargs:
+                logging.warning(
+                    "Passing in {} to {self.__class__.__name__} is deprecated and won't be supported from v4.38."
+                    " Please set it in the config instead"
+                )
+                val = kwargs.pop(fn_arg_name)
+            else:
+                val = getattr(config, config_arg_name)
+            return val
+
+        self.embed_dim = _handle_deprecated_argument("hidden_size", config, "embed_dim", kwargs)
+        self.num_heads = _handle_deprecated_argument("num_attention_heads", config, "num_heads", kwargs)
+        self.dropout = _handle_deprecated_argument("attention_dropout", config, "dropout", kwargs)
+        self.enable_bias = _handle_deprecated_argument("enable_bias", config, "bias", kwargs)
+
+        self.head_dim = self.embed_dim // self.num_heads
         self.is_causal = True
 
         if (self.head_dim * self.num_heads) != self.embed_dim:
@@ -134,10 +152,10 @@ class OPTAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.enable_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.enable_bias)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.enable_bias)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.enable_bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -150,14 +168,8 @@ class OPTAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -284,17 +296,8 @@ class OptFlashAttention2(OPTAttention):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
-            # overwrite attention_mask with padding_mask
-            attention_mask = kwargs.pop("padding_mask")
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -478,15 +481,9 @@ class OPTDecoderLayer(nn.Module):
         self.embed_dim = config.hidden_size
 
         if not getattr(config, "_flash_attn_2_enabled", False):
-            self.self_attn = OPTAttention(
-                config=config,
-                is_decoder=True,
-            )
+            self.self_attn = OPTAttention(config=config, is_decoder=True)
         else:
-            self.self_attn = OptFlashAttention2(
-                config=config,
-                is_decoder=True,
-            )
+            self.self_attn = OptFlashAttention2(config=config, is_decoder=True)
 
         self.do_layer_norm_before = config.do_layer_norm_before
         self.dropout = config.dropout
