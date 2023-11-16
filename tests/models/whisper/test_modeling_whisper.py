@@ -106,7 +106,7 @@ def prepare_whisper_inputs_dict(
 class DummyTimestampLogitProcessor(LogitsProcessor):
     """This processor fakes the correct timestamps tokens pattern [TOK_1] [TOK_2] ... [TOK_N] [TIME_STAMP_TOK_1] [TIME_STAMP_TOK_2] [TOK_N+1] ..."""
 
-    def __init__(self, timestamp_begin, vocab_size, batch_size, max_length, min_space=3):
+    def __init__(self, timestamp_begin, vocab_size, batch_size, max_length, min_space=3, seed=0):
         self.timestamp_begin = timestamp_begin
         self.vocab_size = vocab_size
 
@@ -118,6 +118,13 @@ class DummyTimestampLogitProcessor(LogitsProcessor):
         self.prev_highest_timestamp = batch_size * [0]
         self.batch_size = batch_size
         self.max_length = max_length
+        self.count = 0
+
+        self.let_pass = [[] for _ in range(batch_size)]
+        for k in range(batch_size):
+            random.seed(seed + k)
+            for _ in range(10000):
+                self.let_pass[k].append(random.randint(1, 10) <= 3)
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if input_ids.shape[-1] > 2:
@@ -131,7 +138,7 @@ class DummyTimestampLogitProcessor(LogitsProcessor):
             can_produce = self.no_time_stamp_counter[k] > self.min_space_between_timestamps
             must_produce = input_ids[k][2:].le(self.timestamp_begin).all() and input_ids.shape[-1] == self.max_length - 1
             # produce timestamp with 30%
-            if  (can_produce and random.randint(1, 10) <= 3) or must_produce:
+            if  (can_produce and self.let_pass[k][self.count]) or must_produce:
                 self.no_time_stamp_counter[k] = 0
                 self.prev_highest_timestamp[k] = max(input_ids[k].max() + 1, self.timestamp_tokens[0].item())
                 
@@ -147,6 +154,8 @@ class DummyTimestampLogitProcessor(LogitsProcessor):
                 # force the same as before
                 scores[k, :] = -float("inf")
                 scores[k, input_ids[k, -1].item()] = 10.0
+
+        self.count += 1
 
         return scores
 
@@ -1334,6 +1343,48 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             assert segment["tokens"][0, -1] > timestamp_begin, "Final segment token should be a timestamp token, but not first"
             assert segment["tokens"].shape[-1] <= max_length, "make sure that no segment is larger than max generation length"
 
+    def test_longform_generate_multi_batch(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
+        input_features = input_dict["input_features"]
+
+        # len = 250 with num_input_frames = 60
+        long_input_features = torch.cat([input_features.repeat(1, 1, 4), input_features[:, :, :10]], dim=-1)
+
+        # force bsz=1
+        vocab_size = model.config.vocab_size
+
+        batch_size = 1
+        num_timestamp_tokens = 20
+        max_length = 16
+        timestamp_begin = vocab_size - num_timestamp_tokens
+        model.generation_config.no_timestamps_token_id = timestamp_begin - 1
+
+        # make sure the first timestep is small
+        num_init_tokens = 2
+        model.generation_config.max_initial_timestamp_index = num_init_tokens - 1
+
+        logits_processor = [DummyTimestampLogitProcessor(vocab_size - num_timestamp_tokens, vocab_size, batch_size=batch_size, max_length=max_length, min_space=4)]
+        outputs = model.generate(long_input_features[:1], logits_processor=logits_processor, return_segments=True)
+
+        # retrieve tokens for bsz=1
+        tokens_single = outputs["sequences"][0]
+
+        batch_size = 2
+        logits_processor = [DummyTimestampLogitProcessor(vocab_size - num_timestamp_tokens, vocab_size, batch_size=batch_size, max_length=max_length, min_space=4)]
+        outputs = model.generate(long_input_features, logits_processor=logits_processor, return_segments=True)
+
+        tokens_batch = outputs["sequences"][0]
+        segments = outputs["segments "]
+
+        import ipdb; ipdb.set_trace()
+
+        # for segment in segments:
+        #     assert segment["start"] <= segment["end"], "start has to be smaller equal end"
+        #     assert segment["tokens"][0, 0] == model.generation_config.decoder_start_token_id or segment["tokens"][0, 0] >= timestamp_begin, "First segment token should be a timestamp token"
+        #     assert segment["tokens"][0, -1] > timestamp_begin, "Final segment token should be a timestamp token, but not first"
+        #     assert segment["tokens"].shape[-1] <= max_length, "make sure that no segment is larger than max generation length"
 
 @require_torch
 @require_torchaudio
