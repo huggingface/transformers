@@ -81,8 +81,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, v, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -107,7 +106,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     sin = sin[position_ids].unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+    v_embed = (v * cos) + (rotate_half(v) * sin)
+    return q_embed, k_embed, v_embed
 
 
 @dataclass
@@ -312,13 +312,18 @@ class ClvpSelfAttention(nn.Module):
                 key_states[..., :rotary_emb_dim],
                 key_states[..., rotary_emb_dim:],
             )
+            value_rot, value_pass = (
+                value_states[..., :rotary_emb_dim],
+                value_states[..., rotary_emb_dim:],
+            )
 
             cos, sin = rotary_pos_emb.cos().squeeze(0), rotary_pos_emb.sin().squeeze(0)
-            query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
+            query_rot, key_rot, value_rot = apply_rotary_pos_emb(query_rot, key_rot, value_rot, cos, sin, position_ids)
 
             # [batch_size, num_heads, seq_length, head_dim]
             query_states = torch.cat((query_rot, query_pass), dim=-1)
             key_states = torch.cat((key_rot, key_pass), dim=-1)
+            value_states = torch.cat((value_rot, value_pass), dim=-1)
 
         tgt_len = query_states.shape[2]
         src_len = key_states.shape[2]
@@ -1391,7 +1396,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1511,11 +1515,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
                 This refers to the output of the decoder model.
         """
         decoder_fixing_codes = self.config.decoder_config.decoder_fixing_codes
-        speech_ids = speech_ids[:, 1:]
-        if torch.isin(self.speech_decoder_model.config.eos_token_id, speech_ids):
-            speech_ids = torch.nn.functional.pad(
-                speech_ids, pad=(0, 1), value=self.speech_decoder_model.config.eos_token_id
-            )
 
         stop_token_indices = torch.where(speech_ids == self.speech_decoder_model.config.eos_token_id, 1, 0)
         speech_ids = torch.masked_fill(speech_ids, mask=stop_token_indices.bool(), value=decoder_fixing_codes[0])
@@ -1828,6 +1827,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         input_features: torch.FloatTensor = None,
         attention_mask: Optional[torch.LongTensor] = None,
         generation_config: Optional[GenerationConfig] = None,
+        pad_to_max_mel_tokens: Optional[int] = None,
         output_hidden_states: Optional[bool] = None,
         **kwargs,
     ):
@@ -1855,6 +1855,10 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
+            pad_to_max_mel_tokens (`int`, *optional*):
+                Pads generated speech_ids to the specified value. This is to implement the same logic from the official
+                repo, link: https://github.com/neonbjb/tortoise-tts/blob/80f89987a5abda5e2b082618cd74f9c7411141dc/tortoise/api.py#L430
+                and to make sure the logits are same.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of decoder model, text encoder and speech encoder models.
 
@@ -1870,6 +1874,13 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
+        # pad input_ids as specified in the original repo
+        # link: https://github.com/neonbjb/tortoise-tts/blob/80f89987a5abda5e2b082618cd74f9c7411141dc/tortoise/api.py#L380
+        input_ids = torch.nn.functional.pad(input_ids, (0, 1))
+        attention_mask = (
+            torch.nn.functional.pad(attention_mask, pad=(0, 1), value=1) if attention_mask is not None else None
+        )
+
         conditioning_embeds = self.conditioning_encoder(
             input_features=input_features,
             input_ids=input_ids,
@@ -1884,6 +1895,18 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         )
         if isinstance(decoder_outputs, ModelOutput):
             speech_ids = decoder_outputs.sequences
+
+        # Because we don't use the bos token.
+        speech_ids = speech_ids[:, 1:]
+
+        # pad to pad_to_max_mel_tokens if given this to to replicate the original repo logic
+        # link: https://github.com/neonbjb/tortoise-tts/blob/80f89987a5abda5e2b082618cd74f9c7411141dc/tortoise/api.py#L430
+        if pad_to_max_mel_tokens is not None:
+            padding_needed = pad_to_max_mel_tokens - speech_ids.shape[-1]
+            speech_ids = torch.nn.functional.pad(
+                speech_ids, (0, padding_needed), value=self.generation_config.eos_token_id
+            )
+
         speech_ids = self.fix_speech_decoder_output(speech_ids)
 
         speech_outputs = self.speech_encoder_model(
