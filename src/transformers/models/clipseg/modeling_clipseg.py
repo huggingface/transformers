@@ -188,7 +188,7 @@ class CLIPSegVisionEmbeddings(nn.Module):
 
         return result
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
@@ -196,7 +196,7 @@ class CLIPSegVisionEmbeddings(nn.Module):
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
 
-        if embeddings.shape[1] != self.num_positions:
+        if embeddings.shape[1] != self.num_positions or interpolate_pos_encoding:
             new_shape = int(math.sqrt(embeddings.shape[1] - 1))
             embeddings = embeddings + self.interpolate_position_embeddings((new_shape, new_shape))
             embeddings = embeddings.to(embeddings.dtype)
