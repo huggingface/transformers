@@ -161,7 +161,7 @@ class NotebookProgressBar:
             self.update_bar(value)
             self.last_value = value
             self.last_time = current_time
-            if self.average_time_per_item is None:
+            if (self.average_time_per_item is None) or (self.average_time_per_item == 0):
                 self.wait_for = 1
             else:
                 self.wait_for = max(int(self.update_every / self.average_time_per_item), 1)
