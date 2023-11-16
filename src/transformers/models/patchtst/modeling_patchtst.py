@@ -424,6 +424,7 @@ class PatchTSTMasking(nn.Module):
         mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches)`)
             Bool tensor indicating True on masked points
     """
+
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
         self.random_mask_ratio = config.random_mask_ratio
@@ -480,6 +481,7 @@ class PatchTSTEncoderLayer(nn.Module):
     """
     PatchTST encoder layer
     """
+
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
 
@@ -781,7 +783,9 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
             `BaseModelOutput`
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         # Input embedding
         patch_input = self.embedder(patch_input)
@@ -1069,7 +1073,7 @@ class PatchTSTStdScaler(nn.Module):
         """
         Parameters:
             data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
-                Input for scaler calculation
+                input for Batch norm calculation
             observed_indicator (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
                 Calculating the scale on the observed indicator.
         Returns:
@@ -1106,7 +1110,7 @@ class PatchTSTMeanScaler(nn.Module):
         """
         Parameters:
             data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
-                Input for scaler calculation
+                input for Batch norm calculation
             observed_indicator (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
                 Calculating the scale on the observed indicator.
         Returns:
@@ -1158,7 +1162,7 @@ class PatchTSTNOPScaler(nn.Module):
         """
         Parameters:
             data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
-                Input for scaler calculation
+                input for Batch norm calculation
         Returns:
             tuple of `torch.Tensor` of shapes
                 (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
@@ -1515,7 +1519,8 @@ class PatchTSTPredictionHead(nn.Module):
         self.pooling_type = config.pooling_type
         if self.pooling_type or self.use_cls_token:
             head_dim = config.d_model
-        else: head_dim = config.d_model * config.num_patches
+        else:
+            head_dim = config.d_model * config.num_patches
 
         if not self.share_projection:
             # if each channel has its own head
@@ -1724,9 +1729,9 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Return:
-            [`SamplePatchTSTOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
-            number of samples, prediction_length, 1)` or `(batch_size, number of samples, prediction_length,
-            num_input_channels)` for multivariate predictions.
+            [`SamplePatchTSTOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number of
+            samples, prediction_length, 1)` or `(batch_size, number of samples, prediction_length, num_input_channels)`
+            for multivariate predictions.
         """
         # get number of samples
         num_parallel_samples = self.config.num_parallel_samples
@@ -1809,6 +1814,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
     """
     PatchTST model + Regression head
     """
+
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
@@ -1919,8 +1925,8 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Return:
-            [`SamplePatchTSTOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
-            number of samples, num_targets)`.
+            [`SamplePatchTSTOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number of
+            samples, num_targets)`.
         """
         # get number of samples
         num_parallel_samples = self.config.num_parallel_samples

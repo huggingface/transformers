@@ -66,7 +66,7 @@ class PatchTSTConfig(PretrainedConfig):
             Activate channel attention block in the Transformer to allow channels to attend each other.
         encoder_ffn_dim (`int`, *optional*, defaults to 256):
             Dimension of the "intermediate" (often named feed-forward) layer in encoder.
-        norm_type (`str` , *optional*, defaults to `"BatchNorm"`):
+        norm_type (`str` , *optional*, defaults to `"batchnorm"`):
             Normalization at each Transformer layer. Can be `"BatchNorm"` or `"LayerNorm"`.
         norm_eps (`float`, *optional*, defaults to 1e-05):
             A value added to the denominator for numerical stability of normalization.
@@ -114,7 +114,8 @@ class PatchTSTConfig(PretrainedConfig):
         channel_consistent_masking (`bool`, *optional*, defaults to `False`):
             If channel consistent masking is True, all the channels will have the same masking.
         unmasked_channel_indices (`list`, *optional*):
-            Indices of channels that are not masked during pretraining. Values in the list are number between 1 and `num_input_channels`
+            Indices of channels that are not masked during pretraining. Values in the list are number between 1 and
+            `num_input_channels`
         mask_value (`int`, *optional*, defaults to 0):
             Define the value of masked patches for pretraining.
         pooling_type (`str`, *optional*, defaults to `"mean"`):
@@ -169,7 +170,7 @@ class PatchTSTConfig(PretrainedConfig):
         share_embedding: bool = True,
         channel_attention: bool = False,
         encoder_ffn_dim: int = 256,
-        norm_type: str = "BatchNorm",
+        norm_type: str = "batchnorm",
         norm_eps: float = 1e-5,
         attention_dropout: float = 0.0,
         dropout: float = 0.0,
@@ -193,7 +194,7 @@ class PatchTSTConfig(PretrainedConfig):
         forecast_mask_ratios: List[int] = [1, 1],
         channel_consistent_masking: Optional[bool] = False,
         unmasked_channel_indices: Optional[List[int]] = None,
-        mask_value: int=0,
+        mask_value: int = 0,
         # head
         pooling_type: str = "mean",
         head_dropout: float = 0.0,
