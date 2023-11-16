@@ -299,6 +299,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model = TextNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+
 # copied from tests.test_modeling_bit
 @require_torch
 class TextNetBackboneTest(BackboneTesterMixin, unittest.TestCase):

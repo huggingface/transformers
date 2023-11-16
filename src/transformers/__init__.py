@@ -3301,7 +3301,7 @@ else:
     )
     _import_structure["models.textnet"].extend(
         [
-            "TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+            "TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TextNetBackbone",
             "TextNetForImageClassification",
             "TextNetModel",
@@ -7660,7 +7660,7 @@ if TYPE_CHECKING:
             load_tf_weights_in_tapas,
         )
         from .models.textnet import (
-            TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+            TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             TextNetBackbone,
             TextNetForImageClassification,
             TextNetModel,

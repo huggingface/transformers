@@ -33,6 +33,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_textnet"] = [
+        "TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TextNetBackbone",
         "TextNetModel",
         "TextNetPreTrainedModel",
@@ -50,6 +51,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_textnet import (
+            TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             TextNetBackbone,
             TextNetForImageClassification,
             TextNetModel,
