@@ -1114,7 +1114,9 @@ class WhisperEncoder(WhisperPreTrainedModel):
 
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
         if input_features.shape[-1] != expected_seq_length:
-            raise ValueError(f"Whisper expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}.")
+            raise ValueError(
+                f"Whisper expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
+            )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1850,7 +1852,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     "For more details on how to generate the approtiate config, refer to https://github.com/huggingface/transformers/issues/21878#issuecomment-1451902363"
                 )
             generation_config.return_timestamps = return_timestamps
-        elif is_shortform:
+        elif not is_shortform:
             if return_timestamps is False:
                 raise ValueError(
                     "You are passing more than 3000 mel input features (> 30 seconds) which automatically enables long-form generation which "
@@ -1997,17 +1999,17 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             if kwargs.get("num_frames") is not None:
                 generation_config.num_frames = kwargs.pop("num_frames")
 
-        if generation_config.return_timestamps:
+        if generation_config.return_timestamps is True:
             if generation_config.forced_decoder_ids[-1][-1] == self.generation_config.no_timestamps_token_id:
                 # remove no_timestamp to be forcefully generated if we want to return timestamps
                 # this is also important to make sure `WhisperTimeStampLogitsProcessor` functions correctly
                 forced_decoder_ids = generation_config.forced_decoder_ids[:-1]
                 # Make sure that if list is empty we set it to None
-                generation_config.forced_decoder_ids = None if len(forced_decoder_ids) == 0 else forced_decoder_ids 
+                generation_config.forced_decoder_ids = None if len(forced_decoder_ids) == 0 else forced_decoder_ids
 
             logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
 
-        if is_shortform :
+        if is_shortform:
             outputs = super().generate(
                 inputs,
                 generation_config,
@@ -2062,7 +2064,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             seek_sequence = seek_outputs["sequences"] if return_dict_in_generate else seek_outputs
 
             # cut EOS if necessary
-            if (seek + num_segment_frames) < total_input_frames and seek_sequence[:, -1] == self.generation_config.eos_token_id:
+            if (seek + num_segment_frames) < total_input_frames and seek_sequence[
+                :, -1
+            ] == self.generation_config.eos_token_id:
                 seek_sequence = seek_sequence[:, :-1]
 
             timestamp_tokens: torch.Tensor = seek_sequence.ge(timestamp_begin)
@@ -2070,7 +2074,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             consecutive = torch.where(timestamp_tokens[:, :-1] & timestamp_tokens[:, 1:])[-1]
 
-            last_timestamp_pos = -1 # TODO(PVP delete, just for debugging
+            last_timestamp_pos = -1  # TODO(PVP delete, just for debugging
             if len(consecutive) > 0:
                 # if the output contains two consecutive timestamp tokens
                 slices = consecutive.tolist()
@@ -2081,10 +2085,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 for current_slice in slices:
                     # sliced_tokens = seek_sequence[:, last_slice:current_slice]
                     # start_timestamp_pos = (
-                    #     sliced_tokens[0].item() - timestamp_begin 
+                    #     sliced_tokens[0].item() - timestamp_begin
                     # )
                     # end_timestamp_pos = (
-                    #     sliced_tokens[-1].item() - timestamp_begin 
+                    #     sliced_tokens[-1].item() - timestamp_begin
                     # )
                     # current_segments.append(
                     #     dict(
@@ -2100,22 +2104,15 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     seek += seek_num_frames
                 else:
                     # otherwise, ignore the unfinished segment and seek to the last timestamp
-                    last_timestamp_pos = (
-                        seek_sequence[:, last_slice].item() - timestamp_begin
-                    )
+                    last_timestamp_pos = seek_sequence[:, last_slice].item() - timestamp_begin
                     seek += last_timestamp_pos * input_stride
-                    seek_sequence = seek_sequence[:, :last_slice + 1]
+                    seek_sequence = seek_sequence[:, : last_slice + 1]
             else:
                 # duration = segment_duration
                 timestamps = seek_sequence[:, timestamp_tokens.nonzero().flatten()]
-                if (
-                    len(timestamps) > 0
-                    and timestamps[:, -1].item() != timestamp_begin
-                ):
+                if len(timestamps) > 0 and timestamps[:, -1].item() != timestamp_begin:
                     # no consecutive timestamps but it has a timestamp; use the last one.
-                    last_timestamp_pos = (
-                        timestamps[:, -1].item() - timestamp_begin
-                    )
+                    last_timestamp_pos = timestamps[:, -1].item() - timestamp_begin
                     # duration = last_timestamp_pos * time_precision
 
                 # current_segments.append(
@@ -2129,7 +2126,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 seek += seek_num_frames
 
             if seek_num_frames == 0 or last_timestamp_pos == 0:
-                import ipdb; ipdb.set_trace()
+                import ipdb
+
+                ipdb.set_trace()
 
             if sequence is None:
                 sequence = seek_sequence

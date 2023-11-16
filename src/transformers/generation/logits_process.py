@@ -1521,7 +1521,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
         self.timestamp_begin = generate_config.no_timestamps_token_id + 1
 
-        self.begin_index = len(generate_config.forced_decoder_ids) + 1 if generate_config.forced_decoder_ids is not None else 1
+        self.begin_index = (
+            len(generate_config.forced_decoder_ids) + 1 if generate_config.forced_decoder_ids is not None else 1
+        )
         self.max_initial_timestamp_index = generate_config.max_initial_timestamp_index
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -1531,7 +1533,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
         for k in range(input_ids.shape[0]):
-            sampled_tokens = input_ids[k, self.begin_index:]
+            sampled_tokens = input_ids[k, self.begin_index :]
             seq = list(sampled_tokens.tolist())
 
             last_was_timestamp = len(seq) >= 1 and seq[-1] >= self.timestamp_begin
@@ -1557,7 +1559,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
         # apply the `max_initial_timestamp` option
         if input_ids.shape[1] == self.begin_index:
-            scores[:, :self.timestamp_begin] = -float("inf")
+            scores[:, : self.timestamp_begin] = -float("inf")
 
             if self.max_initial_timestamp_index is not None:
                 last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
