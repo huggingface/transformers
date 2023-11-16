@@ -245,7 +245,7 @@ logits first, and then reshaped to match the size of the labels before you can c
 ...             reduce_labels=False,
 ...         )
 ...         for key, value in metrics.items():
-...             if isinstance(value, np.ndarray)
+...             if isinstance(value, np.ndarray):
 ...                 metrics[key] = value.tolist()
 ...         return metrics
 ```
