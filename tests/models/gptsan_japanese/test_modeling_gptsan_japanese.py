@@ -341,7 +341,7 @@ class GPTSanJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
         input_ids_batch = tokenizer([input_text, input_text], return_tensors="pt").input_ids.to(torch_device)
 
         # spout from uniform and one-hot
-        # fmt: off
+
         spouts = [
             [0.87882208, 0.38426396, 0.33220248, 0.43890406, 0.16562252,
             0.04803985, 0.211572  , 0.23188473, 0.37153068, 0.7836377 ,
@@ -378,8 +378,7 @@ class GPTSanJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
              0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
              0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
              0., 0., 0., 0., 0., 0., 0., 0.],
-        ]
-        # fmt: on
+        ]  # fmt: skip
 
         output1 = model.generate(
             input_ids=input_ids,
