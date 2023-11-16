@@ -42,7 +42,7 @@ class PatchTSTConfig(PretrainedConfig):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
             multivariate targets.
         context_length (`int`, *optional*, defaults to 32):
-            The context length for the encoder.
+            The context length of the input sequence.
         distribution_output (`str`, *optional*, defaults to `"student_t"`):
             The distribution emission head for the model when loss is "nll". Could be either "student_t", "normal" or
             "negative_binomial".
@@ -55,7 +55,7 @@ class PatchTSTConfig(PretrainedConfig):
         patch_stride (`int`, *optional*, defaults to 1):
             Define the stride of the patchification process.
         num_hidden_layers (`int`, *optional*, defaults to 3):
-            Number of encoder layers.
+            Number of hidden layers.
         d_model (`int`, *optional*, defaults to 64):
             Dimensionality of the transformer layers.
         num_attention_heads (`int`, *optional*, defaults to 4):
@@ -64,8 +64,8 @@ class PatchTSTConfig(PretrainedConfig):
             Sharing the input embedding across all channels.
         channel_attention (`bool`, *optional*, defaults to `False`):
             Activate channel attention block in the Transformer to allow channels to attend each other.
-        encoder_ffn_dim (`int`, *optional*, defaults to 256):
-            Dimension of the "intermediate" (often named feed-forward) layer in encoder.
+        ffn_dim (`int`, *optional*, defaults to 256):
+            Dimension of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         norm_type (`str` , *optional*, defaults to `"batchnorm"`):
             Normalization at each Transformer layer. Can be `"BatchNorm"` or `"LayerNorm"`.
         norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -83,7 +83,7 @@ class PatchTSTConfig(PretrainedConfig):
         bias (`bool`, *optional*, defaults to `True`):
             Whether to add bias in the feed-forward networks.
         activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (string) in the encoder.`"gelu"` and `"relu"` are supported.
+            The non-linear activation function (string) in the Transformer.`"gelu"` and `"relu"` are supported.
         pre_norm (`bool`, *optional*, defaults to `True`):
             Normalization is applied before self-attention if pre_norm is set to `True`. Otherwise, normalization is
             applied after residual block.
@@ -122,7 +122,7 @@ class PatchTSTConfig(PretrainedConfig):
         head_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for head.
         prediction_length (`int`, *optional*, defaults to 24):
-            The prediction length for the encoder. In other words, the prediction horizon of the model.
+            The prediction horizon that the model will output.
         num_targets (`int`, *optional*, defaults to 1):
             Number of targets for regression and classificastion tasks. For classification, it is the number of
             classes.
@@ -169,7 +169,7 @@ class PatchTSTConfig(PretrainedConfig):
         num_attention_heads: int = 4,
         share_embedding: bool = True,
         channel_attention: bool = False,
-        encoder_ffn_dim: int = 256,
+        ffn_dim: int = 256,
         norm_type: str = "batchnorm",
         norm_eps: float = 1e-5,
         attention_dropout: float = 0.0,
@@ -214,7 +214,7 @@ class PatchTSTConfig(PretrainedConfig):
         # Transformer architecture configuration
         self.d_model = d_model
         self.num_attention_heads = num_attention_heads
-        self.encoder_ffn_dim = encoder_ffn_dim
+        self.ffn_dim = ffn_dim
         self.num_hidden_layers = num_hidden_layers
         self.dropout = dropout
         self.attention_dropout = attention_dropout

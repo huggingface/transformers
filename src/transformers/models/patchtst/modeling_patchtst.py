@@ -506,10 +506,10 @@ class PatchTSTEncoderLayer(nn.Module):
 
         # Position-wise Feed-Forward
         self.ff = nn.Sequential(
-            nn.Linear(config.d_model, config.encoder_ffn_dim, bias=config.bias),
+            nn.Linear(config.d_model, config.ffn_dim, bias=config.bias),
             ACT2CLS[config.activation_function](),
             nn.Dropout(config.ff_dropout) if config.ff_dropout > 0 else nn.Identity(),
-            nn.Linear(config.encoder_ffn_dim, config.d_model, bias=config.bias),
+            nn.Linear(config.ffn_dim, config.d_model, bias=config.bias),
         )
 
         # Add & Norm of sublayer 3
