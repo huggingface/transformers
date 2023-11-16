@@ -480,7 +480,7 @@ class PvtV2Model(PvtV2PreTrainedModel):
     def __init__(self, config: PvtV2Config):
         super().__init__(config)
         self.config = config
-        self.channels = [config.hidden_sizes[i] for i in config._out_indices]
+        # self.channels = [config.hidden_sizes[i] for i in config.out_indices]
 
         # hierarchical Transformer encoder
         self.encoder = PvtV2Encoder(config)
