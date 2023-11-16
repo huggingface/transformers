@@ -209,7 +209,7 @@ accelerate launch --num_processes 2 trainer-program.py ...
 deepspeed --num_gpus 2 trainer-program.py ...
 ```
 
-これらのランチャーを使用するために、Accelerate または [Deepspeed 統合](Deepspeed) 機能を使用する必要はありません。
+これらのランチャーを使用するために、Accelerate または [Deepspeed 統合](deepspeed) 機能を使用する必要はありません。
 
 
 これまでは、プログラムに使用する GPU の数を指示できました。次に、特定の GPU を選択し、その順序を制御する方法について説明します。
