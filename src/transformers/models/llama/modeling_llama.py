@@ -53,6 +53,7 @@ if is_flash_attn_2_available():
 # It means that the function will not be traced through and simply appear as a node in the graph.
 if is_torch_fx_available():
     import torch.fx
+    
     _prepare_4d_causal_attention_mask = torch.fx.wrap(_prepare_4d_causal_attention_mask)
 
 
