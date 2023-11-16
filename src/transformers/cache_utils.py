@@ -62,6 +62,95 @@ class DynamicCache(Cache):
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
+class PagedAttentionCache(Cache):
+    def __init__(self, num_blocks: int = 1e8, block_size: int = 16) -> None:
+        super().__init__()
+        self.num_blocks = num_blocks
+        self.block_size = block_size
+        self.context_lens = []
+        self.key_cache: Dict[int, Tuple[torch.Tensor]] = {}
+        self.value_cache: Dict[int, Tuple[torch.Tensor]] = {} 
+        self.block_tables = [] #mapping logical block to physical blocks
+        self.free_blocks = list(range(num_blocks)) #free blocks
+        self.block_ref_count = [0] * self.num_blocks #init the reference count for each physical block      
+        self.slots_mapping = [] #mapping logical slots to physical slots. 
+    
+    def allocate(self, batch_idx: int, key_len: int, context_len: int) -> torch.Tensor:        
+        #return the physical slots for this sequence, 1 slot for 1 token state.
+        #if batch_idx not in self.block_tables, allocate blocks for this sequence 
+        slots = []
+        if batch_idx not in self.block_tables:
+            #allocate blocks for this sequence
+            assert context_len == 0
+            needed_blocks = (key_len + self.block_size - 1) // self.block_size
+            assert needed_blocks <= len(self.free_blocks)
+            blocks = self.free_blocks[:needed_blocks]
+            self.free_blocks = self.free_blocks[needed_blocks:]
+            self.block_tables[batch_idx] = blocks
+            for block_idx in blocks:
+                self.block_ref_count[block_idx] += 1
+            #return the slots for this sequence            
+            for i in range(key_len):
+                slots.append(blocks[i // self.block_size] * self.block_size + i % self.block_size)
+            return slots     
+            
+        else:
+            #find free slots in the allocated blocks or find new blocks 
+            seq_len = key_len + context_len
+            needed_blocks = (seq_len + self.block_size - 1) // self.block_size - len(self.block_tables[batch_idx])
+            assert needed_blocks <= len(self.free_blocks)
+            self.block_tables[batch_idx].extend(self.free_blocks[:needed_blocks])
+            self.free_blocks = self.free_blocks[needed_blocks:]
+            for block_idx in self.block_tables[batch_idx]:
+                self.block_ref_count[block_idx] += 1
+            #return the slots for this sequence
+            for i in range(seq_len):
+                slots.append(self.block_tables[batch_idx][i // self.block_size] * self.block_size + i % self.block_size)
+            return slots
+            
+    
+    def free(self, batch_idx: int):
+        #free the blocks allocated for this sequence
+        assert batch_idx in self.block_tables
+        for block_idx in self.block_tables[batch_idx]:
+            self.block_ref_count[block_idx] -= 1
+            if self.block_ref_count[block_idx] == 0:
+                self.free_blocks.append(block_idx)
+    
+    def reshape_and_cache(self, slot_mapping: torch.Tensor, key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int):
+        pass
+     
+    def get_seq_length(self, layer_idx: int = 0) -> int:
+        return self.context_lens[0] #assume all sequences have the same length while unpad should get better performance
+    
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cos: Optional[torch.Tensor] = None,
+        sin: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        batch_size = key_states.shape[0] #[batch, head, seq, dim]
+        kv_head = key_states.shape[1]
+        head_size = key_states.shape[-1]
+        if layer_idx not in self.key_cache: #init the cache
+            self.key_cache[layer_idx] = torch.zeros((self.num_blocks, self.block_size, kv_head, head_size), dtype=key_states.dtype, device=key_states.device)
+            self.value_cache[layer_idx] = torch.zeros((self.num_blocks, self.block_size, kv_head, head_size), dtype=value_states.dtype, device=value_states.device)        
+        #step 1): allocate slots to store token states for each sequence
+        if layer_idx == 0:
+            self.slots_mapping = []  
+            for seq in range(batch_size):
+                seq_len = key_states[seq].shape[-2] 
+                self.context_lens.append(seq_len)            
+                slots = self.allocate(seq, seq_len, self.context_lens[seq])
+                self.slots_mapping.append(slots)
+        assert len(self.slots_mapping) == batch_size
+        #step 2): cache key_states & value states
+        self.reshape_and_cache(self.slots_mapping, key_states, value_states, layer_idx)
+        
+            
+                
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
@@ -96,62 +185,4 @@ class SinkCache(Cache):
             sin = sin.to(torch.float32)
 
             # Compute the cos and sin required for back- and forward-rotating to one position earlier in the sequence
-            original_cos = cos[self.num_sink_tokens + key_states.shape[-2] :]
-            shifted_cos = cos[self.num_sink_tokens : -key_states.shape[-2]]
-            original_sin = sin[self.num_sink_tokens + key_states.shape[-2] :]
-            shifted_sin = sin[self.num_sink_tokens : -key_states.shape[-2]]
-            rerotation_cos = original_cos * shifted_cos + original_sin * shifted_sin
-            rerotation_sin = -original_sin * shifted_cos + original_cos * shifted_sin
-
-            self.cos_sin_cache[key_states.shape[-2]] = (
-                rerotation_cos.to(key_states.dtype).unsqueeze(0),
-                rerotation_sin.to(key_states.dtype).unsqueeze(0),
-            )
-        return self.cos_sin_cache[key_states.shape[-2]]
-
-    def get_seq_length(self, layer_idx: int = 0) -> int:
-        # Workaround to make 'key_states.shape[-2] + past_key_value.get_seq_length(self.layer_idx)' <= window_length
-        return min(super().get_seq_length(layer_idx), self.window_length - 1)
-
-    def update(
-        self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        layer_idx: int,
-        cos: Optional[torch.Tensor] = None,
-        sin: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        # [bsz, num_heads, seq_len, head_dim]
-        if layer_idx not in self.key_cache:
-            # Empty cache
-            self.key_cache[layer_idx] = key_states
-            self.value_cache[layer_idx] = value_states
-
-        elif key_states.shape[-2] + self.get_seq_length(layer_idx) < self.window_length:
-            # Growing cache
-            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
-
-        else:
-            # Shifting cache
-            rotated_keys = self.key_cache[layer_idx][
-                :, :, -self.window_length + self.num_sink_tokens + key_states.shape[-2] :
-            ]
-            rerotation_cos, rerotation_sin = self.get_rerotation_cos_sin(key_states, cos, sin)
-            rerotated_keys = apply_rotary_pos_emb_single(rotated_keys, rerotation_cos, rerotation_sin)
-
-            # Concatenate sink tokens, shifted & rotated tokens, and new tokens
-            self.key_cache[layer_idx] = torch.cat(
-                [self.key_cache[layer_idx][:, :, : self.num_sink_tokens], rerotated_keys, key_states], dim=-2
-            )
-            self.value_cache[layer_idx] = torch.cat(
-                [
-                    self.value_cache[layer_idx][:, :, : self.num_sink_tokens],
-                    self.value_cache[layer_idx][
-                        :, :, -self.window_length + self.num_sink_tokens + value_states.shape[-2] :
-                    ],
-                    value_states,
-                ],
-                dim=-2,
-            )
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+            ori
