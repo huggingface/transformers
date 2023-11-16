@@ -400,7 +400,7 @@ jobs:
 
   run_extract_warnings:
     name: Extract warnings in CI artifacts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: always()
     needs: [
       setup,
@@ -448,7 +448,7 @@ jobs:
 
   send_results:
     name: Send results to webhook
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: always()
     needs: [
       setup,
