@@ -16,8 +16,8 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.bounding_box_utils import BoundingBoxFormat, transform_box_format
 from transformers.testing_utils import require_torch
+from transformers.utils.bounding_box_utils import BoundingBoxFormat, transform_box_format
 
 
 if is_torch_available():

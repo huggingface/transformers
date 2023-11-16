@@ -19,7 +19,7 @@ from transformers.utils import (
     ExplicitEnum,
 )
 
-from .utils import is_torch_available
+from .import_utils import is_torch_available
 
 
 if is_torch_available():
@@ -190,7 +190,8 @@ def transform_box_format(
         original format of the bounding box. dest_format (BoundingBoxFormat): The desired destination format of the
         bounding box. img_shape (Optional[Tuple[int, int]]): The shape of the image (height, width), required for
         relative formats. inplace (bool): If True, perform operation in-place.
-        do_round (bool): If True, and the destination format is not a relative format, the coordinates of boxes are rounded.
+        do_round (bool):
+            If True, and the destination format is not a relative format, the coordinates of boxes are rounded.
 
     Returns:
         Union[torch.Tensor, np.ndarray]: The transformed bounding box.
