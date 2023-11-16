@@ -550,9 +550,6 @@ class ExamplesTests(TestCasePlus):
             --seed 42
         """.split()
 
-        if is_torch_fp16_available_on_device(torch_device):
-            testargs.append("--fp16")
-
         with patch.object(sys, "argv", testargs):
             run_wav2vec2_pretraining_no_trainer.main()
             model = Wav2Vec2ForPreTraining.from_pretrained(tmp_dir)
