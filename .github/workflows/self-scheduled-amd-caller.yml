@@ -1,4 +1,4 @@
-name: Self-hosted runner (AMD mi210 scheduled CI caller)
+name: Self-hosted runner (AMD scheduled CI caller)
 
 on:
   schedule:
