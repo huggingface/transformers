@@ -144,6 +144,7 @@ def get_fusing_mapping(model, quantization_config):
         num_attention_heads = model.config.num_attention_heads
         num_key_value_heads = getattr(model.config, "num_key_value_heads", num_attention_heads)
 
+        # Fill `current_fused_mapping` with the expected values
         current_fused_mapping["hidden_size"] = hidden_size
         current_fused_mapping["num_attention_heads"] = num_attention_heads
         current_fused_mapping["num_key_value_heads"] = num_key_value_heads
