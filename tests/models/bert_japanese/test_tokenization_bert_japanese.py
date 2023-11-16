@@ -198,33 +198,12 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_sudachi_tokenizer_core(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="core")
 
+        # fmt: off
         self.assertListEqual(
             tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
-            # fmt: off
-            [
-                " ",
-                "\t",
-                "アップル",
-                "ストア",
-                "で",
-                "iPhone",
-                "8",
-                " ",
-                "が",
-                " ",
-                " ",
-                "\n ",
-                "発売",
-                "さ",
-                "れ",
-                "た",
-                " ",
-                "。",
-                " ",
-                " ",
-            ],
-            # fmt: on
+            [" ",  "\t",  "アップル",  "ストア",  "で",  "iPhone",  "8",  " ",  "が",  " ",  " ",  "\n ",  "発売",  "さ",  "れ",  "た",  " ",  "。",  " ",  " "],
         )
+        # fmt: on
 
     @require_sudachi
     def test_sudachi_tokenizer_split_mode_A(self):

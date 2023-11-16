@@ -247,7 +247,6 @@ def stylify(code: str) -> str:
     """
     has_indent = len(get_indent(code)) > 0
     if has_indent:
-        pass
         code = f"class Bla:\n{code}"
     formatted_code = asyncio.run(run_ruff(code))
     return formatted_code[len("class Bla:\n") :] if has_indent else formatted_code
