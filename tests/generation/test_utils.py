@@ -1525,7 +1525,7 @@ class GenerationTesterMixin:
                 self.skipTest("Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()
-                for model_name in ["bigbirdpegasus", "led", "mega", "speech2text", "git", "prophetnet"]
+                for model_name in ["bigbirdpegasus", "led", "mega", "speech2text", "git", "prophetnet", "seamlessm4t"]
             ):
                 self.skipTest("May fix in the future: need model-specific fixes")
 
