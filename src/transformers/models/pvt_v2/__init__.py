@@ -47,6 +47,7 @@ else:
         "PvtV2ForImageClassification",
         "PvtV2Model",
         "PvtV2PreTrainedModel",
+        "PvtV2Backbone",
     ]
 
 
@@ -73,6 +74,7 @@ if TYPE_CHECKING:
             PvtV2ForImageClassification,
             PvtV2Model,
             PvtV2PreTrainedModel,
+            PvtV2Backbone,
         )
 
 else:

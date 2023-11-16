@@ -37,7 +37,7 @@ from ...utils import (
 )
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_pvt_v2 import PvtV2Config
-
+from ...utils.backbone_utils import BackboneMixin
 
 logger = logging.get_logger(__name__)
 
@@ -549,6 +549,19 @@ class PvtV2Model(PvtV2PreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+@add_start_docstrings(
+    """
+    PVTv2 backbone, to be used with frameworks like DETR and MaskFormer.
+    """,
+    PVT_V2_START_DOCSTRING,
+)
+class PvtV2Backbone(PvtV2Model, BackboneMixin):
+
+    def __init__(self, config: PvtV2Config):
+        super().__init__(config)
+        super()._init_backbone(config)
+        self.num_features = config.hidden_sizes
 
 
 @add_start_docstrings(
