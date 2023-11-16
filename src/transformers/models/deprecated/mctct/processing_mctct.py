@@ -34,6 +34,7 @@ class MCTCTProcessor(ProcessorMixin):
         tokenizer (`AutoTokenizer`):
             An instance of [`AutoTokenizer`]. The tokenizer is a required input.
     """
+
     feature_extractor_class = "MCTCTFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 

@@ -190,6 +190,7 @@ class Blip2QFormerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "blip_2_qformer"
 
     def __init__(

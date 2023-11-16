@@ -35,7 +35,7 @@ VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "uclanlp/visualbert-nlvr2-pre": "https://huggingface.co/uclanlp/visualbert-nlvr2-pre/resolve/main/config.json",
     "uclanlp/visualbert-nlvr2-coco-pre": (
         "https://huggingface.co/uclanlp/visualbert-nlvr2-coco-pre/resolve/main/config.json"
-    )
+    ),
     # See all VisualBERT models at https://huggingface.co/models?filter=visual_bert
 }
 

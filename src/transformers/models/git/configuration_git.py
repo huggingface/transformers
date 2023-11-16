@@ -188,6 +188,7 @@ class GitConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "git"
 
     def __init__(

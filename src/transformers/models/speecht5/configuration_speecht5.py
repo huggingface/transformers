@@ -194,6 +194,7 @@ class SpeechT5Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "speecht5"
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "num_hidden_layers": "encoder_layers"}
 
@@ -398,6 +399,7 @@ class SpeechT5HifiGanConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "hifigan"
 
     def __init__(
