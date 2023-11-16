@@ -1387,6 +1387,43 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         )
 
 
+class PatchTSTClassificationHead(nn.Module):
+    def __init__(self, config: PatchTSTConfig):
+        super().__init__()
+        self.use_cls_token = config.use_cls_token
+        self.pooling_type = config.pooling_type
+        self.flatten = nn.Flatten(start_dim=1)
+        self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
+        self.linear = nn.Linear(config.num_input_channels * config.d_model, config.num_targets)
+
+    def forward(self, embedding: torch.Tensor):
+        """
+        Parameters:
+            embedding (`torch.Tensor` of shape `(bs, num_channels, num_patches, d_model)` or
+                     `(bs, num_channels, num_patches+1, d_model)` if `cls_token` is set to True, *required*):
+                Embedding from the model
+        Returns:
+            `torch.Tensor` of shape `(bs, num_targets)`
+
+        """
+        if self.use_cls_token:
+            # use the first output token, pooled_embedding: bs x num_channels x d_model
+            pooled_embedding = embedding[:, :, 0, :]
+        elif self.pooling_type == "mean":
+            # pooled_embedding: [bs x num_channels x d_model]
+            pooled_embedding = embedding.mean(dim=2)
+        elif self.pooling_type == "max":
+            # pooled_embedding: [bs x num_channels x d_model]
+            pooled_embedding = embedding.max(dim=2)
+        else:
+            raise ValueError(f"pooling operator {self.pooling_type} is not implemented yet")
+        # pooled_embedding: bs x num_channels * d_model
+        pooled_embedding = self.flatten(pooled_embedding)
+        # output: bs x n_classes
+        output = self.linear(self.dropout(pooled_embedding))
+        return output
+
+
 class PatchTSTForClassification(PatchTSTPreTrainedModel):
     """
     PatchTST model for classification. The model contains PatchTST model + classification head
@@ -1464,42 +1501,6 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
             attentions=model_output.attentions,
         )
 
-
-class PatchTSTClassificationHead(nn.Module):
-    def __init__(self, config: PatchTSTConfig):
-        super().__init__()
-        self.use_cls_token = config.use_cls_token
-        self.pooling_type = config.pooling_type
-        self.flatten = nn.Flatten(start_dim=1)
-        self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
-        self.linear = nn.Linear(config.num_input_channels * config.d_model, config.num_targets)
-
-    def forward(self, embedding: torch.Tensor):
-        """
-        Parameters:
-            embedding (`torch.Tensor` of shape `(bs, num_channels, num_patches, d_model)` or
-                     `(bs, num_channels, num_patches+1, d_model)` if `cls_token` is set to True, *required*):
-                Embedding from the model
-        Returns:
-            `torch.Tensor` of shape `(bs, num_targets)`
-
-        """
-        if self.use_cls_token:
-            # use the first output token, pooled_embedding: bs x num_channels x d_model
-            pooled_embedding = embedding[:, :, 0, :]
-        elif self.pooling_type == "mean":
-            # pooled_embedding: [bs x num_channels x d_model]
-            pooled_embedding = embedding.mean(dim=2)
-        elif self.pooling_type == "max":
-            # pooled_embedding: [bs x num_channels x d_model]
-            pooled_embedding = embedding.max(dim=2)
-        else:
-            raise ValueError(f"pooling operator {self.pooling_type} is not implemented yet")
-        # pooled_embedding: bs x num_channels * d_model
-        pooled_embedding = self.flatten(pooled_embedding)
-        # output: bs x n_classes
-        output = self.linear(self.dropout(pooled_embedding))
-        return output
 
 
 class PatchTSTPredictionHead(nn.Module):
