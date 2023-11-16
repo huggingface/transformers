@@ -54,22 +54,21 @@ class TextNetModelTester:
         act_func="relu",
         dropout_rate=0,
         ops_order="weight_bn_act",
-        stage1_in_channels=[64],
-        stage1_out_channels=[64],
-        stage1_kernel_size=[[3, 3]],
-        stage1_stride=[1],
-        stage2_in_channels=[64],
-        stage2_out_channels=[64],
-        stage2_kernel_size=[[3, 1]],
-        stage2_stride=[2],
-        stage3_in_channels=[64],
-        stage3_out_channels=[64],
-        stage3_kernel_size=[[1, 3]],
-        stage3_stride=[2],
-        stage4_in_channels=[64],
-        stage4_out_channels=[64],
-        stage4_kernel_size=[[3, 3]],
-        stage4_stride=[2],
+        conv_layer_kernel_sizes=[[[3, 3]], [[3, 1]], [[1, 3]], [[3, 3]]],
+        conv_layer_strides=[
+            [
+                1,
+            ],
+            [
+                2,
+            ],
+            [
+                2,
+            ],
+            [
+                2,
+            ],
+        ],
         out_features=["stage1", "stage2", "stage3", "stage4"],
         out_indices=[1, 2, 3, 4],
         batch_size=3,
@@ -90,26 +89,8 @@ class TextNetModelTester:
         self.act_func = act_func
         self.dropout_rate = dropout_rate
         self.ops_order = ops_order
-
-        self.stage1_in_channels = stage1_in_channels
-        self.stage1_out_channels = stage1_out_channels
-        self.stage1_kernel_size = stage1_kernel_size
-        self.stage1_stride = stage1_stride
-
-        self.stage2_in_channels = stage2_in_channels
-        self.stage2_out_channels = stage2_out_channels
-        self.stage2_kernel_size = stage2_kernel_size
-        self.stage2_stride = stage2_stride
-
-        self.stage3_in_channels = stage3_in_channels
-        self.stage3_out_channels = stage3_out_channels
-        self.stage3_kernel_size = stage3_kernel_size
-        self.stage3_stride = stage3_stride
-
-        self.stage4_in_channels = stage4_in_channels
-        self.stage4_out_channels = stage4_out_channels
-        self.stage4_kernel_size = stage4_kernel_size
-        self.stage4_stride = stage4_stride
+        self.conv_layer_kernel_sizes = conv_layer_kernel_sizes
+        self.conv_layer_strides = conv_layer_strides
 
         self.out_features = out_features
         self.out_indices = out_indices
@@ -134,22 +115,8 @@ class TextNetModelTester:
             act_func=self.act_func,
             dropout_rate=self.dropout_rate,
             ops_order=self.ops_order,
-            stage1_in_channels=self.stage1_in_channels,
-            stage1_out_channels=self.stage1_out_channels,
-            stage1_kernel_size=self.stage1_kernel_size,
-            stage1_stride=self.stage1_stride,
-            stage2_in_channels=self.stage2_in_channels,
-            stage2_out_channels=self.stage2_out_channels,
-            stage2_kernel_size=self.stage2_kernel_size,
-            stage2_stride=self.stage2_stride,
-            stage3_in_channels=self.stage3_in_channels,
-            stage3_out_channels=self.stage3_out_channels,
-            stage3_kernel_size=self.stage3_kernel_size,
-            stage3_stride=self.stage3_stride,
-            stage4_in_channels=self.stage4_in_channels,
-            stage4_out_channels=self.stage4_out_channels,
-            stage4_kernel_size=self.stage4_kernel_size,
-            stage4_stride=self.stage4_stride,
+            conv_layer_kernel_sizes=self.conv_layer_kernel_sizes,
+            conv_layer_strides=self.conv_layer_strides,
             out_features=self.out_features,
             out_indices=self.out_indices,
             hidden_sizes=self.hidden_sizes,
@@ -193,7 +160,7 @@ class TextNetModelTester:
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
         self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, self.stage1_out_channels[-1], 16, 16]
+            list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 16, 16]
         )
 
         # verify channels

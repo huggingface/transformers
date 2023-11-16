@@ -45,38 +45,13 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
             The num of channels in out for the initial convolution layer.
         act_func (`str`, *optional*, defaults to `"relu"`):
             The activation function for the initial convolution layer.
-        stage1_in_channels (`List[int]`, *optional*, defaults to `[64, 64, 64]`):
-            The num of channels in input for list of conv in stage 1.
-        stage1_out_channels (`List[int]`, *optional*, defaults to `[64, 64, 64]`):
-            The num of channels in output for list of conv in stage 1.Should be of same length os `stage1_in_channels`
-        stage1_kernel_size (`List[int]`, *optional*, defaults to `[[3, 3], [3, 3], [3, 3]]`):
-            The kernel sizes for list of conv in stage 1.Should be of same length os `stage1_in_channels`
-        stage1_stride (`List[int]`, *optional*, defaults to `[1, 2, 1]`):
-            The strides for list of conv in stage 1.Should be of same length os `stage1_in_channels`
-        stage2_in_channels (`List[int]`, *optional*, defaults to `[64, 128, 128, 128]`):
-            The num of channels in input for list of conv in stage 2.
-        stage2_out_channels (`List[int]`, *optional*, defaults to `[128, 128, 128, 128]`):
-            The num of channels in output for list of conv in stage 2.Should be of same length os `stage2_in_channels`
-        stage2_kernel_size (`List[List[int]]`, *optional*, defaults to `[[3, 3], [1, 3], [3, 3], [3, 1]]`):
-            The kernel sizes for list of conv in stage 2.Should be of same length os `stage2_in_channels`
-        stage2_stride (`List[int]`, *optional*, defaults to `[2, 1, 1, 1]`):
-            The strides for list of conv in stage 2.Should be of same length os `stage2_in_channels`
-        stage3_in_channels (`List[int]`, *optional*, defaults to `[128, 256, 256, 256]`):
-            The num of channels in input for list of conv in stage 3.
-        stage3_out_channels (`List[int]`, *optional*, defaults to `[256, 256, 256, 256]`):
-            The num of channels in output for list of conv in stage 3.Should be of same length os `stage3_in_channels`
-        stage3_kernel_size (`List[List[int]]`, *optional*, defaults to `[[3, 3], [3, 3], [3, 1], [1, 3]]`):
-            The kernel sizes for list of conv in stage 3.Should be of same length os `stage3_in_channels`
-        stage3_stride (`List[int]`, *optional*, defaults to `[2, 1, 1, 1]`):
-            The strides for list of conv in stage 3.Should be of same length os `stage3_in_channels`
-        stage4_in_channels (`List[int]`, *optional*, defaults to `[256, 512, 512, 512]`):
-            The strides for list of conv in stage 4.Should be of same length os `stage4_in_channels`
-        stage4_out_channels (`List[int]`, *optional*, defaults to `[512, 512, 512, 512]`):
-            The num of channels in output for list of conv in stage 4.Should be of same length os `stage4_in_channels`
-        stage4_kernel_size (`List[List[int]]`, *optional*, defaults to `[[3, 3], [3, 1], [1, 3], [3, 3]]`):
-            The kernel sizes for list of conv in stage 4.Should be of same length os `stage4_in_channels`
-        stage4_stride (`List[int]`, *optional*, defaults to `[2, 1, 1, 1]`):
-            The strides for list of conv in stage 4.Should be of same length os `stage4_in_channels`
+                                     [[3, 3], [1, 3], [3, 3], [3, 1]], [[3, 3], [3, 3], [3, 1], [1, 3]], [[3, 3], [3,
+                                     1], [1, 3], [3, 3]]]`):
+            The list of stagewise conv layer's kernel sizes.
+                                [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1]]`):
+            The list of stagewise conv layer's kernel strides.
+        conv_layer_kernel_sizes (`<fill_type>`, *optional*, defaults to `[[[3, 3], [3, 3], [3, 3]], [[3, 3], [1, 3], [3, 3], [3, 1]], [[3, 3], [3, 3], [3, 1], [1, 3]], [[3, 3], [3, 1], [1, 3], [3, 3]]]`): <fill_docstring>
+        conv_layer_strides (`<fill_type>`, *optional*, defaults to `[[1, 2, 1], [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1]]`): <fill_docstring>
         hidden_sizes (`List[int]`, *optional*, defaults to `[64, 64, 128, 256, 512]`):
             Dimensionality (hidden size) at each stage.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -118,22 +93,13 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
         num_channels=3,
         out_channels=64,
         act_func="relu",
-        stage1_in_channels=[64, 64, 64],
-        stage1_out_channels=[64, 64, 64],
-        stage1_kernel_size=[[3, 3], [3, 3], [3, 3]],
-        stage1_stride=[1, 2, 1],
-        stage2_in_channels=[64, 128, 128, 128],
-        stage2_out_channels=[128, 128, 128, 128],
-        stage2_kernel_size=[[3, 3], [1, 3], [3, 3], [3, 1]],
-        stage2_stride=[2, 1, 1, 1],
-        stage3_in_channels=[128, 256, 256, 256],
-        stage3_out_channels=[256, 256, 256, 256],
-        stage3_kernel_size=[[3, 3], [3, 3], [3, 1], [1, 3]],
-        stage3_stride=[2, 1, 1, 1],
-        stage4_in_channels=[256, 512, 512, 512],
-        stage4_out_channels=[512, 512, 512, 512],
-        stage4_kernel_size=[[3, 3], [3, 1], [1, 3], [3, 3]],
-        stage4_stride=[2, 1, 1, 1],
+        conv_layer_kernel_sizes=[
+            [[3, 3], [3, 3], [3, 3]],
+            [[3, 3], [1, 3], [3, 3], [3, 1]],
+            [[3, 3], [3, 3], [3, 1], [1, 3]],
+            [[3, 3], [3, 1], [1, 3], [3, 3]],
+        ],
+        conv_layer_strides=[[1, 2, 1], [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1]],
         hidden_sizes=[64, 64, 128, 256, 512],
         batch_norm_eps=1e-5,
         initializer_range=0.02,
@@ -149,36 +115,14 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
         self.out_channels = out_channels
         self.act_func = act_func
 
-        self.stage1_in_channels = stage1_in_channels
-        self.stage1_out_channels = stage1_out_channels
-        self.stage1_kernel_size = stage1_kernel_size
-        self.stage1_stride = stage1_stride
-
-        self.stage2_in_channels = stage2_in_channels
-        self.stage2_out_channels = stage2_out_channels
-        self.stage2_kernel_size = stage2_kernel_size
-        self.stage2_stride = stage2_stride
-
-        self.stage3_in_channels = stage3_in_channels
-        self.stage3_out_channels = stage3_out_channels
-        self.stage3_kernel_size = stage3_kernel_size
-        self.stage3_stride = stage3_stride
-
-        self.stage4_in_channels = stage4_in_channels
-        self.stage4_out_channels = stage4_out_channels
-        self.stage4_kernel_size = stage4_kernel_size
-        self.stage4_stride = stage4_stride
+        self.conv_layer_kernel_sizes = conv_layer_kernel_sizes
+        self.conv_layer_strides = conv_layer_strides
 
         self.initializer_range = initializer_range
         self.hidden_sizes = hidden_sizes
         self.batch_norm_eps = batch_norm_eps
 
-        self.depths = [
-            len(self.stage1_out_channels),
-            len(self.stage2_out_channels),
-            len(self.stage3_out_channels),
-            len(self.stage4_out_channels),
-        ]
+        self.depths = [len(layer) for layer in self.conv_layer_kernel_sizes]
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, 5)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names

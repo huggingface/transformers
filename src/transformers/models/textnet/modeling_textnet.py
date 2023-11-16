@@ -180,8 +180,18 @@ class TextNetRepConvLayer(nn.Module):
 
 
 class TextNetStage(nn.Module):
-    def __init__(self, config, in_channels, out_channels, kernel_size, stride):
+    def __init__(self, config, depth):
         super().__init__()
+        kernel_size = config.conv_layer_kernel_sizes[depth]
+        stride = config.conv_layer_strides[depth]
+
+        num_layers = len(kernel_size)
+        stage_in_channel_size = config.hidden_sizes[depth]
+        stage_out_channel_size = config.hidden_sizes[depth + 1]
+
+        in_channels = [stage_in_channel_size] + [stage_out_channel_size] * (num_layers - 1)
+        out_channels = [stage_out_channel_size] * num_layers
+
         stage = []
         for stage_config in zip(in_channels, out_channels, kernel_size, stride):
             stage.append(TextNetRepConvLayer(config, *stage_config))
@@ -198,16 +208,9 @@ class TextNetEncoder(nn.Module):
         super().__init__()
 
         stages = []
-        for stage_ix in range(1, 5):
-            stages.append(
-                TextNetStage(
-                    config,
-                    getattr(config, f"stage{stage_ix}_in_channels"),
-                    getattr(config, f"stage{stage_ix}_out_channels"),
-                    getattr(config, f"stage{stage_ix}_kernel_size"),
-                    getattr(config, f"stage{stage_ix}_stride"),
-                )
-            )
+        num_stages = len(config.conv_layer_kernel_sizes)
+        for stage_ix in range(0, num_stages):
+            stages.append(TextNetStage(config, stage_ix))
 
             self.stages = nn.ModuleList(stages)
 
@@ -313,13 +316,7 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
         super()._init_backbone(config)
 
         self.textnet = TextNetModel(config)
-        self.num_features = [
-            config.out_channels,
-            config.stage1_out_channels[-1],
-            config.stage2_out_channels[-1],
-            config.stage3_out_channels[-1],
-            config.stage4_out_channels[-1],
-        ]
+        self.num_features = config.hidden_sizes
 
         # initialize weights and apply final processing
         self.post_init()
