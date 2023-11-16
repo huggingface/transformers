@@ -38,7 +38,7 @@ rename_key_mappings = {
 }
 
 
-def prepare_config(size_config_url,size):
+def prepare_config(size_config_url, size):
     config_dict = json.loads(requests.get(size_config_url).text)
 
     backbone_config = {}
@@ -127,23 +127,15 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_du
             size = data_config["train"]["short_size"]
 
     if "tiny" in model_config["backbone"]["config"]:
-        config = prepare_config(
-            tiny_config_url,size
-        )
+        config = prepare_config(tiny_config_url, size)
     elif "small" in model_config["backbone"]["config"]:
-        config = prepare_config(
-            small_config_url,size
-        )
+        config = prepare_config(small_config_url, size)
     else:
-        config = prepare_config(
-            base_config_url,size
-        )
+        config = prepare_config(base_config_url, size)
 
     model = TextNetBackbone(config)
     textnet_image_processor = CLIPImageProcessor(
-        size={"shortest_edge": size},
-        do_center_crop=False,
-        use_square_size=True
+        size={"shortest_edge": size}, do_center_crop=False, use_square_size=True
     )
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)["ema"]
     state_dict_changed = OrderedDict()
