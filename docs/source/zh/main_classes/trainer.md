@@ -28,13 +28,13 @@ rendered properly in your Markdown viewer.
 
 这个 API 支持在多个 GPU/TPU 上进行分布式训练，支持 [NVIDIA Apex](https://github.com/NVIDIA/apex) 的混合精度和 PyTorch 的原生 AMP。
 
-[`Trainer`] 包含基本的训练循环，支持上述功能。如果需要自定义训练，你可以子类化它们并覆盖以下方法：
+[`Trainer`] 包含基本的训练循环，支持上述功能。如果需要自定义训练，你可以继承 `Trainer` 并覆盖以下方法：
 
 - **get_train_dataloader** -- 创建训练 DataLoader。
 - **get_eval_dataloader** -- 创建评估 DataLoader。
 - **get_test_dataloader** -- 创建测试 DataLoader。
 - **log** -- 记录观察训练的各种对象的信息。
-- **create_optimizer_and_scheduler** -- 如果它们没有在初始化时传递，请设置优化器和学习率调度器。请注意，你还可以单独子类化或覆盖 `create_optimizer` 和 `create_scheduler` 方法。
+- **create_optimizer_and_scheduler** -- 如果它们没有在初始化时传递，请设置优化器和学习率调度器。请注意，你还可以单独继承或覆盖 `create_optimizer` 和 `create_scheduler` 方法。
 - **create_optimizer** -- 如果在初始化时没有传递，则设置优化器。
 - **create_scheduler** -- 如果在初始化时没有传递，则设置学习率调度器。
 - **compute_loss** - 计算单批训练输入的损失。
