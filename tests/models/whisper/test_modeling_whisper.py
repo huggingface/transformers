@@ -16,8 +16,8 @@
 
 import copy
 import inspect
-import random
 import os
+import random
 import tempfile
 import time
 import unittest
@@ -1243,7 +1243,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         class DummyTimestampLogitProcessor(LogitsProcessor):
-            """ This processor fakes the correct timestamps tokens pattern [TOK_1] [TOK_2] ... [TOK_N] [TIME_STAMP_TOK_1] [TIME_STAMP_TOK_2] [TOK_N+1] ... """
+            """This processor fakes the correct timestamps tokens pattern [TOK_1] [TOK_2] ... [TOK_N] [TIME_STAMP_TOK_1] [TIME_STAMP_TOK_2] [TOK_N+1] ..."""
 
             def __init__(self, timestamp_begin, vocab_size, batch_size):
                 self.timestamp_begin = timestamp_begin
@@ -1256,7 +1256,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 self.no_time_stamp_counter = batch_size * [0]
                 self.num_timestamps_used = batch_size * [0]
                 self.batch_size = batch_size
-
 
             def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
                 # first let's make sure to timestamp was produced
@@ -1273,7 +1272,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                         scores[k, :] = -float("inf")
                         scores[k, self.timestamp_tokens[self.num_timestamps_used[k]]] = 10.0
 
-                        if input_ids.shape[-1] > 2 and input_ids[k, -1].item() in self.timestamp_tokens and input_ids[k, -2].item() not in self.timestamp_tokens:
+                        if (
+                            input_ids.shape[-1] > 2
+                            and input_ids[k, -1].item() in self.timestamp_tokens
+                            and input_ids[k, -2].item() not in self.timestamp_tokens
+                        ):
                             # force the same as before
                             scores[k, :] = -float("inf")
                             scores[k, self.timestamp_tokens[input_ids[k, -1].item()]] = 10.0
@@ -1285,7 +1288,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         # len = 250 with num_input_frames = 60
         long_input_features = torch.cat([input_features.repeat(1, 1, 4), input_features[:, :, :10]], dim=-1)
-        
+
         # force bsz=1
         long_input_features = long_input_features[0]
         vocab_size = model.config.vocab_size
@@ -1293,7 +1296,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         batch_size = 1
         logits_processor = [DummyTimestampLogitProcessor(vocab_size - 10, vocab_size, batch_size=batch_size)]
 
-        output = model.generate(input_features, max_new_tokens=1, logits_processor=logits_processor)
+        model.generate(input_features, max_new_tokens=1, logits_processor=logits_processor)
+
 
 @require_torch
 @require_torchaudio
