@@ -25,6 +25,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
@@ -51,6 +52,20 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PersimmonConfig"
+
+
+def _get_unpad_data(attention_mask):
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    cu_seqlens = F.pad(
+        torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0)
+    )
+    return (
+        indices,
+        cu_seqlens,
+        max_seqlen_in_batch,
+    )
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Persimmon
@@ -228,6 +243,7 @@ class PersimmonAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.partial_rotary_factor = config.partial_rotary_factor
+        self.is_causal = True
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -631,21 +647,6 @@ class PersimmonFlashAttention2(PersimmonAttention):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(
-        torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0)
-    )
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
-
-
 class PersimmonDecoderLayer(nn.Module):
     def __init__(self, config: PersimmonConfig):
         super().__init__()
@@ -933,20 +934,24 @@ class PersimmonModel(PersimmonPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        # embed positions
-        if attention_mask is None:
-            attention_mask = torch.ones(
-                (batch_size, seq_length_with_past),
-                dtype=torch.bool,
-                device=inputs_embeds.device,
-            )
-        attention_mask = _prepare_4d_causal_attention_mask(
-            attention_mask,
-            (batch_size, seq_length),
-            inputs_embeds,
-            past_key_values_length,
-        )
 
+        if getattr(self.config, "_flash_attn_2_enabled", False):
+            # 2d mask is passed through the layers
+            attention_mask = (
+                attention_mask
+                if (attention_mask is not None and 0 in attention_mask)
+                else None
+            )
+        else:
+            # 4d mask is passed through the layers
+            attention_mask = _prepare_4d_causal_attention_mask(
+                attention_mask,
+                (batch_size, seq_length),
+                inputs_embeds,
+                past_key_values_length,
+            )
+
+        # embed positions
         hidden_states = inputs_embeds
 
         if self.gradient_checkpointing and self.training:
