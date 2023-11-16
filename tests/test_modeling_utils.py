@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import copy
 import glob
 import json
 import os
@@ -42,10 +42,12 @@ from transformers.testing_utils import (
     TestCasePlus,
     is_staging_test,
     require_accelerate,
+    require_flax,
     require_safetensors,
+    require_tf,
     require_torch,
-    require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_accelerator,
+    require_torch_multi_accelerator,
     require_usr_bin_time,
     slow,
     torch_device,
@@ -56,7 +58,7 @@ from transformers.utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
 )
-from transformers.utils.import_utils import is_torchdynamo_available
+from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torchdynamo_available
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
@@ -66,6 +68,7 @@ from test_module.custom_configuration import CustomConfig, NoSuperInitConfig  # 
 
 if is_torch_available():
     import torch
+    from safetensors.torch import save_file as safe_save_file
     from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from torch import nn
 
@@ -144,6 +147,13 @@ if is_torch_available():
 
         def tie_weights(self):
             self.decoder.weight = self.base.linear.weight
+
+
+if is_flax_available():
+    from transformers import FlaxBertModel
+
+if is_tf_available():
+    from transformers import TFBertModel
 
 
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
@@ -420,13 +430,13 @@ class ModelUtilsTest(TestCasePlus):
                 },
             )
 
-    def test_checkpoint_sharding_local(self):
+    def test_checkpoint_sharding_local_bin(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             # We use the same folder for various sizes to make sure a new save erases the old checkpoint.
             for max_size in ["50kB", "50kiB", "100kB", "100kiB", "200kB", "200kiB"]:
-                model.save_pretrained(tmp_dir, max_shard_size=max_size)
+                model.save_pretrained(tmp_dir, max_shard_size=max_size, safe_serialization=False)
 
                 # Get each shard file and its size
                 shard_to_size = {}
@@ -472,11 +482,11 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), ref_model.parameters()):
             self.assertTrue(torch.allclose(p1, p2))
 
-    def test_checkpoint_variant_local(self):
+    def test_checkpoint_variant_local_bin(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, variant="v2")
+            model.save_pretrained(tmp_dir, variant="v2", safe_serialization=False)
 
             weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["bin"])
 
@@ -492,11 +502,11 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.allclose(p1, p2))
 
-    def test_checkpoint_variant_local_sharded(self):
+    def test_checkpoint_variant_local_sharded_bin(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, variant="v2", max_shard_size="50kB")
+            model.save_pretrained(tmp_dir, variant="v2", max_shard_size="50kB", safe_serialization=False)
 
             weights_index_name = ".".join(WEIGHTS_INDEX_NAME.split(".")[:-1] + ["v2"] + ["json"])
             weights_index_file = os.path.join(tmp_dir, weights_index_name)
@@ -604,18 +614,18 @@ class ModelUtilsTest(TestCasePlus):
             )
         self.assertIsNotNone(model)
 
-    def test_checkpoint_variant_save_load(self):
+    def test_checkpoint_variant_save_load_bin(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             model = BertModel.from_pretrained(
                 "hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir, variant="v2"
             )
             weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["bin"])
 
-            model.save_pretrained(tmp_dir, variant="v2")
+            model.save_pretrained(tmp_dir, variant="v2", safe_serialization=False)
             # saving will create a variant checkpoint
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
 
-            model.save_pretrained(tmp_dir)
+            model.save_pretrained(tmp_dir, safe_serialization=False)
             # saving shouldn't delete variant checkpoints
             weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["bin"])
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
@@ -681,7 +691,7 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @slow
     def test_model_parallelism_gpt2(self):
         device_map = {"transformer.wte": 0, "transformer.wpe": 0, "lm_head": 0, "transformer.ln_f": 1}
@@ -699,7 +709,7 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_from_pretrained_disk_offload_task_model(self):
         model = AutoModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         device_map = {
@@ -739,6 +749,46 @@ class ModelUtilsTest(TestCasePlus):
             outputs2 = new_model_with_offload(inputs)
 
             self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
+
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_from_pretrained_disk_offload_derived_to_base_model(self):
+        derived_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+
+        device_map = {
+            "wte": 0,
+            "wpe": 0,
+            "h.0": "cpu",
+            "h.1": "cpu",
+            "h.2": "cpu",
+            "h.3": "disk",
+            "h.4": "disk",
+            "ln_f": 0,
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            inputs = torch.tensor([[1, 2, 3]]).to(0)
+            derived_model.save_pretrained(tmp_dir, use_safetensors=True)
+            base_model = AutoModel.from_pretrained(tmp_dir)
+            outputs1 = base_model.to(0)(inputs)
+
+            # with disk offload
+            offload_folder = os.path.join(tmp_dir, "offload")
+            base_model_with_offload = AutoModel.from_pretrained(
+                tmp_dir, device_map=device_map, offload_folder=offload_folder
+            )
+            outputs2 = base_model_with_offload(inputs)
+            self.assertTrue(torch.allclose(outputs1[0].cpu(), outputs2[0].cpu()))
+
+            # With state dict temp offload
+            new_model_with_offload = AutoModel.from_pretrained(
+                tmp_dir,
+                device_map=device_map,
+                offload_folder=offload_folder,
+                offload_state_dict=True,
+            )
+            outputs2 = new_model_with_offload(inputs)
+            self.assertTrue(torch.allclose(outputs1[0].cpu(), outputs2[0].cpu()))
 
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
@@ -874,7 +924,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_base_model_to_head_model_load(self):
         base_model = BaseModel(PretrainedConfig())
         with tempfile.TemporaryDirectory() as tmp_dir:
-            base_model.save_pretrained(tmp_dir)
+            base_model.save_pretrained(tmp_dir, safe_serialization=False)
 
             # Can load a base model in a model with head
             model = ModelWithHead.from_pretrained(tmp_dir)
@@ -886,7 +936,7 @@ class ModelUtilsTest(TestCasePlus):
             head_state_dict = model.state_dict()
             base_state_dict["linear2.weight"] = head_state_dict["linear2.weight"]
             base_state_dict["linear2.bias"] = head_state_dict["linear2.bias"]
-            torch.save(base_state_dict, os.path.join(tmp_dir, WEIGHTS_NAME))
+            safe_save_file(base_state_dict, os.path.join(tmp_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"})
 
             with self.assertRaisesRegex(
                 ValueError, "The state dictionary of the model you are trying to load is corrupted."
@@ -934,8 +984,8 @@ class ModelUtilsTest(TestCasePlus):
 
             # Loading the model with the same class, we do get a warning for unexpected weights
             state_dict = model.state_dict()
-            state_dict["added_key"] = state_dict["linear.weight"]
-            torch.save(state_dict, os.path.join(tmp_dir, WEIGHTS_NAME))
+            state_dict["added_key"] = copy.deepcopy(state_dict["linear.weight"])
+            safe_save_file(state_dict, os.path.join(tmp_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"})
             with CaptureLogger(logger) as cl:
                 _, loading_info = ModelWithHead.from_pretrained(tmp_dir, output_loading_info=True)
             self.assertIn("were not used when initializing ModelWithHead: ['added_key']", cl.out)
@@ -1036,7 +1086,7 @@ class ModelUtilsTest(TestCasePlus):
             opt_fn(input_ids)
             self.assertEqual(compile_counter.frame_count, 0)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_pretrained_low_mem_new_config(self):
         # Checking for 1 model(the same one which was described in the issue) .
@@ -1072,6 +1122,54 @@ class ModelUtilsTest(TestCasePlus):
         )
         self.assertEqual(model.generation_config.transformers_version, "foo")
 
+    @require_safetensors
+    def test_safetensors_torch_from_torch(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
+
+    @require_safetensors
+    @require_flax
+    def test_safetensors_torch_from_flax(self):
+        hub_model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
+        model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+        for p1, p2 in zip(hub_model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
+
+    @require_tf
+    @require_safetensors
+    def test_safetensors_torch_from_tf(self):
+        hub_model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+        for p1, p2 in zip(hub_model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
+
+    @require_safetensors
+    def test_safetensors_torch_from_torch_sharded(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="100kB")
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
+
 
 @require_torch
 @is_staging_test
@@ -1104,7 +1202,7 @@ class ModelPushToHubTester(unittest.TestCase):
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         model = BertModel(config)
-        model.push_to_hub("test-model", use_auth_token=self._token)
+        model.push_to_hub("test-model", token=self._token)
 
         new_model = BertModel.from_pretrained(f"{USER}/test-model")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1115,7 +1213,7 @@ class ModelPushToHubTester(unittest.TestCase):
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, repo_id="test-model", push_to_hub=True, use_auth_token=self._token)
+            model.save_pretrained(tmp_dir, repo_id="test-model", push_to_hub=True, token=self._token)
 
         new_model = BertModel.from_pretrained(f"{USER}/test-model")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1144,7 +1242,7 @@ The commit description supports markdown synthax see:
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         model = BertModel(config)
-        model.push_to_hub("valid_org/test-model-org", use_auth_token=self._token)
+        model.push_to_hub("valid_org/test-model-org", token=self._token)
 
         new_model = BertModel.from_pretrained("valid_org/test-model-org")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1155,9 +1253,7 @@ The commit description supports markdown synthax see:
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(
-                tmp_dir, push_to_hub=True, use_auth_token=self._token, repo_id="valid_org/test-model-org"
-            )
+            model.save_pretrained(tmp_dir, push_to_hub=True, token=self._token, repo_id="valid_org/test-model-org")
 
         new_model = BertModel.from_pretrained("valid_org/test-model-org")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1170,7 +1266,7 @@ The commit description supports markdown synthax see:
         config = CustomConfig(hidden_size=32)
         model = CustomModel(config)
 
-        model.push_to_hub("test-dynamic-model", use_auth_token=self._token)
+        model.push_to_hub("test-dynamic-model", token=self._token)
         # checks
         self.assertDictEqual(
             config.auto_map,
@@ -1207,6 +1303,9 @@ class AttentionMaskTester(unittest.TestCase):
         mask_4d = mask_converter.to_4d(mask_2d, query_length=q_len, key_value_length=kv_len)
 
         assert mask_4d.shape == (bsz, 1, q_len, kv_len)
+
+        # make sure there are no overflows
+        assert mask_4d.min() != float("-inf")
 
         context = mask_converter.sliding_window
         if mask_converter.is_causal and context is None:
@@ -1282,6 +1381,9 @@ class AttentionMaskTester(unittest.TestCase):
         self.check_to_4d(mask_converter, q_len=1, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
         self.check_to_4d(mask_converter, q_len=3, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
         self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
+
+        # check that the mask does not overflow on causal masked tokens
+        self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 0), (1, 0), (1, 1)])
 
     def test_2d_to_4d(self):
         mask_converter = AttentionMaskConverter(is_causal=False)

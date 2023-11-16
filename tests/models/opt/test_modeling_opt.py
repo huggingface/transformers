@@ -22,7 +22,7 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_fp16, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, require_torch_fp16, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -514,7 +514,8 @@ class OPTGenerationTest(unittest.TestCase):
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
 
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_torch_fp16
     def test_batched_nan_fp16(self):
         # a bug manifested starting at models facebook/opt-1.3 and larger when running batched generations,
         # therefore not using a tiny model, but the smallest model the problem was seen with which is opt-1.3b.

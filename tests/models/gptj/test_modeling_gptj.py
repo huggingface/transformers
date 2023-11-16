@@ -534,10 +534,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
                 model.gradient_checkpointing_disable()
             model.to(torch_device)
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
-            # fmt: off
             # The dog is a man's best friend. It is a loyal companion, and it is a friend
-            expected_output_ids = [464, 3290, 318, 257, 582, 338, 1266, 1545, 13, 632, 318, 257, 9112, 15185, 11, 290, 340, 318, 257, 1545]
-            # fmt: on
+            expected_output_ids = [464, 3290, 318, 257, 582, 338, 1266, 1545, 13, 632, 318, 257, 9112, 15185, 11, 290, 340, 318, 257, 1545]  # fmt: skip
             output_ids = model.generate(input_ids, do_sample=False)
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
@@ -562,7 +560,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        if torch_device == "cuda":
+        if torch_device != "cpu":
+            # currently this expect value is only for `cuda`
             EXPECTED_OUTPUT_STR = (
                 "Today is a nice day and I've already been enjoying it. I walked to work with my wife"
             )

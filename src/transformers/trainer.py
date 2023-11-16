@@ -113,6 +113,7 @@ from .trainer_utils import (
     find_executable_batch_size,
     get_last_checkpoint,
     has_length,
+    neftune_post_forward_hook,
     number_of_arguments,
     seed_worker,
     set_seed,
@@ -143,6 +144,7 @@ from .utils import (
     is_sagemaker_mp_enabled,
     is_torch_compile_available,
     is_torch_neuroncore_available,
+    is_torch_npu_available,
     is_torch_tpu_available,
     logging,
     strtobool,
@@ -486,6 +488,8 @@ class Trainer:
         self.model_wrapped = model
         self.model = model
 
+        self.neftune_noise_alpha = args.neftune_noise_alpha
+
         self.compute_metrics = compute_metrics
         self.preprocess_logits_for_metrics = preprocess_logits_for_metrics
         self.optimizer, self.lr_scheduler = optimizers
@@ -633,6 +637,42 @@ class Trainer:
         # torch.compile
         if args.torch_compile and not is_torch_compile_available():
             raise RuntimeError("Using torch.compile requires PyTorch 2.0 or higher.")
+
+    def _activate_neftune(self, model):
+        r"""
+        Activates the neftune as presented in this code: https://github.com/neelsjain/NEFTune and paper:
+        https://arxiv.org/abs/2310.05914
+        """
+        unwrapped_model = unwrap_model(model)
+
+        if is_peft_available() and isinstance(unwrapped_model, PeftModel):
+            embeddings = unwrapped_model.base_model.model.get_input_embeddings()
+        else:
+            embeddings = unwrapped_model.get_input_embeddings()
+
+        del unwrapped_model
+
+        embeddings.neftune_noise_alpha = self.neftune_noise_alpha
+        hook_handle = embeddings.register_forward_hook(neftune_post_forward_hook)
+        self.neftune_hook_handle = hook_handle
+        return model
+
+    def _deactivate_neftune(self, model):
+        """
+        Deactivates the neftune method. Make sure to call `_activate_neftune` first.
+        """
+        if not hasattr(self, "neftune_hook_handle"):
+            raise ValueError("Neftune is not activated make sure to call `trainer._activate_neftune()` first")
+
+        unwrapped_model = unwrap_model(model)
+
+        if is_peft_available() and isinstance(unwrapped_model, PeftModel):
+            embeddings = unwrapped_model.base_model.model.get_input_embeddings()
+        else:
+            embeddings = unwrapped_model.get_input_embeddings()
+
+        self.neftune_hook_handle.remove()
+        del embeddings.neftune_noise_alpha, unwrapped_model
 
     def add_callback(self, callback):
         """
@@ -1097,6 +1137,7 @@ class Trainer:
                 optimizer=self.optimizer if optimizer is None else optimizer,
                 num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
                 num_training_steps=num_training_steps,
+                **self.args.lr_scheduler_kwargs,
             )
             self._created_lr_scheduler = True
         return self.lr_scheduler
@@ -1443,6 +1484,10 @@ class Trainer:
         args = self.args
 
         self.is_in_train = True
+
+        # Attach NEFTune hooks if necessary
+        if self.neftune_noise_alpha is not None:
+            self.model = self._activate_neftune(self.model)
 
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
         # the following is a workaround:
@@ -1793,6 +1838,17 @@ class Trainer:
             step = -1
             for step, inputs in enumerate(epoch_iterator):
                 total_batched_samples += 1
+
+                if self.args.include_num_input_tokens_seen:
+                    main_input_name = getattr(self.model, "main_input_name", "input_ids")
+                    if main_input_name not in inputs:
+                        logger.warning(
+                            "Tried to track the number of tokens seen, however the current model is "
+                            "not configured properly to know what item is the input. To fix this, add "
+                            "a `main_input_name` attribute to the model class you are using."
+                        )
+                    else:
+                        self.state.num_input_tokens_seen += self.accelerator.gather(inputs[main_input_name]).numel()
                 if rng_to_sync:
                     self._load_rng_state(resume_from_checkpoint)
                     rng_to_sync = False
@@ -1955,6 +2011,11 @@ class Trainer:
 
         # Wait for the checkpoint to be uploaded.
         self._finish_current_push()
+
+        # After training we make sure to retrieve back the original forward pass method
+        # for the embedding layer by removing the forward post hook.
+        if self.neftune_noise_alpha is not None:
+            self._deactivate_neftune(self.model)
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
@@ -2273,6 +2334,17 @@ class Trainer:
                     )
         if is_torch_tpu_available():
             xm.set_rng_state(checkpoint_rng_state["xla"])
+        if is_torch_npu_available():
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+                torch.npu.random.set_rng_state_all(checkpoint_rng_state["npu"])
+            else:
+                try:
+                    torch.npu.random.set_rng_state(checkpoint_rng_state["npu"])
+                except Exception as e:
+                    logger.info(
+                        f"Didn't manage to set back the RNG states of the NPU because of the following error:\n {e}"
+                        "\nThis won't yield the same results as if the training had not been interrupted."
+                    )
 
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
@@ -2374,6 +2446,12 @@ class Trainer:
 
         if is_torch_tpu_available():
             rng_states["xla"] = xm.get_rng_state()
+
+        if is_torch_npu_available():
+            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+                rng_states["npu"] = torch.npu.random.get_rng_state_all()
+            else:
+                rng_states["npu"] = torch.npu.random.get_rng_state()
 
         # A process can arrive here before the process 0 has a chance to save the model, in which case output_dir may
         # not yet exist.
@@ -2573,6 +2651,8 @@ class Trainer:
         """
         if self.state.epoch is not None:
             logs["epoch"] = round(self.state.epoch, 2)
+        if self.args.include_num_input_tokens_seen:
+            logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
 
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
@@ -2686,10 +2766,11 @@ class Trainer:
             self._past = outputs[self.args.past_index]
 
         if labels is not None:
-            if is_peft_available() and isinstance(model, PeftModel):
-                model_name = unwrap_model(model.base_model)._get_name()
+            unwrapped_model = unwrap_model(model)
+            if is_peft_available() and isinstance(unwrapped_model, PeftModel):
+                model_name = unwrapped_model.base_model.model._get_name()
             else:
-                model_name = unwrap_model(model)._get_name()
+                model_name = unwrapped_model._get_name()
             if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
             else:
@@ -3140,13 +3221,13 @@ class Trainer:
 
             # Update containers on host
             if loss is not None:
-                losses = self.accelerator.gather_for_metrics((loss.repeat(batch_size)))
+                losses = self.gather_function((loss.repeat(batch_size)))
                 losses_host = losses if losses_host is None else nested_concat(losses_host, losses, padding_index=-100)
             if labels is not None:
                 labels = self.accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
             if inputs_decode is not None:
                 inputs_decode = self.accelerator.pad_across_processes(inputs_decode, dim=1, pad_index=-100)
-                inputs_decode = self.accelerator.gather_for_metrics((inputs_decode))
+                inputs_decode = self.gather_function((inputs_decode))
                 inputs_host = (
                     inputs_decode
                     if inputs_host is None
@@ -3156,11 +3237,11 @@ class Trainer:
                 logits = self.accelerator.pad_across_processes(logits, dim=1, pad_index=-100)
                 if self.preprocess_logits_for_metrics is not None:
                     logits = self.preprocess_logits_for_metrics(logits, labels)
-                logits = self.accelerator.gather_for_metrics((logits))
+                logits = self.gather_function((logits))
                 preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
 
             if labels is not None:
-                labels = self.accelerator.gather_for_metrics((labels))
+                labels = self.gather_function((labels))
                 labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
 
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
@@ -3193,6 +3274,8 @@ class Trainer:
                 # Set back to None to begin a new accumulation
                 losses_host, preds_host, inputs_host, labels_host = None, None, None, None
 
+        # After all calls to `.gather_function`, reset to `gather_for_metrics`:
+        self.gather_function = self.accelerator.gather_for_metrics
         if args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
             delattr(self, "_past")
@@ -3858,9 +3941,12 @@ class Trainer:
         # create accelerator object
         self.accelerator = Accelerator(
             dispatch_batches=self.args.dispatch_batches,
+            split_batches=self.args.split_batches,
             deepspeed_plugin=self.args.deepspeed_plugin,
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
+        # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
+        self.gather_function = self.accelerator.gather_for_metrics
 
         # deepspeed and accelerate flags covering both trainer args and accelerate launcher
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None

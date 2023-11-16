@@ -121,7 +121,7 @@ def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any
         if isinstance(first["label_ids"], torch.Tensor):
             batch["labels"] = torch.stack([f["label_ids"] for f in features])
         else:
-            dtype = torch.long if type(first["label_ids"][0]) is int else torch.float
+            dtype = torch.long if isinstance(first["label_ids"][0], int) else torch.float
             batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
 
     # Handling of all other possible keys.
@@ -196,7 +196,7 @@ def numpy_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any
         if isinstance(first["label_ids"], np.ndarray):
             batch["labels"] = np.stack([f["label_ids"] for f in features])
         else:
-            dtype = np.int64 if type(first["label_ids"][0]) is int else np.float32
+            dtype = np.int64 if isinstance(first["label_ids"][0], int) else np.float32
             batch["labels"] = np.array([f["label_ids"] for f in features], dtype=dtype)
 
     # Handling of all other possible keys.
