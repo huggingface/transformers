@@ -482,7 +482,7 @@ class MistralIntegrationTest(unittest.TestCase):
         input_ids = [1] + [306, 338] * 2048
         model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        generated_ids = model.generate(input_ids, max_new_tokens=2, temperature=0)
+        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         del model
