@@ -22,14 +22,14 @@ MADLAD-400 models were released in the paper [MADLAD-400: A Multilingual And Doc
 
 The abstract from the paper is the following: 
 
-> We introduce MADLAD-400, a manually audited, general domain 3T token monolingual dataset based on CommonCrawl, spanning 419 languages. We discuss
-> the limitations revealed by self-auditing MADLAD-400, and the role data auditing
-> had in the dataset creation process. We then train and release a 10.7B-parameter
-> multilingual machine translation model on 250 billion tokens covering over 450
-> languages using publicly available data, and find that it is competitive with models
-> that are significantly larger, and report the results on different domains. In addition, we train a 8B-parameter language model, and assess the results on few-shot
-> translation. We make the baseline models 1
-> available to the research community.
+*We introduce MADLAD-400, a manually audited, general domain 3T token monolingual dataset based on CommonCrawl, spanning 419 languages. We discuss 
+the limitations revealed by self-auditing MADLAD-400, and the role data auditing
+had in the dataset creation process. We then train and release a 10.7B-parameter
+multilingual machine translation model on 250 billion tokens covering over 450
+languages using publicly available data, and find that it is competitive with models
+that are significantly larger, and report the results on different domains. In addition, we train a 8B-parameter language model, and assess the results on few-shot
+translation. We make the baseline models 1
+available to the research community.*
 
 This model was added by [Juarez Bochi](https://huggingface.co/jbochi). The original checkpoints can be found [here](https://github.com/google-research/google-research/tree/master/madlad_400). 
 
