@@ -98,10 +98,10 @@ def construct_full_unpacked_stream(
         # First, construct full token stream (including image placeholder tokens) and loss mask for each subsequence
         # and append to lists. We use lists rather than tensors because each subsequence is variable-sized.
         # TODO Remove this logic in a subsequent release since subsequences are not supported.
-        image_adjustment = image_tokens[batch_index][0]
-        subsequence_stream = torch.cat([image_adjustment, input_stream[batch_index, 0]], dim=0)
+        image_adjustment = image_tokens[batch_index][0] # assume only one image
+        subsequence_stream = torch.cat([image_adjustment, input_stream[batch_index, 0]], dim=0) # assume only one subsequence in text
         num_real_tokens = image_adjustment.shape[0] + num_real_text_tokens[batch_index][0]
-        all_si_stream.append(subsequence_stream[:num_real_tokens])
+        all_si_stream.append(subsequence_stream[:num_real_tokens]) # this is where ten 71013 tokens are deleted from input_ids
         all_bi_stream.append(torch.cat(all_si_stream, dim=0))
 
     return all_bi_stream
@@ -392,7 +392,7 @@ class FuyuProcessor(ProcessorMixin):
         image_newline_id,
         tensor_batch_images,
     ):
-        image_present = torch.ones(1, 1, 1)
+        image_present = torch.ones(tensor_batch_images.shape[0], tensor_batch_images.shape[1], 1) #  shape [batch_size, subsequence_size, num_images]
         model_image_input = self.image_processor.preprocess_with_tokenizer_info(
             image_input=tensor_batch_images,
             image_present=image_present,
@@ -548,7 +548,7 @@ class FuyuProcessor(ProcessorMixin):
 
         image_placeholder_id = self.tokenizer("|SPEAKER|", add_special_tokens=False)["input_ids"][1]
         image_newline_id = self.tokenizer("|NEWLINE|", add_special_tokens=False)["input_ids"][1]
-        tensor_batch_images = torch.stack([img[0] for img in batch_images]).unsqueeze(1)
+        tensor_batch_images = [torch.stack(batch_image).unsqueeze(0) for batch_image in batch_images]
 
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
         all_encodings = []
@@ -563,7 +563,7 @@ class FuyuProcessor(ProcessorMixin):
                 image_unpadded_widths=torch.tensor([image_unpadded_width]),
                 image_placeholder_id=image_placeholder_id,
                 image_newline_id=image_newline_id,
-                tensor_batch_images=tensor_batch_image.unsqueeze(0),
+                tensor_batch_images=tensor_batch_image,
             )
             all_encodings.append(sample_encoding)
         batch_encoding = self._left_pad_inputs_with_attention_mask(
