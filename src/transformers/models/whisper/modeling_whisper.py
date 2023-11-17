@@ -2068,7 +2068,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         else:
             max_frames = torch.ones((1,), dtype=torch.long) * total_input_frames
             seek = torch.zeros((1,), dtype=torch.long)
-            seek = 0
 
         current_segments = [[] for _ in range(batch_size)]
         cur_to_prev_index_map = list(range(batch_size))

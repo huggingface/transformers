@@ -1335,12 +1335,12 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         outputs = model.generate(long_input_features, logits_processor=logits_processor, return_segments=True)
 
-        segments = outputs["segments"]
+        segments = outputs["segments"][0]
 
         for segment in segments:
             assert segment["start"] <= segment["end"], "start has to be smaller equal end"
-            assert segment["tokens"][0, 0] == model.generation_config.decoder_start_token_id or segment["tokens"][0, 0] >= timestamp_begin, "First segment token should be a timestamp token"
-            assert segment["tokens"][0, -1] > timestamp_begin, "Final segment token should be a timestamp token, but not first"
+            assert segment["tokens"][0] == model.generation_config.decoder_start_token_id or segment["tokens"][0] >= timestamp_begin, "First segment token should be a timestamp token"
+            assert segment["tokens"][-1] > timestamp_begin, f"Final segment token should be a timestamp token, but not first. Error {segment['tokens'][-1]} <= {timestamp_begin} "
             assert segment["tokens"].shape[-1] <= max_length, "make sure that no segment is larger than max generation length"
 
     def test_longform_generate_multi_batch(self):
@@ -1376,7 +1376,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         outputs = model.generate(long_input_features, logits_processor=logits_processor, return_segments=True)
 
         tokens_batch = outputs["sequences"][0]
-        segments = outputs["segments "]
+        segments = outputs["segments "][0]
 
         import ipdb; ipdb.set_trace()
 
