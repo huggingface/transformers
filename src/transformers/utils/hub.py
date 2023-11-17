@@ -80,6 +80,7 @@ def is_offline_mode():
 
 
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
+default_cache_path = constants.default_cache_path
 old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 
 # Determine default cache directory. Lots of legacy environment variables to ensure backward compatibility.
