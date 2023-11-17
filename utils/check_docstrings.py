@@ -653,6 +653,8 @@ OBJECTS_TO_IGNORE = [
     "TFRagModel",
     "TFRagSequenceForGeneration",
     "TFRagTokenForGeneration",
+    "TFRegNetModel",
+    "TFRegNetForImageClassification",
     "TFRemBertForCausalLM",
     "TFRemBertForMaskedLM",
     "TFRemBertForMultipleChoice",
