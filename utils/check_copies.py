@@ -750,6 +750,7 @@ if __name__ == "__main__":
 
     proc.sendline("ls -l")
     proc.expect(pat_ps1)
+    print(3)
 
     check_readme(args.fix_and_overwrite)
     check_copies(args.fix_and_overwrite)
