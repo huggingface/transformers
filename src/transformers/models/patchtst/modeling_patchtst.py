@@ -1199,6 +1199,29 @@ class PatchTSTScaler(nn.Module):
     PATCHTST_START_DOCSTRING,
 )
 class PatchTSTModel(PatchTSTPreTrainedModel):
+    """
+    Examples:
+
+    ```python
+    >>> from huggingface_hub import hf_hub_download
+    >>> import torch
+    >>> from transformers import PatchTSTModel
+
+    >>> file = hf_hub_download(
+    ...     repo_id="hf-internal-testing/etth1-hourly-batch", filename="train-batch.pt", repo_type="dataset"
+    ... )
+    >>> batch = torch.load(file)
+
+    >>> model = PatchTSTModel.from_pretrained("huggingface/patchtst-etth1-pretrain")
+
+    >>> # during training, one provides both past and future values
+    >>> outputs = model(
+    ...     past_values=batch["past_values"],
+    ...     future_values=batch["future_values"],
+    ... )
+
+    >>> last_hidden_state = outputs.last_hidden_state
+    """
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
@@ -1316,6 +1339,49 @@ class PatchTSTMaskPretrainHead(nn.Module):
 class PatchTSTForPretraining(PatchTSTPreTrainedModel):
     """
     Mask pretrain model: PatchTST model + pretrain head
+
+    Examples:
+
+    ```python
+    >>> from huggingface_hub import hf_hub_download
+    >>> import torch
+    >>> from transformers import PatchTSTConfig, PatchTSTForPretraining
+
+    >>> file = hf_hub_download(
+    ...     repo_id="hf-internal-testing/etth1-hourly-batch", filename="train-batch.pt", repo_type="dataset"
+    ... )
+    >>> batch = torch.load(file)
+
+    >>> # Config for random mask pretraining
+    >>> config = PatchTSTConfig(
+    ...     num_input_channels=7,
+    ...     context_length=512,
+    ...     patch_length = 12,
+    ...     stride = 12,
+    ...     mask_type = 'random',
+    ...     random_mask_ratio = 0.4,
+    ...     use_cls_token = True,
+    ... )
+    >>> # Config for forecast mask pretraining
+    >>> config = PatchTSTConfig(
+    ...     num_input_channels=7,
+    ...     context_length=512,
+    ...     patch_length = 12,
+    ...     stride = 12,
+    ...     mask_type = 'forecast',
+    ...     num_forecast_mask_patches = 5,
+    ...     use_cls_token = True,
+    ... )
+    >>> model = PatchTSTForPretraining(config)
+
+    >>> # during training, one provides both past and future values
+    >>> outputs = model(
+    ...     past_values=batch["past_values"],
+    ...     future_values=batch["future_values"],
+    ... )
+
+    >>> loss = outputs.loss
+    >>> loss.backward()
     """
 
     def __init__(self, config: PatchTSTConfig):
@@ -1427,6 +1493,27 @@ class PatchTSTClassificationHead(nn.Module):
 class PatchTSTForClassification(PatchTSTPreTrainedModel):
     """
     PatchTST model for classification. The model contains PatchTST model + classification head
+
+    Examples:
+
+    ```python
+    >>> from transformers import PatchTSTConfig, PatchTSTForClassification
+
+    >>> # classification task with two input channel2 and 3 classes
+    >>> config = PatchTSTConfig(
+    ...     num_input_channels=2,
+    ...     num_targets=3,
+    ...     context_length=512,
+    ...     patch_length = 12,
+    ...     stride = 12,
+    ...     use_cls_token = True,
+    ... )
+    >>> model = PatchTSTForClassification.from_pretrained("huggingface/patchtst-etth1-pretrain", config=config)
+
+    >>> # during inference, one only provides past values
+    >>> past_values = torch.randn(20, 512, 2)
+    >>> outputs = model(past_values=past_values)
+    >>> labels = outputs.prediction_logits
     """
 
     def __init__(self, config: PatchTSTConfig):
@@ -1596,6 +1683,45 @@ class PatchTSTPredictionHead(nn.Module):
 class PatchTSTForPrediction(PatchTSTPreTrainedModel):
     """
     PatchTST for forecasting. The model contains PatchTST model + Forecasting head
+
+    Examples:
+
+    ```python
+    >>> from huggingface_hub import hf_hub_download
+    >>> import torch
+    >>> from transformers import PatchTSTConfig, PatchTSTForPrediction
+
+    >>> file = hf_hub_download(
+    ...     repo_id="hf-internal-testing/etth1-hourly-batch", filename="train-batch.pt", repo_type="dataset"
+    ... )
+    >>> batch = torch.load(file)
+
+    >>> # Prediction task with 7 input channels and prediction length is 96
+    >>> config = PatchTSTConfig(
+    ...     num_input_channels=7,
+    ...     context_length=512,
+    ...     patch_length = 12,
+    ...     stride = 12,
+    ...     use_cls_token = True,
+    ...     prediction_length = 96,
+    ... )
+    >>> model = PatchTSTForPrediction.from_pretrained("huggingface/patchtst-etth1-pretrain", config=config)
+
+    >>> # during training, one provides both past and future values
+    >>> outputs = model(
+    ...     past_values=batch["past_values"],
+    ...     future_values=batch["future_values"],
+    ... )
+
+    >>> loss = outputs.loss
+    >>> loss.backward()
+
+    >>> # during inference, one only provides past values, the model generates future values
+    >>> outputs = model.generate(
+    ...     past_values=batch["past_values"],
+    ... )
+
+    >>> mean_prediction = outputs.sequences.mean(dim=1)
     """
 
     def __init__(self, config: PatchTSTConfig):
@@ -1807,6 +1933,30 @@ class PatchTSTRegressionHead(nn.Module):
 class PatchTSTForRegression(PatchTSTPreTrainedModel):
     """
     PatchTST model + Regression head
+
+    Examples:
+
+    ```python
+    >>> from transformers import PatchTSTConfig, PatchTSTForRegression
+
+    >>> # Regression task with 6 input channels and regress 2 targets
+    >>> config = PatchTSTConfig(
+    ...     num_input_channels=6,
+    ...     num_targets=2,
+    ...     context_length=512,
+    ...     patch_length = 12,
+    ...     stride = 12,
+    ...     use_cls_token = True,
+    ... )
+    >>> model = PatchTSTForRegression.from_pretrained("huggingface/patchtst-etth1-pretrain", config=config)
+
+    >>> # during inference, one only provides past values, the model generates future values
+    >>> past_values = torch.randn(20, 512, 6)
+    >>> outputs = model.generate(
+    ...     past_values=past_values
+    ... )
+
+    >>> mean_prediction = outputs.sequences.mean(dim=1)
     """
 
     def __init__(self, config: PatchTSTConfig):
