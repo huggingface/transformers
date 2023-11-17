@@ -51,6 +51,7 @@ if is_torch_available():
     from transformers.models.hubert.modeling_hubert import _compute_mask_indices
 
 if is_torch_fx_available():
+    import torch.fx
     from transformers.utils.fx import symbolic_trace
 
 
