@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import collections
+import copy
 import functools
 import gc
 import importlib.metadata
@@ -2821,6 +2822,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         else:
             model_kwargs = kwargs
+
+            # We do not want to modify inplace the PretrainedConfig passed to from_pretrained.
+            config = copy.deepcopy(config)
 
         quantizer = None
         quantization_method_from_config = None
