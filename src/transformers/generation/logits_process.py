@@ -1076,6 +1076,58 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
         return scores + mask
 
 
+class GrammarConstrainedLogitsProcessor(LogitsProcessor):
+    def __init__(self, grammar_acceptor, batch_size=1, num_beams=1):
+        self.last_size = None
+        self.grammar_acceptor = grammar_acceptor
+        # migrated from LogitsProcessor
+        self.stacks = self.grammar_acceptor.init_stacks()
+
+    def filter_logits(self, logits, device):
+        # resolve each stack to a tensor of True/False for each token
+        # indicating acceptance
+        acceptance = self.grammar_acceptor.filter_vocab(self.stacks, device)
+        logger.debug(acceptance)
+        # Logits to -inf where False
+        logits[~acceptance] = -inf
+
+    # TODO: batching
+    def process_logits(self, input_ids, scores, parse_start_index=None):
+        """
+
+        :param input_ids:
+        :param scores:
+        :param parse_start_index: default None, which means generate from scratch. Set to 0 to parse all input_ids
+        :return:
+        """
+        # if self.last_size is not set (which would be the case when processing the first token).
+        # In this case, do nothing.
+        if self.last_size is None:
+            prefix_to_parse = input_ids[0][parse_start_index:] if parse_start_index is not None else []
+            self.stacks = self.grammar_acceptor.accept_token_ids(prefix_to_parse, self.stacks)
+        #  if the length of the current input IDs (input_ids[0]) is exactly one more than self.last_size.
+        #  This is expected in a scenario where inputs are processed incrementally, one token at a time.
+        elif len(input_ids[0]) == self.last_size + 1:
+            self.stacks = self.grammar_acceptor.accept_token_id(input_ids[0][-1], self.stacks)
+        #  ensure that the input size is consistent with the expected incremental processing
+        #  (i.e., one token at a time).
+        else:
+            raise "Input size changed"
+
+        # TODO: the <s> token should be accounted for directly rather than just
+        # dropped here...
+        self.filter_logits(scores[0], scores.device)
+
+        self.last_size = len(input_ids[0])
+        return scores
+
+
+    # TODO: batching
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        return self.process_logits(input_ids, scores)
+
+
 class HammingDiversityLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that enforces diverse beam search.

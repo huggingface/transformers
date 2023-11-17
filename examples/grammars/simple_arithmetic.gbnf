@@ -1,0 +1,7 @@
+root  ::= (expr "=" ws term "\n")+
+expr  ::= term ([-+*/] term)*
+term  ::= num | "(" ws expr ")" ws
+num   ::= [0-9]+ ws
+ws    ::= [ \t\n]*
+# this is a comment
+
