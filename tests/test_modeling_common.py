@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import collections
 import copy
 import gc
@@ -28,6 +27,7 @@ from collections import defaultdict
 from typing import Dict, List, Tuple
 
 import numpy as np
+from parameterized import parameterized
 from pytest import mark
 
 import transformers
@@ -70,6 +70,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
     require_torch_multi_gpu,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -2834,7 +2835,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             model = model_class(config)
 
@@ -2859,7 +2860,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -2956,7 +2957,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -3049,7 +3050,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -3092,7 +3093,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -3108,7 +3109,7 @@ class ModelTesterMixin:
                     dummy_input = dummy_input.to(torch.float16)
 
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # make sure we do left padding
+                # make sure we do right padding
                 dummy_attention_mask[:, :-1] = 1
                 dummy_attention_mask[:, -1:] = 0
 
@@ -3126,6 +3127,166 @@ class ModelTesterMixin:
 
                 self.assertTrue(torch.equal(out, out_fa))
 
+    @require_torch_sdpa
+    @slow
+    @parameterized.expand([("left",), ("right",)])
+    def test_eager_matches_sdpa_inference(self, padding_side: str):
+        import torch
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_sdpa:
+                self.skipTest(f"{model_class.__name__} does not support SDPA")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            is_encoder_decoder = model.config.is_encoder_decoder
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16,
+                )
+                model_sdpa.to(torch_device)
+
+                # TODO: replace the _use_sdpa=False by `model.config.attn_implementation = "eager"` once the setter is implemented.
+                model_eager = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, _use_sdpa=False,
+                )
+                model_eager.to(torch_device)
+
+                dummy_input = inputs_dict[model.main_input_name][:1]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
+
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    if padding_side == "left":
+                        dummy_attention_mask[:, :-1] = 1
+                        dummy_attention_mask[:, -1:] = 0
+                    elif padding_side == "right":
+                        dummy_attention_mask[:, 1:] = 1
+                        dummy_attention_mask[:, :1] = 0
+
+                if is_encoder_decoder:
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
+
+                    outputs_eager = model_eager(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                    outputs_sdpa = model_sdpa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                else:
+                    outputs_eager = model_eager(dummy_input, output_hidden_states=True)
+                    outputs_sdpa = model_sdpa(dummy_input, output_hidden_states=True)
+
+                logits = (
+                    outputs_eager.hidden_states[-1]
+                    if not is_encoder_decoder
+                    else outputs_eager.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs_sdpa.hidden_states[-1]
+                    if not is_encoder_decoder
+                    else outputs_sdpa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+                if is_encoder_decoder:
+                    other_inputs = {
+                        "decoder_input_ids": decoder_input_ids,
+                        "decoder_attention_mask": dummy_attention_mask,
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs_eager = model_eager(dummy_input, **other_inputs)
+                    outputs_sdpa = model_sdpa(dummy_input, **other_inputs)
+                else:
+                    other_inputs = {
+                        "output_hidden_states": True,
+                    }
+                    if dummy_attention_mask is not None:
+                        other_inputs["attention_mask"] = dummy_attention_mask
+
+                    outputs_eager = model_eager(dummy_input, **other_inputs)
+                    outputs_sdpa = model_sdpa(dummy_input, **other_inputs)
+
+                logits_eager = (
+                    outputs_eager.hidden_states[-1]
+                    if not is_encoder_decoder
+                    else outputs_eager.decoder_hidden_states[-1]
+                )
+                logits_sdpa = (
+                    outputs_sdpa.hidden_states[-1]
+                    if not is_encoder_decoder
+                    else outputs_sdpa.decoder_hidden_states[-1]
+                )
+
+                assert torch.allclose(logits_sdpa[1:], logits_eager[1:], atol=4e-2, rtol=4e-2)
+
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        import torch
+
+        max_new_tokens = 30
+
+        # TODO: Implement a test for SDPA simply testing forward, not generate.
+        if len(self.all_generative_model_classes) == 0:
+            self.skipTest(f"{self.__class__.__name__} tests a model that does support generate: skipping this test")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_sdpa:
+                self.skipTest(f"{model_class.__name__} does not support SDPA")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                # TODO: replace the _use_sdpa=False by `model.config.attn_implementation = "eager"` once the setter is implemented.
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    low_cpu_mem_usage=True,
+                    _use_sdpa=False,
+                ).to(torch_device)
+
+                for name, submodule in model_eager.named_modules():
+                    if "SDPA" in submodule.__class__.__name__:
+                        raise ValueError("The eager model should not have SDPA attention layers")
+
+                # Just test that a large cache works as expected
+                res_eager = model_eager.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
+                )
+
+                res_sdpa = model_sdpa.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
+                )
+
+                self.assertTrue(torch.allclose(res_eager, res_sdpa))
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -3137,7 +3298,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3178,7 +3339,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)

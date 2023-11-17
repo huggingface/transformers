@@ -41,7 +41,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_torch_sdpa_available,
     logging,
     replace_return_docstrings,
 )
@@ -740,9 +739,9 @@ class LlamaDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        if is_flash_attn_2_available() and config.attn_implementation == "flash_attention_2":
+        if config.attn_implementation == "flash_attention_2":
             self.self_attn = LlamaFlashAttention2(config=config)
-        elif is_torch_sdpa_available() and config.attn_implementation == "sdpa":
+        elif config.attn_implementation == "sdpa":
             self.self_attn = LlamaSDPAAttention(config=config)
         else:
             self.self_attn = LlamaAttention(config=config)

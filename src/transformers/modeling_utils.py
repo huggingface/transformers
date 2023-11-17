@@ -2605,6 +2605,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         adapter_name = kwargs.pop("adapter_name", "default")
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
+        # TODO: remove this one once we have a proper config.attn_implementation setter.
+        # This only temporary for testing. SDPA should otherwise should be transparent to the user.
+        _use_sdpa = kwargs.pop("_use_sdpa", True)
+
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
 
@@ -3278,7 +3282,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if use_flash_attention_2:
             config = cls._check_and_enable_flash_attn_2(config, torch_dtype=torch_dtype, device_map=device_map)
-        elif is_torch_sdpa_available():
+        elif _use_sdpa and is_torch_sdpa_available():
             # use_flash_attention_2 takes priority.
             config = cls._check_and_enable_sdpa(config)
         else:

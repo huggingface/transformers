@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -418,6 +419,50 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         self.assertListEqual(output_native, output_fa_2)
 
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        """
+        Overwritting the common test as the test is flaky on tiny models
+        """
+        import torch
+
+        max_new_tokens = 30
+
+        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+
+        model_sdpa = LlamaForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-hf",
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
+        ).to(torch_device)
+
+        # TODO: replace the _use_sdpa=False by `model.config.attn_implementation = "eager"` once the setter is implemented.
+        model_eager = LlamaForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-hf",
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
+            _use_sdpa=False,
+        ).to(torch_device)
+
+        for name, submodule in model_eager.named_modules():
+            if "SDPA" in submodule.__class__.__name__:
+                raise ValueError("The eager model should not have SDPA attention layers")
+
+        texts = ["hi", "Hello this is a very long sentence my friend", "Today I am in Paris and"]
+
+        for padding_side in ["left", "right"]:
+            tokenizer.padding_side = padding_side
+            tokenizer.pad_token = tokenizer.eos_token
+
+            inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
+
+            res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False
+            )
+
+            res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False
+            )
+            self.assertTrue(torch.allclose(res_eager, res_sdpa))
 
 @require_torch
 class LlamaIntegrationTest(unittest.TestCase):

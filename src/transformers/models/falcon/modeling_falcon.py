@@ -733,7 +733,7 @@ class FalconDecoderLayer(nn.Module):
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
 
-        if is_flash_attn_2_available() and config.attn_implementation == "flash_attention_2":
+        if config.attn_implementation == "flash_attention_2":
             self.self_attention = FalconFlashAttention2(config)
         else:
             self.self_attention = FalconAttention(config)
