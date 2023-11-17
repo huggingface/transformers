@@ -517,9 +517,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
 
         # Merge when the previous sequence is not included in the current sequence
-        # fmt: off
-        next_sequences_3 = [[50364, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50584, 50257]]
-        # fmt: on
+        next_sequences_3 = [[50364, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50584, 50257]]  # fmt: skip
         # {'text': ' His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
         merge = _find_timestamp_sequence(
             [[previous_sequence, (480_000, 0, 0)], [next_sequences_3, (480_000, 120_000, 0)]],
@@ -527,12 +525,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             processor.feature_extractor,
             max_source_positions,
         )
-        # fmt: off
         self.assertEqual(
             merge,
             [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51832],
-        )
-        # fmt: on
+        )  # fmt: skip
         self.assertEqual(
             processor.decode(merge, output_offsets=True),
             {
@@ -550,23 +546,19 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             },
         )
         # last case is when the sequence is not in the first next predicted start and end of timestamp
-        # fmt: off
         next_sequences_3 = [
             [50364, 2812, 9836, 14783, 390, 406, 3163, 1953, 466, 13, 50634, 50634, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50934]
-        ]
-        # fmt: on
+        ]  # fmt: skip
         merge = _find_timestamp_sequence(
             [[previous_sequence, (480_000, 0, 0)], [next_sequences_3, (480_000, 167_000, 0)]],
             processor.tokenizer,
             processor.feature_extractor,
             max_source_positions,
         )
-        # fmt: off
         self.assertEqual(
             merge,
             [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51912]
-        )
-        # fmt: on
+        )  # fmt: skip
         self.assertEqual(
             processor.decode(merge, output_offsets=True),
             {
@@ -851,6 +843,44 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
         output_3 = speech_translator(filename)
         self.assertEqual(output_3, {"text": " Un uomo ha detto all'universo, Sir, esiste."})
+
+    @slow
+    @require_torch
+    def test_whisper_language(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny.en",
+            framework="pt",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        filename = ds[0]["file"]
+
+        # 1. English-only model compatible with no language argument
+        output = speech_recognizer(filename)
+        self.assertEqual(
+            output,
+            {"text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."},
+        )
+
+        # 2. English-only Whisper does not accept the language argument
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot specify `task` or `language` for an English-only model. If the model is intended to be multilingual, "
+            "pass `is_multilingual=True` to generate, or update the generation config.",
+        ):
+            _ = speech_recognizer(filename, generate_kwargs={"language": "en"})
+
+        # 3. Multilingual model accepts language argument
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            framework="pt",
+        )
+        output = speech_recognizer(filename, generate_kwargs={"language": "en"})
+        self.assertEqual(
+            output,
+            {"text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."},
+        )
 
     @slow
     @require_torch

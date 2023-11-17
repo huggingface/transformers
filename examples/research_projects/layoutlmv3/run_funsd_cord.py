@@ -250,7 +250,7 @@ def main():
             "nielsr/funsd-layoutlmv3",
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=True if model_args.use_auth_token else None,
         )
     elif data_args.dataset_name == "cord":
         # Downloading and loading a dataset from the hub.
@@ -258,7 +258,7 @@ def main():
             "nielsr/cord-layoutlmv3",
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=True if model_args.use_auth_token else None,
         )
     else:
         raise ValueError("This script only supports either FUNSD or CORD out-of-the-box.")
@@ -313,7 +313,7 @@ def main():
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
 
     processor = AutoProcessor.from_pretrained(
@@ -321,7 +321,7 @@ def main():
         cache_dir=model_args.cache_dir,
         use_fast=True,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
         add_prefix_space=True,
         apply_ocr=False,
     )
@@ -332,7 +332,7 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
 
     # Set the correspondences label/ID inside the model config

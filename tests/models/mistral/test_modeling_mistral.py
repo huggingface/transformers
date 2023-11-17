@@ -19,7 +19,7 @@ import gc
 import tempfile
 import unittest
 
-from pytest import mark
+import pytest
 
 from transformers import AutoTokenizer, MistralConfig, is_torch_available
 from transformers.testing_utils import (
@@ -369,7 +369,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @require_flash_attn
     @require_torch_gpu
-    @mark.flash_attn_test
+    @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_generate_padding_right(self):
         import torch
@@ -403,7 +403,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @require_flash_attn
     @require_torch_gpu
-    @mark.flash_attn_test
+    @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_padding_right(self):
         import torch
@@ -450,9 +450,7 @@ class MistralIntegrationTest(unittest.TestCase):
         EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
-        # fmt: off
-        EXPECTED_SLICE = torch.tensor([-5.8781, -5.8616, -0.1052, -4.7200, -5.8781, -5.8774, -5.8773, -5.8777, -5.8781, -5.8780, -5.8781, -5.8779, -1.0787,  1.7583, -5.8779, -5.8780, -5.8783, -5.8778, -5.8776, -5.8781, -5.8784, -5.8778, -5.8778, -5.8777, -5.8779, -5.8778, -5.8776, -5.8780, -5.8779, -5.8781])
-        # fmt: on
+        EXPECTED_SLICE = torch.tensor([-5.8781, -5.8616, -0.1052, -4.7200, -5.8781, -5.8774, -5.8773, -5.8777, -5.8781, -5.8780, -5.8781, -5.8779, -1.0787,  1.7583, -5.8779, -5.8780, -5.8783, -5.8778, -5.8776, -5.8781, -5.8784, -5.8778, -5.8778, -5.8777, -5.8779, -5.8778, -5.8776, -5.8780, -5.8779, -5.8781])  # fmt: skip
         print(out[0, 0, :30])
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
 

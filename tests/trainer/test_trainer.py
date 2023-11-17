@@ -1944,18 +1944,18 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         metrics = trainer.train().metrics
         check_func("init_mem_cpu_alloc_delta", metrics)
         check_func("train_mem_cpu_alloc_delta", metrics)
-        if torch.cuda.device_count() > 0:
+        if backend_device_count(torch_device) > 0:
             check_func("init_mem_gpu_alloc_delta", metrics)
             check_func("train_mem_gpu_alloc_delta", metrics)
 
         metrics = trainer.evaluate()
         check_func("eval_mem_cpu_alloc_delta", metrics)
-        if torch.cuda.device_count() > 0:
+        if backend_device_count(torch_device) > 0:
             check_func("eval_mem_gpu_alloc_delta", metrics)
 
         metrics = trainer.predict(RegressionDataset()).metrics
         check_func("test_mem_cpu_alloc_delta", metrics)
-        if torch.cuda.device_count() > 0:
+        if backend_device_count(torch_device) > 0:
             check_func("test_mem_gpu_alloc_delta", metrics)
 
     def test_mem_metrics(self):
@@ -2201,9 +2201,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
         trainer = Trainer(model=model)
         trainer.create_optimizer_and_scheduler(10)
-        # fmt: off
-        wd_names = ['0.linear1.weight', '0.linear2.weight', '1.0.linear1.weight', '1.0.linear2.weight', '1.1.linear1.weight', '1.1.linear2.weight']
-        # fmt: on
+        wd_names = ['0.linear1.weight', '0.linear2.weight', '1.0.linear1.weight', '1.0.linear2.weight', '1.1.linear1.weight', '1.1.linear2.weight']  # fmt: skip
         wd_params = [p for n, p in model.named_parameters() if n in wd_names]
         no_wd_params = [p for n, p in model.named_parameters() if n not in wd_names]
         self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)

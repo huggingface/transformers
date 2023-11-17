@@ -76,7 +76,7 @@ from transformers.testing_utils import (
 from transformers.utils import (
     CONFIG_NAME,
     GENERATION_CONFIG_NAME,
-    WEIGHTS_NAME,
+    SAFE_WEIGHTS_NAME,
     is_accelerate_available,
     is_flax_available,
     is_tf_available,
@@ -91,6 +91,7 @@ if is_accelerate_available():
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
     from torch import nn
 
@@ -104,6 +105,7 @@ if is_tf_available():
 if is_flax_available():
     import jax.numpy as jnp
 
+    from tests.test_modeling_flax_utils import check_models_equal
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -311,17 +313,20 @@ class ModelTesterMixin:
             # check that certain keys didn't get saved with the model
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                output_model_file = os.path.join(tmpdirname, WEIGHTS_NAME)
-                state_dict_saved = torch.load(output_model_file)
+                output_model_file = os.path.join(tmpdirname, SAFE_WEIGHTS_NAME)
+                state_dict_saved = safe_load_file(output_model_file)
+
                 for k in _keys_to_ignore_on_save:
                     self.assertNotIn(k, state_dict_saved.keys(), "\n".join(state_dict_saved.keys()))
 
                 # Test we can load the state dict in the model, necessary for the checkpointing API in Trainer.
                 load_result = model.load_state_dict(state_dict_saved, strict=False)
-                self.assertTrue(
-                    len(load_result.missing_keys) == 0
-                    or set(load_result.missing_keys) == set(model._keys_to_ignore_on_save)
-                )
+                keys_to_ignore = set(model._keys_to_ignore_on_save)
+
+                if hasattr(model, "_tied_weights_keys"):
+                    keys_to_ignore.update(set(model._tied_weights_keys))
+
+                self.assertTrue(len(load_result.missing_keys) == 0 or set(load_result.missing_keys) == keys_to_ignore)
                 self.assertTrue(len(load_result.unexpected_keys) == 0)
 
     def test_gradient_checkpointing_backward_compatibility(self):
@@ -2034,7 +2039,7 @@ class ModelTesterMixin:
         tf_inputs_dict = {}
         for key, tensor in pt_inputs_dict.items():
             # skip key that does not exist in tf
-            if type(tensor) == bool:
+            if isinstance(tensor, bool):
                 tf_inputs_dict[key] = tensor
             elif key == "input_values":
                 tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
@@ -3214,6 +3219,55 @@ class ModelTesterMixin:
                     _ = model(dummy_input)
                     # with attention mask
                     _ = model(dummy_input, attention_mask=dummy_attention_mask)
+
+    @is_pt_tf_cross_test
+    def test_tf_from_pt_safetensors(self):
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
+            if not hasattr(transformers, tf_model_class_name):
+                # transformers does not have this model in TF version yet
+                return
+
+            tf_model_class = getattr(transformers, tf_model_class_name)
+
+            pt_model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_model.save_pretrained(tmpdirname, safe_serialization=True)
+                tf_model_1 = tf_model_class.from_pretrained(tmpdirname, from_pt=True)
+
+                pt_model.save_pretrained(tmpdirname, safe_serialization=False)
+                tf_model_2 = tf_model_class.from_pretrained(tmpdirname, from_pt=True)
+
+                # Check models are equal
+                for p1, p2 in zip(tf_model_1.weights, tf_model_2.weights):
+                    self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
+    @is_pt_flax_cross_test
+    def test_flax_from_pt_safetensors(self):
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            flax_model_class_name = "Flax" + model_class.__name__  # Add the "Flax at the beginning
+            if not hasattr(transformers, flax_model_class_name):
+                # transformers does not have this model in Flax version yet
+                return
+
+            flax_model_class = getattr(transformers, flax_model_class_name)
+
+            pt_model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_model.save_pretrained(tmpdirname, safe_serialization=True)
+                flax_model_1 = flax_model_class.from_pretrained(tmpdirname, from_pt=True)
+
+                pt_model.save_pretrained(tmpdirname, safe_serialization=False)
+                flax_model_2 = flax_model_class.from_pretrained(tmpdirname, from_pt=True)
+
+                # Check models are equal
+                self.assertTrue(check_models_equal(flax_model_1, flax_model_2))
 
 
 global_rng = random.Random()

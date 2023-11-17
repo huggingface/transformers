@@ -916,7 +916,7 @@ def build_composite_models(config_class, output_dir):
             model.save_pretrained(model_path)
 
             if tf_model_class is not None:
-                model = tf_model_class.from_pretrained(model_path, from_pt=True)
+                model = tf_model_class.from_pretrained(model_path)
                 model.save_pretrained(model_path)
 
             # copy the processors
@@ -1204,7 +1204,7 @@ def build(config_class, models_to_create, output_dir):
             ckpt = get_checkpoint_dir(output_dir, pt_arch)
             # Use the same weights from PyTorch.
             try:
-                model = tensorflow_arch.from_pretrained(ckpt, from_pt=True)
+                model = tensorflow_arch.from_pretrained(ckpt)
                 model.save_pretrained(ckpt)
             except Exception as e:
                 # Conversion may fail. Let's not create a model with different weights to avoid confusion (for now).

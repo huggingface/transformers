@@ -41,14 +41,14 @@ contrast to most prior work, we also pretrain Longformer and finetune it on a va
 pretrained Longformer consistently outperforms RoBERTa on long document tasks and sets new state-of-the-art results on
 WikiHop and TriviaQA.*
 
-Tips:
+This model was contributed by [beltagy](https://huggingface.co/beltagy). The Authors' code can be found [here](https://github.com/allenai/longformer).
+
+## Usage tips
 
 - Since the Longformer is based on RoBERTa, it doesn't have `token_type_ids`. You don't need to indicate which
   token belongs to which segment. Just separate your segments with the separation token `tokenizer.sep_token` (or
   `</s>`).
 - A transformer model replacing the attention matrices by sparse matrices to go faster. Often, the local context (e.g., what are the two tokens left and right?) is enough to take action for a given token. Some preselected input tokens are still given global attention, but the attention matrix has way less parameters, resulting in a speed-up. See the local attention section for more information.
-
-This model was contributed by [beltagy](https://huggingface.co/beltagy). The Authors' code can be found [here](https://github.com/allenai/longformer).
 
 ## Longformer Self Attention
 
@@ -93,7 +93,7 @@ mlm_labels = tokenizer.encode("This is a sentence from the training data", retur
 loss = model(input_ids, labels=input_ids, masked_lm_labels=mlm_labels)[0]
 ```
 
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
@@ -143,6 +143,9 @@ loss = model(input_ids, labels=input_ids, masked_lm_labels=mlm_labels)[0]
 
 [[autodoc]] models.longformer.modeling_tf_longformer.TFLongformerTokenClassifierOutput
 
+<frameworkcontent>
+<pt>
+
 ## LongformerModel
 
 [[autodoc]] LongformerModel
@@ -173,6 +176,9 @@ loss = model(input_ids, labels=input_ids, masked_lm_labels=mlm_labels)[0]
 [[autodoc]] LongformerForQuestionAnswering
     - forward
 
+</pt>
+<tf>
+
 ## TFLongformerModel
 
 [[autodoc]] TFLongformerModel
@@ -202,3 +208,6 @@ loss = model(input_ids, labels=input_ids, masked_lm_labels=mlm_labels)[0]
 
 [[autodoc]] TFLongformerForMultipleChoice
     - call
+
+</tf>
+</frameworkcontent>

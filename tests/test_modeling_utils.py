@@ -750,6 +750,46 @@ class ModelUtilsTest(TestCasePlus):
 
             self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
 
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_from_pretrained_disk_offload_derived_to_base_model(self):
+        derived_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+
+        device_map = {
+            "wte": 0,
+            "wpe": 0,
+            "h.0": "cpu",
+            "h.1": "cpu",
+            "h.2": "cpu",
+            "h.3": "disk",
+            "h.4": "disk",
+            "ln_f": 0,
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            inputs = torch.tensor([[1, 2, 3]]).to(0)
+            derived_model.save_pretrained(tmp_dir, use_safetensors=True)
+            base_model = AutoModel.from_pretrained(tmp_dir)
+            outputs1 = base_model.to(0)(inputs)
+
+            # with disk offload
+            offload_folder = os.path.join(tmp_dir, "offload")
+            base_model_with_offload = AutoModel.from_pretrained(
+                tmp_dir, device_map=device_map, offload_folder=offload_folder
+            )
+            outputs2 = base_model_with_offload(inputs)
+            self.assertTrue(torch.allclose(outputs1[0].cpu(), outputs2[0].cpu()))
+
+            # With state dict temp offload
+            new_model_with_offload = AutoModel.from_pretrained(
+                tmp_dir,
+                device_map=device_map,
+                offload_folder=offload_folder,
+                offload_state_dict=True,
+            )
+            outputs2 = new_model_with_offload(inputs)
+            self.assertTrue(torch.allclose(outputs1[0].cpu(), outputs2[0].cpu()))
+
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
@@ -1162,7 +1202,7 @@ class ModelPushToHubTester(unittest.TestCase):
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         model = BertModel(config)
-        model.push_to_hub("test-model", use_auth_token=self._token)
+        model.push_to_hub("test-model", token=self._token)
 
         new_model = BertModel.from_pretrained(f"{USER}/test-model")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1173,7 +1213,7 @@ class ModelPushToHubTester(unittest.TestCase):
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, repo_id="test-model", push_to_hub=True, use_auth_token=self._token)
+            model.save_pretrained(tmp_dir, repo_id="test-model", push_to_hub=True, token=self._token)
 
         new_model = BertModel.from_pretrained(f"{USER}/test-model")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1202,7 +1242,7 @@ The commit description supports markdown synthax see:
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         model = BertModel(config)
-        model.push_to_hub("valid_org/test-model-org", use_auth_token=self._token)
+        model.push_to_hub("valid_org/test-model-org", token=self._token)
 
         new_model = BertModel.from_pretrained("valid_org/test-model-org")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1213,9 +1253,7 @@ The commit description supports markdown synthax see:
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(
-                tmp_dir, push_to_hub=True, use_auth_token=self._token, repo_id="valid_org/test-model-org"
-            )
+            model.save_pretrained(tmp_dir, push_to_hub=True, token=self._token, repo_id="valid_org/test-model-org")
 
         new_model = BertModel.from_pretrained("valid_org/test-model-org")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1228,7 +1266,7 @@ The commit description supports markdown synthax see:
         config = CustomConfig(hidden_size=32)
         model = CustomModel(config)
 
-        model.push_to_hub("test-dynamic-model", use_auth_token=self._token)
+        model.push_to_hub("test-dynamic-model", token=self._token)
         # checks
         self.assertDictEqual(
             config.auto_map,
@@ -1265,6 +1303,9 @@ class AttentionMaskTester(unittest.TestCase):
         mask_4d = mask_converter.to_4d(mask_2d, query_length=q_len, key_value_length=kv_len)
 
         assert mask_4d.shape == (bsz, 1, q_len, kv_len)
+
+        # make sure there are no overflows
+        assert mask_4d.min() != float("-inf")
 
         context = mask_converter.sliding_window
         if mask_converter.is_causal and context is None:
@@ -1340,6 +1381,9 @@ class AttentionMaskTester(unittest.TestCase):
         self.check_to_4d(mask_converter, q_len=1, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
         self.check_to_4d(mask_converter, q_len=3, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
         self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
+
+        # check that the mask does not overflow on causal masked tokens
+        self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 0), (1, 0), (1, 1)])
 
     def test_2d_to_4d(self):
         mask_converter = AttentionMaskConverter(is_causal=False)

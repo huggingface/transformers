@@ -37,6 +37,7 @@ class NougatProcessor(ProcessorMixin):
         tokenizer ([`NougatTokenizerFast`]):
             An instance of [`NougatTokenizerFast`]. The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
