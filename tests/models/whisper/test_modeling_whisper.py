@@ -106,7 +106,9 @@ def prepare_whisper_inputs_dict(
 class DummyTimestampLogitProcessor(LogitsProcessor):
     """This processor fakes the correct timestamps tokens pattern [TOK_1] [TOK_2] ... [TOK_N] [TIME_STAMP_TOK_1] [TIME_STAMP_TOK_2] [TOK_N+1] ..."""
 
-    def __init__(self, timestamp_begin, vocab_size, batch_size, max_length, min_space=3, seed=0, is_length_ascending=True):
+    def __init__(
+        self, timestamp_begin, vocab_size, batch_size, max_length, min_space=3, seed=0, is_length_ascending=True
+    ):
         self.timestamp_begin = timestamp_begin
         self.vocab_size = vocab_size
 
@@ -130,7 +132,7 @@ class DummyTimestampLogitProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         # we don't want to randomely sample timestamp tokens
         if input_ids.shape[-1] > 1:
-            scores[:, self.timestamp_begin:] = -float("inf")
+            scores[:, self.timestamp_begin :] = -float("inf")
 
         self.no_time_stamp_counter = [x + 1 for x in self.no_time_stamp_counter]
         for k in range(input_ids.shape[0]):
@@ -144,12 +146,14 @@ class DummyTimestampLogitProcessor(LogitsProcessor):
                 self.no_time_stamp_counter[prev_k] = 0
 
             can_produce = self.no_time_stamp_counter[prev_k] > self.min_space_between_timestamps
-            must_produce = input_ids[k][2:].le(self.timestamp_begin).all() and input_ids.shape[-1] == self.max_length - 1
+            must_produce = (
+                input_ids[k][2:].le(self.timestamp_begin).all() and input_ids.shape[-1] == self.max_length - 1
+            )
             # produce timestamp with 30%
-            if  (can_produce and self.let_pass[prev_k][self.count]) or must_produce:
+            if (can_produce and self.let_pass[prev_k][self.count]) or must_produce:
                 self.no_time_stamp_counter[prev_k] = 0
                 self.prev_highest_timestamp[prev_k] = max(input_ids[k].max() + 1, self.timestamp_tokens[0].item())
-                
+
                 # force a timestamp
                 scores[k, :] = -float("inf")
                 scores[k, self.prev_highest_timestamp[prev_k]] = 10.0
@@ -1323,7 +1327,15 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         batch_size = 1
         num_timestamp_tokens = 20
         max_length = 16
-        logits_processor = [DummyTimestampLogitProcessor(vocab_size - num_timestamp_tokens, vocab_size, batch_size=batch_size, max_length=max_length, min_space=4)]
+        logits_processor = [
+            DummyTimestampLogitProcessor(
+                vocab_size - num_timestamp_tokens,
+                vocab_size,
+                batch_size=batch_size,
+                max_length=max_length,
+                min_space=4,
+            )
+        ]
 
         # each chunk should not be longer than 10
         model.generation_config.max_length = max_length
@@ -1331,7 +1343,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # if input features are long can't set return_timestamps to False
         with self.assertRaises(ValueError):
             _ = model.generate(long_input_features, logits_processor=logits_processor, return_timestamps=False)
-        
 
         # if input features are long need to set generation config
         with self.assertRaises(ValueError):
@@ -1350,9 +1361,16 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         for i, segment in enumerate(segments):
             assert segment["start"] <= segment["end"], "start has to be smaller equal end"
-            assert segment["tokens"][0] == model.generation_config.decoder_start_token_id or segment["tokens"][0] >= timestamp_begin, "First segment token should be a timestamp token"
-            assert any(s > timestamp_begin for s in segment["tokens"][1:]), f"At least one segment token should be a timestamp token, but not first., {segment['tokens']}"
-            assert segment["tokens"].shape[-1] <= max_length, "make sure that no segment is larger than max generation length"
+            assert (
+                segment["tokens"][0] == model.generation_config.decoder_start_token_id
+                or segment["tokens"][0] >= timestamp_begin
+            ), "First segment token should be a timestamp token"
+            assert any(
+                s > timestamp_begin for s in segment["tokens"][1:]
+            ), f"At least one segment token should be a timestamp token, but not first., {segment['tokens']}"
+            assert (
+                segment["tokens"].shape[-1] <= max_length
+            ), "make sure that no segment is larger than max generation length"
 
     def test_longform_generate_multi_batch(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1362,9 +1380,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         # len = 250 with num_input_frames = 60
         long_input_features = torch.cat([input_features.repeat(1, 1, 4), input_features[:, :, :10]], dim=-1)
-        input_features_1 = long_input_features[:1, :, :200]
+        long_input_features[:1, :, :200]
         input_features_2 = long_input_features[1:]
-        attention_mask = torch.ones((2, long_input_features.shape[-1]), dtype=input_features.dtype, device=input_features.device)
+        attention_mask = torch.ones(
+            (2, long_input_features.shape[-1]), dtype=input_features.dtype, device=input_features.device
+        )
         attention_mask[0, 200:] = 0
 
         # force bsz=1
@@ -1380,14 +1400,34 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # make sure that we only have the same begin token
         model.generation_config.max_initial_timestamp_index = 0
 
-        logits_processor = [DummyTimestampLogitProcessor(vocab_size - num_timestamp_tokens, vocab_size, batch_size=batch_size, max_length=max_length, min_space=4, seed=1)]
+        logits_processor = [
+            DummyTimestampLogitProcessor(
+                vocab_size - num_timestamp_tokens,
+                vocab_size,
+                batch_size=batch_size,
+                max_length=max_length,
+                min_space=4,
+                seed=1,
+            )
+        ]
         outputs_2 = model.generate(input_features_2, logits_processor=logits_processor, return_segments=True)
         tokens_2 = outputs_2["sequences"][0]
         segments_2 = outputs_2["segments"][0]
 
         batch_size = 2
-        logits_processor = [DummyTimestampLogitProcessor(vocab_size - num_timestamp_tokens, vocab_size, batch_size=batch_size, max_length=max_length, min_space=4, seed=0)]
-        outputs = model.generate(long_input_features, attention_mask=attention_mask, logits_processor=logits_processor, return_segments=True)
+        logits_processor = [
+            DummyTimestampLogitProcessor(
+                vocab_size - num_timestamp_tokens,
+                vocab_size,
+                batch_size=batch_size,
+                max_length=max_length,
+                min_space=4,
+                seed=0,
+            )
+        ]
+        outputs = model.generate(
+            long_input_features, attention_mask=attention_mask, logits_processor=logits_processor, return_segments=True
+        )
         tokens = outputs["sequences"][1]
         segments = outputs["segments"][1]
 
@@ -2007,7 +2047,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
 
-        input_features = processor(one_audio, return_tensors="pt", truncation=False, padding="longest")["input_features"]
+        input_features = processor(one_audio, return_tensors="pt", truncation=False, padding="longest")[
+            "input_features"
+        ]
         input_features = input_features.to(device="cuda")
 
         result = model.generate(input_features, return_timestamps=True)
@@ -2044,7 +2086,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             result = model.generate(**inputs, return_timestamps=True)
             decoded_single.append(processor.batch_decode(result, skip_special_tokens=True))
 
-        inputs = processor(audios, return_tensors="pt", truncation=False, padding="longest", return_attention_mask=True)
+        inputs = processor(
+            audios, return_tensors="pt", truncation=False, padding="longest", return_attention_mask=True
+        )
         inputs = inputs.to(device="cuda")
 
         result = model.generate(**inputs, return_timestamps=True)
