@@ -49,13 +49,13 @@ def _is_relative_format(format):
     return format.startswith("relative")
 
 
-def _xywh_to_xyxy(xywh: torch.Tensor, inplace: bool) -> torch.Tensor:
+def _xywh_to_xyxy(xywh: "torch.Tensor", inplace: bool) -> "torch.Tensor":
     """
     Convert bounding box format from XYWH to XYXY.
 
     Args:
-        xywh (torch.Tensor): The bounding box in XYWH format.
-        inplace (bool): If True, perform operation in-place.
+        xywh (`torch.Tensor`): The bounding box in XYWH format.
+        inplace (`bool`): If True, perform operation in-place.
 
     Returns:
         torch.Tensor: The bounding box in XYXY format.
@@ -65,13 +65,13 @@ def _xywh_to_xyxy(xywh: torch.Tensor, inplace: bool) -> torch.Tensor:
     return xyxy
 
 
-def _xyxy_to_xywh(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
+def _xyxy_to_xywh(xyxy: "torch.Tensor", inplace: bool) -> "torch.Tensor":
     """
     Convert bounding box format from XYXY to XYWH.
 
     Args:
-        xyxy (torch.Tensor): The bounding box in XYXY format.
-        inplace (bool): If True, perform operation in-place.
+        xyxy (`torch.Tensor`): The bounding box in XYXY format.
+        inplace (`bool`): If True, perform operation in-place.
 
     Returns:
         torch.Tensor: The bounding box in XYWH format.
@@ -82,13 +82,13 @@ def _xyxy_to_xywh(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
 
 
 # adapted from https://github.com/pytorch/vision/blob/main/torchvision/transforms/v2/functional/_meta.py
-def _xcycwh_to_xyxy(xcycwh: torch.Tensor, inplace: bool) -> torch.Tensor:
+def _xcycwh_to_xyxy(xcycwh: "torch.Tensor", inplace: bool) -> "torch.Tensor":
     """
     Convert bounding box format from XCYCWH to XYXY.
 
     Args:
-        xcycwh (torch.Tensor): The bounding box in XCYCWH format.
-        inplace (bool): If True, perform operation in-place.
+        xcycwh (`torch.Tensor`): The bounding box in XCYCWH format.
+        inplace (`bool`): If True, perform operation in-place.
 
     Returns:
         torch.Tensor: The bounding box in XYXY format.
@@ -105,13 +105,13 @@ def _xcycwh_to_xyxy(xcycwh: torch.Tensor, inplace: bool) -> torch.Tensor:
 
 
 # adapted from https://github.com/pytorch/vision/blob/main/torchvision/transforms/v2/functional/_meta.py
-def _xyxy_to_xcycwh(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
+def _xyxy_to_xcycwh(xyxy: "torch.Tensor", inplace: bool) -> "torch.Tensor":
     """
     Convert bounding box format from XYXY to XCYCWH.
 
     Args:
-        xyxy (torch.Tensor): The bounding box in XYXY format.
-        inplace (bool): If True, perform operation in-place.
+        xyxy (`torch.Tensor`): The bounding box in XYXY format.
+        inplace (`bool`): If True, perform operation in-place.
 
     Returns:
         torch.Tensor: The bounding box in XCYCWH format.
@@ -127,14 +127,14 @@ def _xyxy_to_xcycwh(xyxy: torch.Tensor, inplace: bool) -> torch.Tensor:
     return xyxy
 
 
-def _relxywh_to_xyxy(relxywh: torch.Tensor, img_shape: Tuple[int, int], inplace: bool) -> torch.Tensor:
+def _relxywh_to_xyxy(relxywh: "torch.Tensor", img_shape: Tuple[int, int], inplace: bool) -> "torch.Tensor":
     """
     Convert relative XYWH bounding box format to absolute XYXY format.
 
     Args:
-        relxywh (torch.Tensor): The bounding box in relative XYWH format.
+        relxywh (`torch.Tensor`): The bounding box in relative XYWH format.
         img_shape (Tuple[int, int]): The shape of the image (height, width).
-        inplace (bool): If True, perform operation in-place.
+        inplace (`bool`): If True, perform operation in-place.
 
     Returns:
         torch.Tensor: The bounding box in absolute XYXY format.
@@ -147,7 +147,7 @@ def _relxywh_to_xyxy(relxywh: torch.Tensor, img_shape: Tuple[int, int], inplace:
     return relxywh
 
 
-def _relxcycwh_to_xyxy(relxcycwh: torch.Tensor, img_shape: Tuple[int, int], inplace: bool) -> torch.Tensor:
+def _relxcycwh_to_xyxy(relxcycwh: "torch.Tensor", img_shape: Tuple[int, int], inplace: bool) -> "torch.Tensor":
     relxcycwh = relxcycwh if inplace else relxcycwh.clone()
     # convert to relative_xyxy
     relxyxy = _xcycwh_to_xyxy(relxcycwh, inplace)
@@ -156,7 +156,7 @@ def _relxcycwh_to_xyxy(relxcycwh: torch.Tensor, img_shape: Tuple[int, int], inpl
     return relxyxy
 
 
-def _xyxy_to_relxywh(xyxy: torch.Tensor, img_shape: Tuple[int, int], inplace: bool) -> torch.Tensor:
+def _xyxy_to_relxywh(xyxy: "torch.Tensor", img_shape: Tuple[int, int], inplace: bool) -> "torch.Tensor":
     xyxy = xyxy if inplace else xyxy.clone()
     # to xywh
     xyxy = _xyxy_to_xywh(xyxy, inplace)
@@ -165,7 +165,7 @@ def _xyxy_to_relxywh(xyxy: torch.Tensor, img_shape: Tuple[int, int], inplace: bo
     return xyxy
 
 
-def _xyxy_to_relxcycwh(xyxy: torch.Tensor, img_shape: Tuple[int, int], inplace: bool) -> torch.Tensor:
+def _xyxy_to_relxcycwh(xyxy: "torch.Tensor", img_shape: Tuple[int, int], inplace: bool) -> "torch.Tensor":
     xyxy = xyxy if inplace else xyxy.clone()
     # to xcycwh
     xyxy = _xyxy_to_xcycwh(xyxy, inplace)
@@ -175,7 +175,7 @@ def _xyxy_to_relxcycwh(xyxy: torch.Tensor, img_shape: Tuple[int, int], inplace: 
 
 
 def transform_box_format(
-    bbox: torch.Tensor,
+    bbox: "torch.Tensor",
     orig_format: BoundingBoxFormat,
     dest_format: BoundingBoxFormat,
     img_shape: Optional[Union[Tuple[int, int], torch.Tensor]] = None,
@@ -186,11 +186,11 @@ def transform_box_format(
     Transform a bounding box from one format to another.
 
     Args:
-        bbox (torch.Tensor): The bounding box to transform. orig_format (BoundingBoxFormat): The
+        bbox (`torch.Tensor`): The bounding box to transform. orig_format (BoundingBoxFormat): The
         original format of the bounding box. dest_format (BoundingBoxFormat): The desired destination format of the
         bounding box. img_shape (Optional[Tuple[int, int]]): The shape of the image (height, width), required for
-        relative formats. inplace (bool): If True, perform operation in-place.
-        do_round (bool):
+        relative formats. inplace (`bool`): If True, perform operation in-place.
+        do_round (`bool`):
             If True, and the destination format is not a relative format, the coordinates of boxes are rounded.
 
     Returns:
