@@ -37,23 +37,25 @@ improvements to counteract overfitting while training on thousands of tasks. Cri
 a human-translated benchmark, Flores-200, and combined human evaluation with a novel toxicity benchmark covering all languages in Flores-200 to assess translation safety.
 Our model achieves an improvement of 44% BLEU relative to the previous state-of-the-art, laying important groundwork towards realizing a universal translation system.*
 
-Tips:
+This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ).
+The original code can be found [here](https://github.com/facebookresearch/fairseq).
+
+## Usage tips
 
 - M2M100ForConditionalGeneration is the base model for both NLLB and NLLB MoE
 - The NLLB-MoE is very similar to the NLLB model, but it's feed forward layer is based on the implementation of SwitchTransformers.
 - The tokenizer is the same as the NLLB models.
 
-This model was contributed by [Arthur Zucker](https://huggingface.co/ArtZucker).
-The original code can be found [here](https://github.com/facebookresearch/fairseq).
-
 ## Implementation differences with SwitchTransformers
+
 The biggest difference is the way the tokens are routed. NLLB-MoE uses a `top-2-gate` which means that for each input, only the top two experts are selected based on the 
 highest predicted probabilities from the gating network, and the remaining experts are ignored. In `SwitchTransformers`, only the top-1 probabilities are computed, 
 which means that tokens have less probability of being forwarded. Moreover, if a token is not routed to any expert, `SwitchTransformers` still adds its unmodified hidden 
 states (kind of like a residual connection) while they are masked in `NLLB`'s top-2 routing mechanism. 
 
 ## Generating with NLLB-MoE
-The avalable checkpoints requires around 350GB of storage. Make sure to use `accelerate` if you do not have enough RAM on your machine.
+
+The available checkpoints require around 350GB of storage. Make sure to use `accelerate` if you do not have enough RAM on your machine.
 
 While generating the target text set the `forced_bos_token_id` to the target language id. The following
 example shows how to translate English to French using the *facebook/nllb-200-distilled-600M* model.
@@ -99,7 +101,7 @@ See example below for a translation from romanian to german:
 >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
 ```
 
-## Documentation resources
+## Resources
 
 - [Translation task guide](../tasks/translation)
 - [Summarization task guide](../tasks/summarization)

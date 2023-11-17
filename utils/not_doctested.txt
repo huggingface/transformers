@@ -272,9 +272,7 @@ docs/source/en/pad_truncation.md
 docs/source/en/peft.md
 docs/source/en/perf_hardware.md
 docs/source/en/perf_infer_cpu.md
-docs/source/en/perf_infer_gpu_many.md
 docs/source/en/perf_infer_gpu_one.md
-docs/source/en/perf_infer_special.md
 docs/source/en/perf_torch_compile.md
 docs/source/en/perf_train_cpu.md
 docs/source/en/perf_train_cpu_many.md
@@ -295,6 +293,7 @@ docs/source/en/serialization.md
 docs/source/en/tasks/asr.md
 docs/source/en/tasks/audio_classification.md
 docs/source/en/tasks/document_question_answering.md
+docs/source/en/tasks/idefics.md  # causes other tests to fail
 docs/source/en/tasks/image_captioning.md
 docs/source/en/tasks/image_classification.md
 docs/source/en/tasks/language_modeling.md
@@ -432,6 +431,7 @@ src/transformers/models/blip/modeling_blip_text.py
 src/transformers/models/blip/modeling_tf_blip_text.py
 src/transformers/models/blip_2/configuration_blip_2.py
 src/transformers/models/blip_2/convert_blip_2_original_to_pytorch.py
+src/transformers/models/blip_2/modeling_blip_2.py  # causes other tests to fail
 src/transformers/models/bloom/convert_bloom_original_checkpoint_to_pytorch.py
 src/transformers/models/bloom/modeling_bloom.py
 src/transformers/models/bloom/modeling_flax_bloom.py
@@ -566,6 +566,7 @@ src/transformers/models/funnel/configuration_funnel.py
 src/transformers/models/funnel/convert_funnel_original_tf_checkpoint_to_pytorch.py
 src/transformers/models/funnel/modeling_funnel.py
 src/transformers/models/funnel/modeling_tf_funnel.py
+src/transformers/models/fuyu/convert_fuyu_model_weights_to_hf.py
 src/transformers/models/git/configuration_git.py
 src/transformers/models/git/convert_git_to_pytorch.py
 src/transformers/models/glpn/configuration_glpn.py
@@ -617,6 +618,7 @@ src/transformers/models/instructblip/processing_instructblip.py
 src/transformers/models/jukebox/configuration_jukebox.py
 src/transformers/models/jukebox/convert_jukebox.py
 src/transformers/models/jukebox/modeling_jukebox.py
+src/transformers/models/kosmos2/convert_kosmos2_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/led/configuration_led.py
 src/transformers/models/led/modeling_led.py
 src/transformers/models/led/modeling_tf_led.py
@@ -767,6 +769,7 @@ src/transformers/models/sam/image_processing_sam.py
 src/transformers/models/sam/modeling_sam.py
 src/transformers/models/sam/modeling_tf_sam.py
 src/transformers/models/sam/processing_sam.py
+src/transformers/models/seamless_m4t/convert_fairseq2_to_hf.py
 src/transformers/models/segformer/configuration_segformer.py
 src/transformers/models/segformer/convert_segformer_original_to_pytorch.py
 src/transformers/models/sew/convert_sew_original_pytorch_checkpoint_to_pytorch.py
@@ -806,7 +809,8 @@ src/transformers/models/t5/modeling_flax_t5.py
 src/transformers/models/t5/modeling_t5.py
 src/transformers/models/t5/modeling_tf_t5.py
 src/transformers/models/table_transformer/configuration_table_transformer.py
-src/transformers/models/table_transformer/convert_table_transformer_original_pytorch_checkpoint_to_pytorch.py
+src/transformers/models/table_transformer/convert_table_transformer_to_hf.py
+src/transformers/models/table_transformer/convert_table_transformer_to_hf_no_timm.py
 src/transformers/models/tapas/configuration_tapas.py
 src/transformers/models/tapas/convert_tapas_original_tf_checkpoint_to_pytorch.py
 src/transformers/models/tapas/modeling_tapas.py

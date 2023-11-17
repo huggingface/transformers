@@ -18,7 +18,7 @@
 
 import warnings
 from collections import OrderedDict
-from typing import Callable, Dict, List, Mapping, Union, Sequence
+from typing import Callable, Dict, List, Mapping, Sequence, Union
 
 from packaging import version
 from torch.nn.modules.utils import _ntuple
@@ -26,7 +26,7 @@ from torch.nn.modules.utils import _ntuple
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
-from ...utils.backbone_utils import get_aligned_output_features_output_indices
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -42,7 +42,7 @@ PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class PvtV2Config(PretrainedConfig):
+class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`PvtV2Model`]. It is used to instantiate an Pvt
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -53,11 +53,11 @@ class PvtV2Config(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        image_size (`int`, *optional*, defaults to 224):
+        image_size (`int`, *optional*, defaults to `{'height': 224, 'width': 224}`):
             The input image size
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        num_encoder_blocks (`[int]`, *optional*., defaults to 4):
+        num_encoder_blocks (`[int]`, *optional*, defaults to 4):
             The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
         depths (`List[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
             The number of layers in each encoder block.
@@ -85,17 +85,19 @@ class PvtV2Config(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether or not a learnable bias should be added to the queries, keys and values.
-        num_labels ('int', *optional*, defaults to 1000)
+        num_labels ('int', *optional*, defaults to 1000):
             The number of classes.
+        attn_reduce (`str`, *optional*, defaults to `"SR"`):
+            Pass 'SR' for spatial reduction, 'AP' for average pooling.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
             corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
-        out_indices (`List[int]`, *optional*):
+        out_indices (`List[int]`, *optional*, defaults to `[1, 2, 3]`):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage.
@@ -172,10 +174,10 @@ class PvtV2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
-        self.num_labels = num_labels
+        self.num_labels = num_labels if self.id2label is None else len(self.id2label)
         self.qkv_bias = qkv_bias
         self.attn_reduce = attn_reduce
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        self.stage_names = [f"stage{idx}" for idx in range(1, len(depths) + 1)]
         self.reshape_last_stage = kwargs.get("reshape_last_stage", True)
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names

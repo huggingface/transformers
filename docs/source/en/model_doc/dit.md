@@ -37,6 +37,10 @@ alt="drawing" width="600"/>
 
 <small> Summary of the approach. Taken from the [original paper](https://arxiv.org/abs/2203.02378). </small>
 
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/dit).
+
+## Usage tips
+
 One can directly use the weights of DiT with the AutoModel API:
 
 ```python
@@ -66,10 +70,6 @@ model = AutoModelForImageClassification.from_pretrained("microsoft/dit-base-fine
 This particular checkpoint was fine-tuned on [RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/), an important benchmark for document image classification.
 A notebook that illustrates inference for document image classification can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/DiT/Inference_with_DiT_(Document_Image_Transformer)_for_document_image_classification.ipynb).
 
-As DiT's architecture is equivalent to that of BEiT, one can refer to [BEiT's documentation page](beit) for all tips, code examples and notebooks.
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/dit).
-
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DiT.
@@ -79,3 +79,8 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [`BeitForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
+<Tip>
+
+  As DiT's architecture is equivalent to that of BEiT, one can refer to [BEiT's documentation page](beit) for all tips, code examples and notebooks.
+</Tip>
