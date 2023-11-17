@@ -44,14 +44,16 @@ jobs:
     runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu
-      options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: ROCM-SMI
         run: |
           rocm-smi
-      - name: Show HIP environment
+      - name: ROCM-INFO
         run: |
-          echo "HIP: $HIP_VISIBLE_DEVICES"
+          rocminfo  | grep "Agent" -A 14
+      - name: Show ROCR environment
+        run: |
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
   setup:
@@ -63,7 +65,7 @@ jobs:
     runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu
-      options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -92,9 +94,11 @@ jobs:
       - name: ROCM-SMI
         run: |
           rocm-smi
-      - name: Show HIP environment
+      - name: ROCM-INFO
         run: |
-          echo "HIP: $HIP_VISIBLE_DEVICES"
+          rocminfo  | grep "Agent" -A 14
+      - name: Show ROCR environment
+        run: |
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
   run_tests_single_gpu:
@@ -108,7 +112,7 @@ jobs:
     runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu
-      options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     needs: setup
     steps:
       - name: Echo folder ${{ matrix.folders }}
@@ -133,9 +137,11 @@ jobs:
       - name: ROCM-SMI
         run: |
           rocm-smi
-      - name: Show HIP environment
+      - name: ROCM-INFO
         run: |
-          echo "HIP: $HIP_VISIBLE_DEVICES"
+          rocminfo  | grep "Agent" -A 14
+      - name: Show ROCR environment
+        run: |
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
@@ -174,7 +180,7 @@ jobs:
     runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu
-      options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     needs: setup
     steps:
       - name: Echo folder ${{ matrix.folders }}
@@ -199,9 +205,11 @@ jobs:
       - name: ROCM-SMI
         run: |
           rocm-smi
-      - name: Show HIP environment
+      - name: ROCM-INFO
         run: |
-          echo "HIP: $HIP_VISIBLE_DEVICES"
+          rocminfo  | grep "Agent" -A 14
+      - name: Show ROCR environment
+        run: |
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
@@ -238,7 +246,7 @@ jobs:
     runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu
-      options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     needs: setup
     steps:
       - name: Update clone
@@ -252,9 +260,11 @@ jobs:
       - name: ROCM-SMI
         run: |
           rocm-smi
-      - name: Show HIP environment
+      - name: ROCM-INFO
         run: |
-          echo "HIP: $HIP_VISIBLE_DEVICES"
+          rocminfo  | grep "Agent" -A 14
+      - name: Show ROCR environment
+        run: |
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
@@ -293,7 +303,7 @@ jobs:
     runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu
-      options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     needs: setup
     steps:
       - name: Update clone
@@ -307,9 +317,11 @@ jobs:
       - name: ROCM-SMI
         run: |
           rocm-smi
-      - name: Show HIP environment
+      - name: ROCM-INFO
         run: |
-          echo "HIP: $HIP_VISIBLE_DEVICES"
+          rocminfo  | grep "Agent" -A 14
+      - name: Show ROCR environment
+        run: |
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
