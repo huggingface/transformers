@@ -19,7 +19,6 @@ import copy
 import math
 import os
 import warnings
-from enum import Enum
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -254,13 +253,6 @@ class BlenderbotAttention(nn.Module):
 
 
 BLENDERBOT_ATTENTION_CLASSES = {"eager": BlenderbotAttention}
-
-
-# Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->Blenderbot
-class BlenderbotAttentionType(Enum):
-    eager = "eager"
-    sdpa = "sdpa"
-    flash_attention_2 = "flash_attention_2"
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Blenderbot, MBART->BLENDERBOT

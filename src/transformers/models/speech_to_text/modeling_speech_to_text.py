@@ -15,7 +15,6 @@
 """ PyTorch Speech2Text model."""
 
 import math
-from enum import Enum
 from typing import Optional, Tuple, Union
 
 import torch
@@ -333,13 +332,6 @@ class Speech2TextAttention(nn.Module):
 
 
 SPEECH_TO_TEXT_ATTENTION_CLASSES = {"eager": Speech2TextAttention}
-
-
-# Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->Speech2Text
-class Speech2TextAttentionType(Enum):
-    eager = "eager"
-    sdpa = "sdpa"
-    flash_attention_2 = "flash_attention_2"
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Speech2Text, MBART->SPEECH_TO_TEXT

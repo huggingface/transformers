@@ -15,7 +15,6 @@
 # limitations under the License.
 """ PyTorch Time Series Transformer model."""
 
-from enum import Enum
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -509,15 +508,7 @@ class TimeSeriesTransformerEncoderLayer(nn.Module):
 # TODO: Implement attention with SDPA for TimeSeriesTransformer.
 TIME_SERIES_TRANSFORMER_ATTENTION_CLASSES = {
     "eager": TimeSeriesTransformerAttention,
-    "sdpa": TimeSeriesTransformerAttention,
 }
-
-
-# Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->TimeSeriesTransformer
-class TimeSeriesTransformerAttentionType(Enum):
-    eager = "eager"
-    sdpa = "sdpa"
-    flash_attention_2 = "flash_attention_2"
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->TimeSeriesTransformer, with BART->TIME_SERIES_TRANSFORMER

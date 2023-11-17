@@ -16,7 +16,6 @@
 import copy
 import math
 import warnings
-from enum import Enum
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -603,12 +602,6 @@ BART_ATTENTION_CLASSES = {
     "sdpa": BartSDPAAttention,
     "flash_attention_2": BartFlashAttention2,
 }
-
-
-class BartAttentionType(Enum):
-    eager = "eager"
-    sdpa = "sdpa"
-    flash_attention_2 = "flash_attention_2"
 
 
 class BartEncoderLayer(nn.Module):

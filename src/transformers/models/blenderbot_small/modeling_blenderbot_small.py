@@ -17,7 +17,6 @@
 
 import copy
 import math
-from enum import Enum
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -325,13 +324,6 @@ class BlenderbotSmallEncoderLayer(nn.Module):
 BLENDERBOT_SMALL_ATTENTION_CLASSES = {
     "eager": BlenderbotSmallAttention,
 }
-
-
-# Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->BlenderbotSmall
-class BlenderbotSmallAttentionType(Enum):
-    eager = "eager"
-    sdpa = "sdpa"
-    flash_attention_2 = "flash_attention_2"
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->BlenderbotSmall, BART->BLENDERBOT_SMALL

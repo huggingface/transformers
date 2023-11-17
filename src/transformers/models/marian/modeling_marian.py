@@ -17,7 +17,6 @@
 
 import copy
 import math
-from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -340,13 +339,6 @@ class MarianEncoderLayer(nn.Module):
 
 
 MARIAN_ATTENTION_CLASSES = {"eager": MarianAttention}
-
-
-# Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->Marian
-class MarianAttentionType(Enum):
-    eager = "eager"
-    sdpa = "sdpa"
-    flash_attention_2 = "flash_attention_2"
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->Marian, BART->MARIAN

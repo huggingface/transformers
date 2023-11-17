@@ -15,7 +15,6 @@
 """ PyTorch PLBART model."""
 import copy
 import math
-from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -338,14 +337,7 @@ class PLBartEncoderLayer(nn.Module):
 
 
 # TODO: Implement attention with SDPA for PLBart.
-PLBART_ATTENTION_CLASSES = {"eager": PLBartAttention, "sdpa": PLBartAttention}
-
-
-# Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->PLBart
-class PLBartAttentionType(Enum):
-    eager = "eager"
-    sdpa = "sdpa"
-    flash_attention_2 = "flash_attention_2"
+PLBART_ATTENTION_CLASSES = {"eager": PLBartAttention}
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->PLBart, BART->PLBART

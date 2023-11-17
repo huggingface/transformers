@@ -16,7 +16,6 @@
 
 
 import math
-from enum import Enum
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -393,13 +392,6 @@ class M2M100EncoderLayer(nn.Module):
 
 
 M2M100_ATTENTION_CLASSES = {"eager": M2M100Attention}
-
-
-# Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->M2M100
-class M2M100AttentionType(Enum):
-    eager = "eager"
-    sdpa = "sdpa"
-    flash_attention_2 = "flash_attention_2"
 
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->M2M100, MBART->M2M100
