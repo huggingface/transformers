@@ -58,7 +58,7 @@ def _xywh_to_xyxy(xywh: "torch.Tensor", inplace: bool) -> "torch.Tensor":
         inplace (`bool`): If True, perform operation in-place.
 
     Returns:
-        torch.Tensor: The bounding box in XYXY format.
+        The bounding box in XYXY format.
     """
     xyxy = xywh if inplace else xywh.clone()
     xyxy[..., 2:].add_(xyxy[..., :2])
@@ -74,7 +74,7 @@ def _xyxy_to_xywh(xyxy: "torch.Tensor", inplace: bool) -> "torch.Tensor":
         inplace (`bool`): If True, perform operation in-place.
 
     Returns:
-        torch.Tensor: The bounding box in XYWH format.
+        The bounding box in XYWH format.
     """
     xyxy = xyxy if inplace else xyxy.clone()
     xyxy[..., 2:].sub_(xyxy[..., :2])
@@ -91,7 +91,7 @@ def _xcycwh_to_xyxy(xcycwh: "torch.Tensor", inplace: bool) -> "torch.Tensor":
         inplace (`bool`): If True, perform operation in-place.
 
     Returns:
-        torch.Tensor: The bounding box in XYXY format.
+        The bounding box in XYXY format.
     """
     xcycwh = xcycwh if inplace else xcycwh.clone()
     # Trick to do fast division by 2 and ceil
@@ -114,7 +114,7 @@ def _xyxy_to_xcycwh(xyxy: "torch.Tensor", inplace: bool) -> "torch.Tensor":
         inplace (`bool`): If True, perform operation in-place.
 
     Returns:
-        torch.Tensor: The bounding box in XCYCWH format.
+        The bounding box in XCYCWH format.
     """
     xyxy = xyxy if inplace else xyxy.clone()
     # (x2 - x1) = width and (y2 - y1) = height
@@ -137,7 +137,7 @@ def _relxywh_to_xyxy(relxywh: "torch.Tensor", img_shape: Tuple[int, int], inplac
         inplace (`bool`): If True, perform operation in-place.
 
     Returns:
-        torch.Tensor: The bounding box in absolute XYXY format.
+        The bounding box in absolute XYXY format.
     """
     relxywh = relxywh if inplace else relxywh.clone()
     # convert to relative_xyxy
@@ -178,7 +178,7 @@ def transform_box_format(
     bbox: "torch.Tensor",
     orig_format: BoundingBoxFormat,
     dest_format: BoundingBoxFormat,
-    img_shape: Optional[Union[Tuple[int, int], torch.Tensor]] = None,
+    img_shape: Optional[Union[Tuple[int, int], "torch.Tensor"]] = None,
     inplace: bool = False,
     do_round: bool = False,
 ):
@@ -194,7 +194,7 @@ def transform_box_format(
             If True, and the destination format is not a relative format, the coordinates of boxes are rounded.
 
     Returns:
-        Union[torch.Tensor, np.ndarray]: The transformed bounding box.
+        The transformed bounding box.
 
     Raises:
         ValueError: If image shape is required but not provided.
