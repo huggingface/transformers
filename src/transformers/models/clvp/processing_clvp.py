@@ -34,6 +34,7 @@ class ClvpProcessor(ProcessorMixin):
         tokenizer (`ClvpTokenizer`):
             An instance of [`ClvpTokenizer`]. The tokenizer is a required input.
     """
+
     feature_extractor_class = "ClvpFeatureExtractor"
     tokenizer_class = "ClvpTokenizer"
     model_input_names = [
@@ -76,15 +77,15 @@ class ClvpProcessor(ProcessorMixin):
     # Copied from transformers.models.whisper.processing_whisper.WhisperProcessor.batch_decode with Whisper->Clvp
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to ClvpTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
-        to the docstring of this method for more information.
+        This method forwards all its arguments to ClvpTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     # Copied from transformers.models.whisper.processing_whisper.WhisperProcessor.decode with Whisper->Clvp
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to ClvpTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
-        docstring of this method for more information.
+        This method forwards all its arguments to ClvpTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)

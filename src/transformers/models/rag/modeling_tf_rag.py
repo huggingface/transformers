@@ -224,6 +224,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
     generator, the encoder and generator are trainable while the retriever is just an indexed dataset.
 
     """
+
     config_class = RagConfig
     base_model_prefix = "rag"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
