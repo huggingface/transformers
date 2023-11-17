@@ -645,7 +645,8 @@ class LlamaSDPAAttention(LlamaAttention):
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
-            # output_attentions=True can not be supported when using SDPA, falling back on the manual implementation.
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once("LlamaModel is using LlamaSDPAAttention, but torch.nn.functional.scaled_dot_product_attention does not support output_attentions=True. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards.")
             return super().forward(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,

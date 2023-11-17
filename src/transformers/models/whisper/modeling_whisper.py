@@ -675,7 +675,7 @@ class WhisperFlashAttention2(WhisperAttention):
 
 
 class WhisperSDPAAttention(WhisperAttention):
-    # Copied from transformers.models.bart.modeling_bart.BartSDPAAttention.forward with BART->whisper
+    # Copied from transformers.models.bart.modeling_bart.BartSDPAAttention.forward with BART->whisper, Bart->Whisper
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -688,6 +688,7 @@ class WhisperSDPAAttention(WhisperAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
         if output_attentions or layer_head_mask is not None:
+            logger.warning_once("WhisperModel is using WhisperSDPAAttention, but torch.nn.functional.scaled_dot_product_attention does not support output_attentions=True or layer_head_mask not None. Falling back to the manual attention implementation, but manually specifying the manual implementation will be required from Transformers version v5.0.0 onwards.")
             return super().forward(
                 hidden_states,
                 key_value_states=key_value_states,

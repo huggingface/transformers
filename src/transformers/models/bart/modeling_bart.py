@@ -509,6 +509,8 @@ class BartSDPAAttention(BartAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
         if output_attentions or layer_head_mask is not None:
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once("BartModel is using BartSDPAAttention, but torch.nn.functional.scaled_dot_product_attention does not support output_attentions=True or layer_head_mask not None. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards.")
             return super().forward(
                 hidden_states,
                 key_value_states=key_value_states,

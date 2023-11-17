@@ -499,6 +499,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
 class GPTBigCodeSDPAAttention(GPTBigCodeAttention):
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         if head_mask is not None:
+            # The super dispatch is done in the forward.
             raise ValueError(
                 "PyTorch SDPA does not support head_mask. Please open an issue in Transformers repository."
             )
@@ -604,7 +605,8 @@ class GPTBigCodeSDPAAttention(GPTBigCodeAttention):
             # as SDPA expects seq_length to be at index -2 for the key as well
             attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
         else:
-            # output_attentions=True, head_mask not None can not be supported when using SDPA.
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once("GPTBigCodeModel is using GPTBigCodeSDPAAttention, but torch.nn.functional.scaled_dot_product_attention does not support output_attentions=True and head_mask not None. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards.")
             attn_output, attn_weights = super()._attn(query, key.transpose(-1, -2), value, attention_mask, head_mask)
 
         if not self.multi_query:
