@@ -68,6 +68,8 @@
   title: 概念指南
 - sections:
   - sections:
+    - local: main_classes/configuration
+      title: configuration
     - local: main_classes/model
       title: 模型
     - local: main_classes/trainer
