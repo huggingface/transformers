@@ -33,10 +33,10 @@ DeepSpeed ZeRO-3也可以用于推理，因为它允许将单个GPU无法加载�
 
 🤗 Transformers通过以下两种方式集成了[DeepSpeed](https://github.com/microsoft/DeepSpeed)：
 
-1. 通过[`Trainer`]集成核心的DeepSpeed功能。这是一种“一切为您完成”类型的集成 - 只需提供您的自定义配置文件或使用我们的模板配置文件，您就不需要做其他事情。本文档的大部分内容都集中在这个功能上。
+1. 通过[`Trainer`]集成核心的DeepSpeed功能。这是一种“为您完成一切”式的集成 - 您只需提供自定义配置文件或使用我们的模板配置文件。本文档的大部分内容都集中在这个功能上。
 2. 如果您不使用[`Trainer`]并希望在自己的Trainer中集成DeepSpeed，那么像`from_pretrained`和`from_config`这样的核心功能函数将包括ZeRO stage 3及以上的DeepSpeed的基础部分，如`zero.Init`。要利用此功能，请阅读有关[非Trainer DeepSpeed集成](#nontrainer-deepspeed-integration)的文档。
 
-集成的内容是什么：
+集成的内容：
 
 训练：
 
@@ -44,7 +44,7 @@ DeepSpeed ZeRO-3也可以用于推理，因为它允许将单个GPU无法加载�
 
 推理：
 
-1. DeepSpeed ZeRO推理支持使用ZeRO-Infinity的ZeRO stage 3。它使用与训练相同的ZeRO协议，但不使用优化器和学习率调度器，只与stage 3相关。更多详细信息请参阅：[zero-inference](#zero-inference)。
+1. DeepSpeed ZeRO推理支持ZeRO stage 3和ZeRO-Infinity。它使用与训练相同的ZeRO协议，但不使用优化器和学习率调度器，只有stage 3与推理相关。更多详细信息请参阅：[zero-inference](#zero-inference)。
 
 此外还有DeepSpeed推理 - 这是一种完全不同的技术，它使用张量并行而不是ZeRO（即将推出）。
 
