@@ -18,7 +18,7 @@
 import inspect
 import unittest
 
-from transformers import PvtV2Config, is_torch_available, is_vision_available
+from transformers import PvtV2Backbone, PvtV2Config, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_accelerate,
@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -127,6 +128,35 @@ class PvtV2ModelTester:
         result = model(pixel_values)
         self.parent.assertIsNotNone(result.last_hidden_state)
 
+    def create_and_check_backbone(self, config, pixel_values, labels):
+        model = PvtV2Backbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify feature maps
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), len(config.out_features))
+        self.parent.assertListEqual(model.channels, config.hidden_sizes[1:])
+
+        # verify backbone works with out_features=None
+        config.out_features = None
+        model = PvtV2Backbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify feature maps
+        self.parent.assertEqual(len(result.feature_maps), 1)
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[-1], 1, 1])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), 1)
+        self.parent.assertListEqual(model.channels, [config.hidden_sizes[-1]])
+
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
         model = PvtV2ForImageClassification(config)
@@ -160,7 +190,7 @@ def prepare_img():
 
 @require_torch
 class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (PvtV2Model, PvtV2ForImageClassification) if is_torch_available() else ()
+    all_model_classes = (PvtV2Model, PvtV2Backbone, PvtV2ForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": PvtV2Model, "image-classification": PvtV2ForImageClassification}
         if is_torch_available()
@@ -338,3 +368,13 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
         # forward pass to make sure inference works in fp16
         with torch.no_grad():
             _ = model(pixel_values)
+
+
+@require_torch
+class PvtV2BackboneTest(BackboneTesterMixin, unittest.TestCase):
+    all_model_classes = (PvtV2Backbone,) if is_torch_available() else ()
+    has_attentions = False
+    config_class = PvtV2Config
+
+    def setUp(self):
+        self.model_tester = PvtV2ModelTester(self)

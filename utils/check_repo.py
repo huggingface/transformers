@@ -975,6 +975,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "MaskFormerSwinConfig",
     "MaskFormerSwinModel",
     "NatBackbone",
+    "PvtV2Backbone",
     "ResNetBackbone",
     "SwinBackbone",
     "TimmBackbone",
