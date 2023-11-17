@@ -477,6 +477,12 @@ class IncrementalGrammarAcceptor(AbstractGrammarAcceptor):
                 stacks = self.accept_token_id(token_id, stacks)
         return stacks
 
+    def batch_filter_vocab(self, batch_stacks, device):
+        batch_acceptance = []
+        for stacks in batch_stacks:
+            batch_acceptance.append(self.filter_vocab(stacks, device))
+        return torch.stack(batch_acceptance)
+
     def filter_vocab(self, stacks, device):
         if not stacks:  # Check if stacks is empty
             # Handle the empty case: for example, return a tensor of False
