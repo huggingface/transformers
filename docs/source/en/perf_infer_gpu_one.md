@@ -128,6 +128,13 @@ FlashAttention is more memory efficient, meaning you can train on much larger se
 
 ## BetterTransformer
 
+<Tip warning={true}>
+
+Part of BetterTransformer features are being upstreamed in Transformers, with native `torch.nn.scaled_dot_product_attention` default support. BetterTransformer still has a wider coverage than the Transformers SDPA integration, but you can expect more and more architectures to support natively SDPA in Transformers.
+
+</Tip>
+
+
 <Tip>
 
 Check out our benchmarks with BetterTransformer and scaled dot product attention in the [Out of the box acceleration and memory savings of 🤗 decoder models with PyTorch 2.0](https://pytorch.org/blog/out-of-the-box-acceleration/) and learn more about the fastpath execution in the [BetterTransformer](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2) blog post.
@@ -156,11 +163,13 @@ model = model.reverse_bettertransformer()
 model.save_pretrained("saved_model")
 ```
 
-### FlashAttention
+### FlashAttention and memory-efficient attention through PyTorch's scaled_dot_product_attention 
 
-SDPA can also call FlashAttention kernels under the hood. FlashAttention can only be used for models using the `fp16` or `bf16` dtype, so make sure to cast your model to the appropriate dtype before using it.
+PyTorch's `torch.nn.functional.scaled_dot_product_attention` (SDPA) can also call FlashAttention and memory-efficient attention kernels under the hood. SDPA support is being added natively in Transformers, and you can check whether your model is using SDPA with the attribute `model.config.attn_implementation`.
 
-To enable FlashAttention or to check whether it is available in a given setting (hardware, problem size), use [`torch.backends.cuda.sdp_kernel`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as a context manager:
+Note that FlashAttention can only be used for models using the `fp16` or `bf16` dtype, so make sure to cast your model to the appropriate dtype before using it.
+
+By default, `torch.nn.functional.scaled_dot_product_attention` selects the most performant kernel available, but to check whether it is available in a given setting (hardware, problem size), you can use [`torch.backends.cuda.sdp_kernel`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as a context manager:
 
 ```diff
 import torch
