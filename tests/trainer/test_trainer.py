@@ -1532,6 +1532,29 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with patch.object(sys, "argv", testargs):
             run_glue.main()
 
+    def test_auto_batch_size_with_resume_from_checkpoint(self):
+        train_dataset = RegressionDataset(length=128)
+
+        config = RegressionModelConfig(a=0, b=2)
+        model = RegressionRandomPreTrainedModel(config)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        args = RegressionTrainingArguments(
+            tmp_dir,
+            do_train=True,
+            max_steps=2,
+            save_steps=1,
+            per_device_train_batch_size=16,
+            auto_find_batch_size=True,
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.train()
+        # assume that `auto_find_bs` set it to 8
+        trainer.args.per_device_train_batch_size = 8
+        trainer.train(resume_from_checkpoint=True)
+        # We should be back to 16 again
+        self.assertEqual(trainer._train_batch_size, 16)
+
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
         train_dataset = RegressionDataset(length=128)
