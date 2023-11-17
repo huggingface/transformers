@@ -1,12 +1,29 @@
+# coding=utf-8
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+""" Testing suite for the PyTorch Fuyu model. """
+
 import io
 import unittest
 
 import requests
 
 from transformers import FuyuConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.utils import cached_property
 
-from ...test_modeling_common import ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_vision_available():
@@ -23,19 +40,17 @@ if is_torch_available():
     from transformers import FuyuForCausalLM
 
 
-# Copied from transformers.tests.llama.test_modelling_llama.LlamaModelTest with Llama->Fuyu
 class FuyuModelTester:
     def __init__(
         self,
         parent,
         batch_size=13,
         seq_length=7,
-        image_size=300,
-        patch_size=30,
+        image_size=30,
+        patch_size=15,
         num_channels=3,
         is_training=True,
         use_input_mask=True,
-        use_token_type_ids=False,
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
@@ -62,7 +77,6 @@ class FuyuModelTester:
         self.num_channels = num_channels
         self.is_training = is_training
         self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -88,21 +102,15 @@ class FuyuModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
         sequence_labels = None
         token_labels = None
-        choice_labels = None
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, input_ids, input_mask, sequence_labels, token_labels
 
     def get_config(self):
         return FuyuConfig(
@@ -122,7 +130,12 @@ class FuyuModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
     ):
         model = FuyuForCausalLM(config=config)
         model.to(torch_device)
@@ -135,11 +148,9 @@ class FuyuModelTester:
         self,
         config,
         input_ids,
-        token_type_ids,
         input_mask,
         sequence_labels,
         token_labels,
-        choice_labels,
         encoder_hidden_states,
         encoder_attention_mask,
     ):
@@ -165,11 +176,9 @@ class FuyuModelTester:
         self,
         config,
         input_ids,
-        token_type_ids,
         input_mask,
         sequence_labels,
         token_labels,
-        choice_labels,
         encoder_hidden_states,
         encoder_attention_mask,
     ):
@@ -183,11 +192,9 @@ class FuyuModelTester:
         self,
         config,
         input_ids,
-        token_type_ids,
         input_mask,
         sequence_labels,
         token_labels,
-        choice_labels,
         encoder_hidden_states,
         encoder_attention_mask,
     ):
@@ -246,49 +253,88 @@ class FuyuModelTester:
         (
             config,
             input_ids,
-            token_type_ids,
             input_mask,
             sequence_labels,
             token_labels,
-            choice_labels,
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
 
 @require_torch
-@require_torch_accelerator
-@slow
-class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
-    """
-    Currently, all these tests depend on a value of max_tokens_to_generate of 10.
-    """
+class FuyuModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (FuyuForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-to-text": FuyuForCausalLM} if is_torch_available() else {}
 
-    all_model_classes = ("FuyuForCausalLM") if is_torch_available() else ()
+    test_head_masking = False
+    test_pruning = False
+    test_cpu_offload = False
+    test_disk_offload = False
+    test_model_parallel = False
 
     def setUp(self):
-        self.pretrained_model_name = "adept/fuyu-8b"
-        self.processor = FuyuProcessor.from_pretrained(self.pretrained_model_name)
-        self.model = FuyuForCausalLM.from_pretrained(self.pretrained_model_name)
-        self.bus_image_url = (
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
-        )
-        self.bus_image_pil = Image.open(io.BytesIO(requests.get(self.bus_image_url).content))
+        self.model_tester = FuyuModelTester(self)
 
-    @slow
-    def test_model_8b_chat_greedy_generation_bus_captioning(self):
-        EXPECTED_TEXT_COMPLETION = """A blue bus parked on the side of a road.|ENDOFTEXT|"""
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    # TODO: Fix me (once this model gets more usage)
+    @unittest.skip("Does not work on the tiny model.")
+    def test_disk_offload_bin(self):
+        super().test_disk_offload()
+
+    # TODO: Fix me (once this model gets more usage)
+    @unittest.skip("Does not work on the tiny model.")
+    def test_disk_offload_safetensors(self):
+        super().test_disk_offload()
+
+    # TODO: Fix me (once this model gets more usage)
+    @unittest.skip("Does not work on the tiny model.")
+    def test_model_parallelism(self):
+        super().test_model_parallelism()
+
+
+@slow
+@require_torch_gpu
+class FuyuModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_processor(self):
+        return FuyuProcessor.from_pretrained("adept/fuyu-8b")
+
+    @cached_property
+    def default_model(self):
+        return FuyuForCausalLM.from_pretrained("adept/fuyu-8b")
+
+    def test_greedy_generation(self):
+        processor = self.default_processor
+        model = self.default_model
+
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
+        image = Image.open(io.BytesIO(requests.get(url).content))
+
         text_prompt_coco_captioning = "Generate a coco-style caption.\n"
-        model_inputs_bus_captioning = self.processor(text=text_prompt_coco_captioning, images=self.bus_image_pil)
-        generated_tokens = self.model.generate(**model_inputs_bus_captioning, max_new_tokens=10)
-        text = self.processor.tokenizer.batch_decode(generated_tokens)
-        end_sequence = text[0].split("\x04")[1]
-        clean_sequence = (
-            end_sequence[: end_sequence.find("|ENDOFTEXT|") + len("|ENDOFTEXT|")]
-            if "|ENDOFTEXT|" in end_sequence
-            else end_sequence
-        )
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, clean_sequence[1:])
+
+        inputs = processor(text=text_prompt_coco_captioning, images=image, return_tensors="pt")
+        generated_ids = model.generate(**inputs, max_new_tokens=10)
+
+        # take the last 8 tokens (in order to skip special \n\x04 characters) and decode them
+        generated_text = processor.batch_decode(generated_ids[:, -8:], skip_special_tokens=True)[0]
+        self.assertEqual(generated_text, "A blue bus parked on the side of a road.")
 
 
 """
@@ -312,9 +358,7 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
     @slow
     @require_torch_accelerator
     def test_model_8b_chat_greedy_generation_chart_vqa(self):
-        # fmt: off
-        EXPECTED_TEXT_TOKENS = ["The","life expectancy","at","birth","of male","s in","","20","18","is","","80",".","7",".","\n","|ENDOFTEXT|",]
-        # fmt: on
+        EXPECTED_TEXT_TOKENS = ["The","life expectancy","at","birth","of male","s in","","20","18","is","","80",".","7",".","\n","|ENDOFTEXT|",]  # fmt: skip
         expected_text_completion = " ".join(EXPECTED_TEXT_TOKENS)  # TODO make sure the end string matches
 
         text_prompt_chart_vqa = "What is the highest life expectancy at birth of male?\n"

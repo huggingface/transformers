@@ -77,7 +77,7 @@ BEiT の使用を開始するのに役立つ公式 Hugging Face およびコミ�
 
 <PipelineTag pipeline="image-classification"/>
 
-- [`BeitForImageClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) および [ノートブック](https://colab. Research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
+- [`BeitForImageClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
 - 参照: [画像分類タスク ガイド](../tasks/image_classification)
 
 **セマンティック セグメンテーション**

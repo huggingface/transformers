@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Table Transformer checkpoints.
+"""Convert Table Transformer checkpoints with timm-backbone.
 
 URL: https://github.com/microsoft/table-transformer
 """

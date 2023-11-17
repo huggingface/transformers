@@ -692,7 +692,7 @@ class LogitsProcessorTest(unittest.TestCase):
             torch.allclose(
                 scores,
                 torch.tensor(
-                    [[0.0, 0.7, 0.8, 0.0], [0.1, torch.finfo(scores.dtype).max, 0.3, float("-inf")]],
+                    [[0.0, 0.7, 0.8, 0.0], [0.1, torch.finfo(scores.dtype).max, 0.3, torch.finfo(scores.dtype).min]],
                     device=torch_device,
                 ),
                 atol=1e-6,
