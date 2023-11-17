@@ -109,6 +109,7 @@ class RoCBertConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "roc_bert"
 
     def __init__(

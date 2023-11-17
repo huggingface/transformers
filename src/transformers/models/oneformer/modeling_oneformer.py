@@ -3247,5 +3247,5 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         if not return_dict:
             output = tuple(v for v in output.values())
             if loss is not None:
-                output = ((loss)) + output
+                output = (loss) + output
         return output

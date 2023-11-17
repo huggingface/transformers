@@ -108,6 +108,7 @@ _import_structure = {
     "integrations": [
         "is_clearml_available",
         "is_comet_available",
+        "is_dvclive_available",
         "is_neptune_available",
         "is_optuna_available",
         "is_ray_available",
@@ -146,6 +147,7 @@ _import_structure = {
     "models.audio_spectrogram_transformer": [
         "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ASTConfig",
+        "ASTFeatureExtractor",
     ],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -253,6 +255,15 @@ _import_structure = {
         "CLIPSegProcessor",
         "CLIPSegTextConfig",
         "CLIPSegVisionConfig",
+    ],
+    "models.clvp": [
+        "CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ClvpConfig",
+        "ClvpDecoderConfig",
+        "ClvpEncoderConfig",
+        "ClvpFeatureExtractor",
+        "ClvpProcessor",
+        "ClvpTokenizer",
     ],
     "models.code_llama": [],
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
@@ -486,6 +497,7 @@ _import_structure = {
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
+    "models.phi": ["PHI_PRETRAINED_CONFIG_ARCHIVE_MAP", "PhiConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -535,6 +547,7 @@ _import_structure = {
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
+        "Speech2TextFeatureExtractor",
         "Speech2TextProcessor",
     ],
     "models.speech_to_text_2": [
@@ -912,20 +925,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
-
-# Speech-specific objects
-try:
-    if not is_speech_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_speech_objects
-
-    _import_structure["utils.dummy_speech_objects"] = [
-        name for name in dir(dummy_speech_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
-    _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
 
 # Tensorflow-text-specific objects
 try:
@@ -1467,6 +1466,17 @@ else:
             "CLIPSegPreTrainedModel",
             "CLIPSegTextModel",
             "CLIPSegVisionModel",
+        ]
+    )
+    _import_structure["models.clvp"].extend(
+        [
+            "CLVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ClvpDecoder",
+            "ClvpEncoder",
+            "ClvpForCausalLM",
+            "ClvpModel",
+            "ClvpModelForConditionalGeneration",
+            "ClvpPreTrainedModel",
         ]
     )
     _import_structure["models.codegen"].extend(
@@ -2503,6 +2513,16 @@ else:
     )
     _import_structure["models.persimmon"].extend(
         ["PersimmonForCausalLM", "PersimmonForSequenceClassification", "PersimmonModel", "PersimmonPreTrainedModel"]
+    )
+    _import_structure["models.phi"].extend(
+        [
+            "PHI_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PhiForCausalLM",
+            "PhiForSequenceClassification",
+            "PhiForTokenClassification",
+            "PhiModel",
+            "PhiPreTrainedModel",
+        ]
     )
     _import_structure["models.pix2struct"].extend(
         [
@@ -4312,6 +4332,7 @@ if TYPE_CHECKING:
     from .integrations import (
         is_clearml_available,
         is_comet_available,
+        is_dvclive_available,
         is_neptune_available,
         is_optuna_available,
         is_ray_available,
@@ -4352,6 +4373,7 @@ if TYPE_CHECKING:
     from .models.audio_spectrogram_transformer import (
         AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ASTConfig,
+        ASTFeatureExtractor,
     )
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4454,6 +4476,15 @@ if TYPE_CHECKING:
         CLIPSegProcessor,
         CLIPSegTextConfig,
         CLIPSegVisionConfig,
+    )
+    from .models.clvp import (
+        CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ClvpConfig,
+        ClvpDecoderConfig,
+        ClvpEncoderConfig,
+        ClvpFeatureExtractor,
+        ClvpProcessor,
+        ClvpTokenizer,
     )
     from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
     from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
@@ -4670,6 +4701,7 @@ if TYPE_CHECKING:
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.persimmon import PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP, PersimmonConfig
+    from .models.phi import PHI_PRETRAINED_CONFIG_ARCHIVE_MAP, PhiConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4722,6 +4754,7 @@ if TYPE_CHECKING:
     from .models.speech_to_text import (
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Speech2TextConfig,
+        Speech2TextFeatureExtractor,
         Speech2TextProcessor,
     )
     from .models.speech_to_text_2 import (
@@ -5066,15 +5099,6 @@ if TYPE_CHECKING:
         from .utils.dummies_sentencepiece_and_tokenizers_objects import *
     else:
         from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
-
-    try:
-        if not is_speech_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        from .utils.dummy_speech_objects import *
-    else:
-        from .models.audio_spectrogram_transformer import ASTFeatureExtractor
-        from .models.speech_to_text import Speech2TextFeatureExtractor
 
     try:
         if not is_tensorflow_text_available():
@@ -5532,6 +5556,15 @@ if TYPE_CHECKING:
             CLIPSegPreTrainedModel,
             CLIPSegTextModel,
             CLIPSegVisionModel,
+        )
+        from .models.clvp import (
+            CLVP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ClvpDecoder,
+            ClvpEncoder,
+            ClvpForCausalLM,
+            ClvpModel,
+            ClvpModelForConditionalGeneration,
+            ClvpPreTrainedModel,
         )
         from .models.codegen import (
             CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6384,6 +6417,14 @@ if TYPE_CHECKING:
             PersimmonForSequenceClassification,
             PersimmonModel,
             PersimmonPreTrainedModel,
+        )
+        from .models.phi import (
+            PHI_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PhiForCausalLM,
+            PhiForSequenceClassification,
+            PhiForTokenClassification,
+            PhiModel,
+            PhiPreTrainedModel,
         )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -119,6 +119,7 @@ class Mask2FormerConfig(PretrainedConfig):
     ```
 
     """
+
     model_type = "mask2former"
     backbones_supported = ["swin"]
     attribute_map = {"hidden_size": "hidden_dim"}
