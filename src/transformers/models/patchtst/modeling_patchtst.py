@@ -317,7 +317,8 @@ def forecast_masking(
     if seed_number:
         set_seed(seed_number)
 
-    if isinstance(num_forecast_mask_patches, int): num_forecast_mask_patches = [num_forecast_mask_patches]
+    if isinstance(num_forecast_mask_patches, int):
+        num_forecast_mask_patches = [num_forecast_mask_patches]
     forecast_mask_ratios = [1 for _ in num_forecast_mask_patches]
 
     batch_size, num_channels, sequence_length, num_features = inputs.shape
@@ -1222,6 +1223,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
 
     >>> last_hidden_state = outputs.last_hidden_state
     """
+
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
@@ -1587,7 +1589,6 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
             hidden_states=model_output.hidden_states,
             attentions=model_output.attentions,
         )
-
 
 
 class PatchTSTPredictionHead(nn.Module):

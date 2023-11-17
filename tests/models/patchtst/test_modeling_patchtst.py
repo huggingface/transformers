@@ -150,12 +150,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else ()
     )
     all_generative_model_classes = (
-        (
-            PatchTSTForPrediction,
-            PatchTSTForRegression,
-            PatchTSTForPretraining
-        )
-        if is_torch_available() else ()
+        (PatchTSTForPrediction, PatchTSTForRegression, PatchTSTForPretraining) if is_torch_available() else ()
     )
     pipeline_model_mapping = {"feature-extraction": PatchTSTModel} if is_torch_available() else {}
     test_pruning = False
@@ -197,9 +192,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             inputs_dict.pop("future_values")
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
-            target_values = floats_tensor(
-                [self.model_tester.batch_size, self.model_tester.num_targets], rng=rng
-            )
+            target_values = floats_tensor([self.model_tester.batch_size, self.model_tester.num_targets], rng=rng)
             inputs_dict["target_values"] = target_values
             inputs_dict.pop("future_values")
         return inputs_dict
@@ -350,16 +343,13 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
 
-
     def test_prediction_generation(self):
         model = PatchTSTForPrediction.from_pretrained("ibm/patchtst-etth1-forecast").to(torch_device)
         batch = prepare_batch("test-batch.pt")
 
         torch.manual_seed(0)
         with torch.no_grad():
-            outputs = model.generate(
-                past_values=batch["past_values"].to(torch_device)
-            )
+            outputs = model.generate(past_values=batch["past_values"].to(torch_device))
         expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
@@ -370,16 +360,13 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         mean_prediction = outputs.sequences.mean(dim=1)
         self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=TOLERANCE))
 
-
     def test_regression_generation(self):
         model = PatchTSTForRegression.from_pretrained("ibm/patchtst-etth1-forecast").to(torch_device)
         batch = prepare_batch("test-batch.pt")
 
         torch.manual_seed(0)
         with torch.no_grad():
-            outputs = model.generate(
-                past_values=batch["past_values"].to(torch_device)
-            )
+            outputs = model.generate(past_values=batch["past_values"].to(torch_device))
         expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.num_targets))
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
