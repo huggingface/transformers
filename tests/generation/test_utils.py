@@ -130,6 +130,7 @@ class GenerationTesterMixin:
         if forced_bos_token_id is None and forced_eos_token_id is None:
             process_kwargs["no_repeat_ngram_size"] = 2
 
+        # NOTE: the order of operations here should match `generate` for accurate testing
         logits_processor = LogitsProcessorList(
             (
                 [
