@@ -3,7 +3,7 @@ name: Build docker images (scheduled)
 on:
   push:
     branches:
-      - build_docker_on_kube_2
+      - build_docker_on_kube_3
   repository_dispatch:
   workflow_call:
     inputs:
