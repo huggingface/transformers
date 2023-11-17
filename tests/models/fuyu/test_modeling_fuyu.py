@@ -308,6 +308,7 @@ class FuyuModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_parallelism(self):
         super().test_model_parallelism()
 
+
 @slow
 @require_torch_gpu
 class FuyuModelIntegrationTest(unittest.TestCase):
