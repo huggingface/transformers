@@ -255,6 +255,7 @@ def _tokenize_prompts_with_image_and_batch(
     #   - make all the sequences equal length.
     # Get the prompts length.
 
+    # we should delete everything below and just return prompts_tokens. We don't need the lengths for subsequent processing.
     prompts_length = [[len(x) for x in prompts_tokens_seq] for prompts_tokens_seq in prompts_tokens]
     # Get the max prompts length.
     max_prompt_len: int = np.max(prompts_length)
@@ -432,6 +433,7 @@ class FuyuProcessor(ProcessorMixin):
         tokens_to_place = min(max_seq_len_batch, max(0, image_padded_unpacked_tokens[0].shape[0]))
 
         # Use same packing logic for the image patch indices.
+        # this is where image_patch_input_indices +10 tokens really happens. need to check if this is for model forward.
         image_patch_input_indices = full_unpacked_stream_to_tensor(
             all_bi_tokens_to_place=[tokens_to_place],
             full_unpacked_stream=unpacked_image_patch_indices_per_batch,
