@@ -1095,6 +1095,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
           models, `pixel_values` for vision models and `input_values` for speech models).
     """
+
     config_class = None
     base_model_prefix = ""
     main_input_name = "input_ids"
@@ -2777,11 +2778,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             quantization_method_from_config = config.quantization_config.get(
                 "quant_method", QuantizationMethod.BITS_AND_BYTES
             )
-
-        if (
-            quantization_method_from_config == QuantizationMethod.GPTQ
-            or quantization_method_from_config == QuantizationMethod.AWQ
-        ) and quantization_method_from_args is not None:
+        if (quantization_method_from_config == QuantizationMethod.GPTQ or quantization_method_from_config == QuantizationMethod.AWQ) and quantization_method_from_args is not None:
             loading_attr_dict = quantization_config.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 config.quantization_config[attr] = val

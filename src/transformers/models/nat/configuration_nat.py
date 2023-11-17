@@ -92,6 +92,7 @@ class NatConfig(BackboneConfigMixin, PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "nat"
 
     attribute_map = {

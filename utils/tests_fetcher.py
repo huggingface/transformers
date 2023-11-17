@@ -515,9 +515,7 @@ def extract_imports(module_fname: str, cache: Dict[str, List[str]] = None) -> Li
 
     # Filter out all docstrings to not get imports in code examples. As before we need to deactivate formatting to
     # keep this as escaped quotes and avoid this function failing on this file.
-    # fmt: off
-    splits = content.split('\"\"\"')
-    # fmt: on
+    splits = content.split('\"\"\"')  # fmt: skip
     content = "".join(splits[::2])
 
     module_parts = str(module_fname).split(os.path.sep)
