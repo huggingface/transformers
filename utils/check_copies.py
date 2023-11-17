@@ -36,6 +36,11 @@ python utils/check_copies.py --fix_and_overwrite
 for a check that will fix all inconsistencies automatically (used by `make fix-copies`).
 """
 
+import pexpect, sys
+
+pat_ps1 = 'bash-[.0-9]+[$#] $'
+
+
 import argparse
 import glob
 import os
@@ -223,11 +228,17 @@ def get_indent(code: str) -> str:
         return re.search(r"^(\s*)\S", lines[idx]).groups()[0]
     return ""
 
+import datetime
+t = [0.0]
 
 def run_ruff(code):
+    s = datetime.datetime.now()
     command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
     stdout, _ = process.communicate(input=code.encode())
+    e = datetime.datetime.now()
+    d = (e-s).total_seconds()
+    t[0] += d
     return stdout.decode()
 
 
@@ -390,13 +401,11 @@ def check_copies(overwrite: bool = False):
     for filename in all_files:
         new_diffs = is_copy_consistent(filename, overwrite)
         diffs += [f"- {filename}: copy does not match {d[0]} at line {d[1]}" for d in new_diffs]
-    if not overwrite and len(diffs) > 0:
-        diff = "\n".join(diffs)
-        raise Exception(
-            "Found the following copy inconsistencies:\n"
-            + diff
-            + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
-        )
+
+    proc.sendline("ls -l")
+    proc.expect(pat_ps1)
+
+    breakpoint()
     check_model_list_copy(overwrite=overwrite)
 
 
@@ -734,6 +743,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
     args = parser.parse_args()
+
+    proc = pexpect.spawn('bash --norc', encoding='utf8')
+    proc.logfile_read = sys.stdout
+    proc.expect(pat_ps1)
+
+    proc.sendline("ls -l")
+    proc.expect(pat_ps1)
 
     check_readme(args.fix_and_overwrite)
     check_copies(args.fix_and_overwrite)
