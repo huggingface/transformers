@@ -69,6 +69,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_pvt_v2 import (
             PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PvtV2Backbone,
             PvtV2ForImageClassification,
             PvtV2Model,
             PvtV2PreTrainedModel,

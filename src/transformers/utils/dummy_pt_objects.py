@@ -6392,6 +6392,13 @@ class PvtPreTrainedModel(metaclass=DummyObject):
 PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class PvtV2Backbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class PvtV2ForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
