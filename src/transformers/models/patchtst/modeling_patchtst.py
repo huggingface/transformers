@@ -290,18 +290,18 @@ def random_masking(
 
 def forecast_masking(
     inputs: torch.Tensor,
-    num_mask_patches: Union[list, int],
+    num_forecast_mask_patches: Union[list, int],
     unmasked_channel_indices: list = None,
     mask_value: int = 0,
     seed_number: Optional[int] = None,
 ):
-    """Forecast masking that masks the last K patches where K is from the num_mask_patches.
-    If num_mask_patches is a list, samples in the batch will be randomly masked by numbers defined in the list.
+    """Forecast masking that masks the last K patches where K is from the num_forecast_mask_patches.
+    If num_forecast_mask_patches is a list, samples in the batch will be randomly masked by numbers defined in the list.
 
     Parameters:
         inputs (`torch.Tensor`):
             Input of shape `(bs, num_channels, num_patch, patch_len)`
-        num_mask_patches (`list`):
+        num_forecast_mask_patches (`list`):
             Number of patches to be masked at the end of each batch sample. e.g. 4 or [3, 5].
         unmasked_channel_indices (`list`, *optional*):
             Indices of channels that are not masked.
@@ -317,8 +317,8 @@ def forecast_masking(
     if seed_number:
         set_seed(seed_number)
 
-    if isinstance(num_mask_patches, int): num_mask_patches = [num_mask_patches]
-    forecast_mask_ratios = [1 for _ in num_mask_patches]
+    if isinstance(num_forecast_mask_patches, int): num_forecast_mask_patches = [num_forecast_mask_patches]
+    forecast_mask_ratios = [1 for _ in num_forecast_mask_patches]
 
     batch_size, num_channels, sequence_length, num_features = inputs.shape
     mask = torch.zeros(batch_size, num_channels, sequence_length, device=inputs.device)
@@ -327,7 +327,7 @@ def forecast_masking(
     total_length = 0
     total_ratio = sum(forecast_mask_ratios)
 
-    for patch_length, ratio in zip(num_mask_patches, forecast_mask_ratios):
+    for patch_length, ratio in zip(num_forecast_mask_patches, forecast_mask_ratios):
         if patch_length <= 0 or patch_length >= sequence_length:
             raise ValueError(f"masked_patch_len {patch_length} should be greater than 0 and less than total patches.")
         temp_len = int(batch_size * ratio / total_ratio)
@@ -424,7 +424,7 @@ class PatchTSTMasking(nn.Module):
         self.random_mask_ratio = config.random_mask_ratio
         self.channel_consistent_masking = config.channel_consistent_masking
         self.mask_type = config.mask_type
-        self.num_mask_patches = config.num_mask_patches
+        self.num_forecast_mask_patches = config.num_forecast_mask_patches
         self.unmasked_channel_indices = config.unmasked_channel_indices
         self.mask_value = config.mask_value
         if self.unmasked_channel_indices is not None:
@@ -456,7 +456,7 @@ class PatchTSTMasking(nn.Module):
         elif self.mask_type == "forecast":
             masked_input, mask = forecast_masking(
                 inputs=patch_input,
-                num_mask_patches=self.num_mask_patches,
+                num_forecast_mask_patches=self.num_forecast_mask_patches,
                 unmasked_channel_indices=self.unmasked_channel_indices,
                 mask_value=self.mask_value,
                 seed_number=self.seed_number,

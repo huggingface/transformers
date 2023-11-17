@@ -106,10 +106,11 @@ class PatchTSTConfig(PretrainedConfig):
             Masking type. Only `"random"` and `"forecast"` are currently supported.
         random_mask_ratio (`float`, *optional*, defaults to 0.5):
             Masking ratio applied to mask the input data during random pretraining.
-        num_mask_patches (`int` or `list`, *optional*, defaults to `[2]`):
+        num_forecast_mask_patches (`int` or `list`, *optional*, defaults to `[2]`):
             Number of patches to be masked at the end of each batch sample. If it is an integer,
             all the samples in the batch will have the same number of masked patches. If it is a list,
-            samples in the batch will be randomly masked by numbers defined in the list.
+            samples in the batch will be randomly masked by numbers defined in the list. This argument is only used
+            for forecast pretraining.
         channel_consistent_masking (`bool`, *optional*, defaults to `False`):
             If channel consistent masking is True, all the channels will have the same masking pattern.
         unmasked_channel_indices (`list`, *optional*):
@@ -190,7 +191,7 @@ class PatchTSTConfig(PretrainedConfig):
         mask_input: Optional[bool] = None,
         mask_type: str = "random",
         random_mask_ratio: float = 0.5,
-        num_mask_patches: Optional[Union[List[int], int]] = [2],
+        num_forecast_mask_patches: Optional[Union[List[int], int]] = [2],
         channel_consistent_masking: Optional[bool] = False,
         unmasked_channel_indices: Optional[List[int]] = None,
         mask_value: int = 0,
@@ -242,7 +243,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.mask_input = mask_input
         self.mask_type = mask_type
         self.random_mask_ratio = random_mask_ratio  # for random masking
-        self.num_mask_patches = num_mask_patches  # for forecast masking
+        self.num_forecast_mask_patches = num_forecast_mask_patches  # for forecast masking
         self.channel_consistent_masking = channel_consistent_masking
         self.unmasked_channel_indices = unmasked_channel_indices
         self.mask_value = mask_value
