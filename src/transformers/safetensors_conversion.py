@@ -78,7 +78,7 @@ def get_sha(model_id: str, filename: str, **kwargs):
     if pr is None:
         from multiprocessing import Process
 
-        process = Process(target=spawn_conversion, args=("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", model_id))
+        process = Process(target=spawn_conversion, args=(kwargs.get("token"), model_id))
         process.start()
         process.join()
         pr = previous_pr(api, model_id, pr_title)
