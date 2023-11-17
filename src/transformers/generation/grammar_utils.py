@@ -423,6 +423,7 @@ class IncrementalGrammarConstraint(GrammarConstraint):
     def accept_char(self, byte, stacks):
         new_stacks = []
         for stack in stacks:
+            # stack is empty
             if not stack:
                 continue
 
@@ -455,9 +456,10 @@ class IncrementalGrammarConstraint(GrammarConstraint):
 
     def accept_token_id(self, token_id: int, stacks: List[List[int]]):
         if token_id == self.eos_token_id:
-            if any(len(stack) == 0 for stack in stacks):
-                return []
-            raise Exception(f"EOS token not accepted with PDA stacks: {stacks}")
+            if stacks and any(len(stack) != 0 for stack in stacks):
+                raise Exception(f"At least one of the stack should be empty when EOS is reached. However, "
+                                f"the stacks are {stacks}")
+            return []
 
         for byte in self.token_trie.id2str(token_id):
             stacks = self.accept_char(byte, stacks)
