@@ -2053,8 +2053,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             return outputs
 
+        if not return_segments and return_dict_in_generate:
+            raise ValueError("Make sure to set `return_segments=True` to return generation outputs as part of the `'segments' key.`")
+
         # if input is longer than 30 seconds we default to long-form generation
-        sequence = None
         timestamp_begin = self.generation_config.no_timestamps_token_id + 1
         # input stride is mel frames per encoder output vector which is the product of all conv strides
         input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
@@ -2063,7 +2065,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if batch_size > 1 and attention_mask is None:
             raise ValueError("When doing long-form audio transcription, make sure to pass an `attention_mask`. You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True)` ")
         elif batch_size > 1:
-            max_frames = attention_mask.sum(-1).cpu()
+            max_frames = attention_mask.sum(-1).cpu().to(torch.long)
             seek = torch.zeros((batch_size,), dtype=torch.long)
         else:
             max_frames = torch.ones((1,), dtype=torch.long) * total_input_frames
@@ -2091,7 +2093,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             time_offset = seek * time_precision / input_stride
             seek_num_frames = (max_frames - seek).clamp(max=num_segment_frames)
 
-            print(f"Done {seek} of {max_frames}...")
             segment_input = []
             for i in range(cur_bsz):
                 prev_i = cur_to_prev_index_map[i]
@@ -2146,7 +2147,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                 consecutive = torch.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
 
-                last_timestamp_pos = -1  # TODO(PVP delete, just for debugging)
                 if len(consecutive) > 0:
                     # if the output contains two consecutive timestamp tokens
                     slices = consecutive.tolist()
@@ -2164,8 +2164,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                         )
                         current_segments[prev_i].append(
                             dict(
-                                start=time_offset + start_timestamp_pos * time_precision,
-                                end=time_offset + end_timestamp_pos * time_precision,
+                                start=time_offset[prev_i] + start_timestamp_pos * time_precision,
+                                end=time_offset[prev_i] + end_timestamp_pos * time_precision,
                                 tokens=sliced_tokens,
                                 result=seek_outputs[i],
                             )
@@ -2189,16 +2189,13 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                     current_segments[prev_i].append(
                         dict(
-                            start=time_offset,
-                            end=time_offset + last_timestamp_pos * time_precision,
+                            start=time_offset[prev_i],
+                            end=time_offset[prev_i] + last_timestamp_pos * time_precision,
                             tokens=seek_sequence,
                             result=seek_outputs[i],
                         )
                     )
                     seek[prev_i] += seek_num_frames[prev_i]
-
-                if seek_num_frames.max() == 0 or last_timestamp_pos == 0:
-                    import ipdb; ipdb.set_trace()
 
         sequences = []
         max_total_length = 0
