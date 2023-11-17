@@ -42,69 +42,83 @@ if is_torch_available():
     from transformers.models.textnet.modeling_textnet import TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
-class TextNetModelTester:
-    def __init__(
-        self,
-        parent,
-        stem_kernel_size=3,
-        stem_stride=2,
-        stem_in_channels=3,
-        stem_out_channels=64,
-        # use_bn=True,
-        stem_act_func="relu",
-        dropout_rate=0,
-        ops_order="weight_bn_act",
-        conv_layer_kernel_sizes=[[[3, 3]], [[3, 1]], [[1, 3]], [[3, 3]]],
-        conv_layer_strides=[
-            [
-                1,
-            ],
-            [
-                2,
-            ],
-            [
-                2,
-            ],
-            [
-                2,
-            ],
+def __init__(
+    self,
+    parent,
+    stem_kernel_size=3,
+    stem_stride=2,
+    stem_in_channels=3,
+    stem_out_channels=64,
+    # use_bn=True,
+    stem_act_func="relu",
+    dropout_rate=0,
+    ops_order="weight_bn_act",
+    conv_layer_kernel_sizes=[
+        [
+            [3, 3],
         ],
-        out_features=["stage1", "stage2", "stage3", "stage4"],
-        out_indices=[1, 2, 3, 4],
-        batch_size=3,
-        num_channels=3,
-        image_size=32,
-        is_training=True,
-        use_labels=True,
-        hidden_act="relu",
-        num_labels=3,
-        hidden_sizes=[64, 64, 64, 64, 64],
-    ):
-        self.parent = parent
-        self.stem_kernel_size = stem_kernel_size
-        self.stem_stride = stem_stride
-        self.stem_in_channels = stem_in_channels
-        self.stem_out_channels = stem_out_channels
-        # self.use_bn = use_bn
-        self.act_func = stem_act_func
-        self.dropout_rate = dropout_rate
-        self.ops_order = ops_order
-        self.conv_layer_kernel_sizes = conv_layer_kernel_sizes
-        self.conv_layer_strides = conv_layer_strides
+        [
+            [3, 3],
+        ],
+        [
+            [3, 3],
+        ],
+        [
+            [3, 3],
+        ],
+    ],
+    conv_layer_strides=[
+        [
+            2,
+        ],
+        [
+            2,
+        ],
+        [
+            2,
+        ],
+        [
+            2,
+        ],
+    ],
+    out_features=["stage1", "stage2", "stage3", "stage4"],
+    out_indices=[1, 2, 3, 4],
+    batch_size=3,
+    num_channels=3,
+    image_size=32,
+    is_training=True,
+    use_labels=True,
+    hidden_act="relu",
+    num_labels=3,
+    hidden_sizes=[64, 64, 64, 64, 64],
+):
+    self.parent = parent
+    self.stem_kernel_size = stem_kernel_size
+    self.stem_stride = stem_stride
+    self.stem_in_channels = stem_in_channels
+    self.stem_out_channels = stem_out_channels
+    # self.use_bn = use_bn
+    self.act_func = stem_act_func
+    self.dropout_rate = dropout_rate
+    self.ops_order = ops_order
+    self.conv_layer_kernel_sizes = conv_layer_kernel_sizes
+    self.conv_layer_strides = conv_layer_strides
 
-        self.out_features = out_features
-        self.out_indices = out_indices
+    self.out_features = out_features
+    self.out_indices = out_indices
 
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.num_labels = num_labels
-        self.hidden_sizes = hidden_sizes
+    self.batch_size = batch_size
+    self.num_channels = num_channels
+    self.image_size = image_size
+    self.is_training = is_training
+    self.use_labels = use_labels
+    self.num_labels = num_labels
+    self.hidden_sizes = hidden_sizes
 
-        self.num_stages = 5
+    self.num_stages = 5
 
+
+class TextNetModelTester:
     def get_config(self):
         return TextNetConfig(
             stem_kernel_size=self.stem_kernel_size,
@@ -130,7 +144,7 @@ class TextNetModelTester:
         scale = self.image_size // 32
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_sizes[-1], 2 * scale, 2 * scale),
+            (self.batch_size, self.hidden_sizes[-1], scale, scale),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -162,7 +176,7 @@ class TextNetModelTester:
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
         scale = self.image_size // 32
         self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 16 * scale, 16 * scale]
+            list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 8 * scale, 8 * scale]
         )
 
         # verify channels
@@ -179,7 +193,7 @@ class TextNetModelTester:
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
         scale = self.image_size // 32
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, 64, 2 * scale, 2 * scale])
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, 64, scale, scale])
 
         # verify channels
         self.parent.assertEqual(len(model.channels), 1)

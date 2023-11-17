@@ -317,7 +317,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         # classification head
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1] * scale * scale * 2 * 2, config.num_labels)
+            nn.Linear(config.hidden_sizes[-1] * scale * scale, config.num_labels)
             if config.num_labels > 0
             else nn.Identity(),
         )
