@@ -67,11 +67,9 @@ class PatchTSTModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        lags_sequence=[1, 2, 3, 4, 5],
         distil=False,
         seed_number=42,
         num_targets=2,
-        num_output_channels=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -81,7 +79,6 @@ class PatchTSTModelTester:
         self.patch_stride = patch_stride
         self.num_input_channels = num_input_channels
         self.num_time_features = num_time_features
-        self.lags_sequence = lags_sequence
         self.is_training = is_training
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -93,7 +90,6 @@ class PatchTSTModelTester:
 
         self.seed_number = seed_number
         self.num_targets = num_targets
-        self.num_output_channels = num_output_channels
         self.distil = distil
         self.num_patches = (max(self.context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
 
@@ -113,7 +109,6 @@ class PatchTSTModelTester:
             activation_function=self.hidden_act,
             seed_number=self.seed_number,
             num_targets=self.num_targets,
-            num_output_channels=self.num_output_channels,
         )
 
     def prepare_patchtst_inputs_dict(self, config):
@@ -155,7 +150,12 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else ()
     )
     all_generative_model_classes = (
-        (PatchTSTForPrediction, PatchTSTForRegression, PatchTSTForPretraining) if is_torch_available() else ()
+        (
+            PatchTSTForPrediction,
+            PatchTSTForRegression,
+            PatchTSTForPretraining
+        )
+        if is_torch_available() else ()
     )
     pipeline_model_mapping = {"feature-extraction": PatchTSTModel} if is_torch_available() else {}
     test_pruning = False
@@ -198,7 +198,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
             target_values = floats_tensor(
-                [self.model_tester.batch_size, self.model_tester.num_output_channels], rng=rng
+                [self.model_tester.batch_size, self.model_tester.num_targets], rng=rng
             )
             inputs_dict["target_values"] = target_values
             inputs_dict.pop("future_values")
@@ -305,7 +305,7 @@ def prepare_batch(repo_id="ibm/etth1-forecast-test", file="train-batch.pt"):
     return batch
 
 
-# Note: Publishing of pretrained weights is under internal review. Pretrained model is not yet downloadable.
+# Note: Pretrained model is not yet downloadable.
 @require_torch
 @slow
 class PatchTSTModelIntegrationTests(unittest.TestCase):
@@ -349,3 +349,43 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             device=torch_device,
         )
         self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
+
+
+    def test_prediction_generation(self):
+        model = PatchTSTForPrediction.from_pretrained("ibm/patchtst-etth1-forecast").to(torch_device)
+        batch = prepare_batch("test-batch.pt")
+
+        torch.manual_seed(0)
+        with torch.no_grad():
+            outputs = model.generate(
+                past_values=batch["past_values"].to(torch_device)
+            )
+        expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
+        self.assertEqual(outputs.sequences.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[0.3228, 0.4320, 0.4591, 0.4066, -0.3461, 0.3094, -0.8426]],
+            device=torch_device,
+        )
+        mean_prediction = outputs.sequences.mean(dim=1)
+        self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=TOLERANCE))
+
+
+    def test_regression_generation(self):
+        model = PatchTSTForRegression.from_pretrained("ibm/patchtst-etth1-forecast").to(torch_device)
+        batch = prepare_batch("test-batch.pt")
+
+        torch.manual_seed(0)
+        with torch.no_grad():
+            outputs = model.generate(
+                past_values=batch["past_values"].to(torch_device)
+            )
+        expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.num_targets))
+        self.assertEqual(outputs.sequences.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[0.3228, 0.4320, 0.4591, 0.4066, -0.3461, 0.3094, -0.8426]],
+            device=torch_device,
+        )
+        mean_prediction = outputs.sequences.mean(dim=1)
+        self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=TOLERANCE))
