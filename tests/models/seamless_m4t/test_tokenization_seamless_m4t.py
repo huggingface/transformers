@@ -449,9 +449,7 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         " face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
     ]
 
-    # fmt: off
-    expected_src_tokens = [256047, 16297, 134408, 8165, 248066, 14734, 950, 1135, 105721, 3573, 83, 27352, 108, 49486, 3]
-    # fmt: on
+    expected_src_tokens = [256047, 16297, 134408, 8165, 248066, 14734, 950, 1135, 105721, 3573, 83, 27352, 108, 49486, 3]  # fmt: skip
 
     @classmethod
     def setUpClass(cls):
@@ -483,9 +481,7 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
     # Copied from tests.models.nllb.test_tokenization_nllb.NllbDistilledIntegrationTest.test_enro_tokenizer_decode_ignores_language_codes
     def test_enro_tokenizer_decode_ignores_language_codes(self):
         self.assertIn(RO_CODE, self.tokenizer.all_special_ids)
-        # fmt: off
-        generated_ids = [RO_CODE, 4254, 98068, 112923, 39072, 3909, 713, 102767, 26, 17314, 35642, 14683, 33118, 2022, 66987, 2, 256047]
-        # fmt: on
+        generated_ids = [RO_CODE, 4254, 98068, 112923, 39072, 3909, 713, 102767, 26, 17314, 35642, 14683, 33118, 2022, 66987, 2, 256047]  # fmt: skip
 
         result = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
         expected_romanian = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)

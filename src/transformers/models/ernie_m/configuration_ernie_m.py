@@ -78,6 +78,7 @@ class ErnieMConfig(PretrainedConfig):
     A normal_initializer initializes weight matrices as normal distributions. See
     `ErnieMPretrainedModel._init_weights()` for how weights are initialized in `ErnieMModel`.
     """
+
     model_type = "ernie_m"
     attribute_map: Dict[str, str] = {"dropout": "classifier_dropout", "num_classes": "num_labels"}
 

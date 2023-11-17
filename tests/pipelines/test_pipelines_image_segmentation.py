@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import hashlib
 import tempfile
 import unittest
 from typing import Dict
@@ -21,6 +20,7 @@ import datasets
 import numpy as np
 import requests
 from datasets import load_dataset
+from huggingface_hub.utils import insecure_hashlib
 
 from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
@@ -59,7 +59,7 @@ else:
 
 
 def hashimage(image: Image) -> str:
-    m = hashlib.md5(image.tobytes())
+    m = insecure_hashlib.md5(image.tobytes())
     return m.hexdigest()[:10]
 
 
