@@ -271,7 +271,7 @@ def main():
         token=model_args.token,
     )
     # See more about loading any type of standard or custom dataset at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     is_regression = data_args.task_name == "stsb"
     if not is_regression:
