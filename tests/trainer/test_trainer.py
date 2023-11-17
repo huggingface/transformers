@@ -1544,16 +1544,16 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             do_train=True,
             max_steps=2,
             save_steps=1,
-            per_device_train_batch_size=16,
+            per_device_train_batch_size=8,
             auto_find_batch_size=True,
         )
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.train()
-        # assume that `auto_find_bs` set it to 8
-        trainer.args.per_device_train_batch_size = 8
+        # assume that `auto_find_bs` set it to 8, and we were originally at 16
+        trainer.args.per_device_train_batch_size = 16
         trainer.train(resume_from_checkpoint=True)
         # We should be back to 16 again
-        self.assertEqual(trainer._train_batch_size, 16)
+        self.assertEqual(trainer._train_batch_size, 8)
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
