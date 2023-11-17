@@ -233,13 +233,19 @@ t = [0.0]
 
 def run_ruff(code):
     s = datetime.datetime.now()
-    command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-    stdout, _ = process.communicate(input=code.encode())
+
+    #command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
+    #process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    #stdout, _ = process.communicate(input=code.encode())
+
+    proc.sendline(f'echo "{code}" | ruff format - --config pyproject.toml --silent')
+    proc.expect(pat_ps1)
+
     e = datetime.datetime.now()
     d = (e-s).total_seconds()
     t[0] += d
-    return stdout.decode()
+    return ""
+    #return stdout.decode()
 
 
 def stylify(code: str) -> str:
