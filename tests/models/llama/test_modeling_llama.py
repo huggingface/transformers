@@ -15,6 +15,7 @@
 """ Testing suite for the PyTorch LLaMA model. """
 
 
+import copy
 import unittest
 
 import pytest
@@ -430,6 +431,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         max_new_tokens = 30
 
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+        config = LlamaConfig.from_pretrained("meta-llama/Llama-2-7b-hf")
 
         model_sdpa = LlamaForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf",
@@ -437,12 +439,14 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             low_cpu_mem_usage=True,
         ).to(torch_device)
 
-        # TODO: replace the _use_sdpa=False by `model.config.attn_implementation = "eager"` once the setter is implemented.
+        # Force using the eager implementation.
+        cfg = copy.deepcopy(config)
+        cfg.attn_implementation = "eager"
         model_eager = LlamaForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf",
+            config=cfg,
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
-            _use_sdpa=False,
         ).to(torch_device)
 
         for name, submodule in model_eager.named_modules():

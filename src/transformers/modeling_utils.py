@@ -1275,7 +1275,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @classmethod
     def _check_and_enable_flash_attn_2(
-        cls, config, torch_dtype: Optional[torch.dtype] = None, device_map: Optional[Union[str, Dict[str, int]]] = None
+        cls,
+        config,
+        torch_dtype: Optional[torch.dtype] = None,
+        device_map: Optional[Union[str, Dict[str, int]]] = None,
+        enable: bool = True,
     ) -> PretrainedConfig:
         """
         If you don't know about Flash Attention, check out the official repository of flash attention:
@@ -1348,11 +1352,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "You are attempting to use Flash Attention 2.0 with a model dispatched on CPU or disk. This is not supported. Please make sure to "
                 "initialise the model on a GPU by passing a device_map that contains only GPU devices as keys."
             )
-        config.attn_implementation = "flash_attention_2"
+        if enable:
+            config.attn_implementation = "flash_attention_2"
         return config
 
     @classmethod
-    def _check_and_enable_sdpa(cls, config) -> PretrainedConfig:
+    def _check_and_enable_sdpa(cls, config, enable: bool = True) -> PretrainedConfig:
         """
         Enables the use of SDPA natively in Transformers if supported by the model, and if BetterTransformer is not
         being used.
@@ -1364,7 +1369,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if _is_bettertransformer:
             return config
 
-        config.attn_implementation = "sdpa"
+        if enable:
+            config.attn_implementation = "sdpa"
         return config
 
     def enable_input_require_grads(self):
@@ -2607,10 +2613,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         adapter_name = kwargs.pop("adapter_name", "default")
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
-        # TODO: remove this one once we have a proper config.attn_implementation setter.
-        # This only temporary for testing. SDPA should otherwise should be transparent to the user.
-        _use_sdpa = kwargs.pop("_use_sdpa", True)
-
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
 
@@ -3285,12 +3287,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif load_in_8bit or load_in_4bit or low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
 
-        if use_flash_attention_2:
-            config = cls._check_and_enable_flash_attn_2(config, torch_dtype=torch_dtype, device_map=device_map)
-        elif _use_sdpa and is_torch_sdpa_available():
-            # use_flash_attention_2 takes priority.
-            config = cls._check_and_enable_sdpa(config)
+        if (
+            hasattr(config, "attn_implementation")
+            and config.attn_implementation != "flash_attention_2"
+            and use_flash_attention_2
+        ):
+            raise ValueError(
+                f"Both config.attn_implementation ({config.attn_implementation}) and use_flash_attention_2=True were passed to from_pretrained and are incompatible."
+            )
+
+        # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config.
+        if hasattr(config, "attn_implementation"):
+            auto_dispatch_attention = False
         else:
+            auto_dispatch_attention = True
+
+        if use_flash_attention_2:
+            config = cls._check_and_enable_flash_attn_2(
+                config, torch_dtype=torch_dtype, device_map=device_map, enable=auto_dispatch_attention
+            )
+        elif is_torch_sdpa_available():
+            # use_flash_attention_2 takes priority.
+            config = cls._check_and_enable_sdpa(config, enable=auto_dispatch_attention)
+        elif not hasattr(config, "attn_implementation"):
             config.attn_implementation = "eager"
 
         with ContextManagers(init_contexts):

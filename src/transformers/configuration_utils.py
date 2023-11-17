@@ -878,6 +878,9 @@ class PretrainedConfig(PushToHubMixin):
 
         self.dict_torch_dtype_to_str(serializable_config_dict)
 
+        if "attention_implementation" in serializable_config_dict:
+            del serializable_config_dict["attention_implementation"]
+
         return serializable_config_dict
 
     def to_dict(self) -> Dict[str, Any]:
@@ -894,6 +897,8 @@ class PretrainedConfig(PushToHubMixin):
             del output["_auto_class"]
         if "_commit_hash" in output:
             del output["_commit_hash"]
+        if "attention_implementation" in output:
+            del output["attention_implementation"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__

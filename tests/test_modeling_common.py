@@ -3150,13 +3150,19 @@ class ModelTesterMixin:
                 )
                 model_sdpa.to(torch_device)
 
-                # TODO: replace the _use_sdpa=False by `model.config.attn_implementation = "eager"` once the setter is implemented.
+                # Force using the eager implementation.
+                cfg = copy.deepcopy(config)
+                cfg.attn_implementation = "eager"
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
+                    config=cfg,
                     torch_dtype=torch.bfloat16,
-                    _use_sdpa=False,
                 )
                 model_eager.to(torch_device)
+
+                for name, submodule in model_eager.named_modules():
+                    if "SDPA" in submodule.__class__.__name__:
+                        raise ValueError("The eager model should not have SDPA attention layers")
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
                 if dummy_input.dtype in [torch.float32, torch.float16]:
@@ -3271,12 +3277,14 @@ class ModelTesterMixin:
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 
-                # TODO: replace the _use_sdpa=False by `model.config.attn_implementation = "eager"` once the setter is implemented.
+                # Force using the eager implementation.
+                cfg = copy.deepcopy(config)
+                cfg.attn_implementation = "eager"
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
+                    config=cfg,
                     torch_dtype=torch.float16,
                     low_cpu_mem_usage=True,
-                    _use_sdpa=False,
                 ).to(torch_device)
 
                 for name, submodule in model_eager.named_modules():
