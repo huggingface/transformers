@@ -287,7 +287,7 @@ The information in this section isn't not specific to the DeepSpeed integration 
 
 For the duration of this section let's assume that you have 2 nodes with 8 gpus each. And you can reach the first node with `ssh hostname1` and second node with `ssh hostname2`, and both must be able to reach each other via ssh locally without a password. Of course, you will need to rename these host (node) names to the actual host names you are working with.
 
-#### The torch.distributed.run launcher
+#### The torch.distributed.run(torchrun) launcher
 
 
 For example, to use `torch.distributed.run`, you could do:

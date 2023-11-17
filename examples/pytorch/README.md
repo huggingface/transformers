@@ -98,7 +98,7 @@ the [Trainer API](https://huggingface.co/transformers/main_classes/trainer.html)
 use the following command:
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
     --nproc_per_node number_of_gpu_you_have path_to_script.py \
 	--all_arguments_of_the_script
 ```
@@ -107,7 +107,7 @@ As an example, here is how you would fine-tune the BERT large model (with whole 
 classification MNLI task using the `run_glue` script, with 8 GPUs:
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
     --nproc_per_node 8 pytorch/text-classification/run_glue.py \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --task_name mnli \

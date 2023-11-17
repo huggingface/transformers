@@ -130,7 +130,7 @@ The [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) sup
 - Set the number of GPUs to use with the `nproc_per_node` argument.
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
     --nproc_per_node 8 pytorch/summarization/run_summarization.py \
     --fp16 \
     --model_name_or_path t5-small \
