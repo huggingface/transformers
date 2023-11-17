@@ -613,7 +613,7 @@ class BartEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        if getattr(config, "_flash_attn_2_enabled", False):
+        if is_flash_attn_2_available() and getattr(config, "_flash_attn_2_enabled", False):
             self._attn_type = BartAttentionType.flash_attention_2
         elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
             self._attn_type = BartAttentionType.sdpa

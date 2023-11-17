@@ -36,6 +36,7 @@ from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTO
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
     is_torch_sdpa_available,
     logging,
     replace_return_docstrings,
@@ -442,7 +443,7 @@ class TimeSeriesTransformerEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        if getattr(config, "_flash_attn_2_enabled", False):
+        if is_flash_attn_2_available() and getattr(config, "_flash_attn_2_enabled", False):
             self._attn_type = TimeSeriesTransformerAttentionType.flash_attention_2
         elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
             self._attn_type = TimeSeriesTransformerAttentionType.sdpa

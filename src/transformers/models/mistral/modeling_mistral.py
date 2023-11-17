@@ -581,11 +581,12 @@ class MistralDecoderLayer(nn.Module):
     def __init__(self, config: MistralConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = (
-            MistralAttention(config=config)
-            if not getattr(config, "_flash_attn_2_enabled", False)
-            else MistralFlashAttention2(config)
-        )
+
+        if is_flash_attn_2_available() and getattr(config, "_flash_attn_2_enabled", False):
+            self.self_attn = MistralFlashAttention2(config)
+        else:
+            self.self_attn = MistralAttention(config=config)
+
         self.mlp = MistralMLP(config)
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

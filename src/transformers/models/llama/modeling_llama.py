@@ -739,7 +739,7 @@ class LlamaDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        if getattr(config, "_flash_attn_2_enabled", False):
+        if is_flash_attn_2_available() and getattr(config, "_flash_attn_2_enabled", False):
             self.self_attn = LlamaFlashAttention2(config=config)
         elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
             self.self_attn = LlamaSDPAAttention(config=config)

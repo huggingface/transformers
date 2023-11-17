@@ -860,8 +860,11 @@ class PretrainedConfig(PushToHubMixin):
 
         self.dict_torch_dtype_to_str(serializable_config_dict)
 
+        # TODO: This is to be refactored with e.g. an attribute model.attn_type (or attn_implementation) or model.config.attn_type.
         if "_flash_attn_2_enabled" in serializable_config_dict:
             del serializable_config_dict["_flash_attn_2_enabled"]
+        if "_sdpa_enabled" in serializable_config_dict:
+            del serializable_config_dict["_sdpa_enabled"]
 
         return serializable_config_dict
 
@@ -879,8 +882,12 @@ class PretrainedConfig(PushToHubMixin):
             del output["_auto_class"]
         if "_commit_hash" in output:
             del output["_commit_hash"]
+
+        # TODO: This is to be refactored with e.g. an attribute model.attn_type (or attn_implementation) or model.config.attn_type.
         if "_flash_attn_2_enabled" in output:
             del output["_flash_attn_2_enabled"]
+        if "_sdpa_enabled" in output:
+            del output["_sdpa_enabled"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
