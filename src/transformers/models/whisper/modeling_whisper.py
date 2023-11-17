@@ -15,9 +15,9 @@
 """ PyTorch Whisper model."""
 
 import math
+import warnings
 from typing import Optional, Tuple, Union
 
-import warnings
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -1842,7 +1842,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         if "inputs" in kwargs:
             input_features = kwargs.pop("inputs")
-            warnings.warn("The input name `inputs` is deprecated. Please make sure to use `input_features` instead.", FutureWarning)
+            warnings.warn(
+                "The input name `inputs` is deprecated. Please make sure to use `input_features` instead.",
+                FutureWarning,
+            )
 
         return_dict_in_generate = (
             return_dict_in_generate
@@ -2022,7 +2025,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 generation_config.num_frames = kwargs.pop("num_frames")
 
         if generation_config.return_timestamps is True:
-            last_forced_decoder_ids = generation_config.forced_decoder_ids[-1][-1] if hasattr(self.config, "forced_decoder_ids") and self.config.forced_decoder_ids else None
+            last_forced_decoder_ids = (
+                generation_config.forced_decoder_ids[-1][-1]
+                if hasattr(self.config, "forced_decoder_ids") and self.config.forced_decoder_ids
+                else None
+            )
             if last_forced_decoder_ids == self.generation_config.no_timestamps_token_id:
                 # remove no_timestamp to be forcefully generated if we want to return timestamps
                 # this is also important to make sure `WhisperTimeStampLogitsProcessor` functions correctly
@@ -2031,7 +2038,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 generation_config.forced_decoder_ids = None if len(forced_decoder_ids) == 0 else forced_decoder_ids
 
             timestamp_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
-            logits_processor = timestamp_processor if logits_processor is None else timestamp_processor + logits_processor
+            logits_processor = (
+                timestamp_processor if logits_processor is None else timestamp_processor + logits_processor
+            )
 
         if is_shortform:
             outputs = super().generate(
@@ -2054,7 +2063,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             return outputs
 
         if not return_segments and return_dict_in_generate:
-            raise ValueError("Make sure to set `return_segments=True` to return generation outputs as part of the `'segments' key.`")
+            raise ValueError(
+                "Make sure to set `return_segments=True` to return generation outputs as part of the `'segments' key.`"
+            )
 
         # if input is longer than 30 seconds we default to long-form generation
         timestamp_begin = self.generation_config.no_timestamps_token_id + 1
@@ -2063,7 +2074,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         batch_size = input_features.shape[0]
 
         if batch_size > 1 and attention_mask is None:
-            raise ValueError("When doing long-form audio transcription, make sure to pass an `attention_mask`. You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True)` ")
+            raise ValueError(
+                "When doing long-form audio transcription, make sure to pass an `attention_mask`. You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True)` "
+            )
         elif batch_size > 1:
             max_frames = attention_mask.sum(-1).cpu().to(torch.long)
             seek = torch.zeros((batch_size,), dtype=torch.long)
@@ -2084,7 +2097,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 prev_i = cur_to_prev_index_map[i]
                 if seek[prev_i] >= max_frames[prev_i]:
                     cur_bsz -= 1
-                    input_features = torch.cat([input_features[:i], input_features[i + 1:]], dim=0)
+                    input_features = torch.cat([input_features[:i], input_features[i + 1 :]], dim=0)
                 else:
                     # cut out index that goes away
                     new_cur_to_prev_index_map.append(prev_i)
@@ -2096,11 +2109,15 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             segment_input = []
             for i in range(cur_bsz):
                 prev_i = cur_to_prev_index_map[i]
-                segment_input_slice = input_features[i:i+1, :, seek[prev_i] : seek[prev_i] + seek_num_frames[prev_i]]
+                segment_input_slice = input_features[
+                    i : i + 1, :, seek[prev_i] : seek[prev_i] + seek_num_frames[prev_i]
+                ]
 
                 if segment_input_slice.shape[-1] < num_segment_frames:
                     # pad to 3000 if necessary
-                    segment_input_slice = F.pad(segment_input_slice, pad=(0, num_segment_frames - segment_input_slice.shape[-1]))
+                    segment_input_slice = F.pad(
+                        segment_input_slice, pad=(0, num_segment_frames - segment_input_slice.shape[-1])
+                    )
 
                 segment_input.append(segment_input_slice)
 
@@ -2125,7 +2142,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             if return_dict_in_generate:
                 seek_sequences = seek_outputs["sequences"]
-                seek_outputs = [{k: v[i] for k, v in seek_outputs.items()} for i in range(next(iter(seek_outputs.values())).size(0))]
+                seek_outputs = [
+                    {k: v[i] for k, v in seek_outputs.items()}
+                    for i in range(next(iter(seek_outputs.values())).size(0))
+                ]
             else:
                 seek_sequences = seek_outputs
 
@@ -2155,20 +2175,16 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                     last_slice = 0
                     for current_slice in slices:
-                        sliced_tokens = seek_sequence[last_slice+1:current_slice+1]
-                        start_timestamp_pos = (
-                            sliced_tokens[0].item() - timestamp_begin
-                        )
-                        end_timestamp_pos = (
-                            sliced_tokens[-1].item() - timestamp_begin
-                        )
+                        sliced_tokens = seek_sequence[last_slice + 1 : current_slice + 1]
+                        start_timestamp_pos = sliced_tokens[0].item() - timestamp_begin
+                        end_timestamp_pos = sliced_tokens[-1].item() - timestamp_begin
                         current_segments[prev_i].append(
-                            dict(
-                                start=time_offset[prev_i] + start_timestamp_pos * time_precision,
-                                end=time_offset[prev_i] + end_timestamp_pos * time_precision,
-                                tokens=sliced_tokens,
-                                result=seek_outputs[i],
-                            )
+                            {
+                                "start": time_offset[prev_i] + start_timestamp_pos * time_precision,
+                                "end": time_offset[prev_i] + end_timestamp_pos * time_precision,
+                                "tokens": sliced_tokens,
+                                "result": seek_outputs[i],
+                            }
                         )
                         last_slice = current_slice
 
@@ -2188,12 +2204,12 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                         last_timestamp_pos = timestamps[-1].item() - timestamp_begin
 
                     current_segments[prev_i].append(
-                        dict(
-                            start=time_offset[prev_i],
-                            end=time_offset[prev_i] + last_timestamp_pos * time_precision,
-                            tokens=seek_sequence,
-                            result=seek_outputs[i],
-                        )
+                        {
+                            "start": time_offset[prev_i],
+                            "end": time_offset[prev_i] + last_timestamp_pos * time_precision,
+                            "tokens": seek_sequence,
+                            "result": seek_outputs[i],
+                        }
                     )
                     seek[prev_i] += seek_num_frames[prev_i]
 
@@ -2204,7 +2220,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             max_total_length = max(max_total_length, len(sequences[-1]))
 
         for i in range(batch_size):
-            sequences[i] = F.pad(sequences[i], pad=(0, max_total_length - len(sequences[i])), value=self.generation_config.pad_token_id)
+            sequences[i] = F.pad(
+                sequences[i], pad=(0, max_total_length - len(sequences[i])), value=self.generation_config.pad_token_id
+            )
 
         sequences = torch.stack(sequences, dim=0)
 

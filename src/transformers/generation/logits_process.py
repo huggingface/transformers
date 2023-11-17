@@ -1516,11 +1516,17 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, generate_config, detect_timestamp_from_logprob: Optional[bool] = None):  # support for the kwargs
+    def __init__(
+        self, generate_config, detect_timestamp_from_logprob: Optional[bool] = None
+    ):  # support for the kwargs
         self.eos_token_id = generate_config.eos_token_id
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
         self.timestamp_begin = generate_config.no_timestamps_token_id + 1
-        self.detect_timestamp_from_logprob = detect_timestamp_from_logprob if detect_timestamp_from_logprob is not None else getattr(generate_config, "detect_timestamp_from_logprob", True)
+        self.detect_timestamp_from_logprob = (
+            detect_timestamp_from_logprob
+            if detect_timestamp_from_logprob is not None
+            else getattr(generate_config, "detect_timestamp_from_logprob", True)
+        )
 
         self.begin_index = (
             len(generate_config.forced_decoder_ids) + 1 if generate_config.forced_decoder_ids is not None else 1
