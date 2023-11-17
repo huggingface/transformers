@@ -477,7 +477,7 @@ class GPTNeoAttention(nn.Module):
         if self.attention_type in ["global", "local"]:
             self.attention = (
                 GPTNeoSelfAttention(config, self.attention_type)
-                if not getattr(config, "_flash_attn_2_enabled", False)
+                if config.attn_implementation == "eager"
                 else GPTNeoFlashAttention2(config, self.attention_type)
             )
         else:
@@ -698,6 +698,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
         self.drop = nn.Dropout(float(config.embed_dropout))
         self.h = nn.ModuleList([GPTNeoBlock(config, layer_id=i) for i in range(config.num_layers)])
+        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.gradient_checkpointing = False
@@ -775,7 +776,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         hidden_states = inputs_embeds + position_embeds
 
         # Attention mask.
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:

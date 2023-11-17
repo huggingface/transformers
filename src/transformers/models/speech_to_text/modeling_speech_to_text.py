@@ -34,8 +34,6 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_torch_sdpa_available,
     logging,
     replace_return_docstrings,
 )
@@ -338,7 +336,7 @@ SPEECH_TO_TEXT_ATTENTION_CLASSES = {"eager": Speech2TextAttention}
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->Speech2Text
-class Speech2TextAttentionType(str, Enum):
+class Speech2TextAttentionType(Enum):
     eager = "eager"
     sdpa = "sdpa"
     flash_attention_2 = "flash_attention_2"
@@ -350,14 +348,7 @@ class Speech2TextEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        if is_flash_attn_2_available() and getattr(config, "_flash_attn_2_enabled", False):
-            self._attn_type = Speech2TextAttentionType.flash_attention_2
-        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
-            self._attn_type = Speech2TextAttentionType.sdpa
-        else:
-            self._attn_type = Speech2TextAttentionType.eager
-
-        self.self_attn = SPEECH_TO_TEXT_ATTENTION_CLASSES[self._attn_type](
+        self.self_attn = SPEECH_TO_TEXT_ATTENTION_CLASSES[config.attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -427,14 +418,8 @@ class Speech2TextDecoderLayer(nn.Module):
     def __init__(self, config: Speech2TextConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        if getattr(config, "_flash_attn_2_enabled", False):
-            self._attn_type = Speech2TextAttentionType.flash_attention_2
-        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
-            self._attn_type = Speech2TextAttentionType.sdpa
-        else:
-            self._attn_type = Speech2TextAttentionType.eager
 
-        self.self_attn = SPEECH_TO_TEXT_ATTENTION_CLASSES[self._attn_type](
+        self.self_attn = SPEECH_TO_TEXT_ATTENTION_CLASSES[config.attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -447,7 +432,7 @@ class Speech2TextDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = SPEECH_TO_TEXT_ATTENTION_CLASSES[self._attn_type](
+        self.encoder_attn = SPEECH_TO_TEXT_ATTENTION_CLASSES[config.attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,

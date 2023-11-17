@@ -15,7 +15,6 @@
 """ PyTorch MBART model."""
 import copy
 import math
-from enum import Enum
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -42,7 +41,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_torch_sdpa_available,
     logging,
     replace_return_docstrings,
 )
@@ -492,26 +490,12 @@ MBART_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->MBart
-class MBartAttentionType(str, Enum):
-    eager = "eager"
-    sdpa = "sdpa"
-    flash_attention_2 = "flash_attention_2"
-
-
 class MBartEncoderLayer(nn.Module):
     def __init__(self, config: MBartConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
-        if is_flash_attn_2_available() and getattr(config, "_flash_attn_2_enabled", False):
-            self._attn_type = MBartAttentionType.flash_attention_2
-        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
-            self._attn_type = MBartAttentionType.sdpa
-        else:
-            self._attn_type = MBartAttentionType.eager
-
-        self.self_attn = MBART_ATTENTION_CLASSES[self._attn_type](
+        self.self_attn = MBART_ATTENTION_CLASSES[config.attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -580,14 +564,8 @@ class MBartDecoderLayer(nn.Module):
     def __init__(self, config: MBartConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        if getattr(config, "_flash_attn_2_enabled", False):
-            self._attn_type = MBartAttentionType.flash_attention_2
-        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
-            self._attn_type = MBartAttentionType.sdpa
-        else:
-            self._attn_type = MBartAttentionType.eager
 
-        self.self_attn = MBART_ATTENTION_CLASSES[self._attn_type](
+        self.self_attn = MBART_ATTENTION_CLASSES[config.attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -600,7 +578,7 @@ class MBartDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = MBART_ATTENTION_CLASSES[self._attn_type](
+        self.encoder_attn = MBART_ATTENTION_CLASSES[config.attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -939,6 +917,7 @@ class MBartEncoder(MBartPreTrainedModel):
             embed_dim,
         )
         self.layers = nn.ModuleList([MBartEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
         self.layer_norm = nn.LayerNorm(config.d_model)
 
@@ -1027,7 +1006,7 @@ class MBartEncoder(MBartPreTrainedModel):
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            if getattr(self.config, "_flash_attn_2_enabled", False):
+            if self._use_flash_attention_2:
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1116,6 +1095,7 @@ class MBartDecoder(MBartPreTrainedModel):
             config.d_model,
         )
         self.layers = nn.ModuleList([MBartDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
         self.layer_norm = nn.LayerNorm(config.d_model)
 
@@ -1235,7 +1215,7 @@ class MBartDecoder(MBartPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
@@ -1246,7 +1226,7 @@ class MBartDecoder(MBartPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if getattr(self.config, "_flash_attn_2_enabled", False):
+            if self._use_flash_attention_2:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
             else:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]

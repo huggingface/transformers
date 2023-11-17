@@ -422,6 +422,18 @@ class PretrainedConfig(PushToHubMixin):
             self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
             self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
+    @property
+    def attn_implementation(self):
+        return self._attn_implementation
+
+    @attn_implementation.setter
+    def attn_implementation(self, value):
+        if hasattr(self, "attn_implementation_set") and self.attn_implementation_set:
+            raise NotImplementedError("Modifying the attention implementation through this attribute is currently not implemented.")
+        self.attn_implementation_set = True
+
+        self._attn_implementation = value
+
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
         Save a configuration object to the directory `save_directory`, so that it can be re-loaded using the
@@ -861,12 +873,6 @@ class PretrainedConfig(PushToHubMixin):
 
         self.dict_torch_dtype_to_str(serializable_config_dict)
 
-        # TODO: This is to be refactored with e.g. an attribute model.attn_type (or attn_implementation) or model.config.attn_type.
-        if "_flash_attn_2_enabled" in serializable_config_dict:
-            del serializable_config_dict["_flash_attn_2_enabled"]
-        if "_sdpa_enabled" in serializable_config_dict:
-            del serializable_config_dict["_sdpa_enabled"]
-
         return serializable_config_dict
 
     def to_dict(self) -> Dict[str, Any]:
@@ -883,12 +889,6 @@ class PretrainedConfig(PushToHubMixin):
             del output["_auto_class"]
         if "_commit_hash" in output:
             del output["_commit_hash"]
-
-        # TODO: This is to be refactored with e.g. an attribute model.attn_type (or attn_implementation) or model.config.attn_type.
-        if "_flash_attn_2_enabled" in output:
-            del output["_flash_attn_2_enabled"]
-        if "_sdpa_enabled" in output:
-            del output["_sdpa_enabled"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__

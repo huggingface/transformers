@@ -35,7 +35,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_torch_sdpa_available,
     logging,
 )
 from .configuration_gpt_bigcode import GPTBigCodeConfig
@@ -642,6 +641,12 @@ class GPTBigCodeMLP(nn.Module):
         return hidden_states
 
 
+GPTBIGCODE_ATTENTION_CLASSES = {
+    "eager": GPTBigCodeAttention,
+    "flash_attention_2": GPTBigCodeFlashAttention2,
+    "sdpa": GPTBigCodeSDPAAttention,
+}
+
 class GPTBigCodeBlock(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
@@ -650,24 +655,15 @@ class GPTBigCodeBlock(nn.Module):
 
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
-        if getattr(config, "_flash_attn_2_enabled", False):
-            self.attn = GPTBigCodeFlashAttention2(config, layer_idx=layer_idx)
-        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
-            self.attn = GPTBigCodeSDPAAttention(config, layer_idx=layer_idx)
-        else:
-            self.attn = GPTBigCodeAttention(config, layer_idx=layer_idx)
+        self.attn = GPTBIGCODE_ATTENTION_CLASSES[config.attn_implementation](config, layer_idx=layer_idx)
+
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
             if config.multi_query:
                 raise NotImplementedError("Cross-attention not implemented for MQA")
 
-            if getattr(config, "_flash_attn_2_enabled", False):
-                self.attn = GPTBigCodeFlashAttention2(config, is_cross_attention=True, layer_idx=layer_idx)
-            elif is_torch_sdpa_available():
-                self.attn = GPTBigCodeSDPAAttention(config, is_cross_attention=True, layer_idx=layer_idx)
-            else:
-                self.attn = GPTBigCodeAttention(config, is_cross_attention=True, layer_idx=layer_idx)
+            self.crossattention = GPTBIGCODE_ATTENTION_CLASSES[config.attn_implementation](config, is_cross_attention=True, layer_idx=layer_idx)
 
             self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
@@ -891,7 +887,8 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 
         self.gradient_checkpointing = False
 
-        self._use_sdpa = isinstance(self.h[0].attn, GPTBigCodeSDPAAttention)
+        self._use_sdpa = config.attn_implementation == "sdpa"
+        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -973,7 +970,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         key_length = past_length + query_length
         self_attention_mask = self.bias[None, key_length - query_length : key_length, :key_length]
 
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask.bool() if (attention_mask is not None and 0 in attention_mask) else None
             encoder_attention_mask = (

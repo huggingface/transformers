@@ -1155,6 +1155,27 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self.warnings_issued = {}
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
 
+        # TODO: This is TEMPORARY and need to be discussed
+        if config.attn_implementation == "flash_attention_2":
+            if not self._supports_flash_attn_2:
+                raise ValueError(f'Passed config.attn_implementation == "flash_attention_2" but {self.__class__.__name__} does not support Flash Attention yet.')
+
+            if not is_flash_attn_2_available():
+                raise ImportError(
+                    "Flash Attention 2 is not available. Please refer to the documentation of https://github.com/Dao-AILab/flash-attention for"
+                    " installing it. Make sure to have at least the version 2.1.0"
+                )
+
+        if config.attn_implementation == "sdpa":
+            if not self._supports_sdpa:
+                raise ValueError(f'Passed config.attn_implementation == "sdpa" but {self.__class__.__name__} does not support SDPA yet.')
+
+            if not is_torch_sdpa_available():
+                raise ImportError(
+                    "SDPA is not available. Please use torch>=2.1.1 in order to use SDPA."
+                )
+
+
     def post_init(self):
         """
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
@@ -1265,7 +1286,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         The method checks if the current setup is compatible with Flash Attention as it requires the model to be in
         half precision and not ran on CPU.
 
-        If all checks pass, the method will create an attribute in the config `_flash_attn_2_enabled` so that the model
+        If all checks pass, the method will set the config attribute `attn_implementation` to "flash_attention_2" so that the model
         can initialize the correct attention module
         """
         if not cls._supports_flash_attn_2:
@@ -1325,7 +1346,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "You are attempting to use Flash Attention 2.0 with a model dispatched on CPU or disk. This is not supported. Please make sure to "
                 "initialise the model on a GPU by passing a device_map that contains only GPU devices as keys."
             )
-        config._flash_attn_2_enabled = True
+        config.attn_implementation = "flash_attention_2"
         return config
 
     @classmethod
@@ -1341,7 +1362,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if _is_bettertransformer:
             return config
 
-        config._sdpa_enabled = True
+        config.attn_implementation = "sdpa"
         return config
 
     def enable_input_require_grads(self):
@@ -3260,6 +3281,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif is_torch_sdpa_available():
             # use_flash_attention_2 takes priority.
             config = cls._check_and_enable_sdpa(config)
+        else:
+            config.attn_implementation = "eager"
 
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)

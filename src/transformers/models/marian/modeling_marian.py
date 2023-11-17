@@ -40,8 +40,6 @@ from ...utils import (
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_torch_sdpa_available,
     logging,
     replace_return_docstrings,
 )
@@ -276,20 +274,13 @@ class MarianEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        if is_flash_attn_2_available() and getattr(config, "_flash_attn_2_enabled", False):
-            self._attn_type = MarianAttentionType.flash_attention_2
-        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
-            self._attn_type = MarianAttentionType.sdpa
-        else:
-            self._attn_type = MarianAttentionType.eager
-
-        self.self_attn = MARIAN_ATTENTION_CLASSES[self._attn_type](
+        self.self_attn = MARIAN_ATTENTION_CLASSES[config.attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
             config=config,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(config.attn_implementation)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
@@ -352,7 +343,7 @@ MARIAN_ATTENTION_CLASSES = {"eager": MarianAttention}
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->Marian
-class MarianAttentionType(str, Enum):
+class MarianAttentionType(Enum):
     eager = "eager"
     sdpa = "sdpa"
     flash_attention_2 = "flash_attention_2"
@@ -364,14 +355,7 @@ class MarianDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        if getattr(config, "_flash_attn_2_enabled", False):
-            self._attn_type = MarianAttentionType.flash_attention_2
-        elif is_torch_sdpa_available():
-            self._attn_type = MarianAttentionType.sdpa
-        else:
-            self._attn_type = MarianAttentionType.eager
-
-        self.self_attn = MARIAN_ATTENTION_CLASSES[self._attn_type](
+        self.self_attn = MARIAN_ATTENTION_CLASSES[config.attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -384,7 +368,7 @@ class MarianDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = MARIAN_ATTENTION_CLASSES[self._attn_type](
+        self.encoder_attn = MARIAN_ATTENTION_CLASSES[config.attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,

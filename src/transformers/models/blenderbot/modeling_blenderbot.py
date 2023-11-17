@@ -41,8 +41,6 @@ from ...utils import (
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_torch_sdpa_available,
     logging,
     replace_return_docstrings,
 )
@@ -259,7 +257,7 @@ BLENDERBOT_ATTENTION_CLASSES = {"eager": BlenderbotAttention}
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->Blenderbot
-class BlenderbotAttentionType(str, Enum):
+class BlenderbotAttentionType(Enum):
     eager = "eager"
     sdpa = "sdpa"
     flash_attention_2 = "flash_attention_2"
@@ -271,14 +269,7 @@ class BlenderbotEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        if is_flash_attn_2_available() and getattr(config, "_flash_attn_2_enabled", False):
-            self._attn_type = BlenderbotAttentionType.flash_attention_2
-        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
-            self._attn_type = BlenderbotAttentionType.sdpa
-        else:
-            self._attn_type = BlenderbotAttentionType.eager
-
-        self.self_attn = BLENDERBOT_ATTENTION_CLASSES[self._attn_type](
+        self.self_attn = BLENDERBOT_ATTENTION_CLASSES[config.attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -348,14 +339,8 @@ class BlenderbotDecoderLayer(nn.Module):
     def __init__(self, config: BlenderbotConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        if getattr(config, "_flash_attn_2_enabled", False):
-            self._attn_type = BlenderbotAttentionType.flash_attention_2
-        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
-            self._attn_type = BlenderbotAttentionType.sdpa
-        else:
-            self._attn_type = BlenderbotAttentionType.eager
 
-        self.self_attn = BLENDERBOT_ATTENTION_CLASSES[self._attn_type](
+        self.self_attn = BLENDERBOT_ATTENTION_CLASSES[config.attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -368,7 +353,7 @@ class BlenderbotDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = BLENDERBOT_ATTENTION_CLASSES[self._attn_type](
+        self.encoder_attn = BLENDERBOT_ATTENTION_CLASSES[config.attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,

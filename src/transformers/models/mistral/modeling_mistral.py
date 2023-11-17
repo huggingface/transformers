@@ -580,7 +580,7 @@ class MistralDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        if is_flash_attn_2_available() and getattr(config, "_flash_attn_2_enabled", False):
+        if config.attn_implementation == "flash_attention_2":
             self.self_attn = MistralFlashAttention2(config)
         else:
             self.self_attn = MistralAttention(config=config)
@@ -773,6 +773,7 @@ class MistralModel(MistralPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([MistralDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
         self.norm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
@@ -837,8 +838,7 @@ class MistralModel(MistralPreTrainedModel):
 
         if (
             attention_mask is not None
-            and hasattr(self.config, "_flash_attn_2_enabled")
-            and self.config._flash_attn_2_enabled
+            and self._use_flash_attention_2
             and past_key_values is not None
         ):
             is_padding_right = attention_mask[:, -1].sum().item() != batch_size
@@ -849,7 +849,7 @@ class MistralModel(MistralPreTrainedModel):
                     " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                 )
 
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:

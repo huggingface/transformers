@@ -15,7 +15,6 @@
 """ PyTorch Whisper model."""
 
 import math
-from enum import Enum
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -41,7 +40,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_torch_sdpa_available,
     logging,
     replace_return_docstrings,
 )
@@ -688,7 +686,10 @@ class WhisperSDPAAttention(WhisperAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
         if output_attentions or layer_head_mask is not None:
-            logger.warning_once("WhisperModel is using WhisperSDPAAttention, but torch.nn.functional.scaled_dot_product_attention does not support output_attentions=True or layer_head_mask not None. Falling back to the manual attention implementation, but manually specifying the manual implementation will be required from Transformers version v5.0.0 onwards.")
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "WhisperModel is using WhisperSDPAAttention, but torch.nn.functional.scaled_dot_product_attention does not support output_attentions=True or layer_head_mask not None. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards."
+            )
             return super().forward(
                 hidden_states,
                 key_value_states=key_value_states,
@@ -782,27 +783,13 @@ WHISPER_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->Whisper
-class WhisperAttentionType(str, Enum):
-    eager = "eager"
-    sdpa = "sdpa"
-    flash_attention_2 = "flash_attention_2"
-
-
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Whisper, MBART->WHISPER
 class WhisperEncoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
-        if is_flash_attn_2_available() and getattr(config, "_flash_attn_2_enabled", False):
-            self._attn_type = WhisperAttentionType.flash_attention_2
-        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
-            self._attn_type = WhisperAttentionType.sdpa
-        else:
-            self._attn_type = WhisperAttentionType.eager
-
-        self.self_attn = WHISPER_ATTENTION_CLASSES[self._attn_type](
+        self.self_attn = WHISPER_ATTENTION_CLASSES[config.attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -872,14 +859,8 @@ class WhisperDecoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        if getattr(config, "_flash_attn_2_enabled", False):
-            self._attn_type = WhisperAttentionType.flash_attention_2
-        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
-            self._attn_type = WhisperAttentionType.sdpa
-        else:
-            self._attn_type = WhisperAttentionType.eager
 
-        self.self_attn = WHISPER_ATTENTION_CLASSES[self._attn_type](
+        self.self_attn = WHISPER_ATTENTION_CLASSES[config.attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -892,7 +873,7 @@ class WhisperDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = WHISPER_ATTENTION_CLASSES[self._attn_type](
+        self.encoder_attn = WHISPER_ATTENTION_CLASSES[config.attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -1325,7 +1306,8 @@ class WhisperDecoder(WhisperPreTrainedModel):
         self.embed_positions = WhisperPositionalEmbedding(self.max_target_positions, config.d_model)
 
         self.layers = nn.ModuleList([WhisperDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self._attn_type = self.layers[0]._attn_type
+        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
+        self._use_sdpa = config.attn_implementation == "sdpa"
 
         self.layer_norm = nn.LayerNorm(config.d_model)
 
@@ -1435,10 +1417,10 @@ class WhisperDecoder(WhisperPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if self._attn_type == WhisperAttentionType.flash_attention_2:
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self._attn_type == WhisperAttentionType.sdpa and head_mask is None and not output_attentions:
+        elif self._use_sdpa and head_mask is None and not output_attentions:
             # output_attentions=True & head_mask can not be supported when using SDPA.
             attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
                 attention_mask, input_shape, inputs_embeds, past_key_values_length

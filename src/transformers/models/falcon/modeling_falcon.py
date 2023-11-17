@@ -733,7 +733,7 @@ class FalconDecoderLayer(nn.Module):
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
 
-        if is_flash_attn_2_available() and getattr(config, "_flash_attn_2_enabled", False):
+        if is_flash_attn_2_available() and config.attn_implementation == "flash_attention_2":
             self.self_attention = FalconFlashAttention2(config)
         else:
             self.self_attention = FalconAttention(config)
@@ -944,6 +944,7 @@ class FalconModel(FalconPreTrainedModel):
 
         # Transformer blocks
         self.h = nn.ModuleList([FalconDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
 
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
@@ -1035,7 +1036,7 @@ class FalconModel(FalconPreTrainedModel):
                 )
                 position_ids = position_ids.unsqueeze(0)
 
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif hasattr(F, "scaled_dot_product_attention") and not output_attentions:

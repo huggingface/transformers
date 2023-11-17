@@ -44,8 +44,6 @@ from ...utils import (
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_torch_sdpa_available,
     logging,
     replace_return_docstrings,
 )
@@ -274,20 +272,13 @@ class PLBartEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        if is_flash_attn_2_available() and getattr(config, "_flash_attn_2_enabled", False):
-            self._attn_type = PLBartAttentionType.flash_attention_2
-        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
-            self._attn_type = PLBartAttentionType.sdpa
-        else:
-            self._attn_type = PLBartAttentionType.eager
-
-        self.self_attn = PLBART_ATTENTION_CLASSES[self._attn_type](
+        self.self_attn = PLBART_ATTENTION_CLASSES[config.attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
             config=config,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(config.attn_implementation)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
@@ -351,7 +342,7 @@ PLBART_ATTENTION_CLASSES = {"eager": PLBartAttention, "sdpa": PLBartAttention}
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttentionType with Bart->PLBart
-class PLBartAttentionType(str, Enum):
+class PLBartAttentionType(Enum):
     eager = "eager"
     sdpa = "sdpa"
     flash_attention_2 = "flash_attention_2"
@@ -363,14 +354,7 @@ class PLBartDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        if getattr(config, "_flash_attn_2_enabled", False):
-            self._attn_type = PLBartAttentionType.flash_attention_2
-        elif is_torch_sdpa_available():
-            self._attn_type = PLBartAttentionType.sdpa
-        else:
-            self._attn_type = PLBartAttentionType.eager
-
-        self.self_attn = PLBART_ATTENTION_CLASSES[self._attn_type](
+        self.self_attn = PLBART_ATTENTION_CLASSES[config.attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -383,7 +367,7 @@ class PLBartDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = PLBART_ATTENTION_CLASSES[self._attn_type](
+        self.encoder_attn = PLBART_ATTENTION_CLASSES[config.attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -698,7 +682,8 @@ class PLBartEncoder(PLBartPreTrainedModel):
             embed_dim,
         )
         self.layers = nn.ModuleList([PLBartEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self._attn_type = self.layers[0]._attn_type
+        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
+        self._use_sdpa = config.attn_implementation == "sdpa"
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
         self.gradient_checkpointing = False
@@ -786,9 +771,9 @@ class PLBartEncoder(PLBartPreTrainedModel):
 
         # expand attention_mask
         if attention_mask is not None:
-            if self._attn_type == PLBartAttentionType.flash_attention_2:
+            if self._use_flash_attention_2:
                 attention_mask = attention_mask if 0 in attention_mask else None
-            elif self._attn_type == PLBartAttentionType.sdpa and head_mask is None and not output_attentions:
+            elif self._use_sdpa and head_mask is None and not output_attentions:
                 # output_attentions=True & head_mask can not be supported when using SDPA, and we fall back on
                 # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -880,7 +865,9 @@ class PLBartDecoder(PLBartPreTrainedModel):
             config.d_model,
         )
         self.layers = nn.ModuleList([PLBartDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self._attn_type = self.layers[0]._attn_type
+        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
+        self._use_sdpa = config.attn_implementation == "sdpa"
+
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
@@ -999,10 +986,10 @@ class PLBartDecoder(PLBartPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input) * self.embed_scale
 
-        if self._attn_type == PLBartAttentionType.flash_attention_2:
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self._attn_type == PLBartAttentionType.sdpa and not output_attentions and cross_attn_head_mask is None:
+        elif self._use_sdpa and not output_attentions and cross_attn_head_mask is None:
             # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
             # the manual implementation that requires a 4D causal mask in all cases.
             attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
@@ -1019,11 +1006,9 @@ class PLBartDecoder(PLBartPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if self._attn_type == PLBartAttentionType.flash_attention_2:
+            if self._use_flash_attention_2:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
-            elif (
-                self._attn_type == PLBartAttentionType.sdpa and cross_attn_head_mask is None and not output_attentions
-            ):
+            elif self._use_sdpa and cross_attn_head_mask is None and not output_attentions:
                 # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
                 # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]

@@ -740,9 +740,9 @@ class LlamaDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        if is_flash_attn_2_available() and getattr(config, "_flash_attn_2_enabled", False):
+        if is_flash_attn_2_available() and config.attn_implementation == "flash_attention_2":
             self.self_attn = LlamaFlashAttention2(config=config)
-        elif is_torch_sdpa_available() and getattr(config, "_sdpa_enabled", False):
+        elif is_torch_sdpa_available() and config.attn_implementation == "sdpa":
             self.self_attn = LlamaSDPAAttention(config=config)
         else:
             self.self_attn = LlamaAttention(config=config)
@@ -938,7 +938,8 @@ class LlamaModel(LlamaPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self._use_sdpa = isinstance(self.layers[0].self_attn, LlamaSDPAAttention)
+        self._use_sdpa = config.attn_implementation == "sdpa"
+        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
@@ -996,7 +997,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self._use_sdpa and not output_attentions:
