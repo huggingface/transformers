@@ -90,6 +90,7 @@ class MaskFormerSwinConfig(BackboneConfigMixin, PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "maskformer-swin"
 
     attribute_map = {

@@ -180,6 +180,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
     decoder when created with the [`~TFAutoModel.from_pretrained`] class method for the encoder and
     [`~TFAutoModelForCausalLM.from_pretrained`] class method for the decoder.
     """
+
     config_class = VisionEncoderDecoderConfig
     base_model_prefix = "vision_encoder_decoder"
     load_weight_prefix = "tf_vision_encoder_decoder_model"

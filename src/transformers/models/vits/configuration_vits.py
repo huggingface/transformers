@@ -150,6 +150,7 @@ class VitsConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "vits"
 
     def __init__(
