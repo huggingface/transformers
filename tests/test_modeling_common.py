@@ -112,8 +112,6 @@ if is_flax_available():
     )
 
 if is_torch_fx_available():
-    import torch.fx
-
     from transformers.utils.fx import symbolic_trace
 
 
