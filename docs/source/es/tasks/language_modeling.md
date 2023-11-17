@@ -94,7 +94,7 @@ Para modelados de lenguaje por enmascaramiento carga el tokenizador DistilRoBERT
 >>> tokenizer = AutoTokenizer.from_pretrained("distilroberta-base")
 ```
 
-Extrae el subcampo `text` desde su estructura anidado con el método [`flatten`](https://huggingface.co/docs/datasets/process.html#flatten):
+Extrae el subcampo `text` desde su estructura anidado con el método [`flatten`](https://huggingface.co/docs/datasets/process#flatten):
 
 ```py
 >>> eli5 = eli5.flatten()

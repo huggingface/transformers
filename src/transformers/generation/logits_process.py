@@ -1301,8 +1301,9 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
         # set all nan values to 0.0
         scores[scores != scores] = 0.0
 
-        # set all inf values to max possible value
+        # set all +/-inf values to max/min possible value
         scores[scores == float("inf")] = torch.finfo(scores.dtype).max
+        scores[scores == float("-inf")] = torch.finfo(scores.dtype).min
 
         return scores
 
