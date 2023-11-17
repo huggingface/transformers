@@ -432,7 +432,9 @@ class PretrainedConfig(PushToHubMixin):
     @attn_implementation.setter
     def attn_implementation(self, value):
         if hasattr(self, "attn_implementation_set") and self.attn_implementation_set:
-            raise NotImplementedError("Modifying the attention implementation through this attribute is currently not implemented.")
+            raise NotImplementedError(
+                "Modifying the attention implementation through this attribute is currently not implemented."
+            )
         self.attn_implementation_set = True
 
         self._attn_implementation = value

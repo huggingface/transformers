@@ -3145,13 +3145,16 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_sdpa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16,
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
                 )
                 model_sdpa.to(torch_device)
 
                 # TODO: replace the _use_sdpa=False by `model.config.attn_implementation = "eager"` once the setter is implemented.
                 model_eager = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, _use_sdpa=False,
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
+                    _use_sdpa=False,
                 )
                 model_eager.to(torch_device)
 
@@ -3173,8 +3176,12 @@ class ModelTesterMixin:
                 if is_encoder_decoder:
                     decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
 
-                    outputs_eager = model_eager(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                    outputs_sdpa = model_sdpa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
+                    outputs_eager = model_eager(
+                        dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True
+                    )
+                    outputs_sdpa = model_sdpa(
+                        dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True
+                    )
                 else:
                     outputs_eager = model_eager(dummy_input, output_hidden_states=True)
                     outputs_sdpa = model_sdpa(dummy_input, output_hidden_states=True)

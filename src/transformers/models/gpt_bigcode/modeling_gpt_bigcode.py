@@ -605,7 +605,9 @@ class GPTBigCodeSDPAAttention(GPTBigCodeAttention):
             attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
         else:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once("GPTBigCodeModel is using GPTBigCodeSDPAAttention, but torch.nn.functional.scaled_dot_product_attention does not support output_attentions=True and head_mask not None. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards.")
+            logger.warning_once(
+                "GPTBigCodeModel is using GPTBigCodeSDPAAttention, but torch.nn.functional.scaled_dot_product_attention does not support output_attentions=True and head_mask not None. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards."
+            )
             attn_output, attn_weights = super()._attn(query, key.transpose(-1, -2), value, attention_mask, head_mask)
 
         if not self.multi_query:
@@ -647,6 +649,7 @@ GPTBIGCODE_ATTENTION_CLASSES = {
     "sdpa": GPTBigCodeSDPAAttention,
 }
 
+
 class GPTBigCodeBlock(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
@@ -663,7 +666,9 @@ class GPTBigCodeBlock(nn.Module):
             if config.multi_query:
                 raise NotImplementedError("Cross-attention not implemented for MQA")
 
-            self.crossattention = GPTBIGCODE_ATTENTION_CLASSES[config.attn_implementation](config, is_cross_attention=True, layer_idx=layer_idx)
+            self.crossattention = GPTBIGCODE_ATTENTION_CLASSES[config.attn_implementation](
+                config, is_cross_attention=True, layer_idx=layer_idx
+            )
 
             self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 

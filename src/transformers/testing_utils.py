@@ -440,6 +440,7 @@ def require_flash_attn(test_case):
     """
     return unittest.skipUnless(is_flash_attn_2_available(), "test requires Flash Attention")(test_case)
 
+
 def require_torch_sdpa(test_case):
     """
     Decorator marking a test that requires PyTorch's SDPA.
@@ -447,6 +448,7 @@ def require_torch_sdpa(test_case):
     These tests are skipped when requirements are not met (torch version).
     """
     return unittest.skipUnless(is_torch_sdpa_available(), "test requires PyTorch SDPA")(test_case)
+
 
 def require_peft(test_case):
     """

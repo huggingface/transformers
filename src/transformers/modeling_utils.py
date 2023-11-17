@@ -1158,7 +1158,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # TODO: This is TEMPORARY and need to be discussed, should it rather be in XXXPreTrainedModel __init__?
         if config.attn_implementation == "flash_attention_2":
             if not self._supports_flash_attn_2:
-                raise ValueError(f'Passed config.attn_implementation == "flash_attention_2" but {self.__class__.__name__} does not support Flash Attention yet.')
+                raise ValueError(
+                    f'Passed config.attn_implementation == "flash_attention_2" but {self.__class__.__name__} does not support Flash Attention yet.'
+                )
 
             if not is_flash_attn_2_available():
                 raise ImportError(
@@ -1168,13 +1170,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if config.attn_implementation == "sdpa":
             if not self._supports_sdpa:
-                raise ValueError(f'Passed config.attn_implementation == "sdpa" but {self.__class__.__name__} does not support SDPA yet.')
-
-            if not is_torch_sdpa_available():
-                raise ImportError(
-                    "SDPA is not available. Please use torch>=2.1.1 in order to use SDPA."
+                raise ValueError(
+                    f'Passed config.attn_implementation == "sdpa" but {self.__class__.__name__} does not support SDPA yet.'
                 )
 
+            if not is_torch_sdpa_available():
+                raise ImportError("SDPA is not available. Please use torch>=2.1.1 in order to use SDPA.")
 
     def post_init(self):
         """

@@ -457,12 +457,11 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
             inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
 
-            res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False
-            )
+            res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
 
-            res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False
-            )
+            res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
             self.assertTrue(torch.allclose(res_eager, res_sdpa))
+
 
 @require_torch
 class LlamaIntegrationTest(unittest.TestCase):
