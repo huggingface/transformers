@@ -77,19 +77,24 @@ class CustomTrainer(Trainer):
 
 ## Trainer
 
-[[autodoc]] Trainer - all
+[[autodoc]] Trainer 
+    - all
 
 ## Seq2SeqTrainer
 
-[[autodoc]] Seq2SeqTrainer - evaluate - predict
+[[autodoc]] Seq2SeqTrainer 
+    - evaluate
+    - predict
 
 ## TrainingArguments
 
-[[autodoc]] TrainingArguments - all
+[[autodoc]] TrainingArguments
+    - all
 
 ## Seq2SeqTrainingArguments
 
-[[autodoc]] Seq2SeqTrainingArguments - all
+[[autodoc]] Seq2SeqTrainingArguments
+    - all
 
 ## Checkpoints
 

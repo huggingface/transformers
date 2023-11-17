@@ -69,7 +69,7 @@
 - sections:
   - sections:
     - local: main_classes/configuration
-      title: configuration
+      title: 配置
     - local: main_classes/model
       title: 模型
     - local: main_classes/trainer
