@@ -308,7 +308,7 @@ def print_grammar(file, state):
 
 
 
-class AbstractGrammarAcceptor(ABC):
+class GrammarConstraint(ABC):
     def __init__(self, grammar_str, start_rule_name, tokenizer):
         self.tt = 0
         self.nt = 0
@@ -416,7 +416,7 @@ class AbstractGrammarAcceptor(ABC):
         raise NotImplementedError
 
 
-class IncrementalGrammarAcceptor(AbstractGrammarAcceptor):
+class IncrementalGrammarConstraint(GrammarConstraint):
     def __init__(self, grammar_str, start_rule_name, tokenizer):
         super().__init__(grammar_str, start_rule_name, tokenizer)
 
@@ -565,7 +565,7 @@ class IncrementalGrammarAcceptor(AbstractGrammarAcceptor):
         return x
 
 
-class StaticGrammarAcceptor(AbstractGrammarAcceptor):
+class StaticGrammarConstraint(GrammarConstraint):
 
     def __init__(self, grammar_str, start_rule_name, tokenizer):
         super().__init__(grammar_str, start_rule_name, tokenizer)
