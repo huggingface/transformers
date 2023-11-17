@@ -26,6 +26,20 @@ if is_torch_available():
 
 @require_torch
 class UtilBoundingBoxConverters(unittest.TestCase):
+    def test_exceptions(self):
+        # test case when input format is relative and image shape is not passed
+        bbox = torch.Tensor([[100, 200, 300, 400]])
+        with self.assertRaises(ValueError):
+            transform_box_format(bbox=bbox, orig_format="relative_xywh", dest_format="xyxy")
+        with self.assertRaises(ValueError):
+            transform_box_format(bbox=bbox, orig_format="relative_xcycwh", dest_format="xyxy")
+
+        # test case when formats are invalid
+        with self.assertRaises(ValueError):
+            transform_box_format(bbox=bbox, orig_format="abc", dest_format="xyxy")
+        with self.assertRaises(ValueError):
+            transform_box_format(bbox=bbox, orig_format="xyxy", dest_format="abc")
+
     def test_enumerators(self):
         self.assertEqual(BoundingBoxFormat.XYXY, "xyxy")
         self.assertEqual(BoundingBoxFormat.XYWH, "xywh")
