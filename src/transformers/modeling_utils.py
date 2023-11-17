@@ -1155,7 +1155,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self.warnings_issued = {}
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
 
-        # TODO: This is TEMPORARY and need to be discussed
+        # TODO: This is TEMPORARY and need to be discussed, should it rather be in XXXPreTrainedModel __init__?
         if config.attn_implementation == "flash_attention_2":
             if not self._supports_flash_attn_2:
                 raise ValueError(f'Passed config.attn_implementation == "flash_attention_2" but {self.__class__.__name__} does not support Flash Attention yet.')

@@ -424,7 +424,10 @@ class PretrainedConfig(PushToHubMixin):
 
     @property
     def attn_implementation(self):
-        return self._attn_implementation
+        if not hasattr(self, "_attn_implementation"):
+            return "eager"
+        else:
+            return self._attn_implementation
 
     @attn_implementation.setter
     def attn_implementation(self, value):

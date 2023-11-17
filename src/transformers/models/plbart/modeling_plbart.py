@@ -278,7 +278,7 @@ class PLBartEncoderLayer(nn.Module):
             dropout=config.attention_dropout,
             config=config,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(config.attn_implementation)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
