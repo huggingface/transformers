@@ -219,6 +219,7 @@ def convert_openai_whisper_to_tfms(
         eos_token_id=endoftext_id,
         bos_token_id=endoftext_id,
         pad_token_id=endoftext_id,
+        decoder_start_token_id=endoftext_id + 1,
     )
 
     model = WhisperForConditionalGeneration(config)
