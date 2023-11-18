@@ -837,22 +837,34 @@ class GenerationMixin:
 
     def _prefill_inputs(self, input_ids, **model_kwargs):
         """ Adds prefill to model inputs. """
-        
-        # because of 'prepare_inputs_for_generation' logic we have to 
+
+        if self.config.is_encoder_decoder:
+            # TODO: support prefilling these
+            return model_kwargs
+
+        # because of 'prepare_inputs_for_generation' logic we have to
         # only prefill up to but not including the last token
-        trimmed_args = {key:val[:,:-1] for key,val in model_kwargs.items() if isinstance(val,torch.Tensor)}
-        
+
+        if input_ids.shape[1]<2:
+            # no point in prefilling
+            return model_kwargs
+
+        trimmable = ("inputs_embeds","attention_mask","token_type_ids")
+
+        trimmed_args = {key:(val[:,:-1] if isinstance(val,torch.Tensor) and key in trimmable else val)
+                for key,val in model_kwargs.items()}
+
         model_inputs = self.prepare_inputs_for_generation(input_ids[:,:-1],**trimmed_args)
         model_inputs["use_cache"]=True
 
-        outputs = self(**model_inputs)
+        outputs = self(**model_inputs, return_dict=True)
 
         if "past_key_values" not in outputs:
             # TODO: i don't know what mems or past_buckets_states is!
             raise NotImplementedError(
                     "Prefill support for models with unusual cache types hasn't been implemented."
             )
-        
+
         return dict(past_key_values=outputs["past_key_values"],**model_kwargs)
 
     def _extract_past_from_model_output(self, outputs: ModelOutput, standardize_cache_format: bool = False):
@@ -1722,8 +1734,11 @@ class GenerationMixin:
         )
 
         # 9.5. generate prefill
-        model_kwargs = self._prefill_inputs(input_ids,**model_kwargs)
         
+        # contrastive search handles its own prefill.
+        if generation_mode!=GenerationMode.CONTRASTIVE_SEARCH:
+            model_kwargs = self._prefill_inputs(input_ids,**model_kwargs)
+
 
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
