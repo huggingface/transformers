@@ -828,7 +828,32 @@ class GenerationMixin:
                 raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
+        if "past_key_values" in model_kwargs:
+            model_kwargs["past_key_values"] = tuple(
+                tuple(x.repeat_interleave(expand_size,dim=0) for x in y) for y in model_kwargs["past_key_values"]
+            )
+
         return input_ids, model_kwargs
+
+    def _prefill_inputs(self, input_ids, **model_kwargs):
+        """ Adds prefill to model inputs. """
+        
+        # because of 'prepare_inputs_for_generation' logic we have to 
+        # only prefill up to but not including the last token
+        trimmed_args = {key:val[:,:-1] for key,val in model_kwargs.items() if isinstance(val,torch.Tensor)}
+        
+        model_inputs = self.prepare_inputs_for_generation(input_ids[:,:-1],**trimmed_args)
+        model_inputs["use_cache"]=True
+
+        outputs = self(**model_inputs)
+
+        if "past_key_values" not in outputs:
+            # TODO: i don't know what mems or past_buckets_states is!
+            raise NotImplementedError(
+                    "Prefill support for models with unusual cache types hasn't been implemented."
+            )
+        
+        return dict(past_key_values=outputs["past_key_values"],**model_kwargs)
 
     def _extract_past_from_model_output(self, outputs: ModelOutput, standardize_cache_format: bool = False):
         past_key_values = None
@@ -1695,6 +1720,11 @@ class GenerationMixin:
         stopping_criteria = self._get_stopping_criteria(
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
+
+        # 9.5. generate prefill
+        model_kwargs = self._prefill_inputs(input_ids,**model_kwargs)
+        
+
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
             if generation_config.num_return_sequences > 1:
