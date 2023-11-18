@@ -808,6 +808,7 @@ class GenerationMixin:
         expand_size: int = 1,
         is_encoder_decoder: bool = False,
         input_ids: Optional[torch.LongTensor] = None,
+        expand_past_key_values=True,
         **model_kwargs,
     ) -> Tuple[torch.LongTensor, Dict[str, Any]]:
         """Expands tensors from [batch_size, ...] to [batch_size * expand_size, ...]"""
@@ -828,15 +829,15 @@ class GenerationMixin:
                 raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
-        if "past_key_values" in model_kwargs:
+        if "past_key_values" in model_kwargs and expand_past_key_values:
             model_kwargs["past_key_values"] = tuple(
-                tuple(x.repeat_interleave(expand_size,dim=0) for x in y) for y in model_kwargs["past_key_values"]
+                tuple(x.repeat_interleave(expand_size, dim=0) for x in y) for y in model_kwargs["past_key_values"]
             )
 
         return input_ids, model_kwargs
 
     def _prefill_inputs(self, input_ids, **model_kwargs):
-        """ Adds prefill to model inputs. """
+        """Adds prefill to model inputs."""
 
         if self.config.is_encoder_decoder:
             # TODO: support prefilling these
@@ -845,27 +846,30 @@ class GenerationMixin:
         # because of 'prepare_inputs_for_generation' logic we have to
         # only prefill up to but not including the last token
 
-        if input_ids.shape[1]<2:
+        if (input_ids.shape[1] < 2 # too small to prefill
+            or "past_key_values" in model_kwargs # prefill already passed
+            or not model_kwargs.get("use_cache",True)): # caching not requested
+
             # no point in prefilling
             return model_kwargs
 
-        trimmable = ("inputs_embeds","attention_mask","token_type_ids")
+        trimmable = ("inputs_embeds", "attention_mask", "token_type_ids")
 
-        trimmed_args = {key:(val[:,:-1] if isinstance(val,torch.Tensor) and key in trimmable else val)
-                for key,val in model_kwargs.items()}
+        trimmed_args = {
+            key: (val[:, :-1] if key in trimmable else val)
+            for key, val in model_kwargs.items()
+        }
 
-        model_inputs = self.prepare_inputs_for_generation(input_ids[:,:-1],**trimmed_args)
-        model_inputs["use_cache"]=True
+        model_inputs = self.prepare_inputs_for_generation(input_ids[:, :-1], **trimmed_args)
+        model_inputs["use_cache"] = True
 
         outputs = self(**model_inputs, return_dict=True)
 
         if "past_key_values" not in outputs:
             # TODO: i don't know what mems or past_buckets_states is!
-            raise NotImplementedError(
-                    "Prefill support for models with unusual cache types hasn't been implemented."
-            )
+            raise NotImplementedError("Prefill support for models with unusual cache types hasn't been implemented.")
 
-        return dict(past_key_values=outputs["past_key_values"],**model_kwargs)
+        return dict(past_key_values=outputs["past_key_values"], **model_kwargs)
 
     def _extract_past_from_model_output(self, outputs: ModelOutput, standardize_cache_format: bool = False):
         past_key_values = None
@@ -1734,11 +1738,10 @@ class GenerationMixin:
         )
 
         # 9.5. generate prefill
-        
-        # contrastive search handles its own prefill.
-        if generation_mode!=GenerationMode.CONTRASTIVE_SEARCH:
-            model_kwargs = self._prefill_inputs(input_ids,**model_kwargs)
 
+        # contrastive search handles its own prefill.
+        if generation_mode != GenerationMode.CONTRASTIVE_SEARCH:
+            model_kwargs = self._prefill_inputs(input_ids, **model_kwargs)
 
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
@@ -2220,7 +2223,10 @@ class GenerationMixin:
                 if not sequential:
                     # Expands model inputs top_k times, for batched forward passes (akin to beam search).
                     _, model_kwargs = self._expand_inputs_for_generation(
-                        expand_size=top_k, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
+                        expand_size=top_k,
+                        is_encoder_decoder=self.config.is_encoder_decoder,
+                        expand_past_key_values=False,
+                        **model_kwargs,
                     )
 
                 past_key_values = model_kwargs.get("past_key_values")
