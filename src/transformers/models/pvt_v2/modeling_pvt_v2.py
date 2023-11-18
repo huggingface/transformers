@@ -45,10 +45,10 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "PvtV2Config"
 
 _CHECKPOINT_FOR_DOC = "FoamoftheSea/pvt_v2_b0"
-_EXPECTED_OUTPUT_SHAPE = [1, 50, 512]
+_EXPECTED_OUTPUT_SHAPE = [1, 256, 7, 7]
 
 _IMAGE_CLASS_CHECKPOINT = "FoamoftheSea/pvt_v2_b0"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_281"  # ImageNet ID for "tabby, tabby cat"
 
 PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "FoamoftheSea/pvt_v2_b0",
