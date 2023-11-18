@@ -15,7 +15,6 @@
 # limitations under the License.
 
 import argparse
-import hashlib
 import io
 import json
 import os
@@ -24,6 +23,7 @@ import urllib
 import warnings
 
 import torch
+from huggingface_hub.utils import insecure_hashlib
 from torch import nn
 from tqdm import tqdm
 
@@ -114,7 +114,7 @@ def _download(url: str, root: str) -> io.BytesIO:
 
     if os.path.isfile(download_target):
         model_bytes = open(download_target, "rb").read()
-        if hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
+        if insecure_hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
             return torch.load(io.BytesIO(model_bytes))
         else:
             warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
@@ -132,7 +132,7 @@ def _download(url: str, root: str) -> io.BytesIO:
                 loop.update(len(buffer))
 
     model_bytes = open(download_target, "rb").read()
-    if hashlib.sha256(model_bytes).hexdigest() != expected_sha256:
+    if insecure_hashlib.sha256(model_bytes).hexdigest() != expected_sha256:
         raise RuntimeError(
             "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
         )

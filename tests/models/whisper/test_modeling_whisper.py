@@ -18,6 +18,7 @@ import copy
 import inspect
 import os
 import tempfile
+import time
 import unittest
 
 import numpy as np
@@ -1565,9 +1566,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         generated_ids = model.generate(input_features, max_length=448, return_timestamps=True).to("cpu")
 
-        # fmt: off
-        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354, 1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293, 51836, 51836, 50257])
-        # fmt: on
+        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354, 1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293, 51836, 51836, 50257])  # fmt: skip
 
         self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
 
@@ -1735,6 +1734,102 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         text = processor.decode(output[0])
 
         self.assertTrue(prompt in text)
+
+    @slow
+    @require_torch_gpu
+    def test_speculative_decoding_distil(self):
+        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        model_id = "openai/whisper-large-v2"
+        model = WhisperForConditionalGeneration.from_pretrained(
+            model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+        )
+        model.to(torch_device)
+
+        processor = WhisperProcessor.from_pretrained(model_id)
+
+        assistant_model_id = "distil-whisper/distil-large-v2"
+        assistant_model = WhisperForCausalLM.from_pretrained(
+            assistant_model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+        )
+        assistant_model.to(torch_device)
+
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        input_features = processor(sample["array"], return_tensors="pt").input_features.to("cuda").to(torch.float16)
+
+        # warm up assisted decoding
+        _ = model.generate(input_features, assistant_model=assistant_model)
+        # warm up non-assisted decoding
+        _ = model.generate(input_features)
+
+        # assisted decoding
+        start_time = time.time()
+        tokens = model.generate(input_features, assistant_model=assistant_model)
+        total_time_assist = time.time() - start_time
+
+        transcription_ass = processor.batch_decode(tokens, skip_special_tokens=True)
+
+        # non-assisted decoding
+        start_time = time.time()
+        tokens = model.generate(input_features)
+        total_time_non_assist = time.time() - start_time
+
+        transcription_non_ass = processor.batch_decode(tokens, skip_special_tokens=True)
+
+        assert transcription_ass == transcription_non_ass
+        assert transcription_ass == [
+            " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."
+        ]
+        assert total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster"
+
+    @slow
+    @require_torch_gpu
+    def test_speculative_decoding_non_distil(self):
+        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        model_id = "openai/whisper-large-v2"
+        model = WhisperForConditionalGeneration.from_pretrained(
+            model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+        )
+        model.to(torch_device)
+
+        processor = WhisperProcessor.from_pretrained(model_id)
+
+        assistant_model_id = "openai/whisper-tiny"
+        assistant_model = WhisperForConditionalGeneration.from_pretrained(
+            assistant_model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+        )
+        assistant_model.to(torch_device)
+
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        input_features = processor(sample["array"], return_tensors="pt").input_features.to("cuda").to(torch.float16)
+
+        # warm up assisted decoding
+        _ = model.generate(input_features, assistant_model=assistant_model)
+        # warm up non-assisted decoding
+        _ = model.generate(input_features)
+
+        # assisted decoding
+        start_time = time.time()
+        tokens = model.generate(input_features, assistant_model=assistant_model)
+        total_time_assist = time.time() - start_time
+
+        transcription_ass = processor.batch_decode(tokens, skip_special_tokens=True)
+
+        # non-assisted decoding
+        start_time = time.time()
+        tokens = model.generate(input_features)
+        total_time_non_assist = time.time() - start_time
+
+        transcription_non_ass = processor.batch_decode(tokens, skip_special_tokens=True)
+
+        assert transcription_ass == transcription_non_ass
+        assert transcription_ass == [
+            " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."
+        ]
+        assert total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster"
 
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):

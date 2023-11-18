@@ -79,6 +79,7 @@ class MPNetConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mpnet"
 
     def __init__(
