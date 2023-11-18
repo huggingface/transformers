@@ -97,7 +97,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
             corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
-        out_indices (`List[int]`, *optional*, defaults to `None`):
+        out_indices (`List[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage.
@@ -115,6 +115,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "pvt_v2"
 
     def __init__(
