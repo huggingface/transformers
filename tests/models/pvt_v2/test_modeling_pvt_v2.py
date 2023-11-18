@@ -65,7 +65,7 @@ class PvtV2ModelTester:
         hidden_sizes=[16, 32, 64, 128],
         downsampling_rates=[1, 4, 8, 16],
         num_attention_heads=[1, 2, 4, 8],
-        out_indices=[1, 2, 3],
+        out_indices=[0, 1, 2, 3],
         is_training=True,
         use_labels=True,
         hidden_act="gelu",
@@ -190,7 +190,7 @@ def prepare_img():
 
 @require_torch
 class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (PvtV2Model, PvtV2Backbone, PvtV2ForImageClassification) if is_torch_available() else ()
+    all_model_classes = (PvtV2Model, PvtV2ForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": PvtV2Model, "image-classification": PvtV2ForImageClassification}
         if is_torch_available()
@@ -244,7 +244,7 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.hidden_states
 
-            expected_num_layers = len(self.model_tester.out_indices)
+            expected_num_layers = len(self.model_tester.depths)
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             # verify the first hidden states (first block)
@@ -252,8 +252,8 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 list(hidden_states[0].shape[-3:]),
                 [
                     self.model_tester.hidden_sizes[self.model_tester.out_indices[0]],
-                    self.model_tester.image_size // 2 ** (2 * self.model_tester.out_indices[0] + 1),
-                    self.model_tester.image_size // 2 ** (2 * self.model_tester.out_indices[0] + 1),
+                    self.model_tester.image_size // 2 ** (2 + self.model_tester.out_indices[0]),
+                    self.model_tester.image_size // 2 ** (2 + self.model_tester.out_indices[0]),
                 ],
             )
 
@@ -375,6 +375,42 @@ class PvtV2BackboneTest(BackboneTesterMixin, unittest.TestCase):
     all_model_classes = (PvtV2Backbone,) if is_torch_available() else ()
     has_attentions = False
     config_class = PvtV2Config
+
+    def test_config(self):
+        config_class = self.config_class
+
+        # test default config
+        config = config_class()
+        self.assertIsNotNone(config)
+        num_stages = len(config.depths) if hasattr(config, "depths") else config.num_hidden_layers
+        expected_stage_names = [f"stage{idx}" for idx in range(1, num_stages + 1)]
+        self.assertEqual(config.stage_names, expected_stage_names)
+        self.assertTrue(set(config.out_features).issubset(set(config.stage_names)))
+
+        # Test out_features and out_indices are correctly set
+        # out_features and out_indices both None
+        config = config_class(out_features=None, out_indices=None)
+        self.assertEqual(config.out_features, [config.stage_names[-1]])
+        self.assertEqual(config.out_indices, [len(config.stage_names) - 1])
+
+        # out_features and out_indices both set
+        config = config_class(out_features=["stage1", "stage2"], out_indices=[0, 1])
+        self.assertEqual(config.out_features, ["stage1", "stage2"])
+        self.assertEqual(config.out_indices, [0, 1])
+
+        # Only out_features set
+        config = config_class(out_features=["stage2", "stage4"])
+        self.assertEqual(config.out_features, ["stage2", "stage4"])
+        self.assertEqual(config.out_indices, [1, 3])
+
+        # Only out_indices set
+        config = config_class(out_indices=[0, 2])
+        self.assertEqual(config.out_features, [config.stage_names[0], config.stage_names[2]])
+        self.assertEqual(config.out_indices, [0, 2])
+
+        # Error raised when out_indices do not correspond to out_features
+        with self.assertRaises(ValueError):
+            config = config_class(out_features=["stage1", "stage2"], out_indices=[0, 2])
 
     def setUp(self):
         self.model_tester = PvtV2ModelTester(self)
