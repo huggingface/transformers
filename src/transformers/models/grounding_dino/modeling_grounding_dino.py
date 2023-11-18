@@ -72,10 +72,10 @@ if is_scipy_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GroundingDINOConfig"
-_CHECKPOINT_FOR_DOC = "idea-research/grounding-dino-tiny"
+_CHECKPOINT_FOR_DOC = "EduardoPacheco/grounding-dino-tiny"
 
 GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "idea-research/grounding-dino-tiny",
+    "EduardoPacheco/grounding-dino-tiny",
     # See all Grounding DINO models at https://huggingface.co/models?filter=grounding-dino
 ]
 
@@ -2207,8 +2207,8 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> text = "a cat."
 
-        >>> processor = AutoProcessor.from_pretrained("idea-research/grounding-dino-tiny")
-        >>> model = GroundingDINOForObjectDetection.from_pretrained("idea-research/grounding-dino-tiny")
+        >>> processor = AutoProcessor.from_pretrained("EduardoPacheco/grounding-dino-tiny")
+        >>> model = GroundingDINOForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny")
 
         >>> inputs = processor(images=image, text=text, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -2496,8 +2496,8 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> text = "a cat."
 
-        >>> processor = AutoProcessor.from_pretrained("idea-research/grounding-dino-tiny")
-        >>> model = GroundingDINOForObjectDetection.from_pretrained("idea-research/grounding-dino-tiny")
+        >>> processor = AutoProcessor.from_pretrained("EduardoPacheco/grounding-dino-tiny")
+        >>> model = GroundingDINOForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny")
 
         >>> inputs = processor(images=image, text=text, return_tensors="pt")
         >>> outputs = model(**inputs)
