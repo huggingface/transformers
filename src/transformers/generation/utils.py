@@ -829,7 +829,9 @@ class GenerationMixin:
                 raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
-        if "past_key_values" in model_kwargs and expand_past_key_values:
+        if ("past_key_values" in model_kwargs
+            and isinstance(model_kwargs["past_key_values"],tuple)
+            and expand_past_key_values):
             model_kwargs["past_key_values"] = tuple(
                 tuple(x.repeat_interleave(expand_size, dim=0) for x in y) for y in model_kwargs["past_key_values"]
             )
@@ -838,10 +840,6 @@ class GenerationMixin:
 
     def _prefill_inputs(self, input_ids, **model_kwargs):
         """Adds prefill to model inputs."""
-
-        if self.config.is_encoder_decoder:
-            # TODO: support prefilling these
-            return model_kwargs
 
         # because of 'prepare_inputs_for_generation' logic we have to
         # only prefill up to but not including the last token
@@ -865,11 +863,7 @@ class GenerationMixin:
 
         outputs = self(**model_inputs, return_dict=True)
 
-        if "past_key_values" not in outputs:
-            # TODO: i don't know what mems or past_buckets_states is!
-            raise NotImplementedError("Prefill support for models with unusual cache types hasn't been implemented.")
-
-        return dict(past_key_values=outputs["past_key_values"], **model_kwargs)
+        return self._update_model_kwargs_for_generation(outputs,trimmed_args,is_encoder_decoder=self.config.is_encoder_decoder)
 
     def _extract_past_from_model_output(self, outputs: ModelOutput, standardize_cache_format: bool = False):
         past_key_values = None
