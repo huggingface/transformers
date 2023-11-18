@@ -97,7 +97,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
             corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
-        out_indices (`List[int]`, *optional*, defaults to `[1, 2, 3]`):
+        out_indices (`List[int]`, *optional*, defaults to `None`):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage.
@@ -139,7 +139,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         num_labels: int = 1000,
         attn_reduce: str = "SR",  # Set to "SR" for spatial reduction (Conv2d), "AP" for average pooling
         out_features=None,
-        out_indices=[1, 2, 3],
+        out_indices=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -150,6 +150,10 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
                 " removed, as the behaviour will default to that of reshape_last_stage = True.",
                 FutureWarning,
             )
+
+        if kwargs.get("_out_indices", None) is not None:
+            out_indices = kwargs["_out_indices"]
+            out_features = None
 
         if isinstance(image_size, int):
             image_size = _ntuple(2)(image_size)
