@@ -23,17 +23,18 @@ import pytest
 
 from transformers import BertTokenizer, BertTokenizerFast
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_vision, require_torch
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available, is_torch_available
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
 
 
 if is_torch_available():
-    import torch
+    from transformers import GroundingDINOProcessor
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import GroundingDINOImageProcessor, GroundingDINOProcessor
+    from transformers import GroundingDINOImageProcessor
+
 
 @require_torch
 @require_vision

@@ -34,9 +34,6 @@ def get_phrases_from_posmap(posmaps: torch.BoolTensor, input_ids: torch.LongTens
             A boolean tensor of text-thresholded logits related to the detected bounding boxes.
         input_ids (`torch.LongTensor`) of shape `(sequence_length, )`):
             A tensor of token ids.
-
-    Returns:
-        _type_: _description_
     """
     left_idx = 0
     right_idx = 255
