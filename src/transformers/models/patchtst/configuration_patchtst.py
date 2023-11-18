@@ -243,9 +243,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.mask_input = mask_input
         self.mask_type = mask_type
         self.random_mask_ratio = random_mask_ratio  # for random masking
-        self.num_forecast_mask_patches = (
-            num_forecast_mask_patches  # for forecast masking
-        )
+        self.num_forecast_mask_patches = num_forecast_mask_patches  # for forecast masking
         self.channel_consistent_masking = channel_consistent_masking
         self.unmasked_channel_indices = unmasked_channel_indices
         self.mask_value = mask_value
