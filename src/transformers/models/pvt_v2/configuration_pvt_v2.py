@@ -21,7 +21,6 @@ from collections import OrderedDict
 from typing import Callable, Dict, List, Mapping, Sequence, Union
 
 from packaging import version
-from torch.nn.modules.utils import _ntuple
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -157,10 +156,10 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
             out_features = None
 
         if isinstance(image_size, int):
-            image_size = _ntuple(2)(image_size)
+            image_size = (image_size, image_size)
         if isinstance(image_size, dict):
             req_keys = ("height", "width")
-            assert all([k in req_keys for k in image_size.keys()]), f"Image size dict must have keys: {req_keys}"
+            assert all(k in req_keys for k in image_size.keys()), f"Image size dict must have keys: {req_keys}"
         elif isinstance(image_size, Sequence):
             image_size = {"height": image_size[0], "width": image_size[1]}
         self.image_size = image_size
