@@ -528,7 +528,7 @@ class IncrementalGrammarConstraint(GrammarConstraint):
         accepts = [False] * len(self.token_trie)
         accepts[self.eos_token_id] = len(stack) == 0
         if len(stack) == 0:
-            logger.warning("empty stack")
+            logger.debug("empty stack")
 
         def traverse_trie(trie, stacks):
             for byte, next_trie in trie.items():
