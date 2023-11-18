@@ -925,7 +925,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
 class CLIPModel(CLIPPreTrainedModel):
     config_class = CLIPConfig
 
-    def __init__(self, config: CLIPConfig):
+    def __init__(self, config: CLIPConfig, load_vision_model=True, load_text_model=True):
         super().__init__(config)
 
         if not isinstance(config.text_config, CLIPTextConfig):
@@ -947,8 +947,10 @@ class CLIPModel(CLIPPreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        self.text_model = CLIPTextTransformer(text_config)
-        self.vision_model = CLIPVisionTransformer(vision_config)
+        if load_text_model:
+            self.text_model = CLIPTextTransformer(text_config)
+        if load_vision_model:
+            self.vision_model = CLIPVisionTransformer(vision_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
