@@ -26,7 +26,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn.modules.utils import _ntuple
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput, BackboneOutput
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
