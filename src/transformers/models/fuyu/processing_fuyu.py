@@ -80,9 +80,11 @@ def full_unpacked_stream_to_tensor(
 
 
 def construct_full_unpacked_stream(
-    num_real_text_tokens: Union[List[List[int]], "torch.Tensor"],
     input_stream: "torch.Tensor",
     image_tokens: List[List["torch.Tensor"]],
+    image_patch_indices_stream: "torch.Tensor",
+    image_patch_indices: List[List["torch.Tensor"]],
+    image_indicator_id: int,
     batch_size: int,
     num_sub_sequences: int,
 ) -> List["torch.Tensor"]:
@@ -90,21 +92,35 @@ def construct_full_unpacked_stream(
     padding to account for images and then unpacks the subsequences to create a single sequence per item in the batch.
     Returns a list of tensors, one for each item in the batch."""
 
-    all_bi_stream = []
+    all_bi_stream, all_bi_image_patch_indices_stream = [], []
 
     for batch_index in range(batch_size):
-        all_si_stream = []
+        # Extract the subsequence from the input_stream; assume only one subsequence in text
+        subsequence_stream = input_stream[batch_index, 0].clone()
+        subsequence_patch_indices_stream = image_patch_indices_stream[batch_index, 0].clone()
+        
 
-        # First, construct full token stream (including image placeholder tokens) and loss mask for each subsequence
-        # and append to lists. We use lists rather than tensors because each subsequence is variable-sized.
-        # TODO Remove this logic in a subsequent release since subsequences are not supported.
-        image_adjustment = image_tokens[batch_index][0] # assume only one image
-        subsequence_stream = torch.cat([image_adjustment, input_stream[batch_index, 0]], dim=0) # assume only one subsequence in text
-        num_real_tokens = image_adjustment.shape[0] + num_real_text_tokens[batch_index][0]
-        all_si_stream.append(subsequence_stream[:num_real_tokens]) # this is where ten 71013 tokens are deleted from input_ids
-        all_bi_stream.append(torch.cat(all_si_stream, dim=0))
+        # If there are image tokens for this batch item
+        if image_tokens[batch_index]:
+            # Find indices where image_indicator_id appears
+            image_indicator_indices = (subsequence_stream == image_indicator_id).nonzero(as_tuple=True)[0]
 
-    return all_bi_stream
+            # Assert that the number of image indicators matches the number of image tokens
+            assert len(image_indicator_indices) == len(image_tokens[batch_index]), \
+                "Number of image indicators does not match the number of image tokens."
+
+            # Replace image_indicator_id with actual image tokens
+            offset = 0
+            for idx, image_token, image_patch_indice in zip(image_indicator_indices, image_tokens[batch_index], image_patch_indices[batch_index]):
+                adjusted_idx = idx + offset
+                subsequence_stream = torch.cat([subsequence_stream[:adjusted_idx], image_token, subsequence_stream[adjusted_idx+1:]])
+                subsequence_patch_indices_stream = torch.cat([subsequence_patch_indices_stream[:adjusted_idx], image_patch_indice, subsequence_patch_indices_stream[adjusted_idx+1:]])
+                offset += len(image_token) - 1  # Adjust offset for subsequent replacements
+
+        all_bi_stream.append(subsequence_stream)
+        all_bi_image_patch_indices_stream.append(subsequence_patch_indices_stream)
+
+    return all_bi_stream, all_bi_image_patch_indices_stream
 
 
 def _replace_string_repr_with_token_tags(prompt: str) -> str:
@@ -215,6 +231,7 @@ def _tokenize_prompts_with_image_and_batch(
     max_position_embeddings: int,
     add_BOS: bool,  # Same issue with types as above
     add_beginning_of_answer_token: bool,
+    image_tokens: Optional[List["torch.Tensor"]],
 ) -> Tuple["torch.Tensor", "torch.Tensor"]:
     """
     Given a set of prompts and number of tokens to generate:
@@ -222,6 +239,22 @@ def _tokenize_prompts_with_image_and_batch(
     - set the sequence length to be the max of length of prompts plus the number of tokens we would like to generate
     - pad all the sequences to this length so we can convert them into a 3D tensor.
     """
+
+    if image_tokens is not None:
+        for i, single_prompt in enumerate(prompts):
+            for j, (prompt, image_token) in enumerate(zip(single_prompt, image_tokens)):
+                image_indicator_count = prompt.count('|IMAGESTART|')
+                if image_indicator_count > len(image_token):
+                    raise ValueError("Image place indicators exceed the number of images provided.")
+                elif image_indicator_count < len(image_token):
+                    insert_count = len(image_token) - image_indicator_count
+                    logger.warning(f"Inserting {insert_count} image place indicators before the prompt.")
+                    prompt = "|IMAGESTART|" * insert_count + prompt
+
+                assert prompt.count('|IMAGESTART|') == len(image_token)
+                # Write back the modified prompt to the prompts list
+                prompts[i][j] = prompt
+
 
     # If not tool use, tranform the coordinates while tokenizing
     if scale_factors is not None:
@@ -238,47 +271,10 @@ def _tokenize_prompts_with_image_and_batch(
 
     prompts_tokens = transformed_prompt_tokens
 
-    if add_BOS:
-        bos_token = tokenizer.vocab["<s>"]
-    else:
-        bos_token = tokenizer.vocab["|ENDOFTEXT|"]
-    prompts_tokens = [[[bos_token] + x for x in prompt_seq] for prompt_seq in prompts_tokens]
-    if add_beginning_of_answer_token:
-        boa = tokenizer.vocab[BEGINNING_OF_ANSWER_STRING]
-        # Only add bbox open token to the last subsequence since that is what will be completed
-        for token_seq in prompts_tokens:
-            token_seq[-1].append(boa)
-
-    # Now we have a list of list of tokens which each list has a different
-    # size. We want to extend this list to:
-    #   - incorporate the tokens that need to be generated
-    #   - make all the sequences equal length.
-    # Get the prompts length.
-
-    # we should delete everything below and just return prompts_tokens. We don't need the lengths for subsequent processing.
-    prompts_length = [[len(x) for x in prompts_tokens_seq] for prompts_tokens_seq in prompts_tokens]
-    # Get the max prompts length.
-    max_prompt_len: int = np.max(prompts_length)
-    # Number of tokens in the each sample of the batch.
-    samples_length = min(max_prompt_len + max_tokens_to_generate, max_position_embeddings)
-    if max_prompt_len + max_tokens_to_generate > max_position_embeddings:
-        logger.warning(
-            f"Max subsequence prompt length of {max_prompt_len} + max tokens to generate {max_tokens_to_generate}",
-            f"exceeds context length of {max_position_embeddings}. Will generate as many tokens as possible.",
-        )
-    # Now update the list of list to be of the same size: samples_length.
-    for prompt_tokens_seq, prompts_length_seq in zip(prompts_tokens, prompts_length):
-        for prompt_tokens, prompt_length in zip(prompt_tokens_seq, prompts_length_seq):
-            if len(prompt_tokens) > samples_length:
-                raise ValueError("Length of subsequence prompt exceeds sequence length.")
-            padding_size = samples_length - prompt_length
-            prompt_tokens.extend([tokenizer.vocab["|ENDOFTEXT|"]] * padding_size)
-
     # Now we are in a structured format, we can convert to tensors.
     prompts_tokens_tensor = torch.tensor(prompts_tokens, dtype=torch.int64)
-    prompts_length_tensor = torch.tensor(prompts_length, dtype=torch.int64)
 
-    return prompts_tokens_tensor, prompts_length_tensor
+    return prompts_tokens_tensor
 
 
 # Simplified assuming self.crop_top = self.padding_top = 0
@@ -389,6 +385,7 @@ class FuyuProcessor(ProcessorMixin):
         scale_factors,
         image_unpadded_heights,
         image_unpadded_widths,
+        image_indicator_id,
         image_placeholder_id,
         image_newline_id,
         tensor_batch_images,
@@ -404,7 +401,7 @@ class FuyuProcessor(ProcessorMixin):
             variable_sized=True,
         )
         # FIXME max_tokens_to_generate is embedded into this processor's call.
-        prompt_tokens, prompts_length = _tokenize_prompts_with_image_and_batch(
+        prompt_tokens = _tokenize_prompts_with_image_and_batch(
             tokenizer=self.tokenizer,
             prompts=prompts,
             scale_factors=scale_factors,
@@ -412,19 +409,14 @@ class FuyuProcessor(ProcessorMixin):
             max_position_embeddings=self.max_position_embeddings,
             add_BOS=True,
             add_beginning_of_answer_token=True,
+            image_tokens=model_image_input["image_input_ids"],
         )
-        image_padded_unpacked_tokens = construct_full_unpacked_stream(
-            num_real_text_tokens=prompts_length,
+        image_padded_unpacked_tokens, unpacked_image_patch_indices_per_batch = construct_full_unpacked_stream(
             input_stream=prompt_tokens,
             image_tokens=model_image_input["image_input_ids"],
-            batch_size=1,
-            num_sub_sequences=self.subsequence_length,
-        )
-        # Construct inputs for image patch indices.
-        unpacked_image_patch_indices_per_batch = construct_full_unpacked_stream(
-            num_real_text_tokens=prompts_length,
-            input_stream=torch.full_like(prompt_tokens, -1),
-            image_tokens=model_image_input["image_patch_indices_per_batch"],
+            image_patch_indices_stream=torch.full_like(prompt_tokens, -1),
+            image_patch_indices=model_image_input["image_patch_indices_per_batch"],
+            image_indicator_id=image_indicator_id,
             batch_size=1,
             num_sub_sequences=self.subsequence_length,
         )
@@ -547,7 +539,7 @@ class FuyuProcessor(ProcessorMixin):
         self.batch_size = len(batch_images)
 
         # --- Use self.tokenizer to get the ids of special tokens to insert into image ids ---
-
+        image_indicator_id = self.tokenizer("|IMAGESTART|", add_special_tokens=False)["input_ids"][1]
         image_placeholder_id = self.tokenizer("|SPEAKER|", add_special_tokens=False)["input_ids"][1]
         image_newline_id = self.tokenizer("|NEWLINE|", add_special_tokens=False)["input_ids"][1]
         tensor_batch_images = [torch.stack(batch_image).unsqueeze(0) for batch_image in batch_images]
@@ -563,6 +555,7 @@ class FuyuProcessor(ProcessorMixin):
                 scale_factors=[scale_factor],
                 image_unpadded_heights=torch.tensor([image_unpadded_height]),
                 image_unpadded_widths=torch.tensor([image_unpadded_width]),
+                image_indicator_id=image_indicator_id,
                 image_placeholder_id=image_placeholder_id,
                 image_newline_id=image_newline_id,
                 tensor_batch_images=tensor_batch_image,
