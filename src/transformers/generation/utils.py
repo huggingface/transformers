@@ -829,9 +829,11 @@ class GenerationMixin:
                 raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
-        if ("past_key_values" in model_kwargs
-            and isinstance(model_kwargs["past_key_values"],tuple)
-            and expand_past_key_values):
+        if (
+            "past_key_values" in model_kwargs
+            and isinstance(model_kwargs["past_key_values"], tuple)
+            and expand_past_key_values
+        ):
             model_kwargs["past_key_values"] = tuple(
                 tuple(x.repeat_interleave(expand_size, dim=0) for x in y) for y in model_kwargs["past_key_values"]
             )
@@ -844,26 +846,37 @@ class GenerationMixin:
         # because of 'prepare_inputs_for_generation' logic we have to
         # only prefill up to but not including the last token
 
-        if (input_ids.shape[1] < 2 # too small to prefill
-            or "past_key_values" in model_kwargs # prefill already passed
-            or not model_kwargs.get("use_cache",True)): # caching not requested
-
+        # too small to prefill
+        if (
+            input_ids.shape[1] < 2
+            # user already passed prefill
+            or "past_key_values" in model_kwargs
+            # caching wasn't requested
+            or not model_kwargs.get("use_cache", True)
+            # can't prefill without breaking inputs_embeds logic:
+            # e.g. (models/gpt2/modeling_gpt2.py line 1026
+            or "inputs_embeds" in model_kwargs
+        ):
             # no point in prefilling
             return model_kwargs
 
-        trimmable = ("inputs_embeds", "attention_mask", "token_type_ids")
+        if self.config.is_encoder_decoder:
+            trimmable = ("decoder_input_ids", "decoder_attention_mask")
+        else:
+            trimmable = ("input_ids", "attention_mask", "token_type_ids")
 
-        trimmed_args = {
-            key: (val[:, :-1] if key in trimmable else val)
-            for key, val in model_kwargs.items()
-        }
+        trimmed_args = {key: (val[:, :-1] if key in trimmable else val) for key, val in model_kwargs.items()}
 
-        model_inputs = self.prepare_inputs_for_generation(input_ids[:, :-1], **trimmed_args)
+        model_inputs = self.prepare_inputs_for_generation(
+            input_ids if self.config.is_encoder_decoder else input_ids[:, :-1], **trimmed_args
+        )
         model_inputs["use_cache"] = True
 
         outputs = self(**model_inputs, return_dict=True)
 
-        return self._update_model_kwargs_for_generation(outputs,trimmed_args,is_encoder_decoder=self.config.is_encoder_decoder)
+        return self._update_model_kwargs_for_generation(
+            outputs, trimmed_args, is_encoder_decoder=self.config.is_encoder_decoder
+        )
 
     def _extract_past_from_model_output(self, outputs: ModelOutput, standardize_cache_format: bool = False):
         past_key_values = None
