@@ -97,7 +97,7 @@ class PatchTSTConfig(PretrainedConfig):
             Sharing the projection layer across different channels in the forecast head.
         seed_number (`Optional`, *optional*):
             Seed number used for random masking. If unset, no seed is set.
-        scaling (`Union`, *optional*, defaults to `"mean"`):
+        scaling (`Union`, *optional*, defaults to `"std"`):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
             scaler is set to "mean".
         mask_input (`bool`, *optional*):
