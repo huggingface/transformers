@@ -1,6 +1,6 @@
 root   ::= object
 
-object ::= "{" ws ( string ":" ws value ("," ws string ":" ws value)* )? "}"
+object ::= "{" ws ( string ":" ws value ("," ws string ":" ws value)* )? "}" ws
 
 value  ::= object | array | string | number | ("true" | "false" | "null") ws
 
