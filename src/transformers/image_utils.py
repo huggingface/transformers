@@ -245,8 +245,7 @@ def is_valid_annotation_coco_detection(annotation: Dict[str, Union[List, Tuple]]
         and isinstance(annotation["annotations"], (list, tuple))
         and (
             # an image can have no annotations
-            len(annotation["annotations"]) == 0
-            or isinstance(annotation["annotations"][0], dict)
+            len(annotation["annotations"]) == 0 or isinstance(annotation["annotations"][0], dict)
         )
     ):
         return True
@@ -262,8 +261,7 @@ def is_valid_annotation_coco_panoptic(annotation: Dict[str, Union[List, Tuple]])
         and isinstance(annotation["segments_info"], (list, tuple))
         and (
             # an image can have no segments
-            len(annotation["segments_info"]) == 0
-            or isinstance(annotation["segments_info"][0], dict)
+            len(annotation["segments_info"]) == 0 or isinstance(annotation["segments_info"][0], dict)
         )
     ):
         return True

@@ -15,7 +15,6 @@
 
 import argparse
 import copy
-import glob
 import os
 import random
 from dataclasses import dataclass
@@ -239,7 +238,7 @@ class CircleCIJob:
 
         py_command = f'import os; fp = open("reports/{self.job_name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("ERROR ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
         check_test_command += f"$(python3 -c '{py_command}'); "
-        check_test_command += f'cat summary_short.txt; echo ""; exit -1; '
+        check_test_command += 'cat summary_short.txt; echo ""; exit -1; '
 
         # Deeal with failed tests
         check_test_command += f'elif [ -s reports/{self.job_name}/failures_short.txt ]; '
@@ -249,7 +248,7 @@ class CircleCIJob:
 
         py_command = f'import os; fp = open("reports/{self.job_name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("FAILED ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
         check_test_command += f"$(python3 -c '{py_command}'); "
-        check_test_command += f'cat summary_short.txt; echo ""; exit -1; '
+        check_test_command += 'cat summary_short.txt; echo ""; exit -1; '
 
         check_test_command += f'elif [ -s reports/{self.job_name}/stats.txt ]; then echo "All tests pass!"; '
 

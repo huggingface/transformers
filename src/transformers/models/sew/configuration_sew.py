@@ -154,6 +154,7 @@ class SEWConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "sew"
 
     def __init__(
