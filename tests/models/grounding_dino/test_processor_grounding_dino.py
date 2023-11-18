@@ -178,7 +178,7 @@ class GroundingDINOProcessorTest(unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(
-            list(inputs.keys()), ["pixel_values", "pixel_mask", "input_ids", "token_type_ids", "attention_mask"]
+            list(inputs.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values", "pixel_mask"]
         )
 
         # test if it raises when no input is passed
