@@ -56,6 +56,12 @@ found [here](https://github.com/microsoft/table-transformer).
 
 [[autodoc]] TableTransformerConfig
 
+## TableTransformerImageProcessor
+
+[[autodoc]] TableTransformerImageProcessor
+    - preprocess
+    - post_process_object_detection
+
 ## TableTransformerModel
 
 [[autodoc]] TableTransformerModel

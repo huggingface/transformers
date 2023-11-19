@@ -300,11 +300,11 @@ def normalize(image):
 
 
 model_name_to_url = {
-    "table-detection": "https://pubtables1m.blob.core.windows.net/model/pubtables1m_detection_detr_r18.pth",
-    "table-structure-recognition": "https://pubtables1m.blob.core.windows.net/model/pubtables1m_structure_detr_r18.pth",
-    "table-structure-recognition-v1.1-pub": "https://huggingface.co/bsmock/TATR-v1.1-Pub/resolve/main/TATR-v1.1-Pub-msft.pth",
-    "table-structure-recognition-v1.1-fin": "https://huggingface.co/bsmock/TATR-v1.1-Fin/resolve/main/TATR-v1.1-Fin-msft.pth",
-    "table-structure-recognition-v1.1-all": "https://huggingface.co/bsmock/TATR-v1.1-All/resolve/main/TATR-v1.1-All-msft.pth",
+    "table-transformer-detection": "https://pubtables1m.blob.core.windows.net/model/pubtables1m_detection_detr_r18.pth",
+    "table-transformer-structure-recognition": "https://pubtables1m.blob.core.windows.net/model/pubtables1m_structure_detr_r18.pth",
+    "table-transformer-structure-recognition-v1.1-pub": "https://huggingface.co/bsmock/TATR-v1.1-Pub/resolve/main/TATR-v1.1-Pub-msft.pth",
+    "table-transformer-structure-recognition-v1.1-fin": "https://huggingface.co/bsmock/TATR-v1.1-Fin/resolve/main/TATR-v1.1-Fin-msft.pth",
+    "table-transformer-structure-recognition-v1.1-all": "https://huggingface.co/bsmock/TATR-v1.1-All/resolve/main/TATR-v1.1-All-msft.pth",
 }
 
 
@@ -371,18 +371,24 @@ def convert_table_transformer_checkpoint(model_name, verify_logits, pytorch_dump
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
 
-    image_processor = DetrImageProcessor(format="coco_detection", size={"longest_edge": 800})
+    image_processor = DetrImageProcessor(format="coco_detection", size={"shortest_edge": 800, "longest_edge": 1333})
     model = TableTransformerForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
 
-    # verify our conversion
-    filename = "example_pdf.png" if "detection" in checkpoint_url else "example_table.png"
+    # verify pixel values
+    filename = "image.png" if "detection" in checkpoint_url else "example_table.png"
     file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename=filename)
     image = Image.open(file_path).convert("RGB")
     pixel_values = normalize(resize(image, checkpoint_url)).unsqueeze(0)
 
+    print("First values of pixel values:", pixel_values[0, 0, :3, :3])
+
+    # verify forward pass
     outputs = model(pixel_values)
+
+    print("Logits:", outputs.logits)
+    print(outputs.logits[0, :3, :3])
 
     if verify_logits:
         if model_name == "table-detection":
@@ -406,7 +412,7 @@ def convert_table_transformer_checkpoint(model_name, verify_logits, pytorch_dump
         assert outputs.logits.shape == expected_shape
         assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
         assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
-    print("Looks ok!")
+        print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         # Save model and image processor
@@ -418,8 +424,8 @@ def convert_table_transformer_checkpoint(model_name, verify_logits, pytorch_dump
     if push_to_hub:
         # Push model to HF hub
         logger.info("Pushing model and image processor to the hub...")
-        model.push_to_hub(f"microsoft/{model_name}")
-        image_processor.push_to_hub(f"microsoft/{model_name}")
+        model.push_to_hub(f"microsoft/{model_name}", revision="no_timm")
+        image_processor.push_to_hub(f"microsoft/{model_name}", revision="no_timm")
 
 
 if __name__ == "__main__":
@@ -427,7 +433,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--model_name",
-        default="table-detection",
+        default="table-transformer-detection",
         type=str,
         choices=model_name_to_url.keys(),
         help="Name of the original Table Transformer checkpoint you'd like to convert.",

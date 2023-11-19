@@ -14,7 +14,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -24,6 +24,14 @@ _import_structure = {
         "TableTransformerOnnxConfig",
     ]
 }
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_table_transformer"] = ["TableTransformerImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -45,6 +53,14 @@ if TYPE_CHECKING:
         TableTransformerConfig,
         TableTransformerOnnxConfig,
     )
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_table_transformer import TableTransformerImageProcessor
 
     try:
         if not is_torch_available():

@@ -1019,6 +1019,7 @@ else:
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
+    _import_structure["models.table_transformer"].append("TableTransformerImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.tvp"].append("TvpImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
@@ -5199,6 +5200,7 @@ if TYPE_CHECKING:
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
+        from .models.table_transformer import TableTransformerImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.tvp import TvpImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
