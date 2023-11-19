@@ -16,3 +16,4 @@ inputs = processor(images=image, return_tensors="pt")
 print(processor.max_size)
 
 print(inputs.pixel_values.shape)
+print(inputs.pixel_values.mean())

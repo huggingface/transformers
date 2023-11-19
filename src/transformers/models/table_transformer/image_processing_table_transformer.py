@@ -270,7 +270,7 @@ class TableTransformerImageProcessor(BaseImageProcessor):
             overridden by the `do_resize` parameter in the `preprocess` method.
         max_size (`int` *optional*, defaults to 800):
             Size to resize the largest image size to.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Controls whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
@@ -301,7 +301,7 @@ class TableTransformerImageProcessor(BaseImageProcessor):
         format: Union[str, AnnotionFormat] = AnnotionFormat.COCO_DETECTION,
         do_resize: bool = True,
         max_size: Dict[str, int] = 800,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
