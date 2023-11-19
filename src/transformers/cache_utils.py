@@ -68,14 +68,16 @@ class PagedAttentionCache(Cache):
         #cache config & kv_cache
         self.num_blocks = num_blocks
         self.block_size = block_size 
-        self.key_cache: Dict[int, Tuple[torch.Tensor]] = {}
-        self.value_cache: Dict[int, Tuple[torch.Tensor]] = {}        
+        self.key_cache: Dict[int, Tuple[torch.Tensor]] = {} #layer_idx -> key_cache
+        self.value_cache: Dict[int, Tuple[torch.Tensor]] = {} #layer_idx -> value_cache
         
         #cache runtime management information 
         self.free_blocks = list(range(num_blocks)) #free blocks
         self.block_ref_count = [0] * self.num_blocks #init the reference count for each physical block              
         self.block_tables = [] #mapping logical block to physical blocks for each sequence     
-        self.context_lens = []  #context length for each sequence       
+        self.context_lens = []  #context length for each sequence      
+        
+        #The follow two states are shared accross layer but only for the current decode step. Need to update for every decode step.  
         self.batch2seq = {} #mapping batch index to {seq_id0, seq_id1, ...} to enable prompt sharing.
         self.slots_mapping = [] #mapping logical slots to physical slots. 
     
@@ -160,8 +162,23 @@ class PagedAttentionCache(Cache):
         self.batch2seq = batch2seq
     
     def reshape_and_cache(self, slot_mapping: List[List[int]], key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int):
-        pass        
-     
+        slot_mapping = torch.tensor(slot_mapping, dtype=torch.long, device="cpu")
+        block_indicies = torch.div(slot_mapping, self.block_size, rounding_mode="floor")
+        block_indicies = block_indicies.cpu().tolist()
+        block_offsets = slot_mapping % self.block_size
+        block_offsets = block_offsets.cpu().tolist()
+        batch = len(slot_mapping)
+        assert batch == key_states.shape[0]
+        seq_len = key_states.shape[-2]
+        key = key_states.transpose(1, 2)
+        value = value_states.transpose(1, 2)
+        for bi in range(batch):
+            for ti in range(seq_len):
+                block_idx = block_indicies[bi][ti]
+                block_offset = block_offsets[bi][ti]
+                self.key_cache[layer_idx][block_idx][block_offset] = key[bi][ti]
+                self.value_cache[layer_idx][block_idx][block_offset] = value[bi][ti]        
+        
     def get_seq_length(self, layer_idx: int = 0) -> int:
         return self.context_lens[0] #assume all sequences have the same length while unpad should get better performance
     
@@ -173,9 +190,21 @@ class PagedAttentionCache(Cache):
         cos: Optional[torch.Tensor] = None,
         sin: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        
         batch_size = key_states.shape[0] #[batch, head, seq, dim]
         kv_head = key_states.shape[1]
         head_size = key_states.shape[-1]
+        
+        #self.batch2seq is only for the current decode step, need to clear in the last layer and init in the first layer or setup externally 
+        if layer_idx == 0 and self.batch2seq == {}:
+            assert len(self.context_lens) == 0 and len(self.block_tables) == 0
+            self.batch2seq = {i: i for i in range(batch_size)}
+            self.slots_mapping = []
+        elif layer_idx == 0 and self.batch2seq != {}:
+            assert len(self.batch2seq) == batch_size
+        elif layer_idx+1 == len(self.key_cache):            
+            self.batch2seq = {}
+            
         if layer_idx not in self.key_cache: #init the cache
             self.key_cache[layer_idx] = torch.zeros((self.num_blocks, kv_head, self.block_size, head_size), dtype=key_states.dtype, device=key_states.device)
             self.value_cache[layer_idx] = torch.zeros((self.num_blocks, kv_head, self.block_size, head_size), dtype=value_states.dtype, device=value_states.device)        
@@ -189,6 +218,7 @@ class PagedAttentionCache(Cache):
                 slots = self.allocate(seq_ids[0], seq_len, self.context_lens[seq_ids[0]]) 
                 self.slots_mapping.append(slots)
         assert len(self.slots_mapping) == batch_size
+        
         #step 2): cache key_states & value states
         self.reshape_and_cache(self.slots_mapping, key_states, value_states, layer_idx)  
         
@@ -213,10 +243,7 @@ class PagedAttentionCache(Cache):
                 self.block_ref_count[block] += 1
         for seq_idx in freed_seqs:
             self.free(seq_idx)
-            
-                
-                
-        
+                    
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
