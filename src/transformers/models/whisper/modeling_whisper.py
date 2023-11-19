@@ -2096,8 +2096,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             for i in range(prev_bsz):
                 prev_i = cur_to_prev_index_map[i]
                 if seek[prev_i] >= max_frames[prev_i]:
+                    cut_index = i + (cur_bsz - prev_bsz)
                     cur_bsz -= 1
-                    input_features = torch.cat([input_features[:i], input_features[i + 1 :]], dim=0)
+                    input_features = torch.cat([input_features[:cut_index], input_features[cut_index + 1 :]], dim=0)
                 else:
                     # cut out index that goes away
                     new_cur_to_prev_index_map.append(prev_i)
