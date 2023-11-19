@@ -111,6 +111,7 @@ class MobileViTConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mobilevit"
 
     def __init__(

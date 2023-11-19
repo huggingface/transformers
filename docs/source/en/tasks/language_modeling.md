@@ -110,7 +110,7 @@ The next step is to load a DistilGPT2 tokenizer to process the `text` subfield:
 ```
 
 You'll notice from the example above, the `text` field is actually nested inside `answers`. This means you'll need to
-extract the `text` subfield from its nested structure with the [`flatten`](https://huggingface.co/docs/datasets/process.html#flatten) method:
+extract the `text` subfield from its nested structure with the [`flatten`](https://huggingface.co/docs/datasets/process#flatten) method:
 
 ```py
 >>> eli5 = eli5.flatten()

@@ -388,7 +388,7 @@ def main():
             )
 
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     # Load pretrained model and tokenizer
     #
@@ -497,15 +497,20 @@ def main():
                 batched=True,
                 remove_columns=column_names,
             )
+    if hasattr(config, "max_position_embeddings"):
+        max_pos_embeddings = config.max_position_embeddings
+    else:
+        # Define a default value if the attribute is missing in the config.
+        max_pos_embeddings = 1024
 
     if data_args.block_size is None:
         block_size = tokenizer.model_max_length
-        if block_size > config.max_position_embeddings:
+        if block_size > max_pos_embeddings:
             logger.warning(
                 f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                f"Using block_size={min(1024, config.max_position_embeddings)} instead. You can change that default value by passing --block_size xxx."
+                f"Using block_size={min(1024, max_pos_embeddings)} instead. You can change that default value by passing --block_size xxx."
             )
-            block_size = min(1024, config.max_position_embeddings)
+            block_size = min(1024, max_pos_embeddings)
     else:
         if data_args.block_size > tokenizer.model_max_length:
             logger.warning(

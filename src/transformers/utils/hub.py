@@ -43,6 +43,7 @@ from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
     EntryNotFoundError,
     GatedRepoError,
+    HFValidationError,
     LocalEntryNotFoundError,
     RepositoryNotFoundError,
     RevisionNotFoundError,
@@ -491,7 +492,10 @@ def cached_file(
             return None
 
         raise EnvironmentError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{err}")
-
+    except HFValidationError as e:
+        raise EnvironmentError(
+            f"Incorrect path_or_model_id: '{path_or_repo_id}'. Please provide either the path to a local folder or the repo_id of a model on the Hub."
+        ) from e
     return resolved_file
 
 

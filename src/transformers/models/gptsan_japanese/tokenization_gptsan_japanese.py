@@ -375,7 +375,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
     ) -> BatchEncoding:
         # This tokenizer converts input text pairs into Prefix input and subsequent input
-        if type(batch_text_or_text_pairs[0]) is tuple or type(batch_text_or_text_pairs[0]) is list:
+        if isinstance(batch_text_or_text_pairs[0], tuple) or isinstance(tuple(batch_text_or_text_pairs[0]), list):
             # As a single text with an explicit un-prefix position
             batch_prefix_texts = []
             for pref, txt in batch_text_or_text_pairs:

@@ -96,6 +96,7 @@ class RemBertConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "rembert"
 
     def __init__(
