@@ -281,21 +281,21 @@ class UdopTokenizer(PreTrainedTokenizer):
         # Add extra_ids to the special token list
         if extra_ids > 0 and (additional_special_tokens is None or "<extra_id_0>" not in additional_special_tokens):
             if additional_special_tokens is None:
-                additional_special_tokens = ["<extra_id_{}>".format(i) for i in range(extra_ids)]
-            additional_special_tokens.extend(["<extra_l_id_{}>".format(i) for i in range(extra_ids)])
-            additional_special_tokens.extend(["</extra_l_id_{}>".format(i) for i in range(extra_ids)])
-            additional_special_tokens.extend(["<extra_t_id_{}>".format(i) for i in range(extra_ids)])
-            additional_special_tokens.extend(["</extra_t_id_{}>".format(i) for i in range(extra_ids)])
+                additional_special_tokens = ["<extra_id_{}>".format(i) for i in range(extra_ids - 1, -1, -1)]
+            additional_special_tokens.extend(["<extra_l_id_{}>".format(i) for i in range(extra_ids - 1, -1, -1)])
+            additional_special_tokens.extend(["</extra_l_id_{}>".format(i) for i in range(extra_ids - 1, -1, -1)])
+            additional_special_tokens.extend(["<extra_t_id_{}>".format(i) for i in range(extra_ids - 1, -1, -1)])
+            additional_special_tokens.extend(["</extra_t_id_{}>".format(i) for i in range(extra_ids - 1, -1, -1)])
 
         if loc_extra_ids > 0 and (additional_special_tokens is None or "<loc_0>" not in additional_special_tokens):
             if additional_special_tokens is None:
                 additional_special_tokens = []
-            additional_special_tokens.extend(["<loc_{}>".format(i) for i in range(loc_extra_ids)])
+            additional_special_tokens.extend(["<loc_{}>".format(i) for i in range(loc_extra_ids - 1, -1, -1)])
 
         if other_extra_ids > 0 and (additional_special_tokens is None or "<other_0>" not in additional_special_tokens):
             if additional_special_tokens is None:
                 additional_special_tokens = []
-            additional_special_tokens.extend(["<other_{}>".format(i) for i in range(other_extra_ids)])
+            additional_special_tokens.extend(["<other_{}>".format(i) for i in range(other_extra_ids - 1, -1, -1)])
 
         if legacy is None:
             logger.warning_once(
