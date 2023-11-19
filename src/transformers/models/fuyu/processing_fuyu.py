@@ -245,7 +245,7 @@ def _tokenize_prompts_with_image_and_batch(
             for j, (prompt, image_token) in enumerate(zip(single_prompt, image_tokens)):
                 image_indicator_count = prompt.count('|IMAGESTART|')
                 if image_indicator_count > len(image_token):
-                    raise ValueError("Image place indicators exceed the number of images provided.")
+                    raise ValueError(f"Image place indicators exceed the number of images provided. Have {image_indicator_count} images?")
                 elif image_indicator_count < len(image_token):
                     insert_count = len(image_token) - image_indicator_count
                     logger.warning(f"Inserting {insert_count} image place indicators before the prompt.")
@@ -434,7 +434,7 @@ class FuyuProcessor(ProcessorMixin):
             new_seq_len=max_seq_len_batch,
             offset=0,
         )
-        image_patches_tensor = torch.stack([img[0] for img in model_image_input["image_patches"]])
+        image_patches_tensor = torch.stack([torch.concat(img, dim=0) for img in model_image_input["image_patches"]])
         batch_encoding = {
             "input_ids": image_padded_unpacked_tokens[0].unsqueeze(0),
             "image_patches": image_patches_tensor,
@@ -525,7 +525,7 @@ class FuyuProcessor(ProcessorMixin):
             if isinstance(text, str):
                 prompts = [[text]]
             elif isinstance(text, list):
-                prompts = [[text_seq] for text_seq in text]
+                prompts = [[text_seq if text_seq is not None else ""] for text_seq in text]
 
         # --- Preprocess images using self.image_processor ---
 
