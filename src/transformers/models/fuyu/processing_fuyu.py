@@ -227,10 +227,6 @@ def _tokenize_prompts_with_image_and_batch(
     tokenizer,
     prompts: List[List[str]],
     scale_factors: Optional[List[List["torch.Tensor"]]],
-    max_tokens_to_generate: int,
-    max_position_embeddings: int,
-    add_BOS: bool,  # Same issue with types as above
-    add_beginning_of_answer_token: bool,
     image_tokens: Optional[List["torch.Tensor"]],
 ) -> Tuple["torch.Tensor", "torch.Tensor"]:
     """
@@ -330,47 +326,47 @@ class FuyuProcessor(ProcessorMixin):
         self.pad_token_id = 0
         self.dummy_image_index = -1
 
-    def _left_pad_inputs_with_attention_mask(self, model_inputs: List[Dict], return_attention_mask: bool):
-        max_length_input_ids = max(entry["input_ids"].shape[1] for entry in model_inputs)
-        max_length_image_patch_indices = max(entry["image_patches_indices"].shape[1] for entry in model_inputs)
+    def _left_pad_inputs_with_attention_mask(self, model_inputs: List[Dict], return_attention_mask: bool, truncation: bool, truncation_length: int):
+        max_length_input_ids = min(max(entry["input_ids"].shape[1] for entry in model_inputs), truncation_length)
+        max_length_image_patch_indices = min(max(entry["image_patches_indices"].shape[1] for entry in model_inputs), truncation_length)
 
         batched_inputs = {"input_ids": [], "image_patches": [], "image_patches_indices": [], "attention_mask": []}
 
         for entry in model_inputs:
             for key, tensor in entry.items():
-                if key == "input_ids":
-                    num_padding_tokens = max_length_input_ids - tensor.shape[1]
-                    padded_input_ids = torch.cat(
+                if key == "input_ids" or key == "image_patches_indices":
+                    # Truncate if the tensor is longer than the truncation_length
+                    if tensor.shape[1] > truncation_length:
+                        if truncation:
+                            logger.warn(f"Truncating tensor from original length {tensor.shape[1]} to {truncation_length}")
+                            tensor = tensor[:, :truncation_length]
+                        else:
+                            raise ValueError(f"Tensor length {tensor.shape[1]} exceeds truncation_length {truncation_length} (usually max positional embedding length), but truncation is disabled. Please enable truncation or increase truncation_length.")
+                    
+                    # Calculate the number of padding tokens or indices
+                    num_padding = max_length_input_ids - tensor.shape[1] if key == "input_ids" else max_length_image_patch_indices - tensor.shape[1]
+                    
+                    # Pad the tensor
+                    padded_tensor = torch.cat(
                         [
-                            torch.full((tensor.shape[0], num_padding_tokens), self.pad_token_id, dtype=torch.long),
+                            torch.full((tensor.shape[0], num_padding), self.pad_token_id if key == "input_ids" else self.dummy_image_index, dtype=torch.long),
                             tensor,
                         ],
                         dim=1,
                     )
-                    batched_inputs[key].append(padded_input_ids)
+                    batched_inputs[key].append(padded_tensor)
 
-                    attention_mask = torch.cat(
-                        [torch.zeros(tensor.shape[0], num_padding_tokens, dtype=torch.long), torch.ones_like(tensor)],
-                        dim=1,
-                    )
-                    batched_inputs["attention_mask"].append(attention_mask)
+                    if key == "input_ids":
+                        attention_mask = torch.cat(
+                            [torch.zeros(tensor.shape[0], num_padding, dtype=torch.long), torch.ones_like(tensor)],
+                            dim=1,
+                        )
+                        batched_inputs["attention_mask"].append(attention_mask)
 
                 elif key == "image_patches":
                     # For image_patches, we don't pad but just append them to the list.
                     batched_inputs[key].append(tensor)
 
-                else:  # for image_patches_indices
-                    num_padding_indices = max_length_image_patch_indices - tensor.shape[1]
-                    padded_indices = torch.cat(
-                        [
-                            torch.full(
-                                (tensor.shape[0], num_padding_indices), self.dummy_image_index, dtype=torch.long
-                            ),
-                            tensor,
-                        ],
-                        dim=1,
-                    )
-                    batched_inputs[key].append(padded_indices)
         batched_keys = ["input_ids", "image_patches_indices"]
         if return_attention_mask:
             batched_keys.append("attention_mask")
@@ -405,10 +401,6 @@ class FuyuProcessor(ProcessorMixin):
             tokenizer=self.tokenizer,
             prompts=prompts,
             scale_factors=scale_factors,
-            max_tokens_to_generate=self.max_tokens_to_generate,
-            max_position_embeddings=self.max_position_embeddings,
-            add_BOS=True,
-            add_beginning_of_answer_token=True,
             image_tokens=model_image_input["image_input_ids"],
         )
         image_padded_unpacked_tokens, unpacked_image_patch_indices_per_batch = construct_full_unpacked_stream(
@@ -425,7 +417,6 @@ class FuyuProcessor(ProcessorMixin):
         tokens_to_place = min(max_seq_len_batch, max(0, image_padded_unpacked_tokens[0].shape[0]))
 
         # Use same packing logic for the image patch indices.
-        # this is where image_patch_input_indices +10 tokens really happens. need to check if this is for model forward.
         image_patch_input_indices = full_unpacked_stream_to_tensor(
             all_bi_tokens_to_place=[tokens_to_place],
             full_unpacked_stream=unpacked_image_patch_indices_per_batch,
@@ -562,7 +553,7 @@ class FuyuProcessor(ProcessorMixin):
             )
             all_encodings.append(sample_encoding)
         batch_encoding = self._left_pad_inputs_with_attention_mask(
-            model_inputs=all_encodings, return_attention_mask=return_attention_mask
+            model_inputs=all_encodings, return_attention_mask=return_attention_mask, truncation=truncation, truncation_length=max_length if max_length is not None else self.max_position_embeddings,
         )
         return FuyuBatchFeature(data=batch_encoding)
 
