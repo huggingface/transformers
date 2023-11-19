@@ -70,9 +70,9 @@ Blender チャットボット モデルは、[オープンドメイン チャッ
 
 ## Documentation resources
 
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Translation task guide](../tasks/translation)
-- [Summarization task guide](../tasks/summarization)
+- [因果言語モデリング タスク ガイド](../tasks/language_modeling)
+- [翻訳タスクガイド](../tasks/translation)
+- [要約タスクガイド](../tasks/summarization)
 
 ## BlenderbotConfig
 
