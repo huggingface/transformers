@@ -52,7 +52,25 @@ def hex_to_int(c):
     return -1
 
 
-def parse_space(src, newline_ok):
+def remove_leading_white_space(src, newline_ok):
+    """
+    Skips over whitespace and comments in the input string.
+
+    This function processes the input string, skipping over any spaces, tabs,
+    and content following a '#' character, which denotes a comment. The parsing
+    of a comment continues until the end of the line (denoted by newline characters
+    '\r' or '\n'). If the 'newline_ok' parameter is set to False, the function
+    will stop processing and return the remaining string upon encountering a
+    newline character, otherwise it will skip over newline characters as well.
+
+    Parameters:
+    src (str): The input string to be processed.
+    newline_ok (bool): A flag indicating whether encountering a newline character
+                       should stop the parsing (False) or if it should be skipped (True).
+
+    Returns:
+    str: The remaining portion of the input string after skipping whitespace and comments.
+    """
     pos = 0
     while pos < len(src) and (src[pos].isspace() or src[pos] == "#"):
         if src[pos] == "#":
@@ -75,6 +93,14 @@ def parse_name(src):
 
 
 def parse_char(src):
+
+    """
+    parse the leading char from the input string
+    :param src:
+    :return: char, remaining_src
+    """
+
+    # if we have a backslash, it's maybe an escape
     if src[0] == "\\":
         esc = src[1]
         if esc == "x":
@@ -84,7 +110,7 @@ def parse_char(src):
                 if second > -1:
                     return (first << 4) + second, src[4:]
             raise RuntimeError("expecting \\xNN at " + src)
-        elif esc in ('"', "[", "]"):
+        elif esc in ('"', "[", "]", "\\"):
             return esc, src[2:]
         elif esc == "r":
             return "\r", src[2:]
@@ -99,65 +125,65 @@ def parse_char(src):
 
 
 def parse_sequence(state, src, rule_name, outbuf, is_nested):
-    out_start = len(outbuf)
+    out_start_pos = len(outbuf)
 
     # sequence size, will be replaced at end when known
     outbuf.append(TO_BE_FILLED_MARKER)
 
     last_sym_start = len(outbuf)
-    pos = src
-    while pos:
-        if pos[0] == '"':  # literal string
-            pos = pos[1:]
+    remaining_src = src
+    while remaining_src:
+        if remaining_src[0] == '"':  # literal string
+            remaining_src = remaining_src[1:]
             last_sym_start = len(outbuf)
-            while pos[0] != '"':
-                char_pair, pos = parse_char(pos)
+            while remaining_src[0] != '"':
+                char, remaining_src = parse_char(remaining_src)
 
                 # each char of a literal is encoded as a "range" of char - char
                 outbuf.append(LITERAL_MARKER)
-                outbuf.append(ord(char_pair))
-                outbuf.append(ord(char_pair))
-            pos = parse_space(pos[1:], is_nested)
-        elif pos[0] == "[":  # char range(s)
-            pos = pos[1:]
+                outbuf.append(ord(char))
+                outbuf.append(ord(char))
+            remaining_src = remove_leading_white_space(remaining_src[1:], is_nested)
+        elif remaining_src[0] == "[":  # char range(s)
+            remaining_src = remaining_src[1:]
             last_sym_start = len(outbuf)
             # num chars in range - replaced at end of loop
             outbuf.append(TO_BE_FILLED_MARKER)
-            while pos[0] != "]":
-                char_pair, pos = parse_char(pos)
+            while remaining_src[0] != "]":
+                char, remaining_src = parse_char(remaining_src)
 
-                outbuf.append(ord(char_pair))
-                if pos[0] == "-" and pos[1] != "]":
-                    endchar_pair, pos = parse_char(pos[1:])
+                outbuf.append(ord(char))
+                if remaining_src[0] == "-" and remaining_src[1] != "]":
+                    endchar_pair, remaining_src = parse_char(remaining_src[1:])
                     outbuf.append(ord(endchar_pair))
                 else:
                     # chars that aren't part of a c1-c2 range are just doubled (i.e., c-c)
-                    outbuf.append(ord(char_pair))
+                    outbuf.append(ord(char))
             # replace num chars with actual
             outbuf[last_sym_start] = len(outbuf) - last_sym_start - 1
-            pos = parse_space(pos[1:], is_nested)
-        elif is_word_char(pos[0]):  # rule reference
-            name, pos = parse_name(pos)
+            remaining_src = remove_leading_white_space(remaining_src[1:], is_nested)
+        elif is_word_char(remaining_src[0]):  # rule reference
+            name, remaining_src = parse_name(remaining_src)
             ref_rule_id = get_symbol_id(state, name)
-            pos = parse_space(pos, is_nested)
+            remaining_src = remove_leading_white_space(remaining_src, is_nested)
             last_sym_start = len(outbuf)
             outbuf.append(REF_RULE_MARKER)
             outbuf.append(ref_rule_id)
-        elif pos[0] == "(":  # grouping
+        elif remaining_src[0] == "(":  # grouping
             # parse nested alternates into synthesized rule
-            pos = parse_space(pos[1:], True)
+            remaining_src = remove_leading_white_space(remaining_src[1:], True)
             sub_rule_id = generate_symbol_id(state, rule_name)
-            pos = parse_alternates(state, pos, rule_name, sub_rule_id, True)
+            remaining_src = parse_alternates(state, remaining_src, rule_name, sub_rule_id, True)
             last_sym_start = len(outbuf)
             # output reference to synthesized rule
             outbuf.append(REF_RULE_MARKER)
             outbuf.append(sub_rule_id)
-            if pos[0] != ")":
-                raise RuntimeError("expecting ')' at " + pos)
-            pos = parse_space(pos[1:], is_nested)
-        elif pos[0] in ("*", "+", "?"):  # repetition operator
-            if len(outbuf) - out_start - 1 == 0:
-                raise RuntimeError("expecting preceeding item to */+/? at " + pos)
+            if remaining_src[0] != ")":
+                raise RuntimeError("expecting ')' at " + remaining_src)
+            remaining_src = remove_leading_white_space(remaining_src[1:], is_nested)
+        elif remaining_src[0] in ("*", "+", "?"):  # repetition operator
+            if len(outbuf) - out_start_pos - 1 == 0:
+                raise RuntimeError("expecting preceeding item to */+/? at " + remaining_src)
             out_grammar = state.grammar_encoding
 
             # apply transformation to previous symbol (last_sym_start -
@@ -172,7 +198,7 @@ def parse_sequence(state, src, rule_name, outbuf, is_nested):
             out_grammar.append(TO_BE_FILLED_MARKER)
             # add preceding symbol to generated rule
             out_grammar.extend(outbuf[last_sym_start:])
-            if pos[0] in ("*", "+"):
+            if remaining_src[0] in ("*", "+"):
                 # cause generated rule to recurse
                 out_grammar.append(REF_RULE_MARKER)
                 out_grammar.append(sub_rule_id)
@@ -183,7 +209,7 @@ def parse_sequence(state, src, rule_name, outbuf, is_nested):
             sub_rule_start = len(out_grammar)
             # placeholder for size of 2nd alternate
             out_grammar.append(TO_BE_FILLED_MARKER)
-            if pos[0] == "+":
+            if remaining_src[0] == "+":
                 # add preceding symbol as alternate only for '+'
                 out_grammar.extend(outbuf[last_sym_start:])
             # apply actual size of 2nd alternate
@@ -195,57 +221,59 @@ def parse_sequence(state, src, rule_name, outbuf, is_nested):
             # in original rule, replace previous symbol with reference to generated rule
             outbuf[last_sym_start:] = [1, sub_rule_id]
 
-            pos = parse_space(pos[1:], is_nested)
+            remaining_src = remove_leading_white_space(remaining_src[1:], is_nested)
         else:
             break
     # apply actual size of this alternate sequence
-    outbuf[out_start] = len(outbuf) - out_start
+    outbuf[out_start_pos] = len(outbuf) - out_start_pos
     # mark end of alternate
     outbuf.append(END_OF_ALTERNATE_MARKER)
-    logger.debug(f"parse_alternates: outbuf = {outbuf}; rule_name = {rule_name}; is_nested = {is_nested}")
-    return pos
+    return remaining_src
 
 
 def parse_alternates(state, src, rule_name, rule_id, is_nested):
     outbuf = []
-    pos = parse_sequence(state, src, rule_name, outbuf, is_nested)
-    while pos[0] == "|":
-        pos = parse_space(pos[1:], True)
-        pos = parse_sequence(state, pos, rule_name, outbuf, is_nested)
+    remaining_src = parse_sequence(state, src, rule_name, outbuf, is_nested)
+    while remaining_src[0] == "|":
+        remaining_src = remove_leading_white_space(remaining_src[1:], True)
+        remaining_src = parse_sequence(state, remaining_src, rule_name, outbuf, is_nested)
 
     state.grammar_encoding.append(rule_id)
     state.grammar_encoding.extend(outbuf)
     state.grammar_encoding.append(0)
-    return pos
+    return remaining_src
 
 
 def parse_rule(state, src):
-    name, pos = parse_name(src)
-    pos = parse_space(pos, False)
+    name, remaining_src = parse_name(src)
+    remaining_src = remove_leading_white_space(remaining_src, False)
     rule_id = get_symbol_id(state, name)
 
-    if pos[:3] != "::=":
-        raise RuntimeError("expecting ::= at " + pos)
-    pos = parse_space(pos[3:], True)
+    if remaining_src[:3] != "::=":
+        raise RuntimeError("expecting ::= at " + remaining_src)
+    remaining_src = remove_leading_white_space(remaining_src[3:], True)
 
-    pos = parse_alternates(state, pos, name, rule_id, False)
+    remaining_src = parse_alternates(state, remaining_src, name, rule_id, False)
 
-    if pos[0] == "\r":
-        pos = pos[2:] if pos[1] == "\n" else pos[1:]
-    elif pos[0] == "\n":
-        pos = pos[1:]
-    elif pos:
-        raise RuntimeError("expecting newline or end at " + pos)
-    return parse_space(pos, True)
+    if remaining_src[0] == "\r":
+        remaining_src = remaining_src[2:] if remaining_src[1] == "\n" else remaining_src[1:]
+    elif remaining_src[0] == "\n":
+        remaining_src = remaining_src[1:]
+    elif remaining_src:
+        raise RuntimeError("expecting newline or end at " + remaining_src)
+    return remove_leading_white_space(remaining_src, True)
 
 
 def parse_ebnf(src):
     try:
         state = ParseState()
-        grammar_repr = parse_space(src, True)
+        grammar_repr = remove_leading_white_space(src, True)
+        last_grammar_repr = ""
         while grammar_repr:
-            logger.debug(f"grammar_repr: {grammar_repr}, state_out_grammar: {state.grammar_encoding}")
-            logger.debug(f"symbol_id_names: {state.symbol_ids}")
+            if last_grammar_repr:
+                last_parsed_rule_len = len(last_grammar_repr) - len(grammar_repr)
+                logger.debug(f"last_parsed_rule: {last_grammar_repr[:last_parsed_rule_len]}")
+            last_grammar_repr = grammar_repr
             grammar_repr = parse_rule(state, grammar_repr)
         state.grammar_encoding.append(0xFFFF)
         return state
@@ -660,7 +688,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
     try:
-        with open("examples/json.gbnf", "r") as file:
+        with open("examples/json_llama_cpp.gbnf", "r") as file:
             input_text = file.read()
         state = parse_ebnf(input_text)
         print_grammar(sys.stdout, state)
