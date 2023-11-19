@@ -748,7 +748,6 @@ class TableTransformerImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_object_detection
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
     ):
@@ -777,7 +776,7 @@ class TableTransformerImageProcessor(BaseImageProcessor):
                 )
 
         prob = nn.functional.softmax(out_logits, -1)
-        scores, labels = prob[..., :-1].max(-1)
+        scores, labels = prob.max(-1)
 
         # Convert to [x0, y0, x1, y1] format
         boxes = center_to_corners_format(out_bbox)
