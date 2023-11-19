@@ -484,9 +484,10 @@ class FuyuProcessor(ProcessorMixin):
         # --- Check input validity ---
         if not return_attention_mask:
             raise ValueError("`return_attention_mask=False` is not supported for this model.")
-        if text is None and images is None:
+        if all(item is None for item in text) and all(item is None for item in images):
             raise ValueError("You have to specify either text or images. Both cannot be None.")
-        if text is not None and images is None:
+        # if text is not None and images is None:
+        if any(item is not None for item in text) and all(item is None for item in images):
             logger.warning("You are processing a text with no associated image. Make sure it is intended.")
             self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(
@@ -509,10 +510,10 @@ class FuyuProcessor(ProcessorMixin):
             )
             return text_encoding
 
-        if text is None and images is not None:
+        if all(item is None for item in text) and any(item is not None for item in images):
             logger.warning("You are processing an image with no associated text. Make sure it is intended.")
-            prompts = [[""]]
-        if text is not None and images is not None:
+            prompts = [[""] for _ in range(len(images))]
+        if any(item is not None for item in text) and any(item is not None for item in images):
             if isinstance(text, str):
                 prompts = [[text]]
             elif isinstance(text, list):
