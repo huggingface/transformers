@@ -16,9 +16,9 @@ rendered properly in your Markdown viewer.
 
 # Data Collator
 
-Data collators是通过使用数据集元素列表作为输入来形成一个批次的对象。这些元素与 `train_dataset` 或 `eval_dataset` 的元素类型相同。
+Data collators是一个对象，通过使用数据集元素列表作为输入来形成一个批次。这些元素与 `train_dataset` 或 `eval_dataset` 的元素类型相同。
 
-为了能够构建批次，Data collators可能会应用一些处理（比如填充）。其中一些（比如[`DataCollatorForLanguageModeling`]）还会在形成的批次上应用一些随机数据增强（比如随机掩码）。
+为了能够构建批次，Data collators可能会应用一些预处理（比如填充）。其中一些（比如[`DataCollatorForLanguageModeling`]）还会在形成的批次上应用一些随机数据增强（比如随机掩码）。
 
 在[示例脚本](../examples)或[示例notebooks](../notebooks)中可以找到使用的示例。
 

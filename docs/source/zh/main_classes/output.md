@@ -36,24 +36,24 @@ outputs = model(**inputs, labels=labels)
 
 <Tip>
 
-当传递 `output_hidden_states=True` 时，您可能希望 `outputs.hidden_states[-1]` 与 `outputs.last_hidden_states` 完全匹配。然而，这并不总是成立。一些模型在返回最后的隐藏状态时对其应用归一化或后续处理。
+当传递 `output_hidden_states=True` 时，您可能希望 `outputs.hidden_states[-1]` 与 `outputs.last_hidden_states` 完全匹配。然而，这并不总是成立。一些模型在返回最后的 hidden state时对其应用归一化或其他后续处理。
 
 </Tip>
 
 
-您可以像通常一样访问每个属性，如果模型未返回该属性，您将得到 `None`。在这里，例如，`outputs.loss` 是模型计算的损失，而 `outputs.attentions` 是 `None`。
+您可以像往常一样访问每个属性，如果模型未返回该属性，您将得到 `None`。在这里，例如，`outputs.loss` 是模型计算的损失，而 `outputs.attentions` 是 `None`。
 
-当将我们的 `outputs` 对象视为元组时，它仅考虑那些没有 `None` 值的属性。在这里，例如，它有两个元素，`loss` 然后是 `logits`，所以
+当将我们的 `outputs` 对象视为元组时，它仅考虑那些没有 `None` 值的属性。例如这里它有两个元素，`loss` 和 `logits`，所以
 
 ```python
 outputs[:2]
 ```
 
-将返回元组 `(outputs.loss, outputs.logits)` 为例。
+将返回元组 `(outputs.loss, outputs.logits)`。
 
-将我们的 `outputs` 对象视为字典时，它仅考虑那些没有 `None` 值的属性。在这里，例如，它有两个键，分别是 `loss` 和 `logits`。
+将我们的 `outputs` 对象视为字典时，它仅考虑那些没有 `None` 值的属性。例如在这里它有两个键，分别是 `loss` 和 `logits`。
 
-我们在这里记录了被多个模型类型使用的通用模型输出。特定输出类型在其相应的模型页面上有文档。
+我们在这里记录了被多个类型模型使用的通用模型输出。特定输出类型在其相应的模型页面上有文档。
 
 ## ModelOutput
 

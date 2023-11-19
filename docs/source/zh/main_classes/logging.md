@@ -16,11 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Logging
 
-🤗 Transformers拥有一个集中式的日志系统，因此您可以轻松设置库的详细程度。
+🤗 Transformers拥有一个集中式的日志系统，因此您可以轻松设置库输出的日志详细程度。
 
-当前库的默认详细程度为`WARNING`。
+当前库的默认日志详细程度为`WARNING`。
 
-要更改详细程度，只需使用其中一个直接的设置器。例如，以下是如何将详细程度更改为INFO级别的方法：
+要更改日志详细程度，只需使用其中一个直接的setter。例如，以下是如何将日志详细程度更改为INFO级别的方法：
 
 ```python
 import transformers
@@ -28,13 +28,13 @@ import transformers
 transformers.logging.set_verbosity_info()
 ```
 
-您还可以使用环境变量`TRANSFORMERS_VERBOSITY`来覆盖默认的日志详细程度。您可以将其设置为以下之一：`debug`、`info`、`warning`、`error`、`critical`。例如：
+您还可以使用环境变量`TRANSFORMERS_VERBOSITY`来覆盖默认的日志详细程度。您可以将其设置为以下级别之一：`debug`、`info`、`warning`、`error`、`critical`。例如：
 
 ```bash
 TRANSFORMERS_VERBOSITY=error ./myprogram.py
 ```
 
-此外，通过将环境变量`TRANSFORMERS_NO_ADVISORY_WARNINGS`设置为`true`值（如*1*），可以禁用一些`warnings`。这将禁用使用[`logger.warning_advice`]记录的任何警告。例如：
+此外，通过将环境变量`TRANSFORMERS_NO_ADVISORY_WARNINGS`设置为`true`（如*1*），可以禁用一些`warnings`。这将禁用[`logger.warning_advice`]记录的任何警告。例如：
 
 ```bash
 TRANSFORMERS_NO_ADVISORY_WARNINGS=1 ./myprogram.py
@@ -52,25 +52,25 @@ logger.warning("WARN")
 ```
 
 
-此日志模块的所有方法都在下面进行了记录，主要的方法包括 [`logging.get_verbosity`] 用于获取记录器当前详细程度的级别和 [`logging.set_verbosity`] 用于将详细程度设置为您选择的级别。按照顺序（从最不详细到最详细），这些级别（及其相应的整数值）为：
+此日志模块的所有方法都在下面进行了记录，主要的方法包括 [`logging.get_verbosity`] 用于获取logger当前输出日志详细程度的级别和 [`logging.set_verbosity`] 用于将详细程度设置为您选择的级别。按照顺序（从最不详细到最详细），这些级别（及其相应的整数值）为：
 
-- `transformers.logging.CRITICAL` 或 `transformers.logging.FATAL`（整数值，50）：仅报告最关键的错误。
-- `transformers.logging.ERROR`（整数值，40）：仅报告错误。
-- `transformers.logging.WARNING` 或 `transformers.logging.WARN`（整数值，30）：仅报告错误和警告。这是库使用的默认级别。
-- `transformers.logging.INFO`（整数值，20）：报告错误、警告和基本信息。
+- `transformers.logging.CRITICAL` 或 `transformers.logging.FATAL`（整数值，50）：仅报告最关键的errors。
+- `transformers.logging.ERROR`（整数值，40）：仅报告errors。
+- `transformers.logging.WARNING` 或 `transformers.logging.WARN`（整数值，30）：仅报告error和warnings。这是库使用的默认级别。
+- `transformers.logging.INFO`（整数值，20）：报告error、warnings和基本信息。
 - `transformers.logging.DEBUG`（整数值，10）：报告所有信息。
 
 默认情况下，将在模型下载期间显示`tqdm`进度条。[`logging.disable_progress_bar`] 和 [`logging.enable_progress_bar`] 可用于禁止或启用此行为。
 
 ## `logging` vs `warnings`
 
-Python有两个经常一起使用的日志系统：`logging`，如上所述，和`warnings`，它允许对特定桶中的警告进行进一步分类，例如，`FutureWarning`用于已经被弃用的功能或路径，`DeprecationWarning`用于指示即将被弃用的内容。
+Python有两个经常一起使用的日志系统：如上所述的`logging`，和对特定buckets中的警告进行进一步分类的`warnings`，例如，`FutureWarning`用于输出已经被弃用的功能或路径，`DeprecationWarning`用于指示即将被弃用的内容。
 
-我们在`transformers`库中同时使用这两个系统。我们利用并调整了`logging`的`captureWarning`方法，以便通过上面的详细程度设置器来管理这些警告消息。
+我们在`transformers`库中同时使用这两个系统。我们利用并调整了`logging`的`captureWarning`方法，以便通过上面的详细程度setters来管理这些警告消息。
 
 对于库的开发人员，这意味着什么呢？我们应该遵循以下启发法则：
 - 库的开发人员和依赖于`transformers`的库应优先使用`warnings`
-- 使用库在每天项目中的最终用户应该使用`logging`
+- `logging`应该用于在日常项目中经常使用它的用户
 
 以下是`captureWarnings`方法的参考。
 

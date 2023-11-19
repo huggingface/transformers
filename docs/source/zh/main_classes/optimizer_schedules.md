@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 `.optimization` 模块提供了：
 
 - 一个带有固定权重衰减的优化器，可用于微调模型
-- 几个以 `_LRSchedule` 继承为形式的调度对象：
+- 继承自 `_LRSchedule` 多个调度器：
 - 一个梯度累积类，用于累积多个批次的梯度
 
 ## AdamW (PyTorch)

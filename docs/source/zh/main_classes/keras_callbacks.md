@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Keras callbacks
 
-在Keras中训练Transformers模型时，有一些库特定的callbacks函数可用于自动化常见任务：
+在Keras中训练Transformers模型时，有一些库特定的callbacks函数可用于自动执行常见任务：
 
 ## KerasMetricCallback
 

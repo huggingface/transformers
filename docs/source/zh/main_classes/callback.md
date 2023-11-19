@@ -17,17 +17,16 @@ rendered properly in your Markdown viewer.
 # Callbacks
 
 
-Callbacks是可以自定义PyTorch [Trainer]中训练循环行为的对象（此功能尚未在TensorFlow中实现），可以检查训练循环状态（用于进度报告、在TensorBoard或其他ML平台上记录日志等），并做出决策（例如提前停止）。
+Callbacks可以用来自定义PyTorch [Trainer]中训练循环行为的对象（此功能尚未在TensorFlow中实现），该对象可以检查训练循环状态（用于进度报告、在TensorBoard或其他ML平台上记录日志等），并做出决策（例如提前停止）。
 
-Callbacks是“只读”的代码片段，除了它们返回的[TrainerControl]对象外，它们不能更改训练循环中的任何内容。对于需要更改训练循环的自定义，您应该继承[Trainer]并覆盖您需要的方法（有关示例，请参见[trainer](trainer)）。
+Callbacks是“只读”的代码片段，除了它们返回的[TrainerControl]对象外，它们不能更改训练循环中的任何内容。对于需要更改训练循环的自定义，您应该继承[Trainer]并重载您需要的方法（有关示例，请参见[trainer](trainer)）。
 
 默认情况下，`TrainingArguments.report_to` 设置为"all"，然后[Trainer]将使用以下callbacks。
 
 
 - [`DefaultFlowCallback`]，它处理默认的日志记录、保存和评估行为
 - [`PrinterCallback`] 或 [`ProgressCallback`]，用于显示进度和打印日志（如果通过[`TrainingArguments`]停用tqdm，则使用第一个函数；否则使用第二个）。
-- [`~integrations.TensorBoardCallback`]，如果TensorBoard可访问（通过PyTorch版本 >= 1.4）
-  or tensorboardX).
+- [`~integrations.TensorBoardCallback`]，如果TensorBoard可访问（通过PyTorch版本 >= 1.4 或者 tensorboardX）。
 - [`~integrations.WandbCallback`]，如果安装了[wandb](https://www.wandb.com/)。
 - [`~integrations.CometCallback`]，如果安装了[comet_ml](https://www.comet.ml/site/)。
 - [`~integrations.MLflowCallback`]，如果安装了[mlflow](https://www.mlflow.org/)。
@@ -48,7 +47,7 @@ Callbacks是“只读”的代码片段，除了它们返回的[TrainerControl]�
 
 这里是库里可用[`TrainerCallback`]的列表：
 
-[[autodoc]] integrations.CometCallback
+[[autodoc]] integrations.CometCallback 
     - setup
 
 [[autodoc]] DefaultFlowCallback
@@ -61,11 +60,9 @@ Callbacks是“只读”的代码片段，除了它们返回的[TrainerControl]�
 
 [[autodoc]] integrations.TensorBoardCallback
 
-[[autodoc]] integrations.WandbCallback
-    - setup
+[[autodoc]] integrations.WandbCallback - setup
 
-[[autodoc]] integrations.MLflowCallback
-    - setup
+[[autodoc]] integrations.MLflowCallback - setup
 
 [[autodoc]] integrations.AzureMLCallback
 

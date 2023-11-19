@@ -22,9 +22,9 @@ rendered properly in your Markdown viewer.
 - TensorFlow [`~generation.TFGenerationMixin.generate`] 在 [`~generation.TFGenerationMixin`] 中实现。
 - Flax/JAX [`~generation.FlaxGenerationMixin.generate`] 在 [`~generation.FlaxGenerationMixin`] 中实现。
 
-无论您选择哪个框架，都可以使用 [`~generation.GenerationConfig`] 类实例对 generate 方法进行参数化。有关生成方法的行为控制参数的完整列表，请参阅此类。
+无论您选择哪个框架，都可以使用 [`~generation.GenerationConfig`] 类实例对 generate 方法进行参数化。有关生成方法的控制参数的完整列表，请参阅此类。
 
-要了解如何检查模型的生成配置、默认值是什么、如何临时更改参数以及如何创建和保存自定义生成配置，请参阅 [文本生成策略指南](../generation_strategies)。该指南还解释了如何使用相关功能，如令牌流。
+要了解如何检查模型的生成配置、默认值是什么、如何临时更改参数以及如何创建和保存自定义生成配置，请参阅 [文本生成策略指南](../generation_strategies)。该指南还解释了如何使用相关功能，如token流。
 
 ## GenerationConfig
 

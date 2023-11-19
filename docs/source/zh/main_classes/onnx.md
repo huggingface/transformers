@@ -14,9 +14,9 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Exporting 🤗 Transformers models to ONNX
+# 导出 🤗 Transformers 模型到 ONNX
 
-🤗 Transformers提供了一个`transformers.onnx`包，通过利用配置对象，您可以将模型检查点转换为ONNX图。
+🤗 Transformers提供了一个`transformers.onnx`包，通过利用配置对象，您可以将模型checkpoints转换为ONNX图。
 
 有关更多详细信息，请参阅导出 🤗 Transformers 模型的[指南](../serialization)。
 
@@ -24,9 +24,9 @@ rendered properly in your Markdown viewer.
 
 我们提供了三个抽象类，取决于您希望导出的模型架构类型：
 
-* 基于编码器的模型从 [`~onnx.config.OnnxConfig`] 继承
-* 基于解码器的模型从 [`~onnx.config.OnnxConfigWithPast`] 继承
-* 编码器-解码器模型从 [`~onnx.config.OnnxSeq2SeqConfigWithPast`] 继承
+* 基于编码器的模型继承 [`~onnx.config.OnnxConfig`]
+* 基于解码器的模型继承 [`~onnx.config.OnnxConfigWithPast`]
+* 编码器-解码器模型继承 [`~onnx.config.OnnxSeq2SeqConfigWithPast`]
 
 ### OnnxConfig
 

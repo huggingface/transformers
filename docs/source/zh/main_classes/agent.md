@@ -49,9 +49,9 @@ Transformers Agents是一个实验性的API，它随时可能发生变化。由�
 
 ### Agent
 
-[[autodoc]] Agent
-    - chat
-    - run
+[[autodoc]] Agent 
+    - chat 
+    - run 
     - prepare_for_new_chat
 
 ## 工具
@@ -78,9 +78,9 @@ Transformers Agents是一个实验性的API，它随时可能发生变化。由�
 
 ## Agent类型
 
-Agents可以处理工具之间的任何类型的对象；工具是多模态的，可以接受和返回文本、图像、音频、视频等类型。为了增加工具之间的兼容性，以及正确地在ipython（jupyter、colab、ipython notebooks等）中呈现这些返回值，我们实现了这些类型的包装类。
+Agents可以处理工具之间任何类型的对象；工具是多模态的，可以接受和返回文本、图像、音频、视频等类型。为了增加工具之间的兼容性，以及正确地在ipython（jupyter、colab、ipython notebooks等）中呈现这些返回值，我们实现了这些类型的包装类。
 
-被包装的对象应该继续按照最初的行为方式运作；文本对象应该仍然像字符串一样运作，图像对象应该仍然像PIL.Image一样运作。
+被包装的对象应该继续按照最初的行为方式运作；文本对象应该仍然像字符串一样运作，图像对象应该仍然像`PIL.Image`一样运作。
 
 这些类型有三个特定目的：
 

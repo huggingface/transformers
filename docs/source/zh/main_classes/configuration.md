@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Configuration
 
-基类[`PretrainedConfig`]实现了从本地文件或目录加载/保存配置的常见方法，或从库提供的预训练模型配置（从HuggingFace的AWS S3存储库下载）加载。
+基类[`PretrainedConfig`]实现了从本地文件或目录加载/保存配置的常见方法，或下载库提供的预训练模型配置（从HuggingFace的AWS S3库中下载）。
 
 每个派生的配置类都实现了特定于模型的属性。所有配置类中共同存在的属性有：`hidden_size`、`num_attention_heads` 和 `num_hidden_layers`。文本模型进一步添加了 `vocab_size`。
 

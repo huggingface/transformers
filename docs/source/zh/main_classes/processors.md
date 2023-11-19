@@ -17,12 +17,12 @@ rendered properly in your Markdown viewer.
 # Processors
 
 在 Transformers 库中，processors可以有两种不同的含义：
-- 为多模态模型（例如[Wav2Vec2](../model_doc/wav2vec2)（语音和文本）或[CLIP](../model_doc/clip)（文本和视觉））预处理输入的对象
-- 在库的旧版本中用于预处理 GLUE 或 SQUAD 数据的已弃用的对象。
+- 为多模态模型，例如[Wav2Vec2](../model_doc/wav2vec2)（语音和文本）或[CLIP](../model_doc/clip)（文本和视觉）预处理输入的对象
+- 在库的旧版本中用于预处理GLUE或SQUAD数据的已弃用对象。
 
 ## 多模态processors
 
-任何多模态模型都需要一个对象来编码或解码将多个模态（包括文本、视觉和音频）组合在一起的数据。这由称为processors的对象处理，这些processors将两个或多个处理对象组合在一起，例如标记器（用于文本模态），图像处理器（用于视觉）和特征提取器（用于音频）。
+任何多模态模型都需要一个对象来编码或解码将多个模态（包括文本、视觉和音频）组合在一起的数据。这由称为processors的对象处理，这些processors将两个或多个处理对象组合在一起，例如tokenizers（用于文本模态），image processors（用于视觉）和feature extractors（用于音频）。
 
 这些processors继承自以下实现保存和加载功能的基类：
 
@@ -31,7 +31,7 @@ rendered properly in your Markdown viewer.
 
 ## 已弃用的processors
 
-所有processor都遵循与 [`~data.processors.utils.DataProcessor`] 相同的架构。processor返回一个 [`~data.processors.utils.InputExample`] 列表。这些 [`~data.processors.utils.InputExample`] 可以转换为 [`~data.processors.utils.InputFeatures`] 以供馈送到模型。
+所有processor都遵循与 [`~data.processors.utils.DataProcessor`] 相同的架构。processor返回一个 [`~data.processors.utils.InputExample`] 列表。这些 [`~data.processors.utils.InputExample`] 可以转换为 [`~data.processors.utils.InputFeatures`] 以供输送到模型。
 
 [[autodoc]] data.processors.utils.DataProcessor
 
@@ -64,28 +64,28 @@ rendered properly in your Markdown viewer.
 
 ## XNLI
 
-[跨语言NLI语料库（XNLI）](https://www.nyu.edu/projects/bowman/xnli/) 是一个评估跨语言文本表示质量的基准测试。XNLI是一个众包数据集，基于 [*MultiNLI*](http://www.nyu.edu/projects/bowman/multinli/)：文本对被标记为包含15种不同语言（包括英语等高资源语言和斯瓦希里语等低资源语言）的文本蕴涵注释。
+[跨语言NLI语料库（XNLI）](https://www.nyu.edu/projects/bowman/xnli/) 是一个评估跨语言文本表示质量的基准测试。XNLI是一个基于[*MultiNLI*](http://www.nyu.edu/projects/bowman/multinli/)的众包数据集：”文本对“被标记为包含15种不同语言（包括英语等高资源语言和斯瓦希里语等低资源语言）的文本蕴涵注释。
 
 它与论文 [XNLI: Evaluating Cross-lingual Sentence Representations](https://arxiv.org/abs/1809.05053) 一同发布。
 
-该库提供了加载XNLI数据的处理器：
+该库提供了加载XNLI数据的processor：
 
 - [`~data.processors.utils.XnliProcessor`]
 
-请注意，由于测试集上有金标签，因此评估是在测试集上进行的。
+请注意，由于测试集上有“gold”标签，因此评估是在测试集上进行的。
 
-使用这些处理器的示例在 [run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_xnli.py) 脚本中提供。
+使用这些processor的示例在 [run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_xnli.py) 脚本中提供。
 
 
 ## SQuAD
 
 [斯坦福问答数据集（SQuAD）](https://rajpurkar.github.io/SQuAD-explorer//) 是一个评估模型在问答上性能的基准测试。有两个版本，v1.1 和 v2.0。第一个版本（v1.1）与论文 [SQuAD: 100,000+ Questions for Machine Comprehension of Text](https://arxiv.org/abs/1606.05250) 一同发布。第二个版本（v2.0）与论文 [Know What You Don't Know: Unanswerable Questions for SQuAD](https://arxiv.org/abs/1806.03822) 一同发布。
 
-该库为两个版本各自提供了一个处理器：
+该库为两个版本各自提供了一个processor：
 
 ### Processors
 
-这两个处理器是：
+这两个processor是：
 
 - [`~data.processors.utils.SquadV1Processor`]
 - [`~data.processors.utils.SquadV2Processor`]
@@ -100,12 +100,12 @@ rendered properly in your Markdown viewer.
 [[autodoc]] data.processors.squad.squad_convert_examples_to_features
 
 
-这些处理器以及上述方法都可以用于包含数据的文件以及 *tensorflow_datasets* 包。以下是一些示例。
+这些processor以及前面提到的方法可以与包含数据的文件以及tensorflow_datasets包一起使用。下面给出了示例。
 
 
-### Example usage
+### Example使用
 
-以下是使用处理器以及使用数据文件的转换方法的示例：
+以下是使用processor以及使用数据文件的转换方法的示例：
 
 ```python
 # Loading a V2 processor
@@ -143,4 +143,4 @@ features = squad_convert_examples_to_features(
 )
 ```
 
-另一个使用这些处理器的示例在 [run_squad.py](https://github.com/huggingface/transformers/tree/main/examples/legacy/question-answering/run_squad.py) 脚本中提供。
+另一个使用这些processor的示例在 [run_squad.py](https://github.com/huggingface/transformers/tree/main/examples/legacy/question-answering/run_squad.py) 脚本中提供。

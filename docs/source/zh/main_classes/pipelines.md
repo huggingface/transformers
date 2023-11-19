@@ -16,16 +16,16 @@ rendered properly in your Markdown viewer.
 
 # Pipelines
 
-pipelines是使用模型进行推断的一种简便方法。这些pipelines是抽象了库中大部分复杂代码的对象，提供了一个专用于多个任务的简单API，包括命名实体识别、掩码语言建模、情感分析、特征提取和问答等。请参阅[任务摘要](../task_summary)以获取使用示例。
+pipelines是使用模型进行推理的一种简单方法。这些pipelines是抽象了库中大部分复杂代码的对象，提供了一个专用于多个任务的简单API，包括专名识别、掩码语言建模、情感分析、特征提取和问答等。请参阅[任务摘要](../task_summary)以获取使用示例。
 
-有两类pipelines抽象需要注意：
+有两种pipelines抽象类需要注意：
 
 - [`pipeline`]，它是封装所有其他pipelines的最强大的对象。
-- 针对[音频](#audio)、[计算机视觉](#computer-vision)、[自然语言处理](#natural-language-processing)和[多模态](#multimodal)任务的特定任务pipelines也可用。
+- 针对特定任务pipelines，适用于[音频](#audio)、[计算机视觉](#computer-vision)、[自然语言处理](#natural-language-processing)和[多模态](#multimodal)任务。
 
 ## pipeline抽象类
 
-*pipeline*抽象类是对所有其他可用pipeline的封装。它可以像任何其他pipeline一样实例化，但可以提供额外的便利性。
+*pipeline*抽象类是对所有其他可用pipeline的封装。它可以像任何其他pipeline一样实例化，但进一步提供额外的便利性。
 
 简单调用一个项目：
 
@@ -53,7 +53,7 @@ pipelines是使用模型进行推断的一种简便方法。这些pipelines是�
  {'label': 'NEGATIVE', 'score': 0.9996669292449951}]
 ```
 
-为了遍历整个数据集，建议直接使用 `dataset`。这意味着您不需要一次性分配整个数据集，也不需要自己进行批处理。这应该与GPU上的自定义循环一样快。如果不是，请随时提出问题。
+为了遍历整个数据集，建议直接使用 `dataset`。这意味着您不需要一次性分配整个数据集，也不需要自己进行批处理。这应该与GPU上的自定义循环一样快。如果不是，请随时提出issue。
 
 ```python
 import datasets
@@ -103,7 +103,7 @@ for out in pipe(data()):
 
 ## Pipeline batching
 
-所有pipeline都可以使用批处理。这将在管道使用其流处理功能时起作用（因此在传递列表或 `Dataset` 或 `generator` 时）。
+所有pipeline都可以使用批处理。这将在pipeline使用其流处理功能时起作用（即传递列表或 `Dataset` 或 `generator` 时）。
 
 ```python
 from transformers import pipeline
@@ -184,7 +184,7 @@ class MyDataset(Dataset):
         return "This is a test" * n
 ```
 
-与其他句子相比，这是一个偶尔非常长的句子。在这种情况下，**整个**批次将需要400个tokens的长度，因此整个批次将是 [64, 400] 而不是 [64, 4]，导致较大的减速。更糟糕的是，在更大的批次上，程序会崩溃。
+与其他句子相比，这是一个非常长的句子。在这种情况下，**整个**批次将需要400个tokens的长度，因此整个批次将是 [64, 400] 而不是 [64, 4]，从而导致较大的减速。更糟糕的是，在更大的批次上，程序会崩溃。
 
 ```
 ------------------------------
@@ -207,17 +207,16 @@ Traceback (most recent call last):
 RuntimeError: CUDA out of memory. Tried to allocate 376.00 MiB (GPU 0; 3.95 GiB total capacity; 1.72 GiB already allocated; 354.88 MiB free; 2.46 GiB reserved in total by PyTorch)
 ```
 
-对于这个问题，没有好的（通用）解决方案，效果可能因您的用例而异。经验法则：
+对于这个问题，没有好的（通用）解决方案，效果可能因您的用例而异。经验法则如下：
 
 对于用户，一个经验法则是：
 
-- **在您的负载上测量性能，使用您的硬件。进行测量，测量，并持续测量。真实的数字是唯一的方法。**
-- 如果受到延迟的限制（进行推断的实时产品），不要进行批处理。
+- **使用硬件测量负载性能。测量、测量、再测量。真实的数字是唯一的方法。**
+- 如果受到延迟的限制（进行推理的实时产品），不要进行批处理。
 - 如果使用CPU，不要进行批处理。
-- 如果使用吞吐量（希望在一堆静态数据上运行模型），在GPU上，然后：
-
-  - 如果对序列长度的大小没有概念（"自然"数据），默认情况下不要进行批处理，进行测量并尝试逐渐添加，添加OOM检查以在失败时恢复（如果您不能控制序列长度，它将在某些时候失败）。
-  - 如果您的序列长度非常规律，那么批处理更有可能非常有趣，进行测量并推动它，直到出现OOM。
+- 如果您在GPU上处理的是吞吐量（您希望在大量静态数据上运行模型），则：
+  - 如果对序列长度的大小没有概念（"自然"数据），默认情况下不要进行批处理，进行测试并尝试逐渐添加，添加OOM检查以在失败时恢复（如果您不能控制序列长度，它将在某些时候失败）。
+  - 如果您的序列长度非常规律，那么批处理更有可能非常有趣，进行测试并推动它，直到出现OOM。
   - GPU越大，批处理越有可能变得更有趣
 - 一旦启用批处理，确保能够很好地处理OOM。
 
@@ -225,7 +224,7 @@ RuntimeError: CUDA out of memory. Tried to allocate 376.00 MiB (GPU 0; 3.95 GiB 
 
 `zero-shot-classification` 和 `question-answering` 在某种意义上稍微特殊，因为单个输入可能会导致模型的多次前向传递。在正常情况下，这将导致 `batch_size` 参数的问题。
 
-为了规避这个问题，这两个管道都有点特殊，它们是 `ChunkPipeline` 而不是常规的 `Pipeline`。简而言之：
+为了规避这个问题，这两个pipeline都有点特殊，它们是 `ChunkPipeline` 而不是常规的 `Pipeline`。简而言之：
 
 
 ```python
@@ -245,19 +244,19 @@ for preprocessed in pipe.preprocess(inputs):
 outputs = pipe.postprocess(all_model_outputs)
 ```
 
-这对您的代码应该是非常透明的，因为管道的使用方式是相同的。
+这对您的代码应该是非常直观的，因为pipeline的使用方式是相同的。
 
-这是一个简化的视图，因为管道可以自动处理批次！这意味着您不必担心您的输入实际上会触发多少次前向传递，您可以独立于输入优化 `batch_size`。前面部分的注意事项仍然适用。
+这是一个简化的视图，因为Pipeline可以自动处理批次！这意味着您不必担心您的输入实际上会触发多少次前向传递，您可以独立于输入优化 `batch_size`。前面部分的注意事项仍然适用。
 
-## Pipeline custom code
+## Pipeline自定义
 
-如果您想要覆盖特定的管道。
+如果您想要重载特定的pipeline。
 
-请随时为您手头的任务创建一个问题，管道的目标是易于使用并支持大多数情况，因此 `transformers` 可能支持您的用例。
+请随时为您手头的任务创建一个issue，Pipeline的目标是易于使用并支持大多数情况，因此 `transformers` 可能支持您的用例。
 
 如果您想简单地尝试一下，可以：
 
-- 子类化您选择的管道
+- 继承您选择的pipeline
 
 ```python
 class MyPipeline(TextClassificationPipeline):
@@ -438,7 +437,7 @@ See [`TokenClassificationPipeline`] for all details.
 
 ## 多模态 
 
-可用于多模态任务的管道包括以下几种。
+可用于多模态任务的pipeline包括以下几种。
 
 ### DocumentQuestionAnsweringPipeline
 
