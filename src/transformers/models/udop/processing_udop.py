@@ -41,6 +41,7 @@ class UdopProcessor(ProcessorMixin):
         tokenizer (`UdopTokenizer` or `UdopTokenizerFast`, *optional*):
             An instance of [`UdopTokenizer`] or [`UdopTokenizerFast`]. The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "UdopImageProcessor"
     tokenizer_class = ("UdopTokenizer", "UdopTokenizerFast")
