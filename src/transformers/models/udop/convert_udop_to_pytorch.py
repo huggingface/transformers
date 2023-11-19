@@ -128,7 +128,10 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
         outputs = model(input_ids=input_ids, bbox=bbox, pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
         print("Shape of logits:", outputs.logits.shape)
         print("First values of logits:", outputs.logits[0, :3, :3])
-    # assert torch.allclose(outputs.logits[0, :3, :3], torch.tensor([[-20.0254, 0.8438, -17.1796]]), atol=1e-4)
+
+        
+    # torch.tensor([[-18.5262,   1.5087, -15.7051]])
+    # assert torch.allclose(outputs.logits[0, :3, :3], torch.tensor([[-18.5262,   1.5087, -15.7051]]), atol=1e-4)
     print("Looks ok!")
 
     # autoregressive decoding
