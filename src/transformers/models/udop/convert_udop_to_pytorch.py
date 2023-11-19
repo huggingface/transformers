@@ -117,7 +117,7 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
         torch.testing.assert_close(EXPECTED_INPUT_IDS, input_ids)
         bbox = encoding.bbox.float()
         pixel_values = encoding.pixel_values
-    except:
+    except Exception:
         input_ids, bbox, pixel_values = prepare_dummy_inputs(tokenizer, image_processor)
 
     bbox = encoding.bbox.float()
@@ -131,15 +131,13 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
         print("Shape of logits:", outputs.logits.shape)
         print("First values of logits:", outputs.logits[0, :3, :3])
 
-        
-    # torch.tensor([[-18.5262,   1.5087, -15.7051]]) on linux
-    # tensor([[-19.4976,   0.8515, -17.1873]]) on mac 
+    # tensor([[-18.5262,   1.5087, -15.7051]]) on linux
+    # tensor([[-19.4976,   0.8515, -17.1873]]) on mac
     try:
-        assert torch.allclose(outputs.logits[0, :3, :3], torch.tensor([[-18.5262,   1.5087, -15.7051]]), atol=1e-4)
+        assert torch.allclose(outputs.logits[0, :3, :3], torch.tensor([[-18.5262, 1.5087, -15.7051]]), atol=1e-4)
         print("Looks ok!")
-    except:
+    except Exception:
         print("logits don't match let's try to generate")
-
 
     # autoregressive decoding
     print("Testing generation...")
