@@ -688,7 +688,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
     try:
-        with open("examples/json_llama_cpp.gbnf", "r") as file:
+        with open("examples/json.gbnf", "r") as file:
             input_text = file.read()
         state = parse_ebnf(input_text)
         print_grammar(sys.stdout, state)
