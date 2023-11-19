@@ -371,7 +371,7 @@ def main():
                 **dataset_args,
             )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
     # endregion
 
     # region Load pretrained model and tokenizer
