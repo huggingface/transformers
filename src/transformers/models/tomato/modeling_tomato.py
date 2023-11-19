@@ -19,9 +19,9 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_tomato import TomatoConfig
 from ...models.llama import LlamaForCausalLM
 
@@ -179,12 +179,14 @@ class TomatoForCausalLM(TomatoPreTrainedModel):
         embeddings.
 
         Args:
-            word_embeddings: Tensor of word embeddings. Shape: [b, s, h]
-            continuous_embeddings:
-                Tensor of continuous embeddings. The length of the list is the batch size. Each entry is
-            shape [num_image_embeddings, hidden], and num_image_embeddings needs to match the number of non-negative
-            indices in image_patch_input_indices for that batch element.
-            image_patch_input_indices: Tensor of indices of the image patches in the input_ids tensor. Shape: [b, s]
+            word_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Tensor of word embeddings.
+            continuous_embeddings (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
+                Tensor of continuous embeddings. The length of the list is the batch size. Each entry is shape
+                [num_image_embeddings, hidden], and num_image_embeddings needs to match the number of non-negative
+                indices in image_patch_input_indices for that batch element.
+            image_patch_input_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Tensor of indices of the image patches in the input_ids tensor.
         """
         if not (word_embeddings.shape[0] == len(continuous_embeddings)):
             raise ValueError(
@@ -218,12 +220,12 @@ class TomatoForCausalLM(TomatoPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -232,15 +234,14 @@ class TomatoForCausalLM(TomatoPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:
             batch_size, seq_length, _ = inputs_embeds.shape
         else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+            raise ValueError("You have to specify either input_is or inputs_embeds")
 
         seq_length_with_past = seq_length
         past_key_values_length = 0
@@ -273,13 +274,14 @@ class TomatoForCausalLM(TomatoPreTrainedModel):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            labels=labels,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            labels=labels,
             use_cache=use_cache,
+            return_dict=return_dict,
         )
-        if not return_dict:
-            return tuple(v for v in outputs if v is not None)
+
         return outputs
 
     def prepare_inputs_for_generation(

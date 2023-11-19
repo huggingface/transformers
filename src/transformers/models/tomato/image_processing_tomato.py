@@ -441,9 +441,6 @@ class TomatoImageProcessor(BaseImageProcessor):
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         patch_size = patch_size if patch_size is not None else self.patch_size
 
-        if isinstance(images, list) and any(isinstance(elem, list) and len(elem) >= 2 for elem in images):
-            raise ValueError("Multiple images for a single sample are not yet supported.")
-
         batch_images = make_list_of_list_of_images(images)
 
         if do_resize and size is None:
@@ -468,7 +465,7 @@ class TomatoImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(batch_images[0][0])
 
-        original_image_sizes = [get_image_size(images[0], channel_dim=input_data_format) for images in batch_images]
+        original_image_sizes = [[get_image_size(image, channel_dim=input_data_format) for image in images] for images in batch_images]
 
         if do_resize:
             batch_images = [
@@ -476,14 +473,14 @@ class TomatoImageProcessor(BaseImageProcessor):
                 for images in batch_images
             ]
 
-        image_sizes = [get_image_size(images[0], channel_dim=input_data_format) for images in batch_images]
-        image_unpadded_heights = [[image_size[0]] for image_size in image_sizes]
-        image_unpadded_widths = [[image_size[1]] for image_size in image_sizes]
+        batch_image_sizes = [[get_image_size(image, channel_dim=input_data_format) for image in images] for images in batch_images]
+        image_unpadded_heights = [[[image_size[0]] for image_size in image_sizes] for image_sizes in batch_image_sizes]
+        image_unpadded_widths = [[[image_size[1]] for image_size in image_sizes] for image_sizes in batch_image_sizes]
 
         # scale_h is the same as scale_w
         image_scale_factors = [
-            [resized_size[0] / original_size[0]]
-            for original_size, resized_size in zip(original_image_sizes, image_sizes)
+            [[resized_size[0] / original_size[0]]
+            for original_size, resized_size in zip(original_sizes, resized_sizes)] for original_sizes, resized_sizes in zip(original_image_sizes, batch_image_sizes)
         ]
 
         if do_pad:
