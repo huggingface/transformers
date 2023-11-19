@@ -299,8 +299,17 @@ def normalize(image):
     return image
 
 
+model_name_to_url = {
+    "table-detection": "https://pubtables1m.blob.core.windows.net/model/pubtables1m_detection_detr_r18.pth",
+    "table-structure-recognition": "https://pubtables1m.blob.core.windows.net/model/pubtables1m_structure_detr_r18.pth",
+    "table-structure-recognition-v1.1-pub": "https://huggingface.co/bsmock/TATR-v1.1-Pub/resolve/main/TATR-v1.1-Pub-msft.pth",
+    "table-structure-recognition-v1.1-fin": "https://huggingface.co/bsmock/TATR-v1.1-Fin/resolve/main/TATR-v1.1-Fin-msft.pth",
+    "table-structure-recognition-v1.1-all": "https://huggingface.co/bsmock/TATR-v1.1-All/resolve/main/TATR-v1.1-All-msft.pth",
+}
+
+
 @torch.no_grad()
-def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub):
+def convert_table_transformer_checkpoint(model_name, verify_logits, pytorch_dump_folder_path, push_to_hub):
     """
     Copy/paste/tweak model's weights to our DETR structure.
     """
@@ -327,6 +336,7 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
     )
 
     # load original state dict
+    checkpoint_url = model_name_to_url[model_name]
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
 
     # rename keys
@@ -374,23 +384,28 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
 
     outputs = model(pixel_values)
 
-    if "detection" in checkpoint_url:
-        expected_shape = (1, 15, 3)
-        expected_logits = torch.tensor(
-            [[-6.7897, -16.9985, 6.7937], [-8.0186, -22.2192, 6.9677], [-7.3117, -21.0708, 7.4055]]
-        )
-        expected_boxes = torch.tensor([[0.4867, 0.1767, 0.6732], [0.6718, 0.4479, 0.3830], [0.4716, 0.1760, 0.6364]])
+    if verify_logits:
+        if model_name == "table-detection":
+            expected_shape = (1, 15, 3)
+            expected_logits = torch.tensor(
+                [[-6.7897, -16.9985, 6.7937], [-8.0186, -22.2192, 6.9677], [-7.3117, -21.0708, 7.4055]]
+            )
+            expected_boxes = torch.tensor(
+                [[0.4867, 0.1767, 0.6732], [0.6718, 0.4479, 0.3830], [0.4716, 0.1760, 0.6364]]
+            )
 
-    else:
-        expected_shape = (1, 125, 7)
-        expected_logits = torch.tensor(
-            [[-18.1430, -8.3214, 4.8274], [-18.4685, -7.1361, -4.2667], [-26.3693, -9.3429, -4.9962]]
-        )
-        expected_boxes = torch.tensor([[0.4983, 0.5595, 0.9440], [0.4916, 0.6315, 0.5954], [0.6108, 0.8637, 0.1135]])
+        elif model_name == "table-structure-recognition":
+            expected_shape = (1, 125, 7)
+            expected_logits = torch.tensor(
+                [[-18.1430, -8.3214, 4.8274], [-18.4685, -7.1361, -4.2667], [-26.3693, -9.3429, -4.9962]]
+            )
+            expected_boxes = torch.tensor(
+                [[0.4983, 0.5595, 0.9440], [0.4916, 0.6315, 0.5954], [0.6108, 0.8637, 0.1135]]
+            )
 
-    assert outputs.logits.shape == expected_shape
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
-    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
+        assert outputs.logits.shape == expected_shape
+        assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
+        assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
@@ -402,29 +417,22 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
 
     if push_to_hub:
         # Push model to HF hub
-        logger.info("Pushing model to the hub...")
-        model_name = (
-            "microsoft/table-transformer-detection"
-            if "detection" in checkpoint_url
-            else "microsoft/table-transformer-structure-recognition"
-        )
-        model.push_to_hub(model_name, revision="no_timm")
-        image_processor.push_to_hub(model_name, revision="no_timm")
+        logger.info("Pushing model and image processor to the hub...")
+        model.push_to_hub(f"microsoft/{model_name}")
+        image_processor.push_to_hub(f"microsoft/{model_name}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--checkpoint_url",
-        default="https://pubtables1m.blob.core.windows.net/model/pubtables1m_detection_detr_r18.pth",
+        "--model_name",
+        default="table-detection",
         type=str,
-        choices=[
-            "https://pubtables1m.blob.core.windows.net/model/pubtables1m_detection_detr_r18.pth",
-            "https://pubtables1m.blob.core.windows.net/model/pubtables1m_structure_detr_r18.pth",
-        ],
-        help="URL of the Table Transformer checkpoint you'd like to convert.",
+        choices=model_name_to_url.keys(),
+        help="Name of the original Table Transformer checkpoint you'd like to convert.",
     )
+    parser.add_argument("--verify_logits", action="store_true", help="Whether or not to verify the logits.")
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
     )
@@ -432,4 +440,6 @@ if __name__ == "__main__":
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
     )
     args = parser.parse_args()
-    convert_table_transformer_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_table_transformer_checkpoint(
+        args.model_name, args.verify_logits, args.pytorch_dump_folder_path, args.push_to_hub
+    )
