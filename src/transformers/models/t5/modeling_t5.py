@@ -1293,16 +1293,8 @@ class T5Stack(T5PreTrainedModel):
 
         position_ids_info_list_for_relative_embeddings = []
         if add_t5_relative_position_embedding:
-                position_ids_info_list_for_relative_embeddings.append( (None, POSITION_EMBEDDING_T5_RELATIVE))
+            position_ids_info_list_for_relative_embeddings.append( (None, POSITION_EMBEDDING_T5_RELATIVE))
         for position_ids, position_embedding_names  in position_ids_dict.values(): #orig
-        # for ids_elem  in position_ids_dict.values(): #orig
-        #     if isinstance(ids_elem, list):
-        #         position_ids = torch.concat([x[None,...] for (x,name) in ids_elem ])
-        #         position_embedding_names = [x[1] for x in ids_elem]
-        #     else:
-        #         assert isinstance(ids_elem, tuple)      
-        #         assert len(ids_elem) == 2          
-        #         position_ids, position_embedding_names = ids_elem
             position_embedding_name = position_embedding_names[0]  # till collate if fixed, we move a list of identical embedding names of batch_size
             if position_ids is None:
                 device = input_ids.device if input_ids is not None else inputs_embeds.device
