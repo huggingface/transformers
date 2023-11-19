@@ -748,15 +748,16 @@ class TableTransformerImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_object_detection with Detr->TableTransformer
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
     ):
         """
-        Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        Converts the raw output of [`TableTransformerForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
         bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
-            outputs ([`DetrObjectDetectionOutput`]):
+            outputs ([`TableTransformerObjectDetectionOutput`]):
                 Raw outputs of the model.
             threshold (`float`, *optional*):
                 Score threshold to keep object detection predictions.
@@ -776,7 +777,7 @@ class TableTransformerImageProcessor(BaseImageProcessor):
                 )
 
         prob = nn.functional.softmax(out_logits, -1)
-        scores, labels = prob.max(-1)
+        scores, labels = prob[..., :-1].max(-1)
 
         # Convert to [x0, y0, x1, y1] format
         boxes = center_to_corners_format(out_bbox)
@@ -800,50 +801,3 @@ class TableTransformerImageProcessor(BaseImageProcessor):
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
-
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple[int, int]] = None):
-        """
-        Converts the output of [`DetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
-
-        Args:
-            outputs ([`DetrForSegmentation`]):
-                Raw outputs of the model.
-            target_sizes (`List[Tuple[int, int]]`, *optional*):
-                A list of tuples (`Tuple[int, int]`) containing the target size (height, width) of each image in the
-                batch. If unset, predictions will not be resized.
-        Returns:
-            `List[torch.Tensor]`:
-                A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
-                corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
-                `torch.Tensor` correspond to a semantic class id.
-        """
-        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
-        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
-
-        # Remove the null class `[..., :-1]`
-        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
-        masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
-
-        # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
-        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
-        batch_size = class_queries_logits.shape[0]
-
-        # Resize logits and compute semantic segmentation maps
-        if target_sizes is not None:
-            if batch_size != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                )
-
-            semantic_segmentation = []
-            for idx in range(batch_size):
-                resized_logits = nn.functional.interpolate(
-                    segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
-                )
-                semantic_map = resized_logits[0].argmax(dim=0)
-                semantic_segmentation.append(semantic_map)
-        else:
-            semantic_segmentation = segmentation.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
-
-        return semantic_segmentation
