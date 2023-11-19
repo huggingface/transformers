@@ -16,8 +16,8 @@
 
 import os
 import pickle
-from collections import Counter, OrderedDict
 import unittest
+from collections import Counter, OrderedDict
 
 from transformers.models.transfo_xl.tokenization_transfo_xl import VOCAB_FILES_NAMES, TransfoXLTokenizer
 
@@ -49,8 +49,21 @@ class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-        saved_dict = {"eos_idx": 0, "min_freq": 0, "vocab_file": None, "counter": Counter(["welcome home"]), "sym2idx": OrderedDict([("<eos>", 0), ("welcome", 1), ("home", 2)]), "delimiter": None, "idx2sym": ["<eos>", "welcome", "home"], "max_size": None, "lower_case": False, "special": ["<eos>"]}
-        self.pretrained_vocab_file = os.path.join(self.tmpdirname, "mock_folder", VOCAB_FILES_NAMES["pretrained_vocab_file"])
+        saved_dict = {
+            "eos_idx": 0,
+            "min_freq": 0,
+            "vocab_file": None,
+            "counter": Counter(["welcome home"]),
+            "sym2idx": OrderedDict([("<eos>", 0), ("welcome", 1), ("home", 2)]),
+            "delimiter": None,
+            "idx2sym": ["<eos>", "welcome", "home"],
+            "max_size": None,
+            "lower_case": False,
+            "special": ["<eos>"],
+        }
+        self.pretrained_vocab_file = os.path.join(
+            self.tmpdirname, "mock_folder", VOCAB_FILES_NAMES["pretrained_vocab_file"]
+        )
         os.makedirs(os.path.dirname(self.pretrained_vocab_file), exist_ok=True)
         with open(self.pretrained_vocab_file, "wb") as f:
             pickle.dump(saved_dict, f)
@@ -138,7 +151,6 @@ class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(tokenizer.decode([1]), "new1")
 
     def test_from_pretrained_vocab_file(self):
-
         tokenizer = TransfoXLTokenizer.from_pretrained(os.path.join(self.tmpdirname, "mock_folder"))
         sentence = "welcome home"
         self.assertEqual(tokenizer.decode(tokenizer.encode(sentence)), sentence)
