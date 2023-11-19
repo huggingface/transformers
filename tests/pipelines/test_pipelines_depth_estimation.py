@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import hashlib
 import unittest
+
+from huggingface_hub.utils import insecure_hashlib
 
 from transformers import MODEL_FOR_DEPTH_ESTIMATION_MAPPING, is_torch_available, is_vision_available
 from transformers.pipelines import DepthEstimationPipeline, pipeline
@@ -44,7 +45,7 @@ else:
 
 
 def hashimage(image: Image) -> str:
-    m = hashlib.md5(image.tobytes())
+    m = insecure_hashlib.md5(image.tobytes())
     return m.hexdigest()
 
 

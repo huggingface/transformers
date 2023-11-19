@@ -101,6 +101,7 @@ class GPTNeoXConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config  # doctest: +SKIP
     ```"""
+
     model_type = "gpt_neox"
 
     def __init__(
