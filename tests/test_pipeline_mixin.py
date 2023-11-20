@@ -312,8 +312,12 @@ class PipelineTesterMixin:
                     yield copy.deepcopy(random.choice(examples))
 
             out = []
-            for item in pipeline(data(10), batch_size=4):
-                out.append(item)
+            if task == "conversational":
+                for item in pipeline(data(10), batch_size=4, max_new_tokens=5):
+                    out.append(item)
+            else:
+                for item in pipeline(data(10), batch_size=4):
+                    out.append(item)
             self.assertEqual(len(out), 10)
 
         run_batch_test(pipeline, examples)
@@ -327,7 +331,6 @@ class PipelineTesterMixin:
         self.run_task_tests(task="automatic-speech-recognition")
 
     @is_pipeline_test
-    @unittest.skip("Conversational tests are currently broken for several models, will fix ASAP - Matt")
     def test_pipeline_conversational(self):
         self.run_task_tests(task="conversational")
 

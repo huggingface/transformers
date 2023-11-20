@@ -57,6 +57,11 @@ Generation is limited by the sinusoidal positional embeddings to 30 second input
 than 30 seconds of audio (1503 tokens), and input audio passed by Audio-Prompted Generation contributes to this limit so,
 given an input of 20 seconds of audio, MusicGen cannot generate more than 10 seconds of additional audio.
 
+Transformers supports both mono (1-channel) and stereo (2-channel) variants of MusicGen. The mono channel versions 
+generate a single set of codebooks. The stereo versions generate 2 sets of codebooks, 1 for each channel (left/right), 
+and each set of codebooks is decoded independently through the audio compression model. The audio streams for each 
+channel are combined to give the final stereo output.
+
 ### Unconditional Generation
 
 The inputs for unconditional (or 'null') generation can be obtained through the method

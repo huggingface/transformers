@@ -17,7 +17,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -50,11 +50,11 @@ class TFConvNextDropPath(tf.keras.layers.Layer):
         (1) github.com:rwightman/pytorch-image-models
     """
 
-    def __init__(self, drop_path, **kwargs):
+    def __init__(self, drop_path: float, **kwargs):
         super().__init__(**kwargs)
         self.drop_path = drop_path
 
-    def call(self, x, training=None):
+    def call(self, x: tf.Tensor, training=None):
         if training:
             keep_prob = 1 - self.drop_path
             shape = (tf.shape(x)[0],) + (1,) * (len(tf.shape(x)) - 1)
@@ -69,7 +69,7 @@ class TFConvNextEmbeddings(tf.keras.layers.Layer):
     found in src/transformers/models/swin/modeling_swin.py.
     """
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: ConvNextConfig, **kwargs):
         super().__init__(**kwargs)
         self.patch_embeddings = tf.keras.layers.Conv2D(
             filters=config.hidden_sizes[0],
@@ -77,7 +77,7 @@ class TFConvNextEmbeddings(tf.keras.layers.Layer):
             strides=config.patch_size,
             name="patch_embeddings",
             kernel_initializer=get_initializer(config.initializer_range),
-            bias_initializer="zeros",
+            bias_initializer=tf.keras.initializers.Zeros(),
         )
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layernorm")
         self.num_channels = config.num_channels
@@ -86,15 +86,15 @@ class TFConvNextEmbeddings(tf.keras.layers.Layer):
         if isinstance(pixel_values, dict):
             pixel_values = pixel_values["pixel_values"]
 
-        num_channels = shape_list(pixel_values)[1]
-        if tf.executing_eagerly() and num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
+        tf.debugging.assert_equal(
+            shape_list(pixel_values)[1],
+            self.num_channels,
+            message="Make sure that the channel dimension of the pixel values match with the one set in the configuration.",
+        )
 
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
-        # shape = (batch_size, in_height, in_width, in_channels=num_channels)
+        # shape = (batch_size, in_height, in_width, in_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
 
         embeddings = self.patch_embeddings(pixel_values)
@@ -188,15 +188,28 @@ class TFConvNextStage(tf.keras.layers.Layer):
     """ConvNext stage, consisting of an optional downsampling layer + multiple residual blocks.
 
     Args:
-        config ([`ConvNextConfig`]): Model configuration class.
-        in_channels (`int`): Number of input channels.
-        out_channels (`int`): Number of output channels.
-        depth (`int`): Number of residual blocks.
-        drop_path_rates(`List[float]`): Stochastic depth rates for each layer.
+        config (`ConvNextV2Config`):
+            Model configuration class.
+        in_channels (`int`):
+            Number of input channels.
+        out_channels (`int`):
+            Number of output channels.
+        depth (`int`):
+            Number of residual blocks.
+        drop_path_rates(`List[float]`):
+            Stochastic depth rates for each layer.
     """
 
     def __init__(
-        self, config, in_channels, out_channels, kernel_size=2, stride=2, depth=2, drop_path_rates=None, **kwargs
+        self,
+        config: ConvNextConfig,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 2,
+        stride: int = 2,
+        depth: int = 2,
+        drop_path_rates: Optional[List[float]] = None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         if in_channels != out_channels or stride > 1:
@@ -215,7 +228,7 @@ class TFConvNextStage(tf.keras.layers.Layer):
                     kernel_size=kernel_size,
                     strides=stride,
                     kernel_initializer=get_initializer(config.initializer_range),
-                    bias_initializer="zeros",
+                    bias_initializer=tf.keras.initializers.Zeros(),
                     name="downsampling_layer.1",
                 ),
             ]

@@ -137,6 +137,7 @@ class OneFormerConfig(PretrainedConfig):
     >>> configuration = model.config
     ```
     """
+
     model_type = "oneformer"
     attribute_map = {"hidden_size": "hidden_dim"}
 
