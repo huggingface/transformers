@@ -48,17 +48,6 @@ def load_pytorch_checkpoint_in_flax_state_dict(
     flax_model, pytorch_checkpoint_path, is_sharded, allow_missing_keys=False
 ):
     """Load pytorch checkpoints in a flax model"""
-    try:
-        import torch  # noqa: F401
-
-        from .pytorch_utils import is_torch_greater_or_equal_than_1_13  # noqa: F401
-    except (ImportError, ModuleNotFoundError):
-        logger.error(
-            "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see"
-            " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
-            " instructions."
-        )
-        raise
 
     if not is_sharded:
         pt_path = os.path.abspath(pytorch_checkpoint_path)
@@ -66,12 +55,22 @@ def load_pytorch_checkpoint_in_flax_state_dict(
 
         if pt_path.endswith(".safetensors"):
             pt_state_dict = {}
-            with safe_open(pt_path, framework="pt") as f:
+            with safe_open(pt_path, framework="flax") as f:
                 for k in f.keys():
                     pt_state_dict[k] = f.get_tensor(k)
         else:
-            pt_state_dict = torch.load(pt_path, map_location="cpu", weights_only=is_torch_greater_or_equal_than_1_13)
-        logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters.")
+            try:
+                import torch  # noqa: F401
+            except (ImportError, ModuleNotFoundError):
+                logger.error(
+                    "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see"
+                    " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
+                    " instructions."
+                )
+                raise
+
+            pt_state_dict = torch.load(pt_path, map_location="cpu", weights_only=True)
+            logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters.")
 
         flax_state_dict = convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)
     else:
@@ -150,21 +149,6 @@ def rename_key_and_reshape_tensor(
 def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     # convert pytorch tensor to numpy
     # numpy currently does not support bfloat16, need to go over float32 in this case to not lose precision
-    try:
-        import torch  # noqa: F401
-    except (ImportError, ModuleNotFoundError):
-        logger.error(
-            "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see"
-            " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
-            " instructions."
-        )
-        raise
-
-    weight_dtypes = {k: v.dtype for k, v in pt_state_dict.items()}
-    pt_state_dict = {
-        k: v.numpy() if not v.dtype == torch.bfloat16 else v.float().numpy() for k, v in pt_state_dict.items()
-    }
-
     model_prefix = flax_model.base_model_prefix
 
     # use params dict if the model contains batch norm layers
@@ -191,7 +175,6 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     # Need to change some parameters name to match Flax names
     for pt_key, pt_tensor in pt_state_dict.items():
         pt_tuple_key = tuple(pt_key.split("."))
-        is_bfloat_16 = weight_dtypes[pt_key] == torch.bfloat16
 
         # remove base model prefix if necessary
         has_base_model_prefix = pt_tuple_key[0] == model_prefix
@@ -226,15 +209,10 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
                 continue
 
             # also add unexpected weight so that warning is thrown
-            flax_state_dict[("params",) + flax_key] = (
-                jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
-            )
-
+            flax_state_dict[("params",) + flax_key] = np.asarray(flax_tensor)
         else:
             # also add unexpected weight so that warning is thrown
-            flax_state_dict[flax_key] = (
-                jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
-            )
+            flax_state_dict[flax_key] = jnp.asarray(flax_tensor)
 
     return unflatten_dict(flax_state_dict)
 
