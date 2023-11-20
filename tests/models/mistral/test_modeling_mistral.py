@@ -403,7 +403,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @require_flash_attn
     @require_torch_gpu
-    @mark.flash_attn_test
+    @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_generate_use_cache(self):
         import torch
