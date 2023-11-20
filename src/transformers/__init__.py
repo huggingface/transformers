@@ -555,6 +555,7 @@ _import_structure = {
         "SiglipConfig",
         "SiglipProcessor",
         "SiglipTextConfig",
+        "SiglipTokenizer",
         "SiglipVisionConfig",
     ],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
@@ -2822,6 +2823,7 @@ else:
             "SiglipModel",
             "SiglipPreTrainedModel",
             "SiglipTextModel",
+            "SiglipTokenizer",
             "SiglipVisionModel",
         ]
     )
@@ -4820,6 +4822,7 @@ if TYPE_CHECKING:
         SiglipConfig,
         SiglipProcessor,
         SiglipTextConfig,
+        SiglipTokenizer,
         SiglipVisionConfig,
     )
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
@@ -6733,6 +6736,7 @@ if TYPE_CHECKING:
             SiglipModel,
             SiglipPreTrainedModel,
             SiglipTextModel,
+            SiglipTokenizer,
             SiglipVisionModel,
         )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel

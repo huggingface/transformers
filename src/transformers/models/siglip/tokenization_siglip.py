@@ -73,7 +73,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (`str`, *optional*, defaults to `"<pad>"`):
+        pad_token (`str`, *optional*, defaults to `"</s>"`):
             The token used for padding, for example when batching sequences of different lengths.
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer.
@@ -92,6 +92,12 @@ class SiglipTokenizer(PreTrainedTokenizer):
 
             - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
+        model_max_length (`int`, *optional*, defaults to 64):
+            The maximum length (in number of tokens) for model inputs.
+        do_lower_case (`bool`, *optional*, defaults to `True`):
+            Whether or not to lowercase the input when tokenizing.
+        split_special_tokens (`bool`, *optional*, defaults to `True`):
+            Whether or not to split the special tokens apart.
     Attributes:
         sp_model (`SentencePieceProcessor`):
             The *SentencePiece* processor that is used for every conversion (string, tokens and IDs).

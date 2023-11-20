@@ -16,8 +16,6 @@
 
 
 import os
-import re
-import warnings
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
@@ -52,7 +50,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 class SiglipTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" SigLIP tokenizer (backed by HuggingFace's *tokenizers* library). Based on
-    [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models).
+    [SentencePiece](https://github.com/google/sentencepiece).
 
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
@@ -78,10 +76,6 @@ class SiglipTokenizerFast(PreTrainedTokenizerFast):
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        extra_ids (`int`, *optional*, defaults to 100):
-            Add a number of extra ids added to the vocabulary for use as sentinels. These tokens are accessible as
-            "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1. These tokens can be retrieved by
-            calling get_sentinel_tokens method and token ids can be by calling get_sentinel_token_ids method
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer.
     """
@@ -101,38 +95,20 @@ class SiglipTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        extra_ids=100,
         additional_special_tokens=None,
         **kwargs,
     ):
-        # Add extra_ids to the special token list
-        if additional_special_tokens is not None:
-            extra_tokens = [x for x in additional_special_tokens if "<extra_id_" in str(x)]
-            if len(extra_tokens) < 1:
-                additional_special_tokens += [f"<extra_id_{i}>" for i in range(extra_ids)]
-            elif extra_ids > 0 and extra_ids != len(extra_tokens):
-                raise ValueError(
-                    f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
-                    " provided to SiglipTokenizer. In this case the additional_special_tokens must include the extra_ids"
-                    " tokens"
-                )
-        else:
-            extra_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
-            additional_special_tokens = extra_tokens
-
         super().__init__(
             vocab_file,
             tokenizer_file=tokenizer_file,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
-            extra_ids=extra_ids,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
 
         self.vocab_file = vocab_file
-        self._extra_ids = extra_ids
 
     @property
     def can_save_slow_tokenizer(self) -> bool:
@@ -205,11 +181,3 @@ class SiglipTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(token_ids_0 + eos) * [0]
         return len(token_ids_0 + eos + token_ids_1 + eos) * [0]
-
-    def get_sentinel_tokens(self):
-        return list(
-            set(filter(lambda x: bool(re.search(r"<extra_id_\d+>", x)) is not None, self.additional_special_tokens))
-        )
-
-    def get_sentinel_token_ids(self):
-        return [self.convert_tokens_to_ids(token) for token in self.get_sentinel_tokens()]

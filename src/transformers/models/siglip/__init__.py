@@ -31,6 +31,7 @@ _import_structure = {
         "SiglipVisionConfig",
     ],
     "processing_siglip": ["SiglipProcessor"],
+    "tokenization_siglip": ["SiglipTokenizer"],
 }
 
 try:
@@ -73,6 +74,7 @@ if TYPE_CHECKING:
         SiglipVisionConfig,
     )
     from .processing_siglip import SiglipProcessor
+    from .tokenization_siglip import SiglipTokenizer
 
     try:
         if not is_tokenizers_available():
