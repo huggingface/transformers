@@ -161,7 +161,8 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
         vocab_file (`str`, *optional*):
             Path to the vocabulary file.
 
-        tokenizer_file (`<fill_type>`, *optional*): <fill_docstring>
+        tokenizer_file (`str`, *optional*):
+            Path to the tokenizer file.
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
@@ -190,9 +191,12 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
             CrossEntropyLoss.
         only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
-        extra_ids (`<fill_type>`, *optional*, defaults to 100): <fill_docstring>
-        loc_extra_ids (`<fill_type>`, *optional*, defaults to 501): <fill_docstring>
-        other_extra_ids (`<fill_type>`, *optional*, defaults to 200): <fill_docstring>
+        extra_ids (`int`, *optional*, defaults to 100):
+            The number of extra IDs added to the special tokens.
+        loc_extra_ids (`int`, *optional*, defaults to 501):
+            The number of extra location IDs added to the special tokens.
+        other_extra_ids (`int`, *optional*, defaults to 200):
+            The number of extra other IDs added to the special tokens.
         additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
     """

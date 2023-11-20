@@ -197,7 +197,8 @@ class UdopTokenizer(PreTrainedTokenizer):
 
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        sep_token_box (`<fill_type>`, *optional*, defaults to `[1000, 1000, 1000, 1000]`): <fill_docstring>
+        sep_token_box (`List[int]`, *optional*, defaults to `[1000, 1000, 1000, 1000]`):
+            The bounding box to use for the special [SEP] token.
         pad_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [PAD] token.
         pad_token_label (`int`, *optional*, defaults to -100):
@@ -205,9 +206,12 @@ class UdopTokenizer(PreTrainedTokenizer):
             CrossEntropyLoss.
         only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
-        extra_ids (`<fill_type>`, *optional*, defaults to 100): <fill_docstring>
-        loc_extra_ids (`<fill_type>`, *optional*, defaults to 501): <fill_docstring>
-        other_extra_ids (`<fill_type>`, *optional*, defaults to 200): <fill_docstring>
+        extra_ids (`int`, *optional*, defaults to 100):
+            The number of extra IDs added to the special tokens.
+        loc_extra_ids (`int`, *optional*, defaults to 501):
+            The number of extra location IDs added to the special tokens.
+        other_extra_ids (`int`, *optional*, defaults to 200):
+            The number of extra other IDs added to the special tokens.
         additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
 
