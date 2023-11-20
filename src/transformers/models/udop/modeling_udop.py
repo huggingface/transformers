@@ -1594,17 +1594,18 @@ class UdopModel(UdopPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, UdopModel
         >>> from huggingface_hub import hf_hub_download
-        >>> from PIL import Image
+        >>> from datasets import load_dataset
         >>> import torch
 
-        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-large")
+        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-large", apply_ocr=False)
         >>> model = UdopModel.from_pretrained("nielsr/udop-large")
 
-        >>> # load document image
-        >>> filepath = hf_hub_download(
-        ...     repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
-        ... )
-        >>> image = Image.open(filepath).convert("RGB")
+        >>> # load image, along with its words and boxes
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> example = dataset[0]
+        >>> image = example["image"]
+        >>> words = example["tokens"]
+        >>> boxes = example["bboxes"]
 
         >>> # prepare for the model
         >>> inputs = processor(images=image, return_tensors="pt")
@@ -1773,17 +1774,18 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, UdopForConditionalGeneration
         >>> from huggingface_hub import hf_hub_download
-        >>> from PIL import Image
+        >>> from datasets import load_dataset
 
         >>> # load model and processor
-        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-large")
+        >>> processor = AutoProcessor.from_pretrained("nielsr/udop-large", apply_ocr=False)
         >>> model = UdopForConditionalGeneration.from_pretrained("nielsr/udop-large")
 
-        >>> # load image
-        >>> filepath = hf_hub_download(
-        ...     repo_id="hf-internal-testing/fixtures_docvqa", filename="document_2.png", repo_type="dataset"
-        ... )
-        >>> image = Image.open(filepath).convert("RGB")
+        >>> # load image, along with its words and boxes
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> example = dataset[0]
+        >>> image = example["image"]
+        >>> words = example["tokens"]
+        >>> boxes = example["bboxes"]
 
         >>> # inference
         >>> prompt = "Question answering. In which year is the report made?"
