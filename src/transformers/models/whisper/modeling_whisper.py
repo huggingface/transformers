@@ -1814,6 +1814,19 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 Whether to return token-level timestamps with the text. This can be used with or without the
                 `return_timestamps` option. To get word-level timestamps, use the tokenizer to group the tokens into
                 words.
+            return_segments (`bool`, *optional*, defaults to `False`):
+                Whether to additionally return a list of all segments. Note that this option can only be enabled 
+                when doing long-form transcription.
+            attention_mask (`torch.Tensor`, *optional*):
+                `attention_mask` needs to be passed when doing long-form transcription using a batch size > 1.
+            time_precision (`int`, *optional*, defaults to 0.02):
+                The duration of output token in seconds. *E.g.* 0.02 means that a generated token on average accounts
+                for 20 ms.
+            return_dict_in_generate (`bool`, *optional*, defaults to `False`):
+                Whether or not to return a [`~utils.ModelOutput`] instead of just returning the generated tokens.
+                Note that when doing long-form transcription, `return_dict_in_generate` can only be enabled when 
+                `return_segments` is set True. In this case the generation outputs of each segment is added to each 
+                segment.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1873,15 +1886,17 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         elif not is_shortform:
             if return_timestamps is False:
                 raise ValueError(
-                    "You are passing more than 3000 mel input features (> 30 seconds) which automatically enables long-form generation which "
+                    "You have passed more than 3000 mel input features (> 30 seconds) which automatically enables long-form generation which "
                     "requires the model to predict timestamp tokens. Please either pass `return_timestamps=True` or make sure to pass no more than 3000 mel input features."
                 )
 
             if not hasattr(generation_config, "no_timestamps_token_id"):
                 raise ValueError(
-                    "You are trying to return timestamps, but the generation config is not properly set. "
+                    "You have passed more than 3000 mel input features (> 30 seconds) which automatically enables long-form generation which "
+                    "requires the generation config to have `no_timestamps_token_id` correctly. "
                     "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`. "
                     "For more details on how to generate the approtiate config, refer to https://github.com/huggingface/transformers/issues/21878#issuecomment-1451902363"
+                    "or make sure to pass no more than 3000 mel input features."
                 )
 
             logger.info("Setting `return_timestamps=True` for long-form generation.")
