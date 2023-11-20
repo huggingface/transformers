@@ -74,7 +74,8 @@ class TVPModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.seq_length = seq_length
+        self.input_id_length = seq_length
+        self.seq_length = seq_length + 10 + 784  # include text prompt length and visual input length
         self.alpha = alpha
         self.beta = beta
         self.visual_prompter_type = visual_prompter_type
@@ -101,8 +102,8 @@ class TVPModelTester:
         self.num_channels = 3
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = random_attention_mask([self.batch_size, self.seq_length])
+        input_ids = ids_tensor([self.batch_size, self.input_id_length], self.vocab_size)
+        attention_mask = random_attention_mask([self.batch_size, self.input_id_length])
         pixel_values = floats_tensor(
             [self.batch_size, self.num_frames, self.num_channels, self.max_img_size, self.max_img_size]
         )
@@ -152,9 +153,7 @@ class TVPModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, pixel_values, attention_mask)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.seq_length + 10 + 784, self.hidden_size)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -176,11 +175,6 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-
-    test_pruning = False
-    test_torchscript = False
-    test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TVPModelTester(self)
@@ -214,157 +208,6 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    def test_attention_outputs(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model does not output attentions")
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        seq_len = getattr(self.model_tester, "seq_length", None)
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-        chunk_length = getattr(self.model_tester, "chunk_length", None)
-        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
-            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(attentions[0].shape[-4:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        encoder_seq_length + 10 + 784,
-                        chunk_length,
-                        encoder_key_length + 10 + 784,
-                    ],
-                )
-            else:
-                self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        encoder_seq_length + 10 + 784,
-                        encoder_key_length + 10 + 784,
-                    ],
-                )
-            out_len = len(outputs)
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
-                added_hidden_states = 2
-            else:
-                added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
-
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-4:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        encoder_seq_length + 10 + 784,
-                        chunk_length,
-                        encoder_key_length + 10 + 784,
-                    ],
-                )
-            else:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        encoder_seq_length + 10 + 784,
-                        encoder_key_length + 10 + 784,
-                    ],
-                )
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            if hasattr(self.model_tester, "encoder_seq_length"):
-                seq_length = self.model_tester.encoder_seq_length
-                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
-                    seq_length = seq_length * self.model_tester.chunk_length
-            else:
-                seq_length = self.model_tester.seq_length
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length + 10 + 784, self.model_tester.hidden_size],
-            )
-
-            if config.is_encoder_decoder:
-                hidden_states = outputs.decoder_hidden_states
-
-                self.assertIsInstance(hidden_states, (list, tuple))
-                self.assertEqual(len(hidden_states), expected_num_layers)
-                seq_len = getattr(self.model_tester, "seq_length", None)
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
-
-                self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [decoder_seq_length + 10 + 784, self.model_tester.hidden_size],
-                )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -377,13 +220,7 @@ def prepare_img():
 class TvpModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            TvpImageProcessor.from_pretrained(
-                "Jiqing/tiny-random-tvp",
-            )
-            if is_vision_available()
-            else None
-        )
+        return TvpImageProcessor.from_pretrained("Jiqing/tiny-random-tvp") if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
