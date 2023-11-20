@@ -134,7 +134,7 @@ of **0.36**.
 
 ### Multi GPU CTC with Dataset Streaming
 
-The following command shows how to use [Dataset Streaming mode](https://huggingface.co/docs/datasets/dataset_streaming.html)
+The following command shows how to use [Dataset Streaming mode](https://huggingface.co/docs/datasets/dataset_streaming)
 to fine-tune [XLS-R](https://huggingface.co/transformers/main/model_doc/xls_r.html) 
 on [Common Voice](https://huggingface.co/datasets/common_voice) using 4 GPUs in half-precision.
 
