@@ -246,6 +246,7 @@ class PretrainedConfig(PushToHubMixin):
             not be XLA-compatible. This option is here for backward compatibility and will be removed in Transformers
             v5.
     """
+
     model_type: str = ""
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
@@ -484,7 +485,8 @@ class PretrainedConfig(PushToHubMixin):
 
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(

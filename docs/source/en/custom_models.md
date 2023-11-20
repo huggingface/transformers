@@ -272,6 +272,22 @@ Note that there is no need to specify an auto class for the configuration (there
 [`AutoConfig`]) but it's different for models. Your custom model could be suitable for many different tasks, so you
 have to specify which one of the auto classes is the correct one for your model.
 
+<Tip>
+
+Use `register_for_auto_class()` if you want the code files to be copied. If you instead prefer to use code on the Hub from another repo, 
+you don't need to call it. In cases where there's more than one auto class, you can modify the `config.json` directly using the 
+following structure:
+
+```
+"auto_map": {     
+	"AutoConfig": "<your-repo-name>--<config-name>",     
+	"AutoModel": "<your-repo-name>--<config-name>",
+	"AutoModelFor<Task>": "<your-repo-name>--<config-name>",    
+},
+```
+
+</Tip>
+
 Next, let's create the config and models as we did before:
 
 ```py

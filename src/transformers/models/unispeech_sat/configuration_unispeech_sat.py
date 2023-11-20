@@ -197,6 +197,7 @@ class UniSpeechSatConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "unispeech-sat"
 
     def __init__(

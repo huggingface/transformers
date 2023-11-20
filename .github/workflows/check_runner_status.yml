@@ -18,7 +18,7 @@ env:
 jobs:
   check_runner_status:
     name: Check Runner Status
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       offline_runners: ${{ steps.set-offline_runners.outputs.offline_runners }}
     steps:
@@ -39,7 +39,7 @@ jobs:
 
   send_results:
     name: Send results to webhook
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: check_runner_status
     if: ${{ failure() }}
     steps:

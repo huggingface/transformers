@@ -174,7 +174,7 @@ _SPECIAL_SUPPORTED_MODELS = [
     "Speech2Text2Decoder",
     "TrOCRDecoder",
     "PeftModelForCausalLM",
-    "PeftModelForSeq2SeqLM"
+    "PeftModelForSeq2SeqLM",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]

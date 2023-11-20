@@ -493,7 +493,7 @@ class TypicalLogitsWarper(LogitsWarper):
 
         # Remove tokens with cumulative mass above the threshold
         last_ind = (cumulative_probs < self.mass).sum(dim=1)
-        last_ind[last_ind < 0] = 0
+        last_ind.clamp_(max=sorted_scores.shape[-1] - 1)
         sorted_indices_to_remove = sorted_scores > sorted_scores.gather(1, last_ind.view(-1, 1))
         sorted_indices_to_remove[..., : self.min_tokens_to_keep] = 0
         indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
@@ -1301,8 +1301,9 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
         # set all nan values to 0.0
         scores[scores != scores] = 0.0
 
-        # set all inf values to max possible value
+        # set all +/-inf values to max/min possible value
         scores[scores == float("inf")] = torch.finfo(scores.dtype).max
+        scores[scores == float("-inf")] = torch.finfo(scores.dtype).min
 
         return scores
 
@@ -1327,22 +1328,26 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
-    >>> set_seed(1)
     >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
     >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
     >>> text = "Just wanted to let you know, I"
     >>> inputs = tokenizer(text, return_tensors="pt")
 
-    >>> # Generate sequences without exponential penalty. We want short sentences, so we limit max_length=30
-    >>> # see that the answer tends to end abruptly
+    >>> # Let's consider that we want short sentences, so we limit `max_length=30`. However, we observe that the answer
+    >>> # tends to end abruptly.
+    >>> set_seed(1)
     >>> outputs = model.generate(**inputs, do_sample=True, temperature=0.9, max_length=30, pad_token_id=50256)
     >>> print(tokenizer.batch_decode(outputs)[0])
-    Just wanted to let you know, I'm not even a lawyer. I'm a man. I have no real knowledge of politics. I'm a
+    Just wanted to let you know, I received a link to an ebook, the book How To Start A Social Network which was
+    published in 2010. Although
 
-    >>> # Generate sequences with exponential penalty, we add the exponential_decay_length_penalty=(start_index, decay_factor)
-    >>> # We see that instead of cutting at max_tokens, the output comes to an end before (at 25 tokens) and with more meaning
-    >>> # What happens is that starting from `start_index` the EOS token score will be increased by decay_factor exponentially
+    >>> # To promote the appearance of the EOS token at the right time, we add the `exponential_decay_length_penalty =
+    >>> # (start_index, decay_factor)`. Instead of cutting at max_tokens, the output comes to an end before and usually
+    >>> # with more meaning. What happens is that starting from `start_index` the EOS token score will be increased
+    >>> # by `decay_factor` exponentially. However, if you set a high decay factor, you may also end up with abruptly
+    >>> # ending sequences.
+    >>> set_seed(1)
     >>> outputs = model.generate(
     ...     **inputs,
     ...     do_sample=True,
@@ -1352,19 +1357,22 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
     ...     exponential_decay_length_penalty=(15, 1.6),
     ... )
     >>> print(tokenizer.batch_decode(outputs)[0])
-    Just wanted to let you know, I've got a very cool t-shirt educating people on how to use the Internet<|endoftext|>
+    Just wanted to let you know, I received a link to an ebook, the book How To Start A Social Network
+    which<|endoftext|>
 
-    >>> # Generate sequences with smaller decay_factor, still improving the hard cutoff mid-sentence
+    >>> # With a small decay factor, you will have a higher chance of getting a meaningful sequence.
+    >>> set_seed(1)
     >>> outputs = model.generate(
     ...     **inputs,
     ...     do_sample=True,
     ...     temperature=0.9,
     ...     max_length=30,
     ...     pad_token_id=50256,
-    ...     exponential_decay_length_penalty=(15, 1.05),
+    ...     exponential_decay_length_penalty=(15, 1.01),
     ... )
     >>> print(tokenizer.batch_decode(outputs)[0])
-    Just wanted to let you know, I've been working on it for about 6 months and now it's in Alpha.<|endoftext|>
+    Just wanted to let you know, I received a link to an ebook, the book How To Start A Social Network which was
+    published in 2010.<|endoftext|>
     ```
     """
 
@@ -1457,8 +1465,15 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
 
 class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     r"""
-    Whisper specific Processor. This processor can be used to force a list of tokens. The processor will set their log
-    probs to `inf` so that they are sampled at their corresponding index.
+
+    [`LogitsProcessor`] that modifies the logits for the generation of timestamps in the transcription. When the input
+    tokens are at a specific threshold, the processor sets the scores to negative infinity. The processor makes sure
+    that timestamp tokens appear in pairs, by masking out the logits that would break this pairing pattern. This is
+    done to maintain the consistency and structure of generated timestamps. It also ensures that when the predicted
+    probability of sampling any of the timestamp token is greater than any individual non-timestamp token, those
+    non-timestamp logits are set to negative infinity. This is done to ensure the generation of timestamps over other
+    potential tokens.
+
 
     See [the paper](https://arxiv.org/abs/2212.04356) for more information.
 
@@ -1472,6 +1487,34 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                 max_initial_timestamp_index (`int`, *optional*, defaults to 1):
                     Used to set the maximum value of the initial timestamp. This is used to prevent the model from
                     predicting timestamps that are too far in the future.
+
+    Examples:
+    ``` python
+    >>> import torch
+    >>> from transformers import AutoProcessor, WhisperForConditionalGeneration,GenerationConfig
+    >>> from datasets import load_dataset
+
+    >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
+    >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    >>> inputs = processor(ds[3]["audio"]["array"], return_tensors="pt")
+    >>> input_features = inputs.input_features
+
+    >>> #Displaying timestamps
+    >>> generated_ids = model.generate(inputs=input_features, return_timestamps=True)
+    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+    >>> print("Transcription:", transcription)
+    Transcription: <|startoftranscript|><|0.00|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all, and can<|6.44|><|6.44|> discover in it but little of rocky Ithaca.<|9.44|><|endoftext|>
+
+
+    >>> #No timestamps & change EOS:
+    >>> #This allows the user to select a specific token to terminate the sequence on, in this case it's the word "can"(460)
+    >>> model.generation_config.eos_token_id = 460
+    >>> generated_ids = model.generate(inputs=input_features,return_timestamps=False)
+    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    >>> print("Transcription:", transcription)
+    Transcription:  He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can
+    ```
     """
 
     def __init__(self, generate_config):  # support for the kwargs
@@ -1714,3 +1757,35 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         unconditional_logits = torch.nn.functional.log_softmax(logits[:, -1], dim=-1)
         out = self.guidance_scale * (scores - unconditional_logits) + unconditional_logits
         return out
+
+
+class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
+    r"""This processor ensures that the EOS token is selected if its probability is greater than the `min_eos_p`.
+
+    Args:
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+        min_eos_p (`float`, *optional*):
+            Minimum end of speech threshold.
+    """
+
+    def __init__(self, eos_token_id: Union[int, List[int]], min_eos_p: float):
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
+        self.eos_token_id = eos_token_id
+        if min_eos_p is not None and min_eos_p <= 0:
+            raise ValueError(f"`min_eos_p` has to be a positive float, but is {min_eos_p}")
+        self.min_eos_p = min_eos_p
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if self.min_eos_p:
+            probs = torch.nn.functional.softmax(scores.float(), dim=-1)
+            # create scores full of -inf except for the eos_token_id
+            early_stop_scores = torch.ones_like(scores) * -float("inf")
+            early_stop_scores[:, self.eos_token_id] = scores[:, self.eos_token_id]
+
+            do_early_stop = probs[:, self.eos_token_id] > self.min_eos_p
+            scores = torch.where(do_early_stop, early_stop_scores, scores)
+
+        return scores
