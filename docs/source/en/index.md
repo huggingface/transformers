@@ -245,6 +245,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                     [SegFormer](model_doc/segformer)                     |       ✅        |         ✅         |      ❌      |
 |                           [SEW](model_doc/sew)                           |       ✅        |         ❌         |      ❌      |
 |                         [SEW-D](model_doc/sew-d)                         |       ✅        |         ❌         |      ❌      |
+|                        [SigLIP](model_doc/siglip)                        |       ✅        |         ❌         |      ❌      |
 |        [Speech Encoder decoder](model_doc/speech-encoder-decoder)        |       ✅        |         ❌         |      ✅      |
 |                 [Speech2Text](model_doc/speech_to_text)                  |       ✅        |         ✅         |      ❌      |
 |                      [SpeechT5](model_doc/speecht5)                      |       ✅        |         ❌         |      ❌      |

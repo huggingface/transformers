@@ -34,6 +34,7 @@ class SiglipProcessor(ProcessorMixin):
         tokenizer ([`T5TokenizerFast`]):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "SiglipImageProcessor"
     tokenizer_class = ("T5Tokenizer", "T5TokenizerFast")
