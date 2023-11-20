@@ -878,13 +878,14 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
 
         # we need to reshape the hidden states to their original spatial dimensions
         # spatial dimensions contains all the heights and widths of each stage, including after the embeddings
+        feature_maps = ()
         for stage in self.out_features:
             idx = self.stage_names.index(stage)
             # we skip the stem
             if idx == 0:
                 raise ValueError("The stem is not supported.")
             hidden_state = hidden_states[idx]
-            (height, width) = output.hidden_states_spatial_dimensions[idx - 1]
+            (height, width) = outputs.hidden_states_spatial_dimensions[idx - 1]
             norm = self.hidden_states_norms[idx - 1]
             # the last element corespond to the layer's last block output but before patch merging
             hidden_state_unpolled = hidden_state[-1]
