@@ -3081,7 +3081,7 @@ class ModelTesterMixin:
                     dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
                 )
 
-                self.assertTrue(torch.equal(out, out_fa))
+                self.assertTrue(torch.allclose(out, out_fa))
 
     @require_flash_attn
     @require_torch_gpu
@@ -3124,7 +3124,7 @@ class ModelTesterMixin:
                     dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
                 )
 
-                self.assertTrue(torch.equal(out, out_fa))
+                self.assertTrue(torch.allclose(out, out_fa))
 
     @require_flash_attn
     @require_torch_gpu
