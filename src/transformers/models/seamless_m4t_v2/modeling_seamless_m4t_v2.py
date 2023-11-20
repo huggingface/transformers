@@ -562,7 +562,7 @@ class SeamlessM4Tv2ConformerFeatureProjection(nn.Module):
 
     def forward(self, hidden_states):
         # non-projected hidden states are needed for quantization
-        norm_hidden_states = self.layer_norm(hidden_states)
+        norm_hidden_states = self.layer_norm(hidden_states.to(self.layer_norm.weight.dtype))
         hidden_states = self.projection(norm_hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
