@@ -77,7 +77,6 @@ class SiglipImageProcessor(BaseImageProcessor):
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 224, "width": 224}
-        size = get_size_dict(size, default_to_square=False)
 
         self.do_resize = do_resize
         self.size = size

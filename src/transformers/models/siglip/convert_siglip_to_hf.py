@@ -239,15 +239,19 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
 
     # create image processor
     image_processor = SiglipImageProcessor()
-    url = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-ipod.jpg"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-    # preprocess image
-    pixel_values = image_processor(image, return_tensors="pt").pixel_values
+    url_1 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-ipod.jpg"
+    image_1 = Image.open(requests.get(url_1, stream=True).raw).convert("RGB")
+    url_2 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-blank.jpg"
+    image_2 = Image.open(requests.get(url_2, stream=True).raw).convert("RGB")
+    # preprocess images
+    pixel_values = image_processor(images=[image_1, image_2], return_tensors="pt").pixel_values
 
-    print("Pixel values:", pixel_values)
+    print("First values of pixel values:", pixel_values[0, 0, :3, :3])
 
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_pixel_values.pt", repo_type="dataset")
-    pixel_values = torch.load(filepath)
+    original_pixel_values = torch.load(filepath)
+
+    print("First values of original pixel values:", original_pixel_values[0, 0, :3, :3])
 
     # create tokenizer
     tokenizer = SiglipTokenizer(vocab_file=vocab_file)
@@ -260,7 +264,7 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
     assert input_ids.tolist() == original_input_ids.tolist()
 
     with torch.no_grad():
-        outputs = model(input_ids=input_ids, pixel_values=pixel_values)
+        outputs = model(input_ids=input_ids, pixel_values=original_pixel_values)
 
     print("Logits per image:", outputs.logits_per_image[:3, :3])
 
