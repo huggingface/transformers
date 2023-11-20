@@ -315,21 +315,13 @@ class SwiftFormerEncoderBlock(nn.Module):
     def forward(self, x):
         x = self.local_representation(x)
         batch_size, channels, height, width = x.shape
+        res = self.attn(x.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels))
+        res = res.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
         if self.use_layer_scale:
-            x = x + self.drop_path(
-                self.layer_scale_1
-                * self.attn(x.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels))
-                .reshape(batch_size, height, width, channels)
-                .permute(0, 3, 1, 2)
-            )
+            x = x + self.drop_path(self.layer_scale_1 * res)
             x = x + self.drop_path(self.layer_scale_2 * self.linear(x))
-
         else:
-            x = x + self.drop_path(
-                self.attn(x.permute(0, 2, 3, 1).reshape(batch_size, height * width, channels))
-                .reshape(batch_size, height, width, channels)
-                .permute(0, 3, 1, 2)
-            )
+            x = x + self.drop_path(res)
             x = x + self.drop_path(self.linear(x))
         return x
 
