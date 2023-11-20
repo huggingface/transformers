@@ -50,7 +50,7 @@ def load_pytorch_checkpoint_in_flax_state_dict(
     """Load pytorch checkpoints in a flax model"""
     try:
         import torch  # noqa: F401
-    except ImportError:
+    except (ImportError, ModuleNotFoundError):
         logger.error(
             "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see"
             " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
@@ -150,7 +150,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     # numpy currently does not support bfloat16, need to go over float32 in this case to not lose precision
     try:
         import torch  # noqa: F401
-    except ImportError:
+    except (ImportError, ModuleNotFoundError):
         logger.error(
             "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see"
             " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
@@ -349,7 +349,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
 
     try:
         import torch  # noqa: F401
-    except ImportError:
+    except (ImportError, ModuleNotFoundError):
         logger.error(
             "Loading a Flax weights in PyTorch, requires both PyTorch and Flax to be installed. Please see"
             " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"

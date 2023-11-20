@@ -55,7 +55,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.35.0.dev0")
+check_min_version("4.36.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -212,7 +212,7 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
-        self.task_name = self.task_name.lower() if type(self.task_name) == str else self.task_name
+        self.task_name = self.task_name.lower() if isinstance(self.task_name, str) else self.task_name
 
 
 def create_train_state(

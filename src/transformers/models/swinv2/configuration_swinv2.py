@@ -89,6 +89,7 @@ class Swinv2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "swinv2"
 
     attribute_map = {

@@ -478,8 +478,7 @@ def post_process_panoptic_sample(
     threshold=0.85,
 ) -> Dict:
     """
-    Converts the output of [`ConditionalDetrForSegmentation`] into panoptic segmentation predictions for a single
-    sample.
+    Converts the output of [`ConditionalDetrForSegmentation`] into panoptic segmentation predictions for a single sample.
 
     Args:
         out_logits (`torch.Tensor`):
@@ -1454,8 +1453,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_semantic_segmentation with Detr->ConditionalDetr
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple[int, int]] = None):
         """
-        Converts the output of [`ConditionalDetrForSegmentation`] into semantic segmentation maps. Only supports
-        PyTorch.
+        Converts the output of [`ConditionalDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
         Args:
             outputs ([`ConditionalDetrForSegmentation`]):
@@ -1511,8 +1509,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         return_coco_annotation: Optional[bool] = False,
     ) -> List[Dict]:
         """
-        Converts the output of [`ConditionalDetrForSegmentation`] into instance segmentation predictions. Only supports
-        PyTorch.
+        Converts the output of [`ConditionalDetrForSegmentation`] into instance segmentation predictions. Only supports PyTorch.
 
         Args:
             outputs ([`ConditionalDetrForSegmentation`]):
@@ -1596,8 +1593,8 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         target_sizes: Optional[List[Tuple[int, int]]] = None,
     ) -> List[Dict]:
         """
-        Converts the output of [`ConditionalDetrForSegmentation`] into image panoptic segmentation predictions. Only
-        supports PyTorch.
+        Converts the output of [`ConditionalDetrForSegmentation`] into image panoptic segmentation predictions. Only supports
+        PyTorch.
 
         Args:
             outputs ([`ConditionalDetrForSegmentation`]):

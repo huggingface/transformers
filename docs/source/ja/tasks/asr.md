@@ -233,7 +233,7 @@ MInDS-14 データセットのサンプリング レートは 8000kHz です (�
 
 ## Train
 
-<Frameworkcontent>
+<frameworkcontent>
 <pt>
 <Tip>
 

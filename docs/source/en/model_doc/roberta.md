@@ -47,7 +47,9 @@ model published after it. Our best model achieves state-of-the-art results on GL
 highlight the importance of previously overlooked design choices, and raise questions about the source of recently
 reported improvements. We release our models and code.*
 
-Tips:
+This model was contributed by [julien-c](https://huggingface.co/julien-c). The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/roberta).
+
+## Usage tips
 
 - This implementation is the same as [`BertModel`] with a tiny embeddings tweak as well as a setup
   for Roberta pretrained models.
@@ -62,8 +64,6 @@ Tips:
     * train with larger batches
     * use BPE with bytes as a subunit and not characters (because of unicode characters)
 - [CamemBERT](camembert) is a wrapper around RoBERTa. Refer to this page for usage examples.
-
-This model was contributed by [julien-c](https://huggingface.co/julien-c). The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/roberta).
 
 ## Resources
 
@@ -127,6 +127,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] RobertaTokenizerFast
     - build_inputs_with_special_tokens
 
+<frameworkcontent>
+<pt>
+
 ## RobertaModel
 
 [[autodoc]] RobertaModel
@@ -161,6 +164,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] RobertaForQuestionAnswering
     - forward
+
+</pt>
+<tf>
 
 ## TFRobertaModel
 
@@ -197,6 +203,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] TFRobertaForQuestionAnswering
     - call
 
+</tf>
+<jax>
+
 ## FlaxRobertaModel
 
 [[autodoc]] FlaxRobertaModel
@@ -231,3 +240,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] FlaxRobertaForQuestionAnswering
     - __call__
+
+</jax>
+</frameworkcontent>

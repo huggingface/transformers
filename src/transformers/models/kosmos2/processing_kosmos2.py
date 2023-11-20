@@ -52,6 +52,7 @@ class Kosmos2Processor(ProcessorMixin):
         num_patch_index_tokens (`int`, *optional*, defaults to 1024):
             The number of tokens that represent patch indices.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = ("XLMRobertaTokenizer", "XLMRobertaTokenizerFast")
@@ -211,7 +212,9 @@ class Kosmos2Processor(ProcessorMixin):
                 image_embeds_position_mask.append(mask)
 
             if isinstance(text, list):
-                sorted_length = sorted([(idx, len(x)) for idx, x in enumerate(text_encoding.input_ids)])
+                sorted_length = sorted(
+                    [(idx, len(x)) for idx, x in enumerate(text_encoding.input_ids)], key=lambda x: x[-1]
+                )
                 _, min_len_not_padded = sorted_length[0]
                 idx, _ = sorted_length[-1]
 
@@ -388,8 +391,8 @@ class Kosmos2Processor(ProcessorMixin):
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with BertTokenizerFast->PreTrainedTokenizer
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
-        to the docstring of this method for more information.
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 
