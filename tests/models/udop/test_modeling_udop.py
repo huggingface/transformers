@@ -534,12 +534,12 @@ class UdopModelIntegrationTests(unittest.TestCase):
     @cached_property
     def processor(self):
         # TODO update organization
-        return UdopProcessor.from_pretrained("ArthurZ/udop")
+        return UdopProcessor.from_pretrained("nielsr/udop-test")
 
     @cached_property
     def model(self):
         # TODO update organization
-        return UdopForConditionalGeneration.from_pretrained("nielsr/udop-large").to(torch_device)
+        return UdopForConditionalGeneration.from_pretrained("nielsr/udop-test").to(torch_device)
 
     def test_conditional_generation(self):
         processor = self.processor
