@@ -110,7 +110,7 @@ def parse_char(src):
                 if second > -1:
                     return (first << 4) + second, src[4:]
             raise RuntimeError("expecting \\xNN at " + src)
-        elif esc in ('"', "[", "]", "\\"):
+        elif esc in ('"', "[", "]"):
             return esc, src[2:]
         elif esc == "r":
             return "\r", src[2:]
@@ -234,7 +234,7 @@ def parse_sequence(state, src, rule_name, outbuf, is_nested):
 def parse_alternates(state, src, rule_name, rule_id, is_nested):
     outbuf = []
     remaining_src = parse_sequence(state, src, rule_name, outbuf, is_nested)
-    while remaining_src[0] == "|":
+    while remaining_src and remaining_src[0] == "|":
         remaining_src = remove_leading_white_space(remaining_src[1:], True)
         remaining_src = parse_sequence(state, remaining_src, rule_name, outbuf, is_nested)
 
@@ -255,9 +255,9 @@ def parse_rule(state, src):
 
     remaining_src = parse_alternates(state, remaining_src, name, rule_id, False)
 
-    if remaining_src[0] == "\r":
+    if remaining_src and remaining_src[0] == "\r":
         remaining_src = remaining_src[2:] if remaining_src[1] == "\n" else remaining_src[1:]
-    elif remaining_src[0] == "\n":
+    elif remaining_src and remaining_src[0] == "\n":
         remaining_src = remaining_src[1:]
     elif remaining_src:
         raise RuntimeError("expecting newline or end at " + remaining_src)
