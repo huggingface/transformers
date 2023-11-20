@@ -1374,9 +1374,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
             if module.out_proj.bias is not None:
                 module.out_proj.bias.data.zero_()
         elif isinstance(module, Kosmos2VisionMLP):
-            in_proj_std = (
-                (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            )
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
