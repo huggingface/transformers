@@ -85,7 +85,6 @@ class TvpProcessor(ProcessorMixin):
         """
 
         max_text_length = kwargs.pop("max_text_length", None)
-        size = kwargs.pop("size", None)
 
         if text is None and videos is None:
             raise ValueError("You have to specify either text or videos. Both cannot be none.")
@@ -105,7 +104,7 @@ class TvpProcessor(ProcessorMixin):
             encoding.update(textual_input)
 
         if videos is not None:
-            image_features = self.image_processor(videos, return_tensors=return_tensors, size=size, **kwargs)
+            image_features = self.image_processor(videos, return_tensors=return_tensors, **kwargs)
             encoding.update(image_features)
 
         return BatchEncoding(data=encoding, tensor_type=return_tensors)

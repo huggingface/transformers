@@ -116,27 +116,6 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
     frames = frames.transpose(0, 3, 1, 2)
     return frames
 
-def get_resize_size(image, max_size):
-    '''
-    Args:
-        image: np.ndarray
-        max_size: The max size of height and width
-    Returns:
-        (height, width)
-    Note the height/width order difference >>> pil_img = Image.open("raw_img_tensor.jpg") >>> pil_img.size (640,
-    480) # (width, height) >>> np_img = np.array(pil_img) >>> np_img.shape (480, 640, 3) # (height, width, 3)
-    '''
-    height, width = image.shape[-2:]
-    if height >= width:
-        ratio = width * 1.0 / height
-        new_height = max_size
-        new_width = new_height * ratio
-    else:
-        ratio = height * 1.0 / width
-        new_width = max_size
-        new_height = new_width * ratio
-    size = {"height": int(new_height), "width": int(new_width)}
-    return size
 
 file = hf_hub_download(repo_id="Intel/tvp_demo", filename="AK2KG.mp4", repo_type="dataset")
 model = TvpForVideoGrounding.from_pretrained("Intel/tvp-base")
@@ -153,9 +132,8 @@ raw_sampled_frms = decode(**decoder_kwargs)
 
 text = "a person is sitting on a bed."
 processor = AutoProcessor.from_pretrained("Intel/tvp-base")
-size = get_resize_size(raw_sampled_frms, model.config.max_img_size)
 model_inputs = processor(
-    text=[text], videos=list(raw_sampled_frms), return_tensors="pt", max_text_length=100, size=size
+    text=[text], videos=list(raw_sampled_frms), return_tensors="pt", max_text_length=100#, size=size
 )
 
 model_inputs["pixel_values"] = model_inputs["pixel_values"].to(model.dtype)
