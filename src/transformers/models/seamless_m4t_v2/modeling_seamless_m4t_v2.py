@@ -751,7 +751,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
             positional_embedding = positional_embedding.to(dtype=query.dtype)  # fp16 compatibility
 
             relative_position_scores = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
-            scores = scores + relative_position_scores
+            scores = scores + (relative_position_scores / math.sqrt(self.head_size))
 
         # apply attention_mask if necessary
         if attention_mask is not None:

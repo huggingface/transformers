@@ -1149,18 +1149,19 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         # test audio - tgt lang: rus
 
         # fmt: off
-        expected_text_tokens = [3, 256074, 147, 3]
+        expected_text_tokens = [3, 256074, 107, 248213, 404, 247792, 247789, 3]
         # fmt: on
 
         # fmt: off
         expected_unit_tokens = [
-            8976,9886,9886,9886,9886,1498,1498,1498,4567,4567,5037,4418,4418,6750,6750,1514,1514,1514,1514,1514,1514,1514,
-            1514,8063,8063,8063,8063,8063,8063,8063,8063,2066,8063,4199
+            8976,7163,6915,6915,2728,8278,5462,3318,283,3686,1049,9643,1200,2052,2052,8196,8196,5225,1134,7555,7555,7555,
+            7555,9717,9717,4632,8167,8167,972,972,972,8167,297,297,297,3993,3993,3993,3993,3993,3993,4660,4660,1725,1725,
+            1725,7962,225,225,8737,4199
         ]
         # fmt: on
 
         # fmt: off
-        expected_wav_slice = [9.30e-04, 8.23e-04, 6.44e-04, 6.44e-04, 6.46e-04, 6.19e-04, 6.91e-04, 7.98e-04, 7.80e-04, 6.97e-04]
+        expected_wav_slice = [8.68e-4, 8.12e-4, 7.66e-4, 7.37e-4, 7.61e-4, 7.26e-4, 7.62e-4, 7.59e-4, 8.28e-4, 8.17e-4]
         # fmt: on
 
         set_seed(0)
@@ -1174,9 +1175,7 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
 
         # assert mean and std equality - higher tolerance for speech
-        self.assertListAlmostEqual(
-            [-0.00078, 0.11356], [output.waveform.mean().item(), output.waveform.std().item()], tol=0.003
-        )
+        self.assertListAlmostEqual([-0.00028, 0.0742286], [output.waveform.mean().item(), output.waveform.std().item()], tol=5e-4)
 
     @slow
     def test_text_to_text_model(self):
