@@ -223,7 +223,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
             if vocab_dict is not None:
                 for key, value in vocab_dict.items():
-                    if key not in self.__dict__ or key == "sym2idx":
+                    if key not in self.__dict__ or key in ["sym2idx", "idx2sym"]:
                         self.__dict__[key] = value
             elif vocab_file is not None:
                 self.build_vocab()
