@@ -113,19 +113,57 @@ class PatchTSMixerBatchNorm(nn.Module):
 
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
-        self.batchnorm = nn.BatchNorm1d(config.d_model, eps=config.norm_eps)
+        self.batchnorm = nn.BatchNorm1d(config.num_features, eps=config.norm_eps)
 
     def forward(self, inputs: torch.Tensor):
         """
         Parameters:
-            inputs (`torch.Tensor` of shape `(batch_size, sequence_length, d_model)`):
+            inputs (`torch.Tensor` of shape `(batch_size, sequence_length, num_features)`):
                 input for Batch norm calculation
         Returns:
-            `torch.Tensor` of shape `(batch_size, sequence_length, d_model)`
+            `torch.Tensor` of shape `(batch_size, sequence_length, num_features)`
         """
-        output = inputs.transpose(1, 2)  # output: (batch_size, d_model, sequence_length)
+        output = inputs.transpose(1, 2)  # output: (batch_size, num_features, sequence_length)
         output = self.batchnorm(output)
         return output.transpose(1, 2)
+
+
+class PatchTSMixerPositionalEncoding(nn.Module):
+    """
+    Class for positional encoding
+    """
+    def __init__(self, config: PatchTSMixerConfig):
+        super().__init__()
+        # positional encoding: [num_patches x num_features]
+        if config.use_positional_encoding:
+            self.position_enc = self._init_pe(config)
+        else:
+            self.position_enc = nn.Parameter(torch.zeros(config.num_patches, config.num_features))
+
+    @staticmethod
+    def _init_pe(config: PatchTSMixerConfig) -> nn.Parameter:
+        # Positional encoding
+        if config.positional_encoding_type == "random":
+            position_enc = nn.Parameter(torch.randn(config.num_patches, config.d_model), requires_grad=True)
+        elif config.positional_encoding_type == "sincos":
+            position_enc = torch.zeros(config.num_patches, config.num_features)
+            position = torch.arange(0, config.num_patches).unsqueeze(1)
+            div_term = torch.exp(torch.arange(0, config.d_model, 2) * -(math.log(10000.0) / config.d_model))
+            position_enc[:, 0::2] = torch.sin(position * div_term)
+            position_enc[:, 1::2] = torch.cos(position * div_term)
+            position_enc = position_enc - position_enc.mean()
+            position_enc = position_enc / (position_enc.std() * 10)
+            position_enc = nn.Parameter(position_enc, requires_grad=False)
+        else:
+            raise ValueError(
+                f"{config.positional_encoding_type} is not a valid positional encoder. Available types are 'random' and 'sincos'."
+            )
+        return position_enc
+
+    def forward(self, patch_input: torch.Tensor):
+        # hidden_state: [bs x num_channels x num_patches x num_features]
+        hidden_state = patch_input + self.position_enc
+        return hidden_state
 
 
 class PatchTSMixerNormLayer(nn.Module):
@@ -738,9 +776,16 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize weights"""
-        if isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
+        if isinstance(module, PatchTSMixerPositionalEncoding):
+            # initialize positional encoding
+            if self.config.positional_encoding_type == "random":
+                nn.init.normal_(module.position_enc, mean=0.0, std=0.1)
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, PatchTSMixerBatchNorm):
+            module.batchnorm.bias.data.zero_()
+            module.batchnorm.weight.data.fill_(1.0)
         elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
@@ -1215,19 +1260,9 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
 
         self.use_return_dict = config.use_return_dict
 
-        self.use_positional_encoding = config.use_positional_encoding
-
         self.patcher = nn.Linear(config.patch_length, config.num_features)
-
+        self.positional_encoder = PatchTSMixerPositionalEncoding(config=config)
         self.mlp_mixer_encoder = PatchTSMixerBlock(config=config)
-
-        if self.use_positional_encoding:
-            self.position_enc = positional_encoding(
-                config.positional_encoding,
-                config.learn_positional_encoding,
-                config.num_patches,
-                config.num_features,
-            )
 
         # Initialize weights and apply final processing
         if config.post_init:
@@ -1258,19 +1293,18 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
+            `torch.FloatTensor` of shape `(batch_size, n_vars, num_patches, num_features)`
         """
-
-        # past_values: [batch_size  x n_vars x num_patches x patch_length]
-        # return: [batch_size x n_vars x num_patches x num_features]
 
         return_dict = return_dict if return_dict is not None else self.use_return_dict
 
+        # flatten [bs x num_patch x num_features]. common_channel/mix_channel: [bs x n_vars x num_patch x num_features]
         patches = self.patcher(
             past_values
-        )  # flatten: [bs x num_patch x num_features]   common_channel/mix_channel: [bs x n_vars x num_patch x num_features]
+        )
 
-        if self.use_positional_encoding:
-            patches = patches + self.position_enc
+        # add positional encoder
+        patches = self.positional_encoder(patches)
 
         last_hidden_state, hidden_states = self.mlp_mixer_encoder(patches, output_hidden_states=output_hidden_states)
 

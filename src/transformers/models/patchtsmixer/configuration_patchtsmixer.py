@@ -77,9 +77,9 @@ class PatchTSMixerConfig(PretrainedConfig):
         use_positional_encoding (`bool`, *optional*, defaults to `False`):
             Enable the use of positional embedding for the tiny self-attention layers. Works only when `self_attn` is
             set to `True`.
-        positional_encoding (`str`, *optional*, defaults to `"zeros"`):
-            Type of positional encoding. Allowed values are `None`, "zeros", "normal", "uniform", "sincos". Works only
-            when `use_positional_encoding` is set to `True`
+        positional_encoding_type (`str`, *optional*, defaults to `"sincos"`):
+            Positional encodings. Options `"random"` and `"sincos"` are supported.
+            Works only when `use_positional_encoding` is set to `True`
         learn_positional_encoding (`bool`, *optional*, defaults to `False`):
             Whether to learn the positional encoding. Works only when `use_positional_encoding` is set to `True`
         scaling (`string` or `bool`, *optional*, defaults to `"std"`):
@@ -174,7 +174,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         self_attn: bool = False,
         self_attn_heads: int = 1,
         use_positional_encoding: bool = False,
-        positional_encoding: str = "zeros",
+        positional_encoding_type: str = "sincos",
         learn_positional_encoding: bool = False,
         scaling: Optional[Union[str, bool]] = "std",
         loss: str = "mse",
@@ -227,7 +227,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.masked_loss = masked_loss
         self.patch_last = True
         self.use_positional_encoding = use_positional_encoding
-        self.positional_encoding = positional_encoding
+        self.positional_encoding_type = positional_encoding_type
         self.learn_positional_encoding = learn_positional_encoding
         self.prediction_length = prediction_length
         self.prediction_channel_indices = prediction_channel_indices
