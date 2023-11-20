@@ -46,6 +46,7 @@ class BarkProcessor(ProcessorMixin):
             a list of `voice_preset_names`.
 
     """
+
     tokenizer_class = "AutoTokenizer"
     attributes = ["tokenizer"]
 

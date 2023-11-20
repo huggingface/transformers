@@ -77,6 +77,7 @@ class Kosmos2TextConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     ```"""
+
     model_type = "kosmos_2_text_model"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
@@ -271,6 +272,7 @@ class Kosmos2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "kosmos-2"
     is_composition = True
 

@@ -105,7 +105,7 @@ For masked language modeling, the next step is to load a DistilRoBERTa tokenizer
 ```
 
 You'll notice from the example above, the `text` field is actually nested inside `answers`. This means you'll need to e
-xtract the `text` subfield from its nested structure with the [`flatten`](https://huggingface.co/docs/datasets/process.html#flatten) method:
+xtract the `text` subfield from its nested structure with the [`flatten`](https://huggingface.co/docs/datasets/process#flatten) method:
 
 ```py
 >>> eli5 = eli5.flatten()

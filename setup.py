@@ -99,7 +99,6 @@ _deps = [
     "accelerate>=0.20.3",
     "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
-    "black~=23.1",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
@@ -156,7 +155,7 @@ _deps = [
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff>=0.0.241,<=0.0.259",
+    "ruff>=0.1.5,<=0.2",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "safetensors>=0.3.1",
@@ -310,7 +309,7 @@ extras["testing"] = (
         "dill",
         "evaluate",
         "pytest-timeout",
-        "black",
+        "ruff",
         "sacrebleu",
         "rouge-score",
         "nltk",
@@ -329,7 +328,7 @@ extras["testing"] = (
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 
-extras["quality"] = deps_list("black", "datasets", "isort", "ruff", "GitPython", "hf-doc-builder", "urllib3")
+extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "hf-doc-builder", "urllib3")
 
 extras["all"] = (
     extras["tf"]
