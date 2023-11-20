@@ -397,8 +397,9 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 ).to(torch_device)
 
                 with self.assertRaises(ValueError):
+                    # Need at least two tokens to have past_key_values not None - case where the error is raised.
                     _ = model.generate(
-                        dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
+                        dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=2, do_sample=False
                     )
 
     @require_flash_attn

@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_bitsandbytes,
     slow,
     torch_device,
 )
@@ -385,6 +386,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     @require_flash_attn
     @require_torch_gpu
+    @require_bitsandbytes
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_generate_padding_right(self):
