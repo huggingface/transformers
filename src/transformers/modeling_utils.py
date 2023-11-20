@@ -1878,7 +1878,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # For old GC format (transformers < 4.35.0) for models that live on the Hub
         # we will fall back to the overwritten `_set_gradient_checkpointing` methid
-        _is_using_old_format = "value" in inspect.signature(self._set_gradient_checkpointing)
+        _is_using_old_format = "value" in inspect.signature(self._set_gradient_checkpointing).parameters
 
         if not _is_using_old_format:
             self._set_gradient_checkpointing(enable=True, gradient_checkpointing_func=gradient_checkpointing_func)
@@ -1928,7 +1928,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if self.supports_gradient_checkpointing:
             # For old GC format (transformers < 4.35.0) for models that live on the Hub
             # we will fall back to the overwritten `_set_gradient_checkpointing` methid
-            _is_using_old_format = "value" in inspect.signature(self._set_gradient_checkpointing)
+            _is_using_old_format = "value" in inspect.signature(self._set_gradient_checkpointing).parameters
             if not _is_using_old_format:
                 self._set_gradient_checkpointing(enable=False)
             else:
