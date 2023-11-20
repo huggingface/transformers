@@ -1451,7 +1451,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).long().argmax(-1) - 1).to(
+                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1).to(
                     logits.device
                 )
             else:
@@ -1534,7 +1534,20 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_loss=0.25,
-        expected_output=["Lead", "Lead", "Lead", "Position", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead"],
+        expected_output=[
+            "Lead",
+            "Lead",
+            "Lead",
+            "Position",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+        ],
     )
     # fmt: on
     def forward(

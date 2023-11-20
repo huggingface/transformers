@@ -2039,7 +2039,7 @@ class ModelTesterMixin:
         tf_inputs_dict = {}
         for key, tensor in pt_inputs_dict.items():
             # skip key that does not exist in tf
-            if type(tensor) == bool:
+            if isinstance(tensor, bool):
                 tf_inputs_dict[key] = tensor
             elif key == "input_values":
                 tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)

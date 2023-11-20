@@ -728,9 +728,7 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         raw_image = prepare_image()
 
-        # fmt: off
-        input_points = torch.Tensor([[[400, 650]], [[220, 470]]]).cpu()
-        # fmt: on
+        input_points = torch.Tensor([[[400, 650]], [[220, 470]]]).cpu()  # fmt: skip
 
         input_points = input_points.unsqueeze(0)
 

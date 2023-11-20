@@ -96,6 +96,9 @@ class ConfigTester(object):
 
         self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
 
+        with self.parent.assertRaises(OSError):
+            self.config_class.from_pretrained(f".{tmpdirname}")
+
     def create_and_test_config_from_and_save_pretrained_subfolder(self):
         config_first = self.config_class(**self.inputs_dict)
 
