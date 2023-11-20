@@ -528,6 +528,16 @@ def get_file_from_repo(
     tokenizer_config = get_file_from_repo("xlm-roberta-base", "tokenizer_config.json")
     ```
     """
+    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
+    if use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
+        )
+        if token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        token = use_auth_token
+
     return cached_file(
         path_or_repo_id=path_or_repo,
         filename=filename,
@@ -541,7 +551,6 @@ def get_file_from_repo(
         subfolder=subfolder,
         _raise_exceptions_for_missing_entries=False,
         _raise_exceptions_for_connection_errors=False,
-        use_auth_token=deprecated_kwargs.pop("use_auth_token", None),
     )
 
 
