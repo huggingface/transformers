@@ -92,6 +92,7 @@ class GroundingDINOTextPrenetConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "grounding-dino-text-prenet"
 
     def __init__(
@@ -254,6 +255,7 @@ class GroundingDINOConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "grounding-dino"
     attribute_map = {
         "hidden_size": "d_model",
