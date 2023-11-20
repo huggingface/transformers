@@ -103,34 +103,6 @@ class PatchTSMixerGatedAttention(nn.Module):
         return inputs
 
 
-class PatchTSMixerTranspose(nn.Module):
-    """
-    Transpose the input tensor according to specified dimensions.
-
-    Args:
-        *dims (`int`): Variable-length list of dimensions to permute the input tensor. The input tensor is
-            transposed based on the order of dimensions provided.
-
-    Returns:
-        `torch.Tensor`: The transposed tensor.
-
-    """
-
-    def __init__(self, *dims):
-        super().__init__()
-        self.dims = dims
-
-    def forward(self, inputs: torch.Tensor):
-        """
-        Args:
-            inputs (`torch.Tensor`): Input to be transposed.
-        Returns:
-            `torch.Tensor`: transposed tensor.
-        """
-
-        return inputs.transpose(*self.dims)
-
-
 # Copied from transformers.models.patchtst.modeling_patchtst.PatchTSTBatchNorm with PatchTST->PatchTSMixer
 class PatchTSMixerBatchNorm(nn.Module):
     """
