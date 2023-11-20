@@ -210,14 +210,15 @@ class SiglipImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         if do_resize:
+            height, width = size["height"], size["width"]
             images = [
-                resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                resize(image=image, size=(height, width), resample=resample, input_data_format=input_data_format)
                 for image in images
             ]
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(image=image, rescale_factor=rescale_factor, input_data_format=input_data_format)
                 for image in images
             ]
 

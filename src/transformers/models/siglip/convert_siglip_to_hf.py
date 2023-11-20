@@ -29,7 +29,7 @@ from huggingface_hub import hf_hub_download
 from numpy import load
 from PIL import Image
 
-from transformers import SiglipConfig, SiglipModel, SiglipTokenizer
+from transformers import SiglipConfig, SiglipImageProcessor, SiglipModel, SiglipTokenizer
 from transformers.utils import logging
 
 
@@ -237,62 +237,26 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
 
     print("Original temperature:", data["params/t"])
 
-    # TODO create image processor
-    # url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    # image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    # create image processor
+    image_processor = SiglipImageProcessor()
+    url = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-ipod.jpg"
+    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     # preprocess image
-    #
-    # pixel_values = processor(image, return_tensors="pt").pixel_values
+    pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="pixel_values_siglip.npy", repo_type="dataset")
-    pixel_values = np.load(filepath)
-    pixel_values = torch.from_numpy(pixel_values).permute(0, 3, 1, 2)
+    print("Pixel values:", pixel_values)
+
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_pixel_values.pt", repo_type="dataset")
+    pixel_values = torch.load(filepath)
 
     # create tokenizer
     tokenizer = SiglipTokenizer(vocab_file=vocab_file)
-    texts = [
-        "an apple",
-        "a picture of an apple",
-        "an ipod",
-        "granny smith",
-        'an apple with a note saying "ipod"',
-        "a cold drink on a hot day",
-        "a hot drink on a cold day",
-        "a photo of a cold drink on a hot day",
-        "a photo of a hot drink on a cold day",
-        #
-        "a photo of two guys in need of caffeine",
-        "a photo of two guys in need of water",
-        "a photo of the SigLIP authors",
-        "a photo of a rock band",
-        "a photo of researchers at Google Brain",
-        "a photo of researchers at OpenAI",
-        #
-        "a robot on a sign",
-        "a photo of a robot on a sign",
-        "an empty street",
-        "autumn in Toronto",
-        "a photo of autumn in Toronto",
-        "a photo of Toronto in autumn",
-        "a photo of Toronto in summer",
-        "autumn in Singapore",
-        #
-        "cow",
-        "a cow in a tuxedo",
-        "a cow on the beach",
-        "a cow in the prairie",
-        #
-        "the real mountain view",
-        "Zürich",
-        "San Francisco",
-        "a picture of a laptop with the lockscreen on, a cup of cappucino, salt and pepper grinders. The view through the window reveals lake Zürich and the Alps in the background of the city.",
-    ]
+    texts = ["an apple", "a picture of an apple"]
     input_ids = tokenizer(texts, return_tensors="pt", padding="max_length").input_ids
 
     # verify input_ids against original ones
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="input_ids_siglip.npy", repo_type="dataset")
-    original_input_ids = np.load(filepath)
-    original_input_ids = torch.from_numpy(original_input_ids)
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_input_ids.pt", repo_type="dataset")
+    original_input_ids = torch.load(filepath)
     assert input_ids.tolist() == original_input_ids.tolist()
 
     with torch.no_grad():
@@ -302,7 +266,7 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
 
     # assert values
     expected_slice = torch.tensor(
-        [[-2.9621, -2.1672, -1.7837], [-0.2713, 0.2910, -10.6595], [-13.6617, -13.1611, -17.4408]]
+        [[-2.9621, -2.1672], [-0.2713, 0.2910]],
     )
     assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
     print("Looks ok!")
