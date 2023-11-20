@@ -1751,8 +1751,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         **kwargs,
     ):
         """
-
-        Generates sequences of token ids for models with a language modeling head.
+        Transcribes or translates passed mel input features to a sequence of token ids.
 
         <Tip warning={true}>
 
@@ -1833,24 +1832,73 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
 
         Return:
-            [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
-            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
+            [`~utils.ModelOutput`] or `torch.LongTensor` or `Dict[str, Any]`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
+            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor` or a dict of segments when `return_segments=True`.
 
-                If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
-                [`~utils.ModelOutput`] types are:
-
-                    - [`~generation.GreedySearchDecoderOnlyOutput`],
-                    - [`~generation.SampleDecoderOnlyOutput`],
-                    - [`~generation.BeamSearchDecoderOnlyOutput`],
-                    - [`~generation.BeamSampleDecoderOnlyOutput`]
-
-                If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
-                [`~utils.ModelOutput`] types are:
+                If the passed input is > 30 seconds / > 3000 mel input features and `return_segments=True` then a dictionary of generated sequence ids, called `sequences` and a list of each generated segment is returned.
+                
+                else if the passed input is <= 30 seconds / >= 3000 mel input features, the possible [`~utils.ModelOutput`] types are:
 
                     - [`~generation.GreedySearchEncoderDecoderOutput`],
                     - [`~generation.SampleEncoderDecoderOutput`],
                     - [`~generation.BeamSearchEncoderDecoderOutput`],
                     - [`~generation.BeamSampleEncoderDecoderOutput`]
+
+                else only the generated output sequence ids are returned.
+
+        Example:
+
+        - *Longform transcription*: To transcribe or translate audios longer than 30 seconds, process the audio files without truncation and pass all mel features at once to generate.
+        
+        ```python
+        >>> import torch
+        >>> from transformers import AutoProcessor, WhisperForConditionalGeneration
+        >>> from datasets import load_dataset, Audio
+
+        >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
+        >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        >>> model.cuda()
+
+        >>> # load audios > 30 seconds
+        >>> ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
+        >>> # resample to 16kHz
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+        >>> # take first 8 audios and retrieve array
+        >>> audio = ds[:8]["audio"]
+        >>> audio = [x["array"] for x in audio]
+
+        >>> # make sure to NOT truncate the input audio, to return the `attention_mask` and to pad to the longest audio
+        >>> inputs = processor(audio, return_tensors="pt", truncation=False, padding="longest", return_attention_mask=True, sampling_rate=16_000)
+        >>> inputs = inputs.to("cuda", torch.float32)
+
+        >>> # transcribe audio to ids
+        >>> generated_ids = model.generate(**inputs)
+
+        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        ```
+
+        - *Shortform transcription*: If passed mel input features are < 30 seconds, the whole audio will be transcribed with a single call to generate.
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoProcessor, WhisperForConditionalGeneration
+        >>> from datasets import load_dataset
+
+        >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
+        >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
+        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
+        >>> input_features = inputs.input_features
+
+        >>> generated_ids = model.generate(inputs=input_features)
+
+        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> transcription
+        ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
+        ```
+
         """
 
         if "inputs" in kwargs:
