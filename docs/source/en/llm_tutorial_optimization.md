@@ -670,7 +670,7 @@ Note that, despite our advice to use key-value caches, your LLM output may be sl
 
 </Tip>
 
-### Multi-round conversation
+#### 3.2.1 Multi-round conversation
 
 The key-value cache is especially useful for applications such as chat where multiple passes of auto-regressive decoding are required. Let's look at an example.
 
@@ -739,7 +739,7 @@ config = model.config
 Roughly 8 billion float values! Storing 8 billion float values in `float16` precision requires around 15 GB of RAM which is circa half as much as the model weights themselves!
 Researchers have proposed two methods that allow to significantly reduce the memory cost of storing the key-value cache, which are explored in the next subsections.
 
-### Multi-Query-Attention (MQA)
+#### 3.2.2 Multi-Query-Attention (MQA)
 
 [Multi-Query-Attention](https://arxiv.org/abs/1911.02150) was proposed in Noam Shazeer's *Fast Transformer Decoding: One Write-Head is All You Need* paper. As the title says, Noam found out that instead of using `n_head` key-value projections weights, one can use a single head-value projection weight pair that is shared across all attention heads without that the model's performance significantly degrades.
 
@@ -761,7 +761,7 @@ MQA has seen wide adoption by the community and is now used by many of the most 
 
 Also, the checkpoint used in this notebook - `bigcode/octocoder` - makes use of MQA.
 
-### Grouped-Query-Attention (GQA)
+#### 3.2.3 Grouped-Query-Attention (GQA)
 
 [Grouped-Query-Attention](https://arxiv.org/abs/2305.13245), as proposed by Ainslie et al. from Google, found that using MQA can often lead to quality degradation compared to using vanilla multi-key-value head projections. The paper argues that more model performance can be kept by less drastically reducing the number of query head projection weights. Instead of using just a single key-value projection weight, `n < n_head` key-value projection weights should be used. By choosing `n` to a significantly smaller value than `n_head`, such as 2,4 or 8 almost all of the memory and speed gains from MQA can be kept while sacrificing less model capacity and thus arguably less performance.
 
