@@ -226,6 +226,12 @@ class BackboneTesterMixin:
 
             outputs = backbone(**inputs_dict)
             self.assertIsInstance(outputs.feature_maps, tuple)
+
+            if len(set(backbone.out_feature_channels.values())) == 1:
+                # Output shape of feature map is the same for all stages so we cannot verify the
+                # order of the feature maps
+                continue
+
             # Channels from iterating over stage_names should not be the same as iterating over
             # out_features.
             # Stage names are in order and have no repitions, wheras backbone.channels follows out_featurs
