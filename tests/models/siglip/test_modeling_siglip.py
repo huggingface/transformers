@@ -50,13 +50,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
-        SiglipModel,
-        SiglipTextModel,
-        SiglipTextModelWithProjection,
-        SiglipVisionModel,
-        SiglipVisionModelWithProjection,
-    )
+    from transformers import SiglipModel, SiglipTextModel, SiglipVisionModel
     from transformers.models.siglip.modeling_siglip import SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -85,7 +79,6 @@ class SiglipVisionModelTester:
         num_channels=3,
         is_training=True,
         hidden_size=32,
-        projection_dim=32,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
@@ -101,7 +94,6 @@ class SiglipVisionModelTester:
         self.num_channels = num_channels
         self.is_training = is_training
         self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -110,9 +102,9 @@ class SiglipVisionModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
 
-        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        # in ViT, the seq length equals the number of patches
         num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        self.seq_length = num_patches
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -126,7 +118,6 @@ class SiglipVisionModelTester:
             patch_size=self.patch_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
-            projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
@@ -145,21 +136,8 @@ class SiglipVisionModelTester:
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
-
-    def create_and_check_model_with_projection(self, config, pixel_values):
-        model = SiglipVisionModelWithProjection(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.image_embeds.shape, (self.batch_size, self.projection_dim))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -175,7 +153,7 @@ class SiglipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (SiglipVisionModel, SiglipVisionModelWithProjection) if is_torch_available() else ()
+    all_model_classes = (SiglipVisionModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
@@ -219,10 +197,6 @@ class SiglipVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_with_projection(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
-
     def test_training(self):
         pass
 
@@ -243,13 +217,6 @@ class SiglipVisionModelTest(ModelTesterMixin, unittest.TestCase):
             model = SiglipVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    @slow
-    def test_model_with_projection_from_pretrained(self):
-        for model_name in SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SiglipVisionModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "visual_projection"))
-
 
 class SiglipTextModelTester:
     def __init__(
@@ -262,7 +229,6 @@ class SiglipTextModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        projection_dim=32,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
@@ -280,7 +246,6 @@ class SiglipTextModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -312,7 +277,6 @@ class SiglipTextModelTester:
         return SiglipTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
@@ -332,16 +296,6 @@ class SiglipTextModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_model_with_projection(self, config, input_ids, input_mask):
-        model = SiglipTextModelWithProjection(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(input_ids, attention_mask=input_mask)
-            result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.text_embeds.shape, (self.batch_size, self.projection_dim))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, input_mask = config_and_inputs
@@ -351,7 +305,7 @@ class SiglipTextModelTester:
 
 @require_torch
 class SiglipTextModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (SiglipTextModel, SiglipTextModelWithProjection) if is_torch_available() else ()
+    all_model_classes = (SiglipTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
@@ -367,10 +321,6 @@ class SiglipTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_with_projection(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
 
     def test_training(self):
         pass
@@ -396,13 +346,6 @@ class SiglipTextModelTest(ModelTesterMixin, unittest.TestCase):
             model = SiglipTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    @slow
-    def test_model_with_projection_from_pretrained(self):
-        for model_name in SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SiglipTextModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "text_projection"))
-
 
 class SiglipModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
@@ -426,7 +369,8 @@ class SiglipModelTester:
 
     def get_config(self):
         return SiglipConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+            self.text_model_tester.get_config(),
+            self.vision_model_tester.get_config(),
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -455,6 +399,7 @@ class SiglipModelTester:
 @require_torch
 class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SiglipModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": SiglipModel} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
