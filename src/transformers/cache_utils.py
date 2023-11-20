@@ -64,24 +64,34 @@ class DynamicCache(Cache):
 
 
 class PagedAttentionCache(Cache):
-    def __init__(self, num_blocks: int = 1e8, block_size: int = 16) -> None:
+    def __init__(self, num_blocks: int = 2048, block_size: int = 16) -> None:
         super().__init__()
         # cache config & kv_cache
         self.num_blocks = num_blocks
         self.block_size = block_size
         self.key_cache: Dict[int, Tuple[torch.Tensor]] = {}  # layer_idx -> key_cache
         self.value_cache: Dict[int, Tuple[torch.Tensor]] = {}  # layer_idx -> value_cache
+        self.cache_initialized = False
 
         # cache runtime management information
         self.free_blocks = list(range(num_blocks))  # free blocks
         self.block_ref_count = [0] * self.num_blocks  # init the reference count for each physical block
-        self.block_tables = []  # mapping logical block to physical blocks for each sequence
-        self.context_lens = []  # context length for each sequence
+        self.block_tables = {}  # mapping logical block to physical blocks for each sequence
+        self.context_lens = {}  # context length for each sequence
 
         # The follow two states are shared accross layer but only for the current decode step. Need to update for every decode step.
         self.batch2seq = {}  # mapping batch index to {seq_id0, seq_id1, ...} to enable prompt sharing.
         self.slots_mapping = []  # mapping logical slots to physical slots.
-
+    
+    @classmethod
+    def from_legacy_cache(cls, past_key_values: Optional[List[torch.FloatTensor]]) -> "PageAttentionCache":
+        if past_key_values is None:
+            return cls()
+        cache = cls()
+        for layer_idx, (key_states, value_states) in enumerate(zip(*past_key_values)):
+            cache.update(key_states, value_states, layer_idx)
+        return cache
+    
     def allocate(self, seq_idx: int, key_len: int, context_len: int) -> List[int]:
         """
         Allocate physical slots for a given sequence index, key length and context length.
@@ -164,6 +174,18 @@ class PagedAttentionCache(Cache):
     def reshape_and_cache(
         self, slot_mapping: List[List[int]], key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int
     ):
+        """
+        Reshapes and caches the key and value states based on the given slot mapping.
+
+        Args:
+            slot_mapping (List[List[int]]): A list of lists representing the slot mapping.
+            key_states (torch.Tensor): The key states tensor.
+            value_states (torch.Tensor): The value states tensor.
+            layer_idx (int): The index of the layer.
+
+        Returns:
+            None
+        """
         slot_mapping = torch.tensor(slot_mapping, dtype=torch.long, device="cpu")
         block_indicies = torch.div(slot_mapping, self.block_size, rounding_mode="floor")
         block_indicies = block_indicies.cpu().tolist()
@@ -181,10 +203,16 @@ class PagedAttentionCache(Cache):
                 self.key_cache[layer_idx][block_idx][block_offset] = key[bi][ti]
                 self.value_cache[layer_idx][block_idx][block_offset] = value[bi][ti]
 
+    def is_last_layer(self, layer_idx: int) -> bool:
+        return layer_idx + 1 == len(self.key_cache) and self.cache_initialized
+    
+    def has_context(self, layer_idx: int, seq_id: int) -> bool:
+        return seq_id in self.context_lens and layer_idx < len(self.context_lens[seq_id]) and self.context_lens[seq_id][layer_idx] != 0
+      
     def get_seq_length(self, layer_idx: int = 0) -> int:
-        return self.context_lens[
-            0
-        ]  # assume all sequences have the same length while unpad should get better performance
+        if layer_idx not in self.key_cache:
+            return 0
+        return self.context_lens[0][layer_idx] #current assume that padding batch to same length
 
     def update(
         self,
@@ -194,54 +222,101 @@ class PagedAttentionCache(Cache):
         cos: Optional[torch.Tensor] = None,
         sin: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Update the cache with key and value states for a specific layer.
 
+        Args:
+            key_states (torch.Tensor): The key states tensor of shape [batch, head, seq, dim].
+            value_states (torch.Tensor): The value states tensor of shape [batch, head, seq, dim].
+            layer_idx (int): The index of the layer.
+            cos (Optional[torch.Tensor]): Optional tensor of shape [batch, head, seq, dim] representing cosine values.
+            sin (Optional[torch.Tensor]): Optional tensor of shape [batch, head, seq, dim] representing sine values.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: A tuple containing the updated key states and value states tensors.
+
+        Raises:
+            AssertionError: If the batch size is inconsistent with the existing cache.
+        """
         batch_size = key_states.shape[0]  # [batch, head, seq, dim]
         kv_head = key_states.shape[1]
         head_size = key_states.shape[-1]
-
+        current_len = key_states.shape[-2]        
         # self.batch2seq is only for the current decode step, need to clear in the last layer and init in the first layer or setup externally
         if layer_idx == 0 and self.batch2seq == {}:
-            assert len(self.context_lens) == 0 and len(self.block_tables) == 0
-            self.batch2seq = {i: i for i in range(batch_size)}
+            assert len(self.block_tables) == 0
+            self.batch2seq = {i: [i] for i in range(batch_size)}
             self.slots_mapping = []
         elif layer_idx == 0 and self.batch2seq != {}:
-            assert len(self.batch2seq) == batch_size
-        elif layer_idx + 1 == len(self.key_cache):
-            self.batch2seq = {}
+            assert len(self.batch2seq) == batch_size        
 
         if layer_idx not in self.key_cache:  # init the cache
             self.key_cache[layer_idx] = torch.zeros(
-                (self.num_blocks, kv_head, self.block_size, head_size),
+                (self.num_blocks, self.block_size, kv_head, head_size),
                 dtype=key_states.dtype,
                 device=key_states.device,
             )
             self.value_cache[layer_idx] = torch.zeros(
-                (self.num_blocks, kv_head, self.block_size, head_size),
+                (self.num_blocks, self.block_size, kv_head, head_size),
                 dtype=value_states.dtype,
                 device=value_states.device,
             )
+            self.cache_initialized = False
+        else:
+            self.cache_initialized = True
+            
         # step 1): allocate slots to store token states for each sequence in the batch, only need run in the first layer
         if layer_idx == 0:
             self.slots_mapping = []
-
-            # only allocae the slots for the first sequence in the batch to enable promt sharing
+            # only allocate the slots for the first sequence in the batch to enable prompt sharing
             for batch_idx in range(batch_size):
-                seq_ids = self.batch2seq[batch_idx]
-                slots = self.allocate(seq_ids[0], seq_len, self.context_lens[seq_ids[0]])
+                seq_id = self.batch2seq[batch_idx][0]
+                key_len = key_states[batch_idx].shape[-2]                 
+                past_context_len = self.context_lens[seq_id][layer_idx] if self.has_context(layer_idx, seq_id) else 0
+                slots = self.allocate(seq_id, key_len, past_context_len)
                 self.slots_mapping.append(slots)
         assert len(self.slots_mapping) == batch_size
 
         # step 2): cache key_states & value states
         self.reshape_and_cache(self.slots_mapping, key_states, value_states, layer_idx)
 
-        # step 3): fork new sequences to enable prompt sharing and update the context length for each sequence
+        # step 3): fork new sequences to enable prompt sharing, only need run in the first layer
+        if layer_idx == 0:
+            for batch_idx in range(batch_size):
+                seq_ids = self.batch2seq[batch_idx]
+                # fork the blocks allocated for the first sequence to other sequences in the batch
+                for seq_id in seq_ids[1:]:
+                    self.fork(seq_ids[0], seq_id)                 
+                          
+        context_len =  self.context_lens[0][layer_idx] if self.has_context(layer_idx, 0) else 0        
+        # step 4): update the key_states & value_states for each sequence in the batch
+        if context_len != 0:
+            context_len = context_len + key_states.shape[-2]
+            key = torch.zeros((batch_size, context_len, kv_head, head_size), dtype=key_states.dtype, device=key_states.device)
+            value = torch.zeros((batch_size, context_len, kv_head, head_size), dtype=value_states.dtype, device=value_states.device)
+            print("context_len", context_len)
+            for batch_idx in range(batch_size):
+                for i in range(context_len):
+                    block_idx = i // self.block_size
+                    block_offset = i % self.block_size
+                    key[batch_idx][i] = self.key_cache[layer_idx][block_idx][block_offset]
+                    value[batch_idx][i] = self.value_cache[layer_idx][block_idx][block_offset]
+            key_states = key.transpose(1,2).contiguous()
+            value_states = value.transpose(1,2).contiguous()   
+        
+        #update the context length for each sequence in the batch
         for batch_idx in range(batch_size):
             seq_ids = self.batch2seq[batch_idx]
             # fork the blocks allocated for the first sequence to other sequences in the batch
-            for seq_id in seq_ids[1:]:
-                self.fork(seq_ids[0], seq_id)
             for seq_id in seq_ids:
-                self.context_lens[seq_id] += key_states[batch_idx].shape[-2]
+                key_len = key_states[batch_idx].shape[-2]
+                if seq_id not in self.context_lens:
+                    self.context_lens[seq_id] = []
+                if layer_idx == len(self.context_lens[seq_id]):
+                    self.context_lens[seq_id].append(0)
+                self.context_lens[seq_id][layer_idx] += current_len
+        print("context_lens", self.context_lens)
+        return key_states, value_states
 
     def reorder_cache(self, beam_idx: torch.Tensor) -> None:
         """

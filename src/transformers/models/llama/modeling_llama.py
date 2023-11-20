@@ -29,7 +29,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, PagedAttentionCache
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -469,7 +469,8 @@ class LlamaAttention(nn.Module):
             kv_seq_len += past_key_value.get_seq_length(self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-
+        # import pdb
+        # pdb.set_trace()
         if past_key_value is not None:
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cos, sin)
 
@@ -477,7 +478,7 @@ class LlamaAttention(nn.Module):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-
+        print("kv_seq_len", kv_seq_len)
         if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
             raise ValueError(
                 f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
@@ -551,7 +552,6 @@ class LlamaFlashAttention2(LlamaAttention):
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dime x hidden_dim
         # therefore we just need to keep the original shape
@@ -938,7 +938,7 @@ class LlamaModel(LlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        use_legacy_cache: Optional[bool] = True,
+        use_legacy_cache: Optional[bool] = False,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1045,7 +1045,6 @@ class LlamaModel(LlamaPreTrainedModel):
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-
         next_cache = None
         if use_cache:
             next_cache = self.to_legacy_cache(next_decoder_cache) if use_legacy_cache else next_decoder_cache
@@ -1059,7 +1058,7 @@ class LlamaModel(LlamaPreTrainedModel):
         )
 
     def from_legacy_cache(self, past_key_values: Optional[Tuple[Tuple[torch.Tensor]]]) -> Cache:
-        return DynamicCache.from_legacy_cache(past_key_values)
+        return PagedAttentionCache.from_legacy_cache(past_key_values)
 
     def to_legacy_cache(self, past_key_values: Cache) -> Tuple[Tuple[torch.Tensor]]:
         return past_key_values.to_legacy_cache()
@@ -1109,7 +1108,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        use_legacy_cache: Optional[bool] = True,
+        use_legacy_cache: Optional[bool] = False,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1136,7 +1135,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1192,10 +1190,13 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, use_legacy_cache=True, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, use_legacy_cache=False, **kwargs
     ):
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
+            if isinstance(past_key_values, Cache):
+                past_length = past_key_values.get_seq_length()
+            else:
+                past_length = past_key_values[0][0].shape[2]
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:
@@ -1233,12 +1234,15 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
+        if isinstance(past_key_values, PagedAttentionCache):
+            past_key_values = past_key_values.reorder_cache(beam_idx)
+        else:
+            reordered_past = ()
+            for layer_past in past_key_values:
+                reordered_past += (
+                    tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+                )
+            return reordered_past
 
 
 @add_start_docstrings(
@@ -1285,7 +1289,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        use_legacy_cache: Optional[bool] = True,
+        use_legacy_cache: Optional[bool] = False,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
