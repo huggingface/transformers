@@ -45,6 +45,18 @@ The original code can be found [here](https://github.com/google-research/big_vis
 
 [[autodoc]] SiglipVisionConfig
 
+## SiglipTokenizer
+
+[[autodoc]] SiglipTokenizer
+    - build_inputs_with_special_tokens
+    - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
+    - save_vocabulary
+
+## SiglipTokenizerFast
+
+[[autodoc]] SiglipTokenizerFast
+
 ## SiglipImageProcessor
 
 [[autodoc]] SiglipImageProcessor

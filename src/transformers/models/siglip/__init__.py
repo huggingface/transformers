@@ -34,6 +34,14 @@ _import_structure = {
 }
 
 try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_siglip_fast"] = ["SiglipTokenizerFast"]
+
+try:
     if not is_vision_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -65,6 +73,14 @@ if TYPE_CHECKING:
         SiglipVisionConfig,
     )
     from .processing_siglip import SiglipProcessor
+
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_siglip_fast import SiglipTokenizerFast
 
     try:
         if not is_vision_available():

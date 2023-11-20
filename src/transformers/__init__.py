@@ -922,6 +922,7 @@ else:
     _import_structure["models.roberta"].append("RobertaTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.seamless_m4t"].append("SeamlessM4TTokenizerFast")
+    _import_structure["models.siglip"].append("SiglipTokenizerFast")
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
@@ -5158,6 +5159,7 @@ if TYPE_CHECKING:
         from .models.roberta import RobertaTokenizerFast
         from .models.roformer import RoFormerTokenizerFast
         from .models.seamless_m4t import SeamlessM4TTokenizerFast
+        from .models.siglip import SiglipTokenizerFast
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast

@@ -373,6 +373,13 @@ class SeamlessM4TTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class SiglipTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class SplinterTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
