@@ -49,7 +49,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_datasets_available():
     import datasets
-    from datasets import load_dataset, Audio
+    from datasets import Audio, load_dataset
 
 if is_torch_available():
     import torch
@@ -2104,7 +2104,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         assert decoded_all[2:3] == EXPECTED_TEXT_3
         assert decoded_all[3:4] == EXPECTED_TEXT_4
 
-
     @slow
     def test_whisper_longform_multi_batch_hard(self):
         # fmt: off
@@ -2151,6 +2150,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         for i in range(num_samples):
             assert decoded_all[i] == decoded_single[i]
             assert decoded_all[i] == EXPECTED_TEXT[i]
+
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
     if head_mask is None:

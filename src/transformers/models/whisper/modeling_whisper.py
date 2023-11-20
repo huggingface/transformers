@@ -1743,10 +1743,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         is_multilingual=None,
         prompt_ids: Optional[torch.Tensor] = None,
         num_segment_frames: Optional[int] = None,
-        return_token_timestamps=None,
-        return_segments=False,
+        return_token_timestamps: Optional[bool] = None,
+        return_segments: bool = False,
         attention_mask: Optional[torch.Tensor] = None,
-        time_precision=0.02,
+        time_precision: int = 0.02,
         return_dict_in_generate: Optional[bool] = None,
         **kwargs,
     ):
