@@ -110,7 +110,7 @@ results[-1]["mask"]
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/semantic_segmentation_output.png" alt="Semantic Segmentation Output"/>
 </div>
 
-In instance segmentation, the goal is not to classify every pixel, but to predict a mask for **every instance of an object** in a given image. We will use [facebook/mask2former-swin-large-cityscapes-instance](https://huggingface.co/facebook/mask2former-swin-large-cityscapes-instance) for this.
+In instance segmentation, the goal is not to classify every pixel, but to predict a mask for **every instance of an object** in a given image. It works very similar to object detection, where there is a bounding box for every instance, there's a segmentation mask instead. We will use [facebook/mask2former-swin-large-cityscapes-instance](https://huggingface.co/facebook/mask2former-swin-large-cityscapes-instance) for this. 
 
 ```python
 instance_segmentation = pipeline("image-segmentation", "facebook/mask2former-swin-large-cityscapes-instance")
@@ -210,19 +210,6 @@ The task illustrated in this tutorial is supported by the following model archit
 
 </Tip>
 
-Before you begin, make sure you have all the necessary libraries installed:
-
-```bash
-pip install -q datasets transformers evaluate
-```
-
-We encourage you to log in to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to log in:
-
-```py
->>> from huggingface_hub import notebook_login
-
->>> notebook_login()
-```
 
 ### Load SceneParse150 dataset
 
