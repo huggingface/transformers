@@ -1836,7 +1836,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor` or a dict of segments when `return_segments=True`.
 
                 If the passed input is > 30 seconds / > 3000 mel input features and `return_segments=True` then a dictionary of generated sequence ids, called `sequences` and a list of each generated segment is returned.
-                
+
                 else if the passed input is <= 30 seconds / >= 3000 mel input features, the possible [`~utils.ModelOutput`] types are:
 
                     - [`~generation.GreedySearchEncoderDecoderOutput`],
@@ -1849,7 +1849,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         Example:
 
         - *Longform transcription*: To transcribe or translate audios longer than 30 seconds, process the audio files without truncation and pass all mel features at once to generate.
-        
+
         ```python
         >>> import torch
         >>> from transformers import AutoProcessor, WhisperForConditionalGeneration
