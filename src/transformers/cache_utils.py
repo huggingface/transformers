@@ -316,8 +316,9 @@ class PagedAttentionCache(Cache):
             key = torch.zeros((batch_size, context_len, kv_head, head_size), dtype=key_states.dtype, device=key_states.device)
             value = torch.zeros((batch_size, context_len, kv_head, head_size), dtype=value_states.dtype, device=value_states.device)
             for batch_idx in range(batch_size):
+                seq_id = self.batch2seq[batch_idx][0]
                 for i in range(context_len):
-                    block_idx = i // self.block_size
+                    block_idx = self.block_tables[seq_id][i // self.block_size]
                     block_offset = i % self.block_size
                     key[batch_idx][i] = self.key_cache[layer_idx][block_idx][block_offset]
                     value[batch_idx][i] = self.value_cache[layer_idx][block_idx][block_offset]
@@ -342,11 +343,6 @@ class PagedAttentionCache(Cache):
         Reorder the cache according to the beam index. The beam index is a tensor of shape (batch_size,)
         and the sequence id can be get from the self.batch2seq.
         """
-        print("reorder_cache")
-        print("beam_idx", beam_idx)
-        print("self.block_tables", self.block_tables)
-        print("self.block_ref_count", self.block_ref_count)
-        print("self.free_blocks", self.free_blocks)
         freed_seqs = []
         new_block_tables = self.block_tables.copy()
         for batch_idx, target_batch_idx in enumerate(beam_idx.tolist()):
@@ -360,10 +356,6 @@ class PagedAttentionCache(Cache):
         for seq_idx in freed_seqs:
             self.free(seq_idx)
         self.block_tables = new_block_tables
-        print("self.free_blocks", self.free_blocks)
-        print("self.block_tables", self.block_tables)
-        print("self.block_ref_count", self.block_ref_count)
-
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
