@@ -120,8 +120,6 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     except Exception:
         input_ids, bbox, pixel_values = prepare_dummy_inputs(tokenizer, image_processor)
 
-    bbox = encoding.bbox.float()
-    pixel_values = encoding.pixel_values
     print("Input ids used for testing: ", input_ids)
     # single forward pass
     print("Testing single forward pass..")
