@@ -3301,6 +3301,22 @@ class ModelTesterMixin:
 
             _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
 
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                fa2_model.save_pretrained(tmpdirname)
+
+                model_from_pretrained = AutoModelForCausalLM.from_pretrained(tmpdirname)
+
+                self.assertFalse(getattr(model_from_pretrained.config, "_flash_attn_2_enabled", False))
+
+                fa2_correctly_converted = False
+
+                for _, module in model_from_pretrained.named_modules():
+                    if "FlashAttention" in module.__class__.__name__:
+                        fa2_correctly_converted = True
+                        break
+
+                self.assertFalse(fa2_correctly_converted)
+
 
 global_rng = random.Random()
 
