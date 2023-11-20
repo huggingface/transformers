@@ -1,4 +1,6 @@
+from dataclasses import dataclass
 from functools import partial
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -13,6 +15,18 @@ from torch.nn import LayerNorm
 import torch
 import math
 import warnings
+
+from transformers import PreTrainedModel
+from transformers.modeling_outputs import BaseModelOutput
+from transformers.models.seggpt.configuration_seggpt import SegGPTConfig
+from transformers.utils import ModelOutput
+
+SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = {
+    "microsoft/beit-base-patch16-224-pt22k": (
+        "https://huggingface.co/microsoft/beit-base-patch16-224-pt22k/resolve/main/config.json"
+    ),
+    # See all BEiT models at https://huggingface.co/models?filter=beit
+}
 
 
 class LayerNorm2D(nn.Module):
@@ -38,54 +52,54 @@ class LayerNorm2D(nn.Module):
         return x
 
 
-def window_unpartition(windows, window_size, pad_hw, hw):
-    """
-    Window unpartition into original sequences and removing padding.
-    Args:
-        x (tensor): input tokens with [B * num_windows, window_size, window_size, C].
-        window_size (int): window size.
-        pad_hw (Tuple): padded height and width (Hp, Wp).
-        hw (Tuple): original height and width (H, W) before padding.
-
-    Returns:
-        x: unpartitioned sequences with [B, H, W, C].
-    """
-    Hp, Wp = pad_hw
-    H, W = hw
-    B = windows.shape[0] // (Hp * Wp // window_size // window_size)
-    x = windows.view(B, Hp // window_size, Wp // window_size, window_size, window_size, -1)
-    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, Hp, Wp, -1)
-
-    if Hp > H or Wp > W:
-        x = x[:, :H, :W, :].contiguous()
-    return x
-
-
-def window_partition(x, window_size):
-    """
-    Partition into non-overlapping windows with padding if needed.
-    Args:
-        x (tensor): input tokens with [B, H, W, C].
-        window_size (int): window size.
-
-    Returns:
-        windows: windows after partition with [B * num_windows, window_size, window_size, C].
-        (Hp, Wp): padded height and width before partition
-    """
-    B, H, W, C = x.shape
-
-    pad_h = (window_size - H % window_size) % window_size
-    pad_w = (window_size - W % window_size) % window_size
-    if pad_h > 0 or pad_w > 0:
-        x = F.pad(x, (0, 0, 0, pad_w, 0, pad_h))
-    Hp, Wp = H + pad_h, W + pad_w
-
-    x = x.view(B, Hp // window_size, window_size, Wp // window_size, window_size, C)
-    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
-    return windows, (Hp, Wp)
+# def window_unpartition(windows, window_size, pad_hw, hw):
+#     """
+#     Window unpartition into original sequences and removing padding.
+#     Args:
+#         x (tensor): input tokens with [B * num_windows, window_size, window_size, C].
+#         window_size (int): window size.
+#         pad_hw (Tuple): padded height and width (Hp, Wp).
+#         hw (Tuple): original height and width (H, W) before padding.
+#
+#     Returns:
+#         x: unpartitioned sequences with [B, H, W, C].
+#     """
+#     Hp, Wp = pad_hw
+#     H, W = hw
+#     B = windows.shape[0] // (Hp * Wp // window_size // window_size)
+#     x = windows.view(B, Hp // window_size, Wp // window_size, window_size, window_size, -1)
+#     x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, Hp, Wp, -1)
+#
+#     if Hp > H or Wp > W:
+#         x = x[:, :H, :W, :].contiguous()
+#     return x
 
 
-def get_abs_pos(abs_pos, has_cls_token, hw):
+# def window_partition(x, window_size):
+#     """
+#     Partition into non-overlapping windows with padding if needed.
+#     Args:
+#         x (tensor): input tokens with [B, H, W, C].
+#         window_size (int): window size.
+#
+#     Returns:
+#         windows: windows after partition with [B * num_windows, window_size, window_size, C].
+#         (Hp, Wp): padded height and width before partition
+#     """
+#     B, H, W, C = x.shape
+#
+#     pad_h = (window_size - H % window_size) % window_size
+#     pad_w = (window_size - W % window_size) % window_size
+#     if pad_h > 0 or pad_w > 0:
+#         x = F.pad(x, (0, 0, 0, pad_w, 0, pad_h))
+#     Hp, Wp = H + pad_h, W + pad_w
+#
+#     x = x.view(B, Hp // window_size, window_size, Wp // window_size, window_size, C)
+#     windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
+#     return windows, (Hp, Wp)
+
+
+def get_abs_pos(abs_pos, hw):
     """
     Calculate absolute positional embeddings. If needed, resize embeddings and remove cls_token
         dimension for the original embeddings.
@@ -98,8 +112,7 @@ def get_abs_pos(abs_pos, has_cls_token, hw):
         Absolute positional embeddings after processing with shape (1, H, W, C)
     """
     h, w = hw
-    if has_cls_token:
-        abs_pos = abs_pos[:, 1:]
+    abs_pos = abs_pos[:, 1:]
     xy_num = abs_pos.shape[1]
     size = int(math.sqrt(xy_num))
     assert size * size == xy_num
@@ -182,14 +195,13 @@ def add_decomposed_rel_pos(attn, q, rel_pos_h, rel_pos_w, q_size, k_size):
     return attn
 
 
-class PatchEmbed(nn.Module):
+class SegGPTPatchEmbed(nn.Module):
     """
     Image to Patch Embedding.
     """
 
     def __init__(
-            self, kernel_size=(16, 16), stride=(16, 16), padding=(0, 0), in_chans=3, embed_dim=768
-    ):
+            self, config):
         """
         Args:
             kernel_size (Tuple): kernel size of the projection layer.
@@ -201,7 +213,8 @@ class PatchEmbed(nn.Module):
         super().__init__()
 
         self.proj = nn.Conv2d(
-            in_chans, embed_dim, kernel_size=kernel_size, stride=stride, padding=padding
+            config.num_channels, config.embed_dim, kernel_size=(config.patch_size, config.patch_size),
+            stride=(config.patch_size, config.patch_size), padding=(0, 0)
         )
 
     def forward(self, x):
@@ -211,23 +224,23 @@ class PatchEmbed(nn.Module):
         return x
 
 
-class Mlp(nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
+class SegGPTMlp(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = act_layer()
+        out_features = config.embed_dim
+        hidden_features = int(config.embed_dim * config.mlp_ratio)
+        self.fc1 = nn.Linear(config.embed_dim, hidden_features)
+        self.act = nn.GELU()
         self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
+        self.drop = nn.Dropout(0)
 
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
-        return x
+    def forward(self, hidden_states):
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.drop(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.drop(hidden_states)
+        return hidden_states
 
 
 def drop_path(x, drop_prob: float = 0., training: bool = False):
@@ -319,50 +332,36 @@ def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
     return _no_grad_trunc_normal_(tensor, mean, std, a, b)
 
 
-class Attention(nn.Module):
+class SegGPTAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
     def __init__(
             self,
-            dim,
-            num_heads=8,
-            qkv_bias=True,
-            use_rel_pos=False,
-            rel_pos_zero_init=True,
-            input_size=None,
+            config,
     ):
-        """
-        Args:
-            dim (int): Number of input channels.
-            num_heads (int): Number of attention heads.
-            qkv_bias (bool:  If True, add a learnable bias to query, key, value.
-            rel_pos (bool): If True, add relative positional embeddings to the attention map.
-            rel_pos_zero_init (bool): If True, zero initialize relative positional parameters.
-            input_size (int or None): Input resolution for calculating the relative positional
-                parameter size.
-        """
         super().__init__()
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
+        self.num_heads = config.num_attention_heads
+        head_dim = config.embed_dim // config.num_attention_heads
         self.scale = head_dim ** -0.5
+        input_size = (config.image_size[0] // config.patch_size,
+                      config.image_size[1] // config.patch_size)
+        self.qkv = nn.Linear(config.embed_dim, config.embed_dim * 3, bias=config.qkv_bias)
+        self.proj = nn.Linear(config.embed_dim, config.embed_dim)
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.proj = nn.Linear(dim, dim)
-
-        self.use_rel_pos = use_rel_pos
+        self.use_rel_pos = config.use_rel_pos
         if self.use_rel_pos:
             # initialize relative positional embeddings
             self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
             self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
 
-            if not rel_pos_zero_init:
-                trunc_normal_(self.rel_pos_h, std=0.02)
-                trunc_normal_(self.rel_pos_w, std=0.02)
+            # trunc_normal_(self.rel_pos_h, std=0.02)
+            # trunc_normal_(self.rel_pos_w, std=0.02)
 
-    def forward(self, x):
-        B, H, W, _ = x.shape
+    def forward(self, hidden_states,
+                output_attentions: Optional[bool] = False, ):
+        B, H, W, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
-        qkv = self.qkv(x).reshape(B, H * W, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
+        qkv = self.qkv(hidden_states).reshape(B, H * W, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
         # q, k, v with shape (B * nHead, H * W, C)
         q, k, v = qkv.reshape(3, B * self.num_heads, H * W, -1).unbind(0)
 
@@ -372,274 +371,327 @@ class Attention(nn.Module):
             attn = add_decomposed_rel_pos(attn, q, self.rel_pos_h, self.rel_pos_w, (H, W), (H, W))
 
         attn = attn.softmax(dim=-1)
-        x = (attn @ v).view(B, self.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
-        x = self.proj(x)
+        hidden_states = (attn @ v).view(B, self.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
+        ouputs = self.proj(hidden_states)
 
-        return x
+        if output_attentions:
+            return (ouputs, attn)
 
-
-class ResBottleneckBlock(nn.Module):
-    """
-    The standard bottleneck residual block without the last activation layer.
-    It contains 3 conv layers with kernels 1x1, 3x3, 1x1.
-    """
-
-    def __init__(
-            self,
-            in_channels,
-            out_channels,
-            bottleneck_channels,
-            norm="LN",
-            act_layer=nn.GELU,
-    ):
-        """
-        Args:
-            in_channels (int): Number of input channels.
-            out_channels (int): Number of output channels.
-            bottleneck_channels (int): number of output channels for the 3x3
-                "bottleneck" conv layers.
-            norm (str or callable): normalization for all conv layers.
-                See :func:`layers.get_norm` for supported format.
-            act_layer (callable): activation for all conv layers.
-        """
-        super().__init__(in_channels, out_channels, 1)
-
-        self.conv1 = nn.Conv2d(in_channels, bottleneck_channels, 1, bias=False)
-        self.norm1 = LayerNorm(out_channels)
-        self.act1 = act_layer()
-
-        self.conv2 = nn.Conv2d(
-            bottleneck_channels,
-            bottleneck_channels,
-            3,
-            padding=1,
-            bias=False,
-        )
-        self.norm2 = LayerNorm(out_channels)
-        self.act2 = act_layer()
-
-        self.conv3 = nn.Conv2d(bottleneck_channels, out_channels, 1, bias=False)
-        self.norm3 = LayerNorm(out_channels)
-
-        # for layer in [self.conv1, self.conv2, self.conv3]:
-        #     weight_init.c2_msra_fill(layer)
-        for layer in [self.norm1, self.norm2]:
-            layer.weight.data.fill_(1.0)
-            layer.bias.data.zero_()
-        # zero init last norm layer.
-        self.norm3.weight.data.zero_()
-        self.norm3.bias.data.zero_()
-
-    def forward(self, x):
-        out = x
-        for layer in self.children():
-            out = layer(out)
-
-        out = x + out
-        return out
+        return ouputs
 
 
-class Block(nn.Module):
+class SegGPTBlock(nn.Module):
     """Transformer blocks with support of window attention and residual propagation blocks"""
 
     def __init__(
             self,
-            dim,
-            num_heads,
-            mlp_ratio=4.0,
-            qkv_bias=True,
-            drop_path=0.0,
-            norm_layer=nn.LayerNorm,
-            act_layer=nn.GELU,
-            use_rel_pos=False,
-            rel_pos_zero_init=True,
-            window_size=0,
-            use_residual_block=False,
-            input_size=None,
-    ):
-        """
-        Args:
-            dim (int): Number of input channels.
-            num_heads (int): Number of attention heads in each ViT block.
-            mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-            qkv_bias (bool): If True, add a learnable bias to query, key, value.
-            drop_path (float): Stochastic depth rate.
-            norm_layer (nn.Module): Normalization layer.
-            act_layer (nn.Module): Activation layer.
-            use_rel_pos (bool): If True, add relative positional embeddings to the attention map.
-            rel_pos_zero_init (bool): If True, zero initialize relative positional parameters.
-            window_size (int): Window size for window attention blocks. If it equals 0, then not
-                use window attention.
-            use_residual_block (bool): If True, use a residual block after the MLP block.
-            input_size (int or None): Input resolution for calculating the relative positional
-                parameter size.
-        """
-        super().__init__()
-        self.norm1 = norm_layer(dim)
-        self.attn = Attention(
-            dim,
-            num_heads=num_heads,
-            qkv_bias=qkv_bias,
-            use_rel_pos=use_rel_pos,
-            rel_pos_zero_init=rel_pos_zero_init,
-            input_size=input_size if window_size == 0 else (window_size, window_size),
-        )
-
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        self.norm2 = norm_layer(dim)
-        self.mlp = Mlp(in_features=dim, hidden_features=int(dim * mlp_ratio), act_layer=act_layer)
-
-        self.window_size = window_size
-
-        self.use_residual_block = use_residual_block
-        if use_residual_block:
-            # Use a residual block with bottleneck channel as dim // 2
-            self.residual = ResBottleneckBlock(
-                in_channels=dim,
-                out_channels=dim,
-                bottleneck_channels=dim // 2,
-                norm="LN",
-                act_layer=act_layer,
-            )
-
-    def forward(self, x, merge=0):
-        shortcut = x
-        x = self.norm1(x)
-        # Window partition
-        if self.window_size > 0:
-            H, W = x.shape[1], x.shape[2]
-            x, pad_hw = window_partition(x, self.window_size)
-
-        x = self.attn(x)
-        # Reverse window partition
-        if self.window_size > 0:
-            x = window_unpartition(x, self.window_size, pad_hw, (H, W))
-
-        # feature ensemble
-        if merge > 0:
-            prompt, inputs = x.split(x.shape[1] // 2, dim=1)
-            if merge == 1:
-                num_prompts = x.shape[0] // 2
-                inputs = inputs.reshape(2, num_prompts, -1)
-                inputs = inputs.mean(dim=1, keepdim=True).expand_as(inputs)
-                inputs = inputs.reshape(*prompt.shape)
-            else:
-                inputs = inputs.mean(dim=0, keepdim=True).expand_as(inputs)
-            x = torch.cat([prompt, inputs], dim=1)
-
-        x = shortcut + self.drop_path(x)
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
-
-        if self.use_residual_block:
-            x = self.residual(x.permute(0, 3, 1, 2)).permute(0, 2, 3, 1)
-
-        return x
-
-
-class SegGPT(nn.Module):
-    def __init__(
-            self,
-            img_size=224,
-            patch_size=16,
-            in_chans=3,
-            embed_dim=1024,
-            depth=24,
-            num_heads=16,
-            mlp_ratio=4.,
-            qkv_bias=True,
-            drop_path_rate=0.,
-            norm_layer=nn.LayerNorm,
-            act_layer=nn.GELU,
-            use_abs_pos=True,
-            use_rel_pos=False,
-            rel_pos_zero_init=True,
-            window_size=0,
-            window_block_indexes=(),
-            residual_block_indexes=(),
-            pretrain_img_size=224,
-            pretrain_use_cls_token=True,
-            out_feature="last_feat",
-            decoder_embed_dim=128,
-            loss_func="smoothl1",
+            config,
+            block_depth,
     ):
         super().__init__()
-
-        # --------------------------------------------------------------------------
-        self.pretrain_use_cls_token = pretrain_use_cls_token
-        self.patch_size = patch_size
-        self.patch_embed = PatchEmbed(
-            kernel_size=(patch_size, patch_size),
-            stride=(patch_size, patch_size),
-            in_chans=in_chans,
-            embed_dim=embed_dim,
+        self.norm1 = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
+        self.attn = SegGPTAttention(
+            config,
         )
-        self.patch_embed.num_patches = (img_size[0] // patch_size) * (img_size[1] // patch_size)
+        self.reshape_mean = config.merge_index >= block_depth
+        self.swap_img_tgts = config.merge_index == block_depth
+        dpr_values = torch.linspace(0, config.drop_path_rate, config.num_blocks_in_group * config.num_group_blocks)
+        self.drop_path_rate = dpr_values[block_depth]
+        # self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.norm2 = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = SegGPTMlp(config)
 
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, 1, embed_dim))
-        self.segment_token_x = nn.Parameter(torch.zeros(1, 1, 1, embed_dim))
-        self.segment_token_y = nn.Parameter(torch.zeros(1, 1, 1, embed_dim))
-        # token for seg types
-        self.type_token_cls = nn.Parameter(torch.zeros(1, 1, 1, embed_dim))
-        self.type_token_ins = nn.Parameter(torch.zeros(1, 1, 1, embed_dim))
+        # self.window_size = config.window_size
 
-        if use_abs_pos:
-            # Initialize absolute positional embedding with pretrain image size.
-            num_patches = (pretrain_img_size // patch_size) * (pretrain_img_size // patch_size)
-            num_positions = (num_patches + 1) if pretrain_use_cls_token else num_patches
-            self.pos_embed = nn.Parameter(torch.zeros(1, num_positions, embed_dim), requires_grad=True)
+    def forward(self,
+                hidden_state,
+                output_attentions: Optional[bool] = None,
+                ):
+        shortcut = hidden_state
+        hidden_state = self.norm1(hidden_state)
+
+        hidden_state = self.attn(hidden_state, output_attentions=output_attentions)
+
+        if output_attentions:
+            hidden_state, attention_output = hidden_state
+
+        prompt, inputs = hidden_state.split(hidden_state.shape[1] // 2, dim=1)
+        if self.reshape_mean:
+            num_prompts = hidden_state.shape[0] // 2
+            inputs = inputs.reshape(2, num_prompts, -1)
+            inputs = inputs.mean(dim=1, keepdim=True).expand_as(inputs)
+            inputs = inputs.reshape(*prompt.shape)
         else:
-            self.pos_embed = None
+            inputs = inputs.mean(dim=0, keepdim=True).expand_as(inputs)
+        hidden_state = torch.cat([prompt, inputs], dim=1)
+
+        hidden_state = shortcut + drop_path(hidden_state, drop_prob=self.drop_path_rate)
+        hidden_state = hidden_state + drop_path(self.mlp(self.norm2(hidden_state)), drop_prob=self.drop_path_rate)
+
+        if self.swap_img_tgts:
+            hidden_state = (hidden_state[:hidden_state.shape[0] // 2] + hidden_state[hidden_state.shape[0] // 2:]) * 0.5
+
+        if output_attentions:
+            return hidden_state, attention_output
+
+        return hidden_state
+
+
+class SegGPTBlockGroup(nn.Module):
+
+    def __init__(self, config, depth):
+        super().__init__()
+        blocks = []
+
+        for i in range(config.num_blocks_in_group):
+            block_depth = config.num_blocks_in_group * depth + i
+
+            blocks.append(SegGPTBlock(config, block_depth))
+
+        self.blocks = nn.ModuleList(blocks)
+
+    def forward(self,
+                hidden_state,
+                output_attentions: Optional[bool] = None,
+                output_hidden_states: Optional[bool] = None,
+                return_dict: Optional[bool] = None,
+                ):
+
+        hidden_states = [hidden_state]
+        attention_outputs = []
+        for block in self.blocks:
+            hidden_state = block(hidden_state,output_attentions=output_attentions)
+            if output_attentions:
+                hidden_state, attention = hidden_state
+                attention_outputs.append(attention)
+            hidden_states.append(hidden_state)
+
+        if not return_dict:
+            outputs = (hidden_state,)
+            outputs = outputs + (hidden_states,) if output_hidden_states else outputs
+            return outputs + (attention_outputs,) if output_attentions else outputs
+
+        return BaseModelOutput(
+            last_hidden_state=hidden_state,
+            hidden_states=hidden_states,
+            attentions=attention_outputs
+        )
+
+
+class SegGPTEncoder(nn.Module):
+
+    def __init__(self, config):
+        super().__init__()
+        self.patch_size = config.patch_size
+        self.patch_embed = SegGPTPatchEmbed(config,
+                                            )
+        self.num_patches = (config.image_size[0] // config.patch_size) * (
+                config.image_size[1] // config.patch_size)
+
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, 1, config.embed_dim))
+        self.segment_token_x = nn.Parameter(torch.zeros(1, 1, 1, config.embed_dim))
+        self.segment_token_y = nn.Parameter(torch.zeros(1, 1, 1, config.embed_dim))
+        # token for seg types
+        self.type_token_cls = nn.Parameter(torch.zeros(1, 1, 1, config.embed_dim))
+        self.type_token_ins = nn.Parameter(torch.zeros(1, 1, 1, config.embed_dim))
+
+        # Initialize absolute positional embedding with pretrain image size.
+        num_patches = (config.pretrain_img_size // config.patch_size) * (config.pretrain_img_size // config.patch_size)
+        num_positions = (num_patches + 1)
+        self.pos_embed = nn.Parameter(torch.zeros(1, num_positions, config.embed_dim), requires_grad=True)
 
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]
+        depth = config.num_group_blocks * config.num_blocks_in_group
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, depth)]
 
-        self.blocks = nn.ModuleList()
-        for i in range(depth):
-            block = Block(
-                dim=embed_dim,
-                num_heads=num_heads,
-                mlp_ratio=mlp_ratio,
-                qkv_bias=qkv_bias,
-                drop_path=dpr[i],
-                norm_layer=norm_layer,
-                act_layer=act_layer,
-                use_rel_pos=use_rel_pos,
-                rel_pos_zero_init=rel_pos_zero_init,
-                window_size=window_size if i in window_block_indexes else 0,
-                use_residual_block=i in residual_block_indexes,
-                input_size=(img_size[0] // patch_size, img_size[1] // patch_size),
+        self.group_blocks = nn.ModuleList()
+        for i in range(config.num_group_blocks):
+            block = SegGPTBlockGroup(
+                config,
+                depth=i
             )
-            self.blocks.append(block)
+            self.group_blocks.append(block)
 
-        self._out_feature_channels = {out_feature: embed_dim}
-        self._out_feature_strides = {out_feature: patch_size}
-        self._out_features = [out_feature]
+        self._out_feature_channels = {config.out_feature: config.embed_dim}
+        self._out_feature_strides = {config.out_feature: config.patch_size}
+        self._out_features = [config.out_feature]
 
         if self.pos_embed is not None:
             trunc_normal_(self.pos_embed, std=0.02)
-        self.norm = norm_layer(embed_dim)
+        self.norm = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
 
-        # --------------------------------------------------------------------------
+    def forward(self, imgs, tgts, seg_type=None,
+                output_attentions: Optional[bool] = None,
+                output_hidden_states: Optional[bool] = None,
+                return_dict: Optional[bool] = None,
+                ):
 
-        # --------------------------------------------------------------------------
-        self.decoder_embed_dim = decoder_embed_dim
-        self.decoder_embed = nn.Linear(embed_dim * 4, patch_size ** 2 * self.decoder_embed_dim,
+        # embed patches
+        x = self.patch_embed(imgs)
+        y = self.patch_embed(tgts)
+        batch_size, Hp, Wp, _ = x.size()
+        seq_len = Hp * Wp
+
+        mask_token = self.mask_token.expand(batch_size, Hp, Wp, -1)
+        # replace the masked visual tokens by mask_token
+
+        bool_masked_pos = torch.zeros(self.num_patches)
+        bool_masked_pos[self.num_patches // 2:] = 1
+        bool_masked_pos = bool_masked_pos.unsqueeze(dim=0).flatten(1).to(torch.bool)
+
+        w = bool_masked_pos.unsqueeze(-1).type_as(mask_token).reshape(-1, Hp, Wp, 1)
+        y = y * (1 - w) + mask_token * w
+
+        # add pos embed w/o cls token
+        x = x + self.segment_token_x
+        y = y + self.segment_token_y
+        if self.pos_embed is not None:
+            x = x + get_abs_pos(
+                self.pos_embed, (x.shape[1], x.shape[2])
+            )
+            y = y + get_abs_pos(
+                self.pos_embed, (y.shape[1], y.shape[2])
+            )
+
+        # add type tokens for cls and ins
+        type_emb = torch.zeros(batch_size, 1, 1, self.type_token_cls.shape[-1]).to(x.device)
+        type_emb[seg_type == 0] = self.type_token_cls
+        type_emb[seg_type == 1] = self.type_token_ins
+
+        x = x + type_emb
+        y = y + type_emb
+        x = torch.cat((x, y), dim=0)
+        merge_idx = 2
+        # apply Transformer blocks
+        last_hidden_states = []
+        all_hidden_states = []
+        all_attention_outputs = []
+        for idx, block_group in enumerate(self.group_blocks):
+            group_block_outputs = block_group(x, output_attentions=output_attentions,
+                                              output_hidden_states=output_hidden_states,
+                                              return_dict=return_dict)
+            hidden_state = group_block_outputs[0]
+            if output_hidden_states:
+                all_hidden_states.extend(group_block_outputs[1])
+            if output_attentions:
+                all_attention_outputs.extend(group_block_outputs[-1])
+            last_hidden_states.append(self.norm(hidden_state))
+
+        last_hidden_state = torch.cat(last_hidden_states, dim=-1)
+
+        if not return_dict:
+            outputs = (last_hidden_state,)
+            outputs = outputs + (all_hidden_states,) if output_hidden_states else outputs
+            return outputs + (all_attention_outputs,) if output_attentions else outputs
+
+        return BaseModelOutput(
+            last_hidden_state=last_hidden_state,
+            hidden_states=output_hidden_states,
+            attentions=output_attentions
+        )
+
+
+class SegGPTDecoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.patch_size = config.patch_size
+        self.decoder_embed_dim = config.decoder_embed_dim
+        self.decoder_embed = nn.Linear(config.embed_dim * 4, config.patch_size ** 2 * config.decoder_embed_dim,
                                        bias=True)  # decoder to patch
         self.decoder_pred = nn.Sequential(
-            nn.Conv2d(self.decoder_embed_dim, self.decoder_embed_dim, kernel_size=3, padding=1, ),
-            LayerNorm2D(self.decoder_embed_dim),
+            nn.Conv2d(config.decoder_embed_dim, config.decoder_embed_dim, kernel_size=3, padding=1, ),
+            LayerNorm2D(config.decoder_embed_dim),
             nn.GELU(),
-            nn.Conv2d(self.decoder_embed_dim, 3, kernel_size=1, bias=True),  # decoder to patch
+            nn.Conv2d(config.decoder_embed_dim, 3, kernel_size=1, bias=True),  # decoder to patch
         )
-        # --------------------------------------------------------------------------
-        self.loss_func = loss_func
 
-        torch.nn.init.normal_(self.mask_token, std=.02)
-        torch.nn.init.normal_(self.segment_token_x, std=.02)
-        torch.nn.init.normal_(self.segment_token_y, std=.02)
-        torch.nn.init.normal_(self.type_token_cls, std=.02)
-        torch.nn.init.normal_(self.type_token_ins, std=.02)
+    def forward(self, x):
+        # x = torch.cat(x, dim=-1)
+        x = self.decoder_embed(x)  # BxhxwxC
+        p = self.patch_size
+        h, w = x.shape[1], x.shape[2]
+        x = x.reshape(shape=(x.shape[0], h, w, p, p, self.decoder_embed_dim))
+        x = torch.einsum('nhwpqc->nchpwq', x)
+        x = x.reshape(shape=(x.shape[0], -1, h * p, w * p))
+
+        x = self.decoder_pred(x)  # Bx3xHxW
+        return x
+
+
+class SegGPTPretrainedModel(PreTrainedModel):
+    config_class = SegGPTConfig
+    base_model_prefix = "segGPT"
+    main_input_name = "pixel_values"
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
+@dataclass
+class SegGPTModelOutput(ModelOutput):
+    """
+    Class for outputs of [`MaskFormerForInstanceSegmentation`].
+
+    This output can be directly passed to [`~MaskFormerImageProcessor.post_process_semantic_segmentation`] or or
+    [`~MaskFormerImageProcessor.post_process_instance_segmentation`] or
+    [`~MaskFormerImageProcessor.post_process_panoptic_segmentation`] depending on the task. Please, see
+    [`~MaskFormerImageProcessor] for details regarding usage.
+
+    Args:
+        loss (`torch.Tensor`, *optional*):
+            The computed loss, returned when labels are present.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction of the decoder.
+        encoder_last_hidden_state (`torch.FloatTensor`):
+            Last hidden states (final feature map) of the last stage of the encoder model .
+        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the encoder
+            model at the output of each stage.
+        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights from Detr's decoder after the attention softmax, used to compute the
+            weighted average in the self-attention heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+class SegGPTModel(SegGPTPretrainedModel):
+    def __init__(
+            self, config
+    ):
+        super().__init__(config)
+
+        # --------------------------------------------------------------------------
+        self.encoder = SegGPTEncoder(config)
+
+        # --------------------------------------------------------------------------
+
+        # --------------------------------------------------------------------------
+        self.decoder = SegGPTDecoder(config)
+        self.num_patches = (config.image_size[0] // config.patch_size) * (
+                config.image_size[1] // config.patch_size)
+        # --------------------------------------------------------------------------
+        # torch.nn.init.normal_(self.mask_token, std=.02)
+        # torch.nn.init.normal_(self.segment_token_x, std=.02)
+        # torch.nn.init.normal_(self.segment_token_y, std=.02)
+        # torch.nn.init.normal_(self.type_token_cls, std=.02)
+        # torch.nn.init.normal_(self.type_token_ins, std=.02)
         self.apply(self._init_weights)
+        self.patch_size = config.patch_size
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -684,51 +736,6 @@ class SegGPT(nn.Module):
         imgs = x.reshape(shape=(x.shape[0], 3, h * p, w * p))
         return imgs
 
-    def forward_encoder(self, imgs, tgts, bool_masked_pos, seg_type, merge_between_batch=-1):
-        # embed patches
-        x = self.patch_embed(imgs)
-        y = self.patch_embed(tgts)
-        batch_size, Hp, Wp, _ = x.size()
-        seq_len = Hp * Wp
-
-        mask_token = self.mask_token.expand(batch_size, Hp, Wp, -1)
-        # replace the masked visual tokens by mask_token
-        w = bool_masked_pos.unsqueeze(-1).type_as(mask_token).reshape(-1, Hp, Wp, 1)
-        y = y * (1 - w) + mask_token * w
-
-        # add pos embed w/o cls token
-        x = x + self.segment_token_x
-        y = y + self.segment_token_y
-        if self.pos_embed is not None:
-            x = x + get_abs_pos(
-                self.pos_embed, self.pretrain_use_cls_token, (x.shape[1], x.shape[2])
-            )
-            y = y + get_abs_pos(
-                self.pos_embed, self.pretrain_use_cls_token, (y.shape[1], y.shape[2])
-            )
-
-        # add type tokens for cls and ins
-        type_emb = torch.zeros(batch_size, 1, 1, self.type_token_cls.shape[-1]).to(x.device)
-        type_emb[seg_type == 0] = self.type_token_cls
-        type_emb[seg_type == 1] = self.type_token_ins
-
-        x = x + type_emb
-        y = y + type_emb
-        x = torch.cat((x, y), dim=0)
-        merge_idx = 2
-        # apply Transformer blocks
-        out = []
-        for idx, blk in enumerate(self.blocks):
-            merge = 0
-            if merge_between_batch >= 0 and idx >= merge_between_batch:
-                merge = 1 if merge_idx >= idx else 2
-            x = blk(x, merge=merge)
-            if idx == merge_idx:
-                x = (x[:x.shape[0] // 2] + x[x.shape[0] // 2:]) * 0.5
-            if idx in [5, 11, 17, 23]:
-                out.append(self.norm(x))
-        return out
-
     def forward_decoder(self, x):
         x = torch.cat(x, dim=-1)
         x = self.decoder_embed(x)  # BxhxwxC
@@ -741,50 +748,100 @@ class SegGPT(nn.Module):
         x = self.decoder_pred(x)  # Bx3xHxW
         return x
 
-    def forward_loss(self, pred, tgts, mask, valid):
+    def loss(self, pred, tgts):
         """
         tgts: [N, 3, H, W]
         pred: [N, 3, H, W]
         mask: [N, L], 0 is keep, 1 is remove,
         valid: [N, 3, H, W]
         """
-        mask = mask[:, :, None].repeat(1, 1, self.patch_size ** 2 * 3)
-        mask = self.unpatchify(mask)
-        mask = mask * valid
+
+        bool_masked_pos = torch.zeros(self.num_patches)
+        bool_masked_pos[self.num_patches // 2:] = 1
+        bool_masked_pos = bool_masked_pos.unsqueeze(dim=0).flatten(1).to(torch.bool).repeat(1, 1,
+                                                                                            self.patch_size ** 2 * 3)
+
+        mask = self.unpatchify(bool_masked_pos)
+        to_expand = tgts.shape[0] // mask.shape[0]
+        mask = mask.repeat(to_expand, 1, 1, 1)
 
         target = tgts
-        if self.loss_func == "l1l2":
-            loss = ((pred - target).abs() + (pred - target) ** 2.) * 0.5
-        elif self.loss_func == "l1":
-            loss = (pred - target).abs()
-        elif self.loss_func == "l2":
-            loss = (pred - target) ** 2.
-        elif self.loss_func == "smoothl1":
-            loss = F.smooth_l1_loss(pred, target, reduction="none", beta=0.01)
+        loss = F.smooth_l1_loss(pred, target, reduction="none", beta=0.01)
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
         return loss
 
-    def forward(self, imgs, tgts, bool_masked_pos=None, valid=None, seg_type=None, merge_between_batch=-1):
-        if bool_masked_pos is None:
-            bool_masked_pos = torch.zeros((imgs.shape[0], self.patch_embed.num_patches), dtype=torch.bool).to(
-                imgs.device)
-        else:
-            bool_masked_pos = bool_masked_pos.flatten(1).to(torch.bool)
-        latent = self.forward_encoder(imgs, tgts, bool_masked_pos, seg_type, merge_between_batch=merge_between_batch)
-        pred = self.forward_decoder(latent)  # [N, L, p*p*3]
-        loss = self.forward_loss(pred, tgts, bool_masked_pos, valid)
-        return loss, self.patchify(pred), bool_masked_pos
+    def forward(self,
+                pixel_values,
+                prompt_pixel_values,
+                seg_type=None,
+                output_attentions: Optional[bool] = None,
+                output_hidden_states: Optional[bool] = None,
+                return_dict: Optional[bool] = None,
+                ):
+
+        # bool_masked_pos = torch.zeros(self.encoder.num_patches)
+        # bool_masked_pos[self.encoder.num_patches // 2:] = 1
+        # bool_masked_pos = bool_masked_pos.unsqueeze(dim=0)
+        # bool_masked_pos = bool_masked_pos.flatten(1).to(torch.bool)
+
+        # if bool_masked_pos is None:
+        #     bool_masked_pos = torch.zeros((imgs.shape[0], self.patch_embed.num_patches), dtype=torch.bool).to(
+        #         imgs.device)
+        # else:
+
+        encoder_outputs = self.encoder(pixel_values, prompt_pixel_values, seg_type, output_attentions=output_attentions,
+                                       output_hidden_states=output_hidden_states, return_dict=return_dict)
+
+        logits = self.patchify(self.decoder(encoder_outputs[0]))  # [N, L, p*p*3]
+        loss = self.loss(logits, prompt_pixel_values)
+
+        if not return_dict:
+            outputs = (loss, logits, encoder_outputs[0])
+            outputs = outputs + (encoder_outputs[1]) if output_hidden_states else outputs
+            return outputs + (encoder_outputs[2]) if output_attentions else outputs
+
+        return SegGPTModelOutput(
+            loss=loss,
+            logits=logits,
+            encoder_last_hidden_state=encoder_outputs[0],
+            encoder_hidden_states=encoder_outputs[1] if output_hidden_states else None,
+            encoder_attentions=encoder_outputs[2] if output_attentions else None,
+        )
 
 
-def seggpt_vit_large_patch16_input896x448(**kwargs):
-    model = SegGPT(
-        img_size=(896, 448), patch_size=16, embed_dim=1024, depth=24, num_heads=16,
-        drop_path_rate=0.1, window_size=14, qkv_bias=True,
-        mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6),
-        window_block_indexes=(list(range(0, 2)) + list(range(3, 5)) + list(range(6, 8)) + list(range(9, 11)) + \
-                              list(range(12, 14)), list(range(15, 17)), list(range(18, 20)), list(range(21, 23))),
-        residual_block_indexes=[], use_rel_pos=True, out_feature="last_feat",
-        decoder_embed_dim=64,
-        loss_func="smoothl1",
-        **kwargs)
-    return model
+class SegGPTForInstanceSegmentation(SegGPTPretrainedModel):
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.seggpt_model = SegGPTModel(config)
+
+    def forward(self,
+                pixel_values,
+                prompt_pixel_values,
+                output_attentions: Optional[bool] = None,
+                output_hidden_states: Optional[bool] = None,
+                return_dict: Optional[bool] = None,
+                ):
+        seg_type = torch.ones([prompt_pixel_values.shape[0], 1])
+        return self.seggpt_model(pixel_values, prompt_pixel_values,seg_type, output_attentions, output_hidden_states,
+                                 return_dict)
+
+
+class SegGPTForSemanticSegmentation(SegGPTPretrainedModel):
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.seggpt_model = SegGPTModel(config)
+
+    def forward(self,
+                pixel_values,
+                prompt_pixel_values,
+                output_attentions: Optional[bool] = None,
+                output_hidden_states: Optional[bool] = None,
+                return_dict: Optional[bool] = None,
+                ):
+        seg_type = torch.zeros([prompt_pixel_values.shape[0], 1])
+        return self.seggpt_model(pixel_values, prompt_pixel_values, seg_type,output_attentions, output_hidden_states,
+                                 return_dict, seg_type)

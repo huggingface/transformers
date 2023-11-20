@@ -541,6 +541,7 @@ _import_structure = {
         "SeamlessM4TProcessor",
     ],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
+    "models.seggpt": ["SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegGPTConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
@@ -1008,6 +1009,7 @@ else:
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
+    _import_structure["models.seggpt"].extend(["SegGPTImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
@@ -2750,6 +2752,14 @@ else:
             "SegformerLayer",
             "SegformerModel",
             "SegformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.seggpt"].extend(
+        [
+            "SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SegGPTModel",
+            "SegGPTForSemanticSegmentation",
+            "SegGPTForInstanceSegmentation",
         ]
     )
     _import_structure["models.sew"].extend(
@@ -4748,6 +4758,7 @@ if TYPE_CHECKING:
         SeamlessM4TProcessor,
     )
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
+    from .models.seggpt import SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, SegGPTConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
@@ -5163,6 +5174,7 @@ if TYPE_CHECKING:
         from .models.pvt import PvtImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
+        from .models.seggpt import SegGPTImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
@@ -6614,6 +6626,13 @@ if TYPE_CHECKING:
             SegformerModel,
             SegformerPreTrainedModel,
         )
+        from .models.seggpt import (
+            SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+            SegGPTModel,
+            SegGPTForInstanceSegmentation,
+            SegGPTForSemanticSegmentation
+        )
+
         from .models.sew import (
             SEW_PRETRAINED_MODEL_ARCHIVE_LIST,
             SEWForCTC,
