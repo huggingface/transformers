@@ -94,7 +94,6 @@ class SiglipTextConfig(PretrainedConfig):
         vocab_size=49408,
         hidden_size=512,
         intermediate_size=2048,
-        projection_dim=512,
         num_hidden_layers=12,
         num_attention_heads=8,
         max_position_embeddings=64,
@@ -115,7 +114,6 @@ class SiglipTextConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.max_position_embeddings = max_position_embeddings
@@ -201,7 +199,6 @@ class SiglipVisionConfig(PretrainedConfig):
         self,
         hidden_size=768,
         intermediate_size=3072,
-        projection_dim=512,
         num_hidden_layers=12,
         num_attention_heads=12,
         num_channels=3,
@@ -218,7 +215,6 @@ class SiglipVisionConfig(PretrainedConfig):
 
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
@@ -264,10 +260,6 @@ class SiglipConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`SiglipTextConfig`].
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`SiglipVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimentionality of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original Siglip implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -297,9 +289,7 @@ class SiglipConfig(PretrainedConfig):
 
     model_type = "siglip"
 
-    def __init__(
-        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
-    ):
+    def __init__(self, text_config=None, vision_config=None, **kwargs):
         # If `_config_dict` exist, we use them for the backward compatibility.
         # We pop out these 2 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
         # of confusion!).
@@ -381,8 +371,6 @@ class SiglipConfig(PretrainedConfig):
         self.text_config = SiglipTextConfig(**text_config)
         self.vision_config = SiglipVisionConfig(**vision_config)
 
-        self.projection_dim = projection_dim
-        self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
 
     @classmethod

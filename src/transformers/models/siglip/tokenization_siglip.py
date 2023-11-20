@@ -16,7 +16,6 @@
 
 
 import os
-import re
 import warnings
 from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -156,7 +155,6 @@ class SiglipTokenizer(PreTrainedTokenizer):
             tokenizer.LoadFromSerializedProto(sp_model)
         return tokenizer
 
-
     @property
     def vocab_size(self):
         return self.sp_model.get_piece_size()
@@ -209,8 +207,8 @@ class SiglipTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Siglip does not make
-        use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Siglip does not
+        make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (`List[int]`):
