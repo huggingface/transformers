@@ -87,18 +87,18 @@ old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 # The best way to set the cache path is with the environment variable HF_HOME. For more details, checkout this
 # documentation page: https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables.
 #
-# In code, use `HUGGINGFACE_HUB_CACHE` as the default cache path. This variable is set by the library and is guaranteed
+# In code, use `HF_HUB_CACHE` as the default cache path. This variable is set by the library and is guaranteed
 # to be set to the right value.
 #
 # TODO: clean this for v5?
-PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", constants.HUGGINGFACE_HUB_CACHE)
+PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", constants.HF_HUB_CACHE)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
 TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
 
 # Onetime move from the old location to the new one if no ENV variable has been set.
 if (
     os.path.isdir(old_default_cache_path)
-    and not os.path.isdir(constants.HUGGINGFACE_HUB_CACHE)
+    and not os.path.isdir(constants.HF_HUB_CACHE)
     and "PYTORCH_PRETRAINED_BERT_CACHE" not in os.environ
     and "PYTORCH_TRANSFORMERS_CACHE" not in os.environ
     and "TRANSFORMERS_CACHE" not in os.environ
@@ -110,7 +110,7 @@ if (
         " '~/.cache/huggingface/transformers' to avoid redownloading models you have already in the cache. You should"
         " only see this message once."
     )
-    shutil.move(old_default_cache_path, constants.HUGGINGFACE_HUB_CACHE)
+    shutil.move(old_default_cache_path, constants.HF_HUB_CACHE)
 
 HF_MODULES_CACHE = os.getenv("HF_MODULES_CACHE", os.path.join(constants.HF_HOME, "modules"))
 TRANSFORMERS_DYNAMIC_MODULE_NAME = "transformers_modules"
@@ -1210,7 +1210,7 @@ if cache_version < 1 and cache_is_not_empty:
             "`transformers.utils.move_cache()`."
         )
     try:
-        if TRANSFORMERS_CACHE != constants.HUGGINGFACE_HUB_CACHE:
+        if TRANSFORMERS_CACHE != constants.HF_HUB_CACHE:
             # Users set some env variable to customize cache storage
             move_cache(TRANSFORMERS_CACHE, TRANSFORMERS_CACHE)
         else:
