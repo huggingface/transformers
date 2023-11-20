@@ -651,6 +651,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             "./regression",
             evaluation_strategy="epoch",
             metric_for_best_model="eval_loss",
+            report_to="none",
         )
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
