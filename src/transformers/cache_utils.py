@@ -252,10 +252,10 @@ class PagedAttentionCache(Cache):
             kv_head = key_states.shape[1]
             head_size = key_states.shape[-1]
             context_len = context_len + key_states.shape[-2]
-            key = torch.zeros(
+            key = torch.empty(
                 (batch_size, context_len, kv_head, head_size), dtype=key_states.dtype, device=key_states.device
             )
-            value = torch.zeros(
+            value = torch.empty(
                 (batch_size, context_len, kv_head, head_size), dtype=value_states.dtype, device=value_states.device
             )
             for batch_idx in range(batch_size):
