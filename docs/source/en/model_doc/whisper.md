@@ -75,6 +75,19 @@ Here is a step-by-step guide to transcribing an audio sample using a pre-trained
 ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
 ```
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Whisper. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
+- A fork with a script to [convert a Whisper model in Hugging Face format to OpenAI format](https://github.com/zuazo-forks/transformers/blob/convert_hf_to_openai/src/transformers/models/whisper/convert_hf_to_openai.py). 🌎
+Usage example:
+```bash
+pip install -U openai-whisper
+python convert_hf_to_openai.py \
+    --checkpoint openai/whisper-tiny \
+    --whisper_dump_path whisper-tiny-openai.pt
+```
+
 ## WhisperConfig
 
 [[autodoc]] WhisperConfig
