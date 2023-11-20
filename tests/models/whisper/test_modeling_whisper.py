@@ -1748,7 +1748,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         processor = WhisperProcessor.from_pretrained(model_id)
 
         assistant_model_id = "distil-whisper/distil-large-v2"
-        assistant_model = WhisperForConditionalGeneration.from_pretrained(
+        assistant_model = WhisperForCausalLM.from_pretrained(
             assistant_model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
         )
         assistant_model.to(torch_device)
