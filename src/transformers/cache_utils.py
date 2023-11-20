@@ -64,7 +64,7 @@ class DynamicCache(Cache):
 
 
 class PagedAttentionCache(Cache):
-    def __init__(self, num_blocks: int = 2048, block_size: int = 16) -> None:
+    def __init__(self, num_blocks: int = 8, block_size: int = 16) -> None:
         super().__init__()
         # cache config & kv_cache
         self.num_blocks = num_blocks
@@ -92,6 +92,18 @@ class PagedAttentionCache(Cache):
             cache.update(key_states, value_states, layer_idx)
         return cache
     
+    def copy_on_write(self, src_block_idx: int, dst_block_idx: int):
+        """
+        Copy the content of src_block_idx to dst_block_idx.
+
+        Args:
+            src_block_idx (int): The index of the source block.
+            dst_block_idx (int): The index of the destination block.
+        """
+        for layer_idx in range(len(self.key_cache)):
+            self.key_cache[layer_idx][dst_block_idx] = self.key_cache[layer_idx][src_block_idx].clone()
+            self.value_cache[layer_idx][dst_block_idx] = self.value_cache[layer_idx][src_block_idx].clone()
+        
     def allocate(self, seq_idx: int, key_len: int, context_len: int) -> List[int]:
         """
         Allocate physical slots for a given sequence index, key length and context length.
@@ -127,6 +139,16 @@ class PagedAttentionCache(Cache):
                 self.free_blocks = self.free_blocks[new_blocks:]
                 for block_idx in candidate_blocks:
                     self.block_ref_count[block_idx] += 1
+            else:
+                last_block = self.block_tables[seq_idx][-1]
+                #sharing the last block with other sequences, need to allocate a new block and copy the last block
+                if self.block_ref_count[last_block] > 1:
+                    assert len(self.free_blocks) > 0
+                    new_block = self.free_blocks.pop()
+                    self.block_tables[seq_idx][-1] = new_block
+                    self.block_ref_count[new_block] += 1
+                    self.block_ref_count[last_block] -= 1
+                    self.copy_on_write(last_block, new_block)
         # return the slots for this sequence
         for i in range(key_len):
             token_id = i + context_len
@@ -241,7 +263,7 @@ class PagedAttentionCache(Cache):
         batch_size = key_states.shape[0]  # [batch, head, seq, dim]
         kv_head = key_states.shape[1]
         head_size = key_states.shape[-1]
-        current_len = key_states.shape[-2]        
+        original_key_states = key_states       
         # self.batch2seq is only for the current decode step, need to clear in the last layer and init in the first layer or setup externally
         if layer_idx == 0 and self.batch2seq == {}:
             assert len(self.block_tables) == 0
@@ -264,7 +286,6 @@ class PagedAttentionCache(Cache):
             self.cache_initialized = False
         else:
             self.cache_initialized = True
-            
         # step 1): allocate slots to store token states for each sequence in the batch, only need run in the first layer
         if layer_idx == 0:
             self.slots_mapping = []
@@ -294,7 +315,6 @@ class PagedAttentionCache(Cache):
             context_len = context_len + key_states.shape[-2]
             key = torch.zeros((batch_size, context_len, kv_head, head_size), dtype=key_states.dtype, device=key_states.device)
             value = torch.zeros((batch_size, context_len, kv_head, head_size), dtype=value_states.dtype, device=value_states.device)
-            print("context_len", context_len)
             for batch_idx in range(batch_size):
                 for i in range(context_len):
                     block_idx = i // self.block_size
@@ -309,13 +329,12 @@ class PagedAttentionCache(Cache):
             seq_ids = self.batch2seq[batch_idx]
             # fork the blocks allocated for the first sequence to other sequences in the batch
             for seq_id in seq_ids:
-                key_len = key_states[batch_idx].shape[-2]
+                key_len = original_key_states[batch_idx].shape[-2]
                 if seq_id not in self.context_lens:
                     self.context_lens[seq_id] = []
                 if layer_idx == len(self.context_lens[seq_id]):
                     self.context_lens[seq_id].append(0)
-                self.context_lens[seq_id][layer_idx] += current_len
-        print("context_lens", self.context_lens)
+                self.context_lens[seq_id][layer_idx] += key_len
         return key_states, value_states
 
     def reorder_cache(self, beam_idx: torch.Tensor) -> None:
@@ -323,13 +342,27 @@ class PagedAttentionCache(Cache):
         Reorder the cache according to the beam index. The beam index is a tensor of shape (batch_size,)
         and the sequence id can be get from the self.batch2seq.
         """
+        print("reorder_cache")
+        print("beam_idx", beam_idx)
+        print("self.block_tables", self.block_tables)
+        print("self.block_ref_count", self.block_ref_count)
+        print("self.free_blocks", self.free_blocks)
         freed_seqs = []
+        new_block_tables = self.block_tables.copy()
         for batch_idx, target_batch_idx in enumerate(beam_idx.tolist()):
-            freed_seqs.append(batch_idx)
-            for block in self.block_tables[target_batch_idx]:
+            target_seq_id = self.batch2seq[target_batch_idx][0]
+            seq_id = self.batch2seq[batch_idx][0]
+            freed_seqs.append(seq_id)
+            new_block_tables[seq_id] = []
+            for block in self.block_tables[target_seq_id]:
                 self.block_ref_count[block] += 1
+                new_block_tables[seq_id].append(block)
         for seq_idx in freed_seqs:
             self.free(seq_idx)
+        self.block_tables = new_block_tables
+        print("self.free_blocks", self.free_blocks)
+        print("self.block_tables", self.block_tables)
+        print("self.block_ref_count", self.block_ref_count)
 
 
 def rotate_half(x):

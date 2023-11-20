@@ -469,8 +469,6 @@ class LlamaAttention(nn.Module):
             kv_seq_len += past_key_value.get_seq_length(self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-        # import pdb
-        # pdb.set_trace()
         if past_key_value is not None:
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cos, sin)
 
@@ -478,7 +476,6 @@ class LlamaAttention(nn.Module):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-        print("kv_seq_len", kv_seq_len)
         if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
             raise ValueError(
                 f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
@@ -959,8 +956,6 @@ class LlamaModel(LlamaPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         past_key_values_length = 0
-        import pdb 
-        pdb.set_trace()
         if use_cache:
             if not isinstance(past_key_values, Cache):
                 past_key_values = self.from_legacy_cache(past_key_values)
@@ -1235,7 +1230,8 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         if isinstance(past_key_values, PagedAttentionCache):
-            past_key_values = past_key_values.reorder_cache(beam_idx)
+            past_key_values.reorder_cache(beam_idx)
+            return past_key_values
         else:
             reordered_past = ()
             for layer_past in past_key_values:
