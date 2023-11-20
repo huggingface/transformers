@@ -1271,17 +1271,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         if not is_flash_attn_2_available():
-            raise ImportError(
-                "Flash Attention 2 is not available. Please refer to the documentation of https://github.com/Dao-AILab/flash-attention for"
-                " installing it. Make sure to have at least the version 2.1.0"
-            )
-        else:
             flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
-            is_flash_greater_than_2 = flash_attention_version >= version.parse("2.1.0")
-            if not is_flash_greater_than_2:
-                raise ValueError(
-                    f"You need flash_attn package version to be greater or equal than 2.1. Make sure to have that version installed - detected version {flash_attention_version}"
-                )
+            if torch.version.cuda:
+                install_message = "Please refer to the documentation of https://github.com/Dao-AILab/flash-attention to install it. Make sure to have at least the version 2.1.0."
+
+                if importlib.util.find_spec("flash_attn") is None:
+                    raise ValueError(f"The packaging flash_attn seem to be not installed. {install_message}")
+
+                flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
+                if flash_attention_version < version.parse("2.1.0"):
+                    raise ValueError(
+                        f"You need flash_attn package version to be greater or equal than 2.1. Make sure to have that version installed - detected version {flash_attention_version}."
+                    )
+                else:
+                    raise ImportError(f"Flash Attention 2 is not available. {install_message}")
+            elif torch.version.hip:
+                install_message = "Please refer to the documentation of https://github.com/ROCmSoftwarePlatform/flash-attention to install it for AMD GPUs, or use the Transformers + Flash Attention 2-compatible Dockerfile available at https://github.com/huggingface/optimum-amd/tree/main/docker/transformers-pytorch-nightly-amd-gpu-flash/Dockerfile."
+
+                if importlib.util.find_spec("flash_attn") is None:
+                    raise ValueError(f"The packaging flash_attn seem to be not installed. {install_message}")
+                flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
+                if flash_attention_version < version.parse("2.0.4"):
+                    raise ValueError(
+                        f"You need flash_attn package version to be greater or equal than 2.0.4. Make sure to have that version installed - detected version {flash_attention_version}."
+                    )
+                else:
+                    raise ImportError(f"Flash Attention 2 is not available. {install_message}")
 
         _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
 

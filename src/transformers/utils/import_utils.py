@@ -71,9 +71,6 @@ TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
-_flash_attn_2_available = _is_package_available("flash_attn") and version.parse(
-    importlib.metadata.version("flash_attn")
-) >= version.parse("2.1.0")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -608,10 +605,28 @@ def is_flash_attn_2_available():
     if not is_torch_available():
         return False
 
+    if not _is_package_available("flash_attn"):
+        return False
+
     # Let's add an extra check to see if cuda is available
     import torch
 
-    return _flash_attn_2_available and torch.cuda.is_available()
+    if not torch.cuda.is_available():
+        return False
+
+    if torch.version.cuda:
+        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
+    elif torch.version.hip:
+        # Compilation of flash_attn for RoCm requires RoCm 5.7, otherwise getting the following error:
+        # fatal error: error in backend: Not supported instr: <MCInst 0 <MCOperand Reg:519> <MCOperand Reg:527> <MCOperand Expr:(.LBB2_3)> <MCOperand Reg:487> <MCOperand Expr:(.LBB2_-1)>>
+        # clang-16: error: clang frontend command failed with exit code 70 (use -v to see invocation)
+        # AMD clang version 16.0.0 (https://github.com/RadeonOpenCompute/llvm-project roc-5.6.1 23332 4f9bb99d78a4d8d9770be38b91ebd004ea4d2a3a)
+        rocm_version = torch.version.hip.split(".").join[:2]
+        return version.parse(rocm_version) >= version.parse("5.7") and version.parse(
+            importlib.metadata.version("flash_attn")
+        ) >= version.parse("2.0.4")
+    else:
+        return False
 
 
 def is_flash_attn_available():
