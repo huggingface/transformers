@@ -15,6 +15,7 @@
 
 
 import json
+import pathlib
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision, slow
@@ -32,6 +33,7 @@ if is_vision_available():
     from transformers import GroundingDINOImageProcessor
 
 
+# Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTester with DeformableDetr->GroundingDINO
 class GroundingDINOImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
@@ -126,6 +128,7 @@ class GroundingDINOImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
+# Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTest with DeformableDetr->GroundingDINO
 class GroundingDINOImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = GroundingDINOImageProcessor if is_vision_available() else None
 
@@ -194,6 +197,55 @@ class GroundingDINOImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
         # verify class_labels
         expected_class_labels = torch.tensor([75, 75, 63, 65, 17, 17])
         self.assertTrue(torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels))
+        # verify orig_size
+        expected_orig_size = torch.tensor([480, 640])
+        self.assertTrue(torch.allclose(encoding["labels"][0]["orig_size"], expected_orig_size))
+        # verify size
+        expected_size = torch.tensor([800, 1066])
+        self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
+
+    @slow
+    def test_call_pytorch_with_coco_panoptic_annotations(self):
+        # prepare image, target and masks_path
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:
+            target = json.loads(f.read())
+
+        target = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
+
+        masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
+
+        # encode them
+        image_processing = GroundingDINOImageProcessor(format="coco_panoptic")
+        encoding = image_processing(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
+
+        # verify pixel values
+        expected_shape = torch.Size([1, 3, 800, 1066])
+        self.assertEqual(encoding["pixel_values"].shape, expected_shape)
+
+        expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
+        self.assertTrue(torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-4))
+
+        # verify area
+        expected_area = torch.tensor([147979.6875, 165527.0469, 484638.5938, 11292.9375, 5879.6562, 7634.1147])
+        self.assertTrue(torch.allclose(encoding["labels"][0]["area"], expected_area))
+        # verify boxes
+        expected_boxes_shape = torch.Size([6, 4])
+        self.assertEqual(encoding["labels"][0]["boxes"].shape, expected_boxes_shape)
+        expected_boxes_slice = torch.tensor([0.2625, 0.5437, 0.4688, 0.8625])
+        self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"][0], expected_boxes_slice, atol=1e-3))
+        # verify image_id
+        expected_image_id = torch.tensor([39769])
+        self.assertTrue(torch.allclose(encoding["labels"][0]["image_id"], expected_image_id))
+        # verify is_crowd
+        expected_is_crowd = torch.tensor([0, 0, 0, 0, 0, 0])
+        self.assertTrue(torch.allclose(encoding["labels"][0]["iscrowd"], expected_is_crowd))
+        # verify class_labels
+        expected_class_labels = torch.tensor([17, 17, 63, 75, 75, 93])
+        self.assertTrue(torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels))
+        # verify masks
+        expected_masks_sum = 822873
+        self.assertEqual(encoding["labels"][0]["masks"].sum().item(), expected_masks_sum)
         # verify orig_size
         expected_orig_size = torch.tensor([480, 640])
         self.assertTrue(torch.allclose(encoding["labels"][0]["orig_size"], expected_orig_size))

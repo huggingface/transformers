@@ -77,18 +77,23 @@ class GroundingDINOProcessorTest(unittest.TestCase):
         with open(self.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
 
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_tokenizer with CLIP->Bert
     def get_tokenizer(self, **kwargs):
         return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_rust_tokenizer with CLIP->Bert
     def get_rust_tokenizer(self, **kwargs):
         return BertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_image_processor with CLIP->GroundingDINO
     def get_image_processor(self, **kwargs):
         return GroundingDINOImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.tearDown
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.prepare_image_inputs
     def prepare_image_inputs(self):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
         or a list of PyTorch tensors if one specifies torchify=True.
@@ -100,6 +105,7 @@ class GroundingDINOProcessorTest(unittest.TestCase):
 
         return image_inputs
 
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_save_load_pretrained_default with CLIP->GroundingDINO,GroundingDINOTokenizer->BertTokenizer
     def test_save_load_pretrained_default(self):
         tokenizer_slow = self.get_tokenizer()
         tokenizer_fast = self.get_rust_tokenizer()
@@ -124,6 +130,7 @@ class GroundingDINOProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor_slow.image_processor, GroundingDINOImageProcessor)
         self.assertIsInstance(processor_fast.image_processor, GroundingDINOImageProcessor)
 
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_save_load_pretrained_additional_features with CLIP->GroundingDINO,GroundingDINOTokenizer->BertTokenizer
     def test_save_load_pretrained_additional_features(self):
         processor = GroundingDINOProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
         processor.save_pretrained(self.tmpdirname)
@@ -141,6 +148,7 @@ class GroundingDINOProcessorTest(unittest.TestCase):
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, GroundingDINOImageProcessor)
 
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_image_processor with CLIP->GroundingDINO
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
@@ -155,6 +163,7 @@ class GroundingDINOProcessorTest(unittest.TestCase):
         for key in input_image_proc.keys():
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
 
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_tokenizer with CLIP->GroundingDINO
     def test_tokenizer(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
@@ -189,6 +198,7 @@ class GroundingDINOProcessorTest(unittest.TestCase):
         with pytest.raises(ValueError):
             processor()
 
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_tokenizer_decode with CLIP->GroundingDINO
     def test_tokenizer_decode(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
@@ -202,6 +212,7 @@ class GroundingDINOProcessorTest(unittest.TestCase):
 
         self.assertListEqual(decoded_tok, decoded_processor)
 
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_model_input_names with CLIP->GroundingDINO
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
