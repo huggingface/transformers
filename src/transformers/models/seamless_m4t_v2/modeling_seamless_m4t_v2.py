@@ -552,8 +552,8 @@ class SeamlessM4Tv2ConformerRelPositionalEmbedding(nn.Module):
         return relative_position_embeddings
 
 
-# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerFeatureProjection with SeamlessM4T->SeamlessM4Tv2
 class SeamlessM4Tv2ConformerFeatureProjection(nn.Module):
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerFeatureProjection.__init__
     def __init__(self, config):
         super().__init__()
         self.layer_norm = nn.LayerNorm(config.feature_projection_input_dim, eps=config.layer_norm_eps)
