@@ -27,7 +27,6 @@ import pytest
 
 import transformers
 from transformers import WhisperConfig
-from transformers.generation.logits_process import LogitsProcessor
 from transformers.testing_utils import (
     is_pt_flax_cross_test,
     require_flash_attn,
@@ -63,6 +62,7 @@ if is_torch_available():
         WhisperProcessor,
         set_seed,
     )
+    from transformers.generation.logits_process import LogitsProcessor
     from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder, sinusoids
 
     class DummyTimestampLogitProcessor(LogitsProcessor):
