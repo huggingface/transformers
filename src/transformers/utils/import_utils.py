@@ -621,7 +621,7 @@ def is_flash_attn_2_available():
         # fatal error: error in backend: Not supported instr: <MCInst 0 <MCOperand Reg:519> <MCOperand Reg:527> <MCOperand Expr:(.LBB2_3)> <MCOperand Reg:487> <MCOperand Expr:(.LBB2_-1)>>
         # clang-16: error: clang frontend command failed with exit code 70 (use -v to see invocation)
         # AMD clang version 16.0.0 (https://github.com/RadeonOpenCompute/llvm-project roc-5.6.1 23332 4f9bb99d78a4d8d9770be38b91ebd004ea4d2a3a)
-        rocm_version = torch.version.hip.split(".").join[:2]
+        rocm_version = ".".join(torch.version.hip.split(".")[:2])
         return version.parse(rocm_version) >= version.parse("5.7") and version.parse(
             importlib.metadata.version("flash_attn")
         ) >= version.parse("2.0.4")
