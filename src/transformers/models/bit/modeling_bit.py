@@ -883,8 +883,7 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
         hidden_states = outputs.hidden_states
 
         feature_maps = ()
-        for stage in self.out_features:
-            idx = self.stage_names.index(stage)
+        for idx in self.out_indices:
             feature_maps += (hidden_states[idx],)
 
         if not return_dict:

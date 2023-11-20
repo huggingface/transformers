@@ -858,9 +858,9 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
         hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         feature_maps = ()
-        for stage, hidden_state in zip(self.stage_names, hidden_states):
-            if stage in self.out_features:
-                feature_maps += (hidden_state,)
+        for stage in self.out_features:
+            idx = self.stage_names.index(stage)
+            feature_maps += (hidden_states[idx],)
 
         if not return_dict:
             if output_hidden_states:

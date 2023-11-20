@@ -535,10 +535,12 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
         hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         feature_maps = ()
-        for stage, hidden_state in zip(self.stage_names, hidden_states):
-            if stage in self.out_features:
-                hidden_state = self.hidden_states_norms[stage](hidden_state)
-                feature_maps += (hidden_state,)
+        for stage in self.out_features:
+            idx = self.stage_names.index(stage)
+            if idx == 0:
+                raise ValueError("The stem should not be returned as a feature map.")
+            hidden_state = self.hidden_states_norms[stage](hidden_states[idx])
+            feature_maps += (hidden_state,)
 
         if not return_dict:
             output = (feature_maps,)

@@ -934,16 +934,16 @@ class NatBackbone(NatPreTrainedModel, BackboneMixin):
         hidden_states = outputs.reshaped_hidden_states
 
         feature_maps = ()
-        for stage, hidden_state in zip(self.stage_names, hidden_states):
-            if stage in self.out_features:
-                # TODO can we simplify this?
-                batch_size, num_channels, height, width = hidden_state.shape
-                hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
-                hidden_state = hidden_state.view(batch_size, height * width, num_channels)
-                hidden_state = self.hidden_states_norms[stage](hidden_state)
-                hidden_state = hidden_state.view(batch_size, height, width, num_channels)
-                hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
-                feature_maps += (hidden_state,)
+        for stage in self.out_features:
+            idx = self.stage_names.index(stage)
+            hidden_state = hidden_states[idx]
+            batch_size, num_channels, height, width = hidden_state.shape
+            hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
+            hidden_state = hidden_state.view(batch_size, height * width, num_channels)
+            hidden_state = self.hidden_states_norms[stage](hidden_state)
+            hidden_state = hidden_state.view(batch_size, height, width, num_channels)
+            hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
+            feature_maps += (hidden_state,)
 
         if not return_dict:
             output = (feature_maps,)
