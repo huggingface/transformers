@@ -1,21 +1,11 @@
 name: Self-hosted runner AMD GPU (push)
 
 on:
-  workflow_run:
-    workflows: ["Self-hosted runner (push-caller)"]
-    branches: ["main"]
-    types: [completed]
-  push:
-    branches:
-      - ci_*
-      - ci-*
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/**"
-      - "templates/**"
-      - "utils/**"
-  repository_dispatch:
+  workflow_call:
+    inputs:
+      gpu_flavor:
+        required: true
+        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -29,7 +19,7 @@ env:
 jobs:
   check_runner_status:
     name: Check Runner Status
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout transformers
         uses: actions/checkout@v3
@@ -45,18 +35,19 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-        gpu_flavor: [mi210]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ matrix.gpu_flavor }}']
+    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
-      options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: ROCM-SMI
         run: |
-          rocminfo  | grep "Agent" -A 14
-      - name: Show HIP environment
+          rocm-smi
+      - name: ROCM-INFO
         run: |
-          echo "HIP: $HIP_VISIBLE_DEVICES"
+          rocminfo  | grep "Agent" -A 14
+      - name: Show ROCR environment
+        run: |
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
   setup_gpu:
@@ -65,11 +56,10 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-        gpu_flavor: [mi210]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ matrix.gpu_flavor }}']
+    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
-      options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       test_map: ${{ steps.set-matrix.outputs.test_map }}
@@ -164,11 +154,10 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup_gpu.outputs.matrix) }}
         machine_type: [single-gpu, multi-gpu]
-        gpu_flavor: [mi210]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ matrix.gpu_flavor }}']
+    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
-      options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
@@ -220,10 +209,12 @@ jobs:
 
       - name: ROCM-SMI
         run: |
-          rocminfo  | grep "Agent" -A 14
-      - name: Show HIP environment
+          rocm-smi
+      - name: ROCM-INFO
         run: |
-          echo "HIP: $HIP_VISIBLE_DEVICES"
+          rocminfo  | grep "Agent" -A 14
+      - name: Show ROCR environment
+        run: |
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
@@ -254,7 +245,7 @@ jobs:
 
   send_results:
     name: Send results to webhook
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: always()
     needs: [
         check_runner_status,
@@ -321,7 +312,7 @@ jobs:
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_AMD }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-          CI_EVENT: push
+          CI_EVENT: Push CI (AMD) - ${{ inputs.gpu_flavor }}
           CI_TITLE_PUSH: ${{ github.event.head_commit.message }}
           CI_TITLE_WORKFLOW_RUN: ${{ github.event.workflow_run.head_commit.message }}
           CI_SHA: ${{ env.CI_SHA }}

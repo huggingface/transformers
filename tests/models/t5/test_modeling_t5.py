@@ -891,6 +891,10 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     def test_disk_offload(self):
         pass
 
+    @unittest.skip("Does not support conversations.")
+    def test_pipeline_conversational(self):
+        pass
+
 
 class T5EncoderOnlyModelTester:
     def __init__(
@@ -1031,6 +1035,10 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
+
+    @unittest.skip("Test does not fail individually but fails on the CI @ArthurZucker looking into it")
+    def test_assisted_decoding_sample(self):
+        pass
 
 
 def use_task_specific_params(model, task):

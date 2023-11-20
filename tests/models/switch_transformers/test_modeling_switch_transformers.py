@@ -19,7 +19,14 @@ import tempfile
 import unittest
 
 from transformers import SwitchTransformersConfig, is_torch_available
-from transformers.testing_utils import require_tokenizers, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_tokenizers,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_bf16,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -719,6 +726,10 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     def test_disk_offload(self):
         pass
 
+    @unittest.skip("Test does not fail individually but fails on the CI @ArthurZucker looking into it")
+    def test_assisted_decoding_sample(self):
+        pass
+
 
 class SwitchTransformersEncoderOnlyModelTester:
     def __init__(
@@ -894,6 +905,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
     Original implementation of the routers here:
 
     """
+
     config = SwitchTransformersConfig(
         num_experts=2,
         hidden_size=8,
@@ -1017,7 +1029,8 @@ class SwitchTransformerRouterTest(unittest.TestCase):
 @require_torch
 @require_tokenizers
 class SwitchTransformerModelIntegrationTests(unittest.TestCase):
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_torch_bf16
     def test_small_logits(self):
         r"""
         Logits testing to check implementation consistency between `t5x` implementation

@@ -1,4 +1,5 @@
-tensorflow<2.15
+tensorflow<2.16
+keras<2.16
 tensorboard
 scikit-learn
 seqeval

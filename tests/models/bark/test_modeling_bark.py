@@ -20,6 +20,8 @@ import inspect
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import (
     BarkCoarseConfig,
     BarkConfig,
@@ -32,7 +34,14 @@ from transformers.models.bark.generation_configuration_bark import (
     BarkFineGenerationConfig,
     BarkSemanticGenerationConfig,
 )
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_flash_attn,
+    require_torch,
+    require_torch_fp16,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -570,13 +579,13 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = self.all_generative_model_classes[0](config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -636,13 +645,13 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = self.all_generative_model_classes[0](config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -700,14 +709,14 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         # take first codebook channel
 
         model = self.all_model_classes[0](config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
 
         # toy generation_configs
         semantic_generation_config = BarkSemanticGenerationConfig(semantic_vocab_size=0)
@@ -866,6 +875,122 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
+                )
+                model.to(torch_device)
+
+                dummy_input = inputs_dict["input_ids"][:1]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
+
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    dummy_attention_mask[:, 1:] = 1
+                    dummy_attention_mask[:, :1] = 0
+
+                outputs = model(inputs_dict["codebook_idx"], dummy_input, output_hidden_states=True)
+                outputs_fa = model_fa(inputs_dict["codebook_idx"], dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+                other_inputs = {"output_hidden_states": True}
+                if dummy_attention_mask is not None:
+                    other_inputs["attention_mask"] = dummy_attention_mask
+
+                outputs = model(inputs_dict["codebook_idx"], dummy_input, **other_inputs)
+                outputs_fa = model_fa(inputs_dict["codebook_idx"], dummy_input, **other_inputs)
+
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
+
+                assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
+
+                # check with inference + dropout
+                model.train()
+                _ = model_fa(inputs_dict["codebook_idx"], dummy_input, **other_inputs)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference_padding_right(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
+                )
+                model.to(torch_device)
+
+                dummy_input = inputs_dict["input_ids"][:1]
+                if dummy_input.dtype in [torch.float32, torch.float16]:
+                    dummy_input = dummy_input.to(torch.bfloat16)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
+
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    dummy_attention_mask[:, :-1] = 1
+                    dummy_attention_mask[:, -1:] = 0
+
+                outputs = model(inputs_dict["codebook_idx"], dummy_input, output_hidden_states=True)
+                outputs_fa = model_fa(inputs_dict["codebook_idx"], dummy_input, output_hidden_states=True)
+
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
+
+                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
+
+                other_inputs = {
+                    "output_hidden_states": True,
+                }
+                if dummy_attention_mask is not None:
+                    other_inputs["attention_mask"] = dummy_attention_mask
+
+                outputs = model(inputs_dict["codebook_idx"], dummy_input, **other_inputs)
+                outputs_fa = model_fa(inputs_dict["codebook_idx"], dummy_input, **other_inputs)
+
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
+
+                assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
+
 
 @require_torch
 class BarkModelIntegrationTests(unittest.TestCase):
@@ -904,10 +1029,8 @@ class BarkModelIntegrationTests(unittest.TestCase):
     def test_generate_semantic(self):
         input_ids = self.inputs
 
-        # fmt: off
         # check first ids
-        expected_output_ids = [7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927,]
-        # fmt: on
+        expected_output_ids = [7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927,]  # fmt: skip
 
         # greedy decoding
         with torch.no_grad():
@@ -917,7 +1040,49 @@ class BarkModelIntegrationTests(unittest.TestCase):
                 temperature=1.0,
                 semantic_generation_config=self.semantic_generation_config,
             )
+        self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
+    @slow
+    def test_generate_semantic_early_stop(self):
+        input_ids = self.inputs
+        min_eos_p = 0.01
+
+        # check first ids
+        expected_output_ids = [7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927,]  # fmt: skip
+
+        # Should be able to read min_eos_p from kwargs
+        with torch.no_grad():
+            torch.manual_seed(0)
+            output_ids_without_min_eos_p = self.model.semantic.generate(
+                **input_ids,
+                do_sample=False,
+                temperature=0.9,
+                semantic_generation_config=self.semantic_generation_config,
+            )
+            torch.manual_seed(0)
+            output_ids_kwargs = self.model.semantic.generate(
+                **input_ids,
+                do_sample=False,
+                temperature=0.9,
+                semantic_generation_config=self.semantic_generation_config,
+                min_eos_p=min_eos_p,
+            )
+        self.assertListEqual(output_ids_without_min_eos_p[0, : len(expected_output_ids)].tolist(), expected_output_ids)
+        self.assertLess(len(output_ids_kwargs[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist()))
+
+        # Should be able to read min_eos_p from the semantic generation config
+        self.semantic_generation_config.min_eos_p = min_eos_p
+        with torch.no_grad():
+            torch.manual_seed(0)
+            output_ids = self.model.semantic.generate(
+                **input_ids,
+                do_sample=False,
+                temperature=0.9,
+                semantic_generation_config=self.semantic_generation_config,
+            )
+
+        self.assertEqual(output_ids.shape, output_ids_kwargs.shape)
+        self.assertLess(len(output_ids[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist()))
         self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
     @slow
@@ -926,10 +1091,8 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
         history_prompt = input_ids["history_prompt"]
 
-        # fmt: off
         # check first ids
-        expected_output_ids = [11018, 11391, 10651, 11418, 10857, 11620, 10642, 11366, 10312, 11528, 10531, 11516, 10474, 11051, 10524, 11051, ]
-        # fmt: on
+        expected_output_ids = [11018, 11391, 10651, 11418, 10857, 11620, 10642, 11366, 10312, 11528, 10531, 11516, 10474, 11051, 10524, 11051, ]  # fmt: skip
 
         with torch.no_grad():
             output_ids = self.model.semantic.generate(
@@ -1018,30 +1181,65 @@ class BarkModelIntegrationTests(unittest.TestCase):
             self.model.generate(**input_ids, do_sample=True, temperature=0.6, num_beams=4)
 
     @slow
+    def test_generate_batching(self):
+        args = {"do_sample": False, "temperature": None}
+
+        s1 = "I love HuggingFace"
+        s2 = "In the light of the moon, a little egg lay on a leaf"
+        voice_preset = "en_speaker_6"
+        input_ids = self.processor([s1, s2], voice_preset=voice_preset).to(torch_device)
+
+        # generate in batch
+        outputs, audio_lengths = self.model.generate(**input_ids, **args, return_output_lengths=True)
+
+        # generate one-by-one
+        s1 = self.processor(s1, voice_preset=voice_preset).to(torch_device)
+        s2 = self.processor(s2, voice_preset=voice_preset).to(torch_device)
+        output1 = self.model.generate(**s1, **args)
+        output2 = self.model.generate(**s2, **args)
+
+        # up until the coarse acoustic model (included), results are the same
+        # the fine acoustic model introduces small differences
+        # first verify if same length (should be the same because it's decided in the coarse model)
+        self.assertEqual(tuple(audio_lengths), (output1.shape[1], output2.shape[1]))
+
+        # then assert almost equal
+        self.assertTrue(torch.allclose(outputs[0, : audio_lengths[0]], output1.squeeze(), atol=2e-3))
+        self.assertTrue(torch.allclose(outputs[1, : audio_lengths[1]], output2.squeeze(), atol=2e-3))
+
+        # now test single input with return_output_lengths = True
+        outputs, _ = self.model.generate(**s1, **args, return_output_lengths=True)
+        self.assertTrue((outputs == output1).all().item())
+
+    @slow
     def test_generate_end_to_end_with_sub_models_args(self):
         input_ids = self.inputs
 
         with torch.no_grad():
+            torch.manual_seed(0)
             self.model.generate(
                 **input_ids, do_sample=False, temperature=1.0, coarse_do_sample=True, coarse_temperature=0.7
             )
-            self.model.generate(
+            output_ids_without_min_eos_p = self.model.generate(
                 **input_ids,
-                do_sample=False,
-                temperature=1.0,
+                do_sample=True,
+                temperature=0.9,
                 coarse_do_sample=True,
                 coarse_temperature=0.7,
                 fine_temperature=0.3,
             )
-            self.model.generate(
+
+            output_ids_with_min_eos_p = self.model.generate(
                 **input_ids,
                 do_sample=True,
-                temperature=0.6,
-                penalty_alpha=0.6,
-                semantic_temperature=0.9,
-                coarse_temperature=0.2,
-                fine_temperature=0.1,
+                temperature=0.9,
+                coarse_temperature=0.7,
+                fine_temperature=0.3,
+                min_eos_p=0.1,
             )
+        self.assertLess(
+            len(output_ids_with_min_eos_p[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist())
+        )
 
     @require_torch_gpu
     @slow

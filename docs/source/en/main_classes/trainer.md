@@ -18,6 +18,12 @@ rendered properly in your Markdown viewer.
 
 The [`Trainer`] class provides an API for feature-complete training in PyTorch for most standard use cases. It's used in most of the [example scripts](https://github.com/huggingface/transformers/tree/main/examples).
 
+<Tip>
+
+If you're looking to fine-tune a language model like Llama-2 or Mistral on a text dataset using autoregressive techniques, consider using [`trl`](https://github.com/huggingface/trl)'s [`~trl.SFTTrainer`]. The [`~trl.SFTTrainer`] wraps the [`Trainer`] and is specially optimized for this particular task and supports sequence packing, LoRA, quantization, and DeepSpeed for efficient scaling to any model size. On the other hand, the [`Trainer`] is a more versatile option, suitable for a broader spectrum of tasks.
+
+</Tip>
+
 Before instantiating your [`Trainer`], create a [`TrainingArguments`] to access all the points of customization during training.
 
 The API supports distributed training on multiple GPUs/TPUs, mixed precision through [NVIDIA Apex](https://github.com/NVIDIA/apex) and Native AMP for PyTorch.
@@ -204,6 +210,7 @@ python -m torch.distributed.launch --nproc_per_node=2  trainer-program.py ...
 ```
 
 if you have either [`accelerate`](https://github.com/huggingface/accelerate) or [`deepspeed`](https://github.com/microsoft/DeepSpeed) installed you can also accomplish the same by using one of:
+
 ```bash
 accelerate launch --num_processes 2 trainer-program.py ...
 ```
@@ -212,7 +219,7 @@ accelerate launch --num_processes 2 trainer-program.py ...
 deepspeed --num_gpus 2 trainer-program.py ...
 ```
 
-You don't need to use the Accelerate or [the Deepspeed integration](Deepspeed) features to use these launchers.
+You don't need to use the Accelerate or [the Deepspeed integration](deepspeed) features to use these launchers.
 
 
 Until now you were able to tell the program how many GPUs to use. Now let's discuss how to select specific GPUs and control their order.
@@ -240,6 +247,7 @@ CUDA_VISIBLE_DEVICES=2,0 python -m torch.distributed.launch trainer-program.py .
 Here your physical GPUs 0 and 2 are mapped to `cuda:1` and `cuda:0` correspondingly.
 
 The above examples were all for `DistributedDataParallel` use pattern, but the same method works for [`DataParallel`](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html) as well:
+
 ```bash
 CUDA_VISIBLE_DEVICES=2,0 python trainer-program.py ...
 ```
@@ -732,3 +740,27 @@ Sections that were moved:
 | <a href="./deepspeed#deepspeed-grad-clip">Gradient Clipping</a><a id="gradient-clipping"></a>
 | <a href="./deepspeed#deepspeed-weight-extraction">Getting The Model Weights Out</a><a id="getting-the-model-weights-out"></a>
 ]
+
+## Boost your fine-tuning performances using NEFTune
+
+
+NEFTune is a technique to boost the performance of chat models and was introduced by the paper “NEFTune: Noisy Embeddings Improve Instruction Finetuning” from Jain et al. it consists of adding noise to the embedding vectors during training. According to the abstract of the paper:
+
+> Standard finetuning of LLaMA-2-7B using Alpaca achieves 29.79% on AlpacaEval, which rises to 64.69% using noisy embeddings. NEFTune also improves over strong baselines on modern instruction datasets. Models trained with Evol-Instruct see a 10% improvement, with ShareGPT an 8% improvement, and with OpenPlatypus an 8% improvement. Even powerful models further refined with RLHF such as LLaMA-2-Chat benefit from additional training with NEFTune.
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/trl-internal-testing/example-images/resolve/main/images/neft-screenshot.png">
+</div>
+
+To use it in `Trainer` simply pass `neftune_noise_alpha` when creating your `TrainingArguments` instance. Note that to avoid any surprising behaviour, NEFTune is disabled after training to retrieve back the original behaviour of the embedding layer.
+
+```python
+from transformers import Trainer, TrainingArguments
+
+args = TrainingArguments(..., neftune_noise_alpha=0.1)
+trainer = Trainer(..., args=args)
+
+...
+
+trainer.train()
+```
