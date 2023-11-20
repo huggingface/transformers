@@ -1175,7 +1175,9 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
 
         # assert mean and std equality - higher tolerance for speech
-        self.assertListAlmostEqual([-0.00028, 0.0742286], [output.waveform.mean().item(), output.waveform.std().item()], tol=5e-4)
+        self.assertListAlmostEqual(
+            [-0.00028, 0.0742286], [output.waveform.mean().item(), output.waveform.std().item()], tol=5e-4
+        )
 
     @slow
     def test_text_to_text_model(self):
