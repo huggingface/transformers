@@ -1222,6 +1222,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
     ... )
 
     >>> last_hidden_state = outputs.last_hidden_state
+    ```
     """
 
     def __init__(self, config: PatchTSTConfig):
@@ -1384,6 +1385,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
 
     >>> loss = outputs.loss
     >>> loss.backward()
+    ```
     """
 
     def __init__(self, config: PatchTSTConfig):
@@ -1516,6 +1518,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
     >>> past_values = torch.randn(20, 512, 2)
     >>> outputs = model(past_values=past_values)
     >>> labels = outputs.prediction_logits
+    ```
     """
 
     def __init__(self, config: PatchTSTConfig):
@@ -1723,6 +1726,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
     ... )
 
     >>> mean_prediction = outputs.sequences.mean(dim=1)
+    ```
     """
 
     def __init__(self, config: PatchTSTConfig):
@@ -1958,6 +1962,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
     ... )
 
     >>> mean_prediction = outputs.sequences.mean(dim=1)
+    ```
     """
 
     def __init__(self, config: PatchTSTConfig):
