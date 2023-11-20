@@ -19,7 +19,7 @@ import numpy as np
 from huggingface_hub import HfFolder, delete_repo, snapshot_download
 from requests.exceptions import HTTPError
 
-from transformers import BertConfig, BertModel, is_flax_available, is_torch_available
+from transformers import BertConfig, BertModel, is_flax_available
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -251,7 +251,6 @@ class FlaxModelUtilsTest(unittest.TestCase):
 
         self.assertTrue(check_models_equal(flax_model, safetensors_model))
 
-    @require_torch
     @require_safetensors
     @is_pt_flax_cross_test
     def test_safetensors_load_from_hub_from_safetensors_pt(self):
@@ -265,7 +264,6 @@ class FlaxModelUtilsTest(unittest.TestCase):
         safetensors_model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors")
         self.assertTrue(check_models_equal(flax_model, safetensors_model))
 
-    @require_torch
     @require_safetensors
     @is_pt_flax_cross_test
     def test_safetensors_load_from_local_from_safetensors_pt(self):
@@ -283,39 +281,6 @@ class FlaxModelUtilsTest(unittest.TestCase):
             safetensors_model = FlaxBertModel.from_pretrained(location)
 
         self.assertTrue(check_models_equal(flax_model, safetensors_model))
-
-    @require_safetensors
-    def test_safetensors_load_from_hub_from_safetensors_pt_without_torch_installed(self):
-        """
-        This test checks that we cannot load safetensors from a checkpoint that only has safetensors
-        saved in the "pt" format if torch isn't installed.
-        """
-        if is_torch_available():
-            # This test verifies that a correct error message is shown when loading from a pt safetensors
-            # PyTorch shouldn't be installed for this to work correctly.
-            return
-
-        # Cannot load from the PyTorch-formatted checkpoint without PyTorch installed
-        with self.assertRaises(ModuleNotFoundError):
-            _ = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors")
-
-    @require_safetensors
-    def test_safetensors_load_from_local_from_safetensors_pt_without_torch_installed(self):
-        """
-        This test checks that we cannot load safetensors from a checkpoint that only has safetensors
-        saved in the "pt" format if torch isn't installed.
-        """
-        if is_torch_available():
-            # This test verifies that a correct error message is shown when loading from a pt safetensors
-            # PyTorch shouldn't be installed for this to work correctly.
-            return
-
-        with tempfile.TemporaryDirectory() as tmp:
-            location = snapshot_download("hf-internal-testing/tiny-bert-pt-safetensors", cache_dir=tmp)
-
-            # Cannot load from the PyTorch-formatted checkpoint without PyTorch installed
-            with self.assertRaises(ModuleNotFoundError):
-                _ = FlaxBertModel.from_pretrained(location)
 
     @require_safetensors
     def test_safetensors_load_from_hub_msgpack_before_safetensors(self):
