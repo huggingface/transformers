@@ -97,12 +97,12 @@ class SiglipProcessor(ProcessorMixin):
             return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Siglip, T5->Siglip
-    def batch_decode(self, *args, **kwargs):
+    def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to SiglipTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
+        This method forwards all its arguments to SiglipTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
         """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+        return self.tokenizer.decode(*args, **kwargs)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Siglip, T5->Siglip
     def batch_decode(self, *args, **kwargs):
@@ -114,9 +114,7 @@ class SiglipProcessor(ProcessorMixin):
 
     @property
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->Siglip, T5->Siglip
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to SiglipTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))

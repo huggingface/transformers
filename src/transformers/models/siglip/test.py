@@ -1,5 +1,6 @@
 from transformers import SiglipTokenizer
 
+
 tokenizer = SiglipTokenizer(vocab_file="/Users/nielsrogge/Documents/SigLIP/sentencepiece.model", model_max_length=2)
 
 print(tokenizer.eos_token_id)

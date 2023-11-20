@@ -29,7 +29,7 @@ from huggingface_hub import hf_hub_download
 from numpy import load
 from PIL import Image
 
-from transformers import SiglipConfig, SiglipImageProcessor, SiglipModel, SiglipTokenizer
+from transformers import SiglipConfig, SiglipImageProcessor, SiglipModel, SiglipProcessor, SiglipTokenizer
 from transformers.utils import logging
 
 
@@ -237,34 +237,29 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
 
     print("Original temperature:", data["params/t"])
 
-    # create image processor
+    # create processor image processor
     image_processor = SiglipImageProcessor()
+    tokenizer = SiglipTokenizer(vocab_file=vocab_file)
+    processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
+
+    # verify on dummy images and texts
     url_1 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-ipod.jpg"
     image_1 = Image.open(requests.get(url_1, stream=True).raw).convert("RGB")
     url_2 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-blank.jpg"
     image_2 = Image.open(requests.get(url_2, stream=True).raw).convert("RGB")
-    # preprocess images
-    pixel_values = image_processor(images=[image_1, image_2], return_tensors="pt").pixel_values
-
-    print("First values of pixel values:", pixel_values[0, 0, :3, :3])
-
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_pixel_values.pt", repo_type="dataset")
-    original_pixel_values = torch.load(filepath)
-
-    print("First values of original pixel values:", original_pixel_values[0, 0, :3, :3])
-
-    # create tokenizer
-    tokenizer = SiglipTokenizer(vocab_file=vocab_file)
     texts = ["an apple", "a picture of an apple"]
-    input_ids = tokenizer(texts, return_tensors="pt", padding="max_length").input_ids
+
+    inputs = processor(images=[image_1, image_2], text=texts, return_tensors="pt", padding="max_length")
 
     # verify input_ids against original ones
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_pixel_values.pt", repo_type="dataset")
+    original_pixel_values = torch.load(filepath)
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_input_ids.pt", repo_type="dataset")
     original_input_ids = torch.load(filepath)
-    assert input_ids.tolist() == original_input_ids.tolist()
+    assert inputs.input_ids.tolist() == original_input_ids.tolist()
 
     with torch.no_grad():
-        outputs = model(input_ids=input_ids, pixel_values=original_pixel_values)
+        outputs = model(input_ids=inputs.input_ids, pixel_values=original_pixel_values)
 
     print("Logits per image:", outputs.logits_per_image[:3, :3])
 
@@ -279,12 +274,12 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # print(f"Saving processor to {pytorch_dump_folder_path}")
-        # processor.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving processor to {pytorch_dump_folder_path}")
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         model.push_to_hub(f"nielsr/{model_name}")
-        # processor.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
