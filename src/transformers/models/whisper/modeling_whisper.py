@@ -2564,7 +2564,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
         >>> predicted_ids = model.generate(input_features, assistant_model=assistant_model)
 
         >>> # decode token ids to text
-        >>> transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
+        >>> transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
         >>> transcription
         ' Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.'
         ```"""
