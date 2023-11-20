@@ -822,38 +822,6 @@ class PatchTSMixerPretrainHead(nn.Module):
         return forecast
 
 
-# Copied from transformers.models.patchtst.modeling_patchtst.positional_encoding
-def positional_encoding(positional_encoding_type, learned, q_len, d_model):
-    # Positional encoding
-    if positional_encoding_type is None:
-        # positional_encoding_type = None and learned = False can be used to measure impact of positional encoding
-        position_enc = torch.empty((q_len, d_model))
-        nn.init.uniform_(position_enc, -0.02, 0.02)
-        learned = False
-    elif positional_encoding_type == "zeros":
-        position_enc = torch.empty((q_len, d_model))
-        nn.init.uniform_(position_enc, -0.02, 0.02)
-    elif positional_encoding_type == "normal":
-        position_enc = torch.zeros((q_len, 1))
-        nn.init.normal_(position_enc, mean=0.0, std=0.1)
-    elif positional_encoding_type == "uniform":
-        position_enc = torch.zeros((q_len, 1))
-        nn.init.uniform_(position_enc, a=0.0, b=0.1)
-    elif positional_encoding_type == "sincos":
-        position_enc = torch.zeros(q_len, d_model)
-        position = torch.arange(0, q_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model))
-        position_enc[:, 0::2] = torch.sin(position * div_term)
-        position_enc[:, 1::2] = torch.cos(position * div_term)
-        position_enc = position_enc - position_enc.mean()
-        position_enc = position_enc / (position_enc.std() * 10)
-    else:
-        raise ValueError(
-            f"{positional_encoding_type} is not a valid positional encoder. Available types are 'normal', 'zeros', 'zero', uniform', 'sincos', None."
-        )
-    return nn.Parameter(position_enc, requires_grad=learned)
-
-
 # Copied from transformers.models.patchtst.modeling_patchtst.random_masking
 def random_masking(
     inputs: torch.Tensor,
