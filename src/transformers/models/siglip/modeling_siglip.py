@@ -949,8 +949,8 @@ class SiglipModel(SiglipPreTrainedModel):
         text_config = config.text_config
         vision_config = config.vision_config
 
-        self.text_model = SiglipTextModel(text_config)
-        self.vision_model = SiglipVisionModel(vision_config)
+        self.text_model = SiglipTextTransformer(text_config)
+        self.vision_model = SiglipVisionTransformer(vision_config)
 
         self.temperature = nn.Parameter(
             torch.randn(
@@ -1127,20 +1127,11 @@ class SiglipModel(SiglipPreTrainedModel):
         image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
-        print("Normalized image embeds:", image_embeds[0, :3])
-        print("Normalized text embeds:", text_embeds[0, :3])
-
         # cosine similarity as logits
         logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * self.temperature.exp() + self.bias
         logits_per_image = logits_per_text.t()
 
-        print("Learned temperature:", self.temperature)
-        print("Learned bias:", self.bias)
-
         z = torch.matmul(image_embeds, text_embeds.t()) * self.temperature.exp()
-        print("Multiplying by temperature:", z[:3, :3])
-
-        print("Logits per image:", logits_per_image[:3, :3])
 
         loss = None
         if return_loss:
