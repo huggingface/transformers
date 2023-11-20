@@ -724,6 +724,10 @@ class FalconDecoderLayer(nn.Module):
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
 
+        num_kv_heads = config.num_kv_heads if (config.new_decoder_architecture or not config.multi_query) else 1
+        if getattr(config, "_flash_attn_2_enabled", False) and not (config.new_decoder_architecture or config.num_attention_heads == num_kv_heads) and torch.version.hip:
+            raise ValueError("The Falcon model being used uses multi-query attention or grouped-query attention, which is not supported by Flash Attention 2 on RoCm devices. Please use use_flash_attention_2=False.")
+
         self.self_attention = (
             FalconAttention(config)
             if not getattr(config, "_flash_attn_2_enabled", False)
