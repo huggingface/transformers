@@ -4545,10 +4545,21 @@ class GenerationMixin:
         # prepare assistant model's keys of inputs
         assistant_kwargs = copy.copy(model_kwargs)
         if assistant_model.config.is_encoder_decoder:
+            # both are encoder-decoder
             input_ids_key = "decoder_input_ids"
             attention_key = "decoder_attention_mask"
             assistant_kwargs["encoder_outputs"] = assistant_kwargs.pop("assistant_encoder_outputs")
+        elif "assistant_encoder_outputs" in assistant_kwargs:
+            # special case for encoder-decoder with decoder-only assistant (like DistilWhisper)
+            input_ids_key = "input_ids"
+            attention_key = "attention_mask"
+            assistant_kwargs["attention_mask"] = assistant_kwargs.get(
+                "decoder_attention_mask",
+                torch.ones((input_ids.shape[0], 1), device=input_ids.device, dtype=torch.long),
+            )
+            assistant_kwargs["encoder_outputs"] = assistant_kwargs.pop("assistant_encoder_outputs")
         else:
+            # both are decoder-only
             input_ids_key = "input_ids"
             attention_key = "attention_mask"
 
@@ -4625,8 +4636,10 @@ class GenerationMixin:
 
             # 2.1. Prepare the model inputs
             candidate_kwargs = copy.copy(model_kwargs)
-            candidate_kwargs = self._extend_attention_mask(candidate_kwargs, candidate_input_ids.shape[1])
-            candidate_kwargs = self._extend_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
+            candidate_kwargs = _prepare_attention_mask(
+                candidate_kwargs, candidate_input_ids.shape[1], self.config.is_encoder_decoder
+            )
+            candidate_kwargs = _prepare_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
 
             model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
 
@@ -4741,13 +4754,10 @@ class GenerationMixin:
             )
 
             # Update assistant_kwargs for the assistant's next round of generations
-            if n_matches > 0:
-                model_kwargs = self._extend_attention_mask(model_kwargs, new_cur_len)
-                model_kwargs = self._extend_token_type_ids(model_kwargs, new_cur_len)
-            if attention_key in assistant_kwargs:
-                assistant_kwargs[attention_key] = model_kwargs.get(attention_key, None)
-            if "token_type_ids" in assistant_kwargs:
-                assistant_kwargs["token_type_ids"] = model_kwargs.get("token_type_ids", None)
+            assistant_kwargs = _prepare_attention_mask(
+                assistant_kwargs, new_cur_len, assistant_model.config.is_encoder_decoder
+            )
+            assistant_kwargs = _prepare_token_type_ids(assistant_kwargs, new_cur_len)
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id_tensor is not None:
@@ -4926,3 +4936,37 @@ def _ranking_fast(
     contrastive_score = torch.stack(torch.split(contrastive_score, beam_width))  # [B, K]
     _, selected_idx = contrastive_score.max(dim=-1)  # [B]
     return selected_idx
+
+
+def _prepare_attention_mask(model_kwargs: Dict[str, Any], new_length: int, is_encoder_decoder: bool) -> Dict[str, Any]:
+    """Expands or crops the model's mask for decoding purposes, to the defined length"""
+
+    mask_key = "decoder_attention_mask" if is_encoder_decoder else "attention_mask"
+    if mask_key not in model_kwargs:
+        return model_kwargs
+
+    mask = model_kwargs[mask_key]
+    mask_length_diff = new_length - mask.shape[1]
+
+    if mask_length_diff < 0:
+        model_kwargs[mask_key] = mask[:, :mask_length_diff]
+    elif mask_length_diff > 0:
+        model_kwargs[mask_key] = torch.cat([mask, mask.new_ones((mask.shape[0], mask_length_diff))], dim=-1)
+    return model_kwargs
+
+
+def _prepare_token_type_ids(model_kwargs: Dict[str, Any], new_length: int) -> Dict[str, Any]:
+    """Expands or crops the model's token_type_ids for decoding purposes, to the defined length"""
+    if "token_type_ids" not in model_kwargs or model_kwargs["token_type_ids"] is None:
+        return model_kwargs
+
+    token_type_ids = model_kwargs["token_type_ids"]
+    final_token_type = token_type_ids[:, -1].unsqueeze(-1)
+    type_length_diff = new_length - token_type_ids.shape[1]
+
+    if type_length_diff < 0:
+        token_type_ids = token_type_ids[:, :type_length_diff]
+    elif type_length_diff > 0:
+        token_type_copies = final_token_type.repeat(1, type_length_diff)
+        model_kwargs["token_type_ids"] = torch.cat([model_kwargs["token_type_ids"], token_type_copies], dim=-1)
+    return model_kwargs
