@@ -183,7 +183,7 @@ SEAMLESS_M4T_V2_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-SEAMLESS_M4T_V2_INPUTS_DOCSTRING_FIRST_PART = r"""
+SEAMLESS_M4T_V2_MULTIMODAL_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary.
@@ -197,7 +197,7 @@ SEAMLESS_M4T_V2_INPUTS_DOCSTRING_FIRST_PART = r"""
             [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
     """
 
-SEAMLESS_M4T_V2_INPUTS_DOCSTRING_TEXT_PART = r"""
+M4T_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary.
@@ -208,14 +208,14 @@ SEAMLESS_M4T_V2_INPUTS_DOCSTRING_TEXT_PART = r"""
             [What are input IDs?](../glossary#input-ids)
         """
 
-SEAMLESS_M4T_V2_INPUTS_DOCSTRING_SPEECH_PART = r"""
+M4T_SPEECH_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
             Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
             [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
         """
 
-SEAMLESS_M4T_V2_INPUTS_DOCSTRING_LAST_PART = r"""
+SEAMLESS_M4T_V2_END_INPUTS_DOCSTRING = r"""
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -307,13 +307,13 @@ SEAMLESS_M4T_V2_INPUTS_DOCSTRING_LAST_PART = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-M4T_MODEL_INPUTS_DOCSTRING = SEAMLESS_M4T_V2_INPUTS_DOCSTRING_FIRST_PART + SEAMLESS_M4T_V2_INPUTS_DOCSTRING_LAST_PART
+M4T_MODEL_INPUTS_DOCSTRING = SEAMLESS_M4T_V2_MULTIMODAL_INPUTS_DOCSTRING + SEAMLESS_M4T_V2_END_INPUTS_DOCSTRING
 
-M4T_TEXT_INPUTS_DOCSTRING = SEAMLESS_M4T_V2_INPUTS_DOCSTRING_TEXT_PART + SEAMLESS_M4T_V2_INPUTS_DOCSTRING_LAST_PART
+M4T_TEXT_INPUTS_DOCSTRING = M4T_TEXT_INPUTS_DOCSTRING + SEAMLESS_M4T_V2_END_INPUTS_DOCSTRING
 
-M4T_SPEECH_INPUTS_DOCSTRING = SEAMLESS_M4T_V2_INPUTS_DOCSTRING_SPEECH_PART + SEAMLESS_M4T_V2_INPUTS_DOCSTRING_LAST_PART
+M4T_SPEECH_INPUTS_DOCSTRING = M4T_SPEECH_INPUTS_DOCSTRING + SEAMLESS_M4T_V2_END_INPUTS_DOCSTRING
 
-M4T_T2U_INPUTS_DOCSTRING = r"""
+M4T_TEXT_TO_UNITS_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary.
@@ -2624,7 +2624,7 @@ class SeamlessM4Tv2TextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrainedMod
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(M4T_T2U_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(M4T_TEXT_TO_UNITS_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
