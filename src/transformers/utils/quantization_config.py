@@ -543,11 +543,11 @@ class AwqConfig(QuantizationConfigMixin):
         backend (`AwqBackendPackingMethod`, *optional*, defaults to `AwqBackendPackingMethod.AUTOAWQ`):
             The quantization backend. Some models might be quantized using `llm-awq` backend. This is useful for users
             that quantize their own models using `llm-awq` library.
-        fuse_modules (`bool`, *optional*, defaults to `False`):
+        do_fuse (`bool`, *optional*, defaults to `False`):
             Whether to fuse attention and mlp layers together for faster inference
         fuse_max_seq_len (`int`, *optional*):
             The Maximum sequence length to generate when using fusing.
-        fusing_mapping (`dict`, *optional*, default to `None`):
+        modules_to_fuse (`dict`, *optional*, default to `None`):
             Overwrite the natively supported fusing scheme with the one specified by the users.
     """
 
@@ -558,9 +558,9 @@ class AwqConfig(QuantizationConfigMixin):
         zero_point: bool = True,
         version: AWQLinearVersion = AWQLinearVersion.GEMM,
         backend: AwqBackendPackingMethod = AwqBackendPackingMethod.AUTOAWQ,
-        fuse_modules: Optional[bool] = False,
+        do_fuse: Optional[bool] = False,
         fuse_max_seq_len: Optional[int] = None,
-        fusing_mapping: Optional[dict] = None,
+        modules_to_fuse: Optional[dict] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AWQ
@@ -570,9 +570,9 @@ class AwqConfig(QuantizationConfigMixin):
         self.zero_point = zero_point
         self.version = version
         self.backend = backend
-        self.fuse_modules = fuse_modules
+        self.do_fuse = do_fuse
         self.fuse_max_seq_len = fuse_max_seq_len
-        self.fusing_mapping = fusing_mapping
+        self.modules_to_fuse = modules_to_fuse
 
         self.post_init()
 
@@ -605,9 +605,9 @@ class AwqConfig(QuantizationConfigMixin):
                 "You cannot enable fused modules without specifying a `fuse_max_seq_len`, make sure to pass a valid `fuse_max_seq_len` for your usecase"
             )
 
-        if self.is_using_fused_modules and self.fusing_mapping is not None:
+        if self.is_using_fused_modules and self.modules_to_fuse is not None:
             required_keys = ["hidden_size", "num_attention_heads", "num_key_value_heads"]
-            if not all(key in self.fusing_mapping for key in required_keys):
+            if not all(key in self.modules_to_fuse for key in required_keys):
                 raise ValueError(
                     f"Required fiels are missing in the fusing mapping, required fields are {required_keys}"
                 )
@@ -616,4 +616,4 @@ class AwqConfig(QuantizationConfigMixin):
 
     @property
     def is_using_fused_modules(self):
-        return self.fuse_modules or (self.fusing_mapping is not None and len(self.fusing_mapping) > 0)
+        return self.do_fuse or (self.modules_to_fuse is not None and len(self.modules_to_fuse) > 0)

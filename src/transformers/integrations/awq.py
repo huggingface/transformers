@@ -123,7 +123,7 @@ def replace_with_awq_linear(
     return model, has_been_replaced
 
 
-def get_fusing_mapping(model, quantization_config):
+def get_modules_to_fuse(model, quantization_config):
     """
     Returns the fusing mapping given the quantization config and the model
 
@@ -136,9 +136,9 @@ def get_fusing_mapping(model, quantization_config):
     if not isinstance(model, PreTrainedModel):
         raise ValueError(f"The model should be an instance of `PreTrainedModel`, got {model.__class__.__name__}")
 
-    # Always default to `quantization_config.fusing_mapping`
-    if quantization_config.fusing_mapping is not None:
-        current_fused_mapping = quantization_config.fusing_mapping
+    # Always default to `quantization_config.modules_to_fuse`
+    if quantization_config.modules_to_fuse is not None:
+        current_fused_mapping = quantization_config.modules_to_fuse
         current_fused_mapping["max_seq_len"] = quantization_config.fuse_max_seq_len
     elif model.config.model_type in AWQ_FUSED_MAPPINGS:
         current_fused_mapping = AWQ_FUSED_MAPPINGS[model.config.model_type]
@@ -172,7 +172,7 @@ def fuse_awq_modules(model, quantization_config):
             The quantization configuration to use.
     """
     backend = quantization_config.backend
-    fusing_mapping = get_fusing_mapping(model, quantization_config)
+    modules_to_fuse = get_modules_to_fuse(model, quantization_config)
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
         from awq.modules.fused.attn import QuantAttentionFused
@@ -184,7 +184,7 @@ def fuse_awq_modules(model, quantization_config):
 
     for name, module in model.named_modules():
         # Replace layer norms
-        for module_name in fusing_mapping["layernorm"]:
+        for module_name in modules_to_fuse["layernorm"]:
             if hasattr(module, module_name):
                 old_module = getattr(module, module_name)
                 module._modules[module_name] = FasterTransformerRMSNorm(
@@ -193,10 +193,10 @@ def fuse_awq_modules(model, quantization_config):
                 ).to(old_module.weight.device)
                 del old_module
         # Replace MLP layers
-        if hasattr(module, fusing_mapping["mlp"][0]):
-            gate_proj = getattr(module, fusing_mapping["mlp"][0])
-            up_proj = getattr(module, fusing_mapping["mlp"][1])
-            down_proj = getattr(module, fusing_mapping["mlp"][2])
+        if hasattr(module, modules_to_fuse["mlp"][0]):
+            gate_proj = getattr(module, modules_to_fuse["mlp"][0])
+            up_proj = getattr(module, modules_to_fuse["mlp"][1])
+            down_proj = getattr(module, modules_to_fuse["mlp"][2])
 
             previous_device = gate_proj.qweight.device
             activation_fn = ACT2FN[model.config.hidden_act]
@@ -209,10 +209,10 @@ def fuse_awq_modules(model, quantization_config):
             del gate_proj, up_proj, down_proj
 
         # Replace attention layers
-        # inside fusing_mapping["attention"] we should have (in correct order): q, k, v, o layer
-        if hasattr(module, fusing_mapping["attention"][0]):
+        # inside modules_to_fuse["attention"] we should have (in correct order): q, k, v, o layer
+        if hasattr(module, modules_to_fuse["attention"][0]):
             # First, we pack the QKV layers together
-            q_proj = getattr(module, fusing_mapping["attention"][0])
+            q_proj = getattr(module, modules_to_fuse["attention"][0])
             previous_device = q_proj.qweight.device
 
             if isinstance(q_proj, WQLinear_GEMV):
@@ -222,9 +222,9 @@ def fuse_awq_modules(model, quantization_config):
                 target_cls = WQLinear_GEMM
                 cat_dim = 1
 
-            k_proj = getattr(module, fusing_mapping["attention"][1])
-            v_proj = getattr(module, fusing_mapping["attention"][2])
-            o_proj = getattr(module, fusing_mapping["attention"][3])
+            k_proj = getattr(module, modules_to_fuse["attention"][1])
+            v_proj = getattr(module, modules_to_fuse["attention"][2])
+            o_proj = getattr(module, modules_to_fuse["attention"][3])
 
             bias = torch.cat([q_proj.bias, k_proj.bias, v_proj.bias], dim=0) if q_proj.bias is not None else None
 
@@ -247,14 +247,14 @@ def fuse_awq_modules(model, quantization_config):
             qkv_layer.bias = bias
 
             fused_attention_layer = QuantAttentionFused(
-                fusing_mapping["hidden_size"],
-                fusing_mapping["num_attention_heads"],
-                fusing_mapping["num_key_value_heads"],
+                modules_to_fuse["hidden_size"],
+                modules_to_fuse["num_attention_heads"],
+                modules_to_fuse["num_key_value_heads"],
                 qkv_layer,
                 o_proj,
                 previous_device,
-                fusing_mapping["max_seq_len"],
-                use_alibi=fusing_mapping["use_alibi"],
+                modules_to_fuse["max_seq_len"],
+                use_alibi=modules_to_fuse["use_alibi"],
             )
 
             fused_attention_layer.is_hf_transformers = True
