@@ -1791,6 +1791,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
         )
         return (
+            "{% if bos_token is defined %}{{ bos_token }}{% endif %}"
             "{% for message in messages %}"
             "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
             "{% endfor %}"
