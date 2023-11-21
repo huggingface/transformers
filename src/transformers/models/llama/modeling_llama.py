@@ -889,7 +889,6 @@ class LlamaModel(LlamaPreTrainedModel):
             if not isinstance(past_key_values, Cache):
                 past_key_values = self.from_legacy_cache(past_key_values)
             past_key_values_length = past_key_values.get_seq_length()
-            seq_length_with_past += past_key_values_length
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -935,7 +934,7 @@ class LlamaModel(LlamaPreTrainedModel):
                     hidden_states,
                     attention_mask,
                     position_ids,
-                    past_key_value,
+                    past_key_values,
                     output_attentions,
                     use_cache,
                 )
