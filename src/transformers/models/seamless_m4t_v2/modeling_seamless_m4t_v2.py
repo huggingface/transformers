@@ -739,6 +739,10 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
         self.gradient_checkpointing = False
         
     def _apply_chunk_attention(self, attention_mask, hidden_states):
+        """
+        Creates a chunk attention mask. It creates a mask to prevent attention across chunks, ensuring that each position attends only to positions within its own chunk.
+        If a left chunk overlap is specified (`speech_encoder_chunk_size` in the configuration), the attention mask is adjusted accordingly to allow each position to also attends the `speech_encoder_chunk_size - 1` previous chunks.
+        """
         sequence_len = hidden_states.shape[1]
 
         chunk_indices = torch.arange(sequence_len, device=hidden_states.device)
