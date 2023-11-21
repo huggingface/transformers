@@ -46,7 +46,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 512, 20, 20]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "Raghavan/textnet-base"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_0"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_1"
 
 TEXTNET_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
