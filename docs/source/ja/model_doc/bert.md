@@ -69,7 +69,7 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 
 <PipelineTag pipeline="text-classification"/>
 
-- [別の言語での BERT テキスト分類] に関するブログ投稿 (https://www.philschmid.de/bert-text-classification-in-a-different-language)。
+- [別の言語での BERT テキスト分類](https://www.philschmid.de/bert-text-classification-in-a-different-language) に関するブログ投稿 。
 - [マルチラベル テキスト分類のための BERT (およびその友人) の微調整](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/BERT/Fine_tuning_BERT_(and_friends)_for_multi_label_text_classification) のノートブック.ipynb)。
 - [PyTorch を使用したマルチラベル分類のための BERT の微調整] 方法に関するノートブック (https://colab.research.google.com/github/abhmishra91/transformers-tutorials/blob/master/transformers_multi_label_classification.ipynb)。 🌎
 - [要約のために BERT を使用して EncoderDecoder モデルをウォームスタートする]方法に関するノートブック (https://colab.research.google.com/github/patrickvonplaten/notebooks/blob/master/BERT2BERT_for_CNN_Dailymail.ipynb)。
