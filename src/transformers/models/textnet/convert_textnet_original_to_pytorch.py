@@ -23,7 +23,7 @@ import requests
 import torch
 
 from transformers import CLIPImageProcessor, TextNetBackbone, TextNetConfig
-
+from transformers.utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 tiny_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_tiny.config"
 small_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_small.config"
@@ -135,7 +135,8 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_du
 
     model = TextNetBackbone(config)
     textnet_image_processor = CLIPImageProcessor(
-        size={"shortest_edge": size}, do_center_crop=False, use_square_size=True
+        size={"shortest_edge": size}, do_center_crop=False, use_square_size=True, image_mean=IMAGENET_DEFAULT_MEAN,
+        image_std=IMAGENET_DEFAULT_STD
     )
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)["ema"]
     state_dict_changed = OrderedDict()
