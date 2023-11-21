@@ -94,12 +94,18 @@ jobs:
       - name: ROCM-SMI
         run: |
           rocm-smi
+
       - name: ROCM-INFO
         run: |
           rocminfo  | grep "Agent" -A 14
       - name: Show ROCR environment
         run: |
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
 
   run_tests_single_gpu:
     name: Single GPU tests
