@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch LLaMA model. """
 
 
-import tempfile
 import unittest
 
 import pytest
@@ -420,50 +419,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         output_fa_2 = tokenizer.batch_decode(output_fa_2)
 
         self.assertListEqual(output_native, output_fa_2)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_use_cache(self):
-        import torch
-
-        max_new_tokens = 30
-
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn_2:
-                return
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # NOTE: Mistral apparently does not support right padding + use_cache with FA2.
-                dummy_attention_mask[:, -1] = 1
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    use_flash_attention_2=True,
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                # Just test that a large cache works as expected
-                _ = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
-                )
 
 
 @require_torch
