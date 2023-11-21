@@ -150,9 +150,7 @@ Generally, we recommend using the `AutoTokenizer` class and the `TFAutoModelFor`
 ```py
 >>> from transformers import AutoImageProcessor, AutoBackbone
 >>> processor = AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
->>> model = AutoBackbone.from_pretrained(
-"microsoft/swin-tiny-patch4-window7-224", out_features=(0,)
-)
+>>> model = AutoBackbone.from_pretrained("microsoft/swin-tiny-patch4-window7-224", out_features=(0,))
 
 >>> inputs = processor(image, return_tensors="pt")
 >>> outputs = model(**inputs)
