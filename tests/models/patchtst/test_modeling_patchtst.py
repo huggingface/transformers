@@ -260,22 +260,27 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = [
-                "past_values",
-                "past_observed_mask",
-                "future_values",
-            ]
             if model_class == PatchTSTForPretraining:
-                expected_arg_names.remove("future_values")
-            elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
-                MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
+                expected_arg_names = [
+                    "past_values",
+                    "past_observed_mask",
+                ]
+            elif (
+                model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) 
+                or model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING)
             ):
-                expected_arg_names.remove("future_values")
-                expected_arg_names.remove("past_observed_mask")
-                expected_arg_names.append("target_values") if model_class in get_values(
-                    MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING
-                ) else expected_arg_names.append("target_values")
-                expected_arg_names.append("past_observed_mask")
+                expected_arg_names = [
+                    "past_values",
+                    "target_values",
+                    "past_observed_mask"
+                ]
+            else:
+                expected_arg_names = [
+                    "past_values",
+                    "past_observed_mask",
+                    "future_values",
+                ]
+
             expected_arg_names.extend(
                 [
                     "output_hidden_states",
