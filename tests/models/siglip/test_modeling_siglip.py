@@ -57,7 +57,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CLIPProcessor
+    from transformers import SiglipProcessor
 
 
 if is_flax_available():
@@ -197,10 +197,20 @@ class SiglipVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
     def test_training(self):
         pass
 
+    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="SiglipVisionModel has no base class and is not available in MODEL_MAPPING")
@@ -321,15 +331,25 @@ class SiglipTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+    
+    @unittest.skip(reason="SIGLIP does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
 
+    @unittest.skip(reason="SiglipTextModel does not support standalone training")
     def test_training(self):
         pass
 
+    @unittest.skip(reason="SiglipTextModel does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="SIGLIP does not use inputs_embeds")
-    def test_inputs_embeds(self):
+    @unittest.skip(reason="SiglipTextModel does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(reason="SiglipTextModel does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="SiglipTextModel has no base class and is not available in MODEL_MAPPING")
@@ -391,7 +411,7 @@ class SiglipModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
-            "return_loss": True,
+            "return_loss": False,
         }
         return config, inputs_dict
 
@@ -427,6 +447,22 @@ class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="SiglipModel does not have input/output embeddings")
     def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="SiglipModel does not support training")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="SiglipModel does not support training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="SiglipModel does not support training")
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(reason="SiglipModel does not support training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     # override as the `logit_scale` parameter initilization is different for SIGLIP
@@ -676,9 +712,10 @@ def prepare_img():
 class SiglipModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "google/siglip-base-patch16-224"
+        # TODO update organization
+        model_name = "nielsr/siglip-base-patch16-224"
         model = SiglipModel.from_pretrained(model_name).to(torch_device)
-        processor = CLIPProcessor.from_pretrained(model_name)
+        processor = SiglipProcessor.from_pretrained(model_name)
 
         image = prepare_img()
         inputs = processor(
