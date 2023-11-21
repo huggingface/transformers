@@ -234,6 +234,9 @@ def _fuse_awq_mlp(model, current_module_name, fuse_module_names, module, target_
             The `QuantFusedMLP` class as it only supports that class
             for now.
     """
+    if len(fuse_module_names) == 0:
+        return
+
     if hasattr(module, fuse_module_names[0]):
         gate_proj = getattr(module, fuse_module_names[0])
         up_proj = getattr(module, fuse_module_names[1])
@@ -269,6 +272,9 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
             for now.
     """
     from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
+
+    if len(modules_to_fuse["attention"]) == 0:
+        return
 
     if hasattr(module, modules_to_fuse["attention"][0]):
         # First, we pack the QKV layers together
