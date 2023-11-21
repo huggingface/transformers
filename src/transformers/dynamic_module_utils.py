@@ -25,6 +25,8 @@ import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+from huggingface_hub import try_to_load_from_cache
+
 from .utils import (
     HF_MODULES_CACHE,
     TRANSFORMERS_DYNAMIC_MODULE_NAME,
@@ -32,7 +34,6 @@ from .utils import (
     extract_commit_hash,
     is_offline_mode,
     logging,
-    try_to_load_from_cache,
 )
 
 
