@@ -1926,7 +1926,6 @@ class ModelTesterMixin:
             "FunnelForPreTraining",
             "ElectraForPreTraining",
             "XLMWithLMHeadModel",
-            "TransfoXLLMHeadModel",
         ]:
             for k in key_differences:
                 if k in ["loss", "losses"]:

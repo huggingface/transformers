@@ -25,7 +25,7 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
-from ...modeling_tf_utils import (
+from ....modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
@@ -33,8 +33,8 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
-from ...utils import (
+from ....tf_utils import shape_list, stable_softmax
+from ....utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,

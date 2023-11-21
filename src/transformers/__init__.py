@@ -307,6 +307,12 @@ _import_structure = {
         "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrajectoryTransformerConfig",
     ],
+    "models.deprecated.transfo_xl": [
+        "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TransfoXLConfig",
+        "TransfoXLCorpus",
+        "TransfoXLTokenizer",
+    ],
     "models.deprecated.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.deta": ["DETA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetaConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
@@ -580,12 +586,6 @@ _import_structure = {
     ],
     "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
-    "models.transfo_xl": [
-        "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "TransfoXLConfig",
-        "TransfoXLCorpus",
-        "TransfoXLTokenizer",
-    ],
     "models.trocr": [
         "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrOCRConfig",
@@ -1648,6 +1648,17 @@ else:
             "TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TrajectoryTransformerModel",
             "TrajectoryTransformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.deprecated.transfo_xl"].extend(
+        [
+            "TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AdaptiveEmbedding",
+            "TransfoXLForSequenceClassification",
+            "TransfoXLLMHeadModel",
+            "TransfoXLModel",
+            "TransfoXLPreTrainedModel",
+            "load_tf_weights_in_transfo_xl",
         ]
     )
     _import_structure["models.deprecated.van"].extend(
@@ -2908,17 +2919,6 @@ else:
         ]
     )
     _import_structure["models.timm_backbone"].extend(["TimmBackbone"])
-    _import_structure["models.transfo_xl"].extend(
-        [
-            "TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "AdaptiveEmbedding",
-            "TransfoXLForSequenceClassification",
-            "TransfoXLLMHeadModel",
-            "TransfoXLModel",
-            "TransfoXLPreTrainedModel",
-            "load_tf_weights_in_transfo_xl",
-        ]
-    )
     _import_structure["models.trocr"].extend(
         ["TROCR_PRETRAINED_MODEL_ARCHIVE_LIST", "TrOCRForCausalLM", "TrOCRPreTrainedModel"]
     )
@@ -3500,6 +3500,17 @@ else:
             "TFDeiTPreTrainedModel",
         ]
     )
+    _import_structure["models.deprecated.transfo_xl"].extend(
+        [
+            "TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFAdaptiveEmbedding",
+            "TFTransfoXLForSequenceClassification",
+            "TFTransfoXLLMHeadModel",
+            "TFTransfoXLMainLayer",
+            "TFTransfoXLModel",
+            "TFTransfoXLPreTrainedModel",
+        ]
+    )
     _import_structure["models.distilbert"].extend(
         [
             "TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3862,17 +3873,6 @@ else:
             "TFTapasForSequenceClassification",
             "TFTapasModel",
             "TFTapasPreTrainedModel",
-        ]
-    )
-    _import_structure["models.transfo_xl"].extend(
-        [
-            "TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFAdaptiveEmbedding",
-            "TFTransfoXLForSequenceClassification",
-            "TFTransfoXLLMHeadModel",
-            "TFTransfoXLMainLayer",
-            "TFTransfoXLModel",
-            "TFTransfoXLPreTrainedModel",
         ]
     )
     _import_structure["models.vision_encoder_decoder"].extend(["TFVisionEncoderDecoderModel"])
@@ -4527,6 +4527,12 @@ if TYPE_CHECKING:
         TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TrajectoryTransformerConfig,
     )
+    from .models.deprecated.transfo_xl import (
+        TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TransfoXLConfig,
+        TransfoXLCorpus,
+        TransfoXLTokenizer,
+    )
     from .models.deprecated.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
     from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
@@ -4787,12 +4793,6 @@ if TYPE_CHECKING:
     )
     from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimesformerConfig
     from .models.timm_backbone import TimmBackboneConfig
-    from .models.transfo_xl import (
-        TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        TransfoXLConfig,
-        TransfoXLCorpus,
-        TransfoXLTokenizer,
-    )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltFeatureExtractor, TvltProcessor
     from .models.umt5 import UMT5Config
@@ -5709,6 +5709,15 @@ if TYPE_CHECKING:
             TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TrajectoryTransformerModel,
             TrajectoryTransformerPreTrainedModel,
+        )
+        from .models.deprecated.transfo_xl import (
+            TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AdaptiveEmbedding,
+            TransfoXLForSequenceClassification,
+            TransfoXLLMHeadModel,
+            TransfoXLModel,
+            TransfoXLPreTrainedModel,
+            load_tf_weights_in_transfo_xl,
         )
         from .models.deprecated.van import (
             VAN_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6738,15 +6747,6 @@ if TYPE_CHECKING:
             TimesformerPreTrainedModel,
         )
         from .models.timm_backbone import TimmBackbone
-        from .models.transfo_xl import (
-            TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
-            AdaptiveEmbedding,
-            TransfoXLForSequenceClassification,
-            TransfoXLLMHeadModel,
-            TransfoXLModel,
-            TransfoXLPreTrainedModel,
-            load_tf_weights_in_transfo_xl,
-        )
         from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
         from .models.tvlt import (
             TVLT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7226,6 +7226,15 @@ if TYPE_CHECKING:
             TFDeiTModel,
             TFDeiTPreTrainedModel,
         )
+        from .models.deprecated.transfo_xl import (
+            TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFAdaptiveEmbedding,
+            TFTransfoXLForSequenceClassification,
+            TFTransfoXLLMHeadModel,
+            TFTransfoXLMainLayer,
+            TFTransfoXLModel,
+            TFTransfoXLPreTrainedModel,
+        )
         from .models.distilbert import (
             TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDistilBertForMaskedLM,
@@ -7510,15 +7519,6 @@ if TYPE_CHECKING:
             TFTapasForSequenceClassification,
             TFTapasModel,
             TFTapasPreTrainedModel,
-        )
-        from .models.transfo_xl import (
-            TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFAdaptiveEmbedding,
-            TFTransfoXLForSequenceClassification,
-            TFTransfoXLLMHeadModel,
-            TFTransfoXLMainLayer,
-            TFTransfoXLModel,
-            TFTransfoXLPreTrainedModel,
         )
         from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import TFVisionTextDualEncoderModel

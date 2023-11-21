@@ -396,13 +396,11 @@ def get_model_modules() -> List[str]:
         "modeling_flax_speech_encoder_decoder",
         "modeling_flax_vision_encoder_decoder",
         "modeling_timm_backbone",
-        "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
         "modeling_tf_encoder_decoder",
         "modeling_tf_outputs",
         "modeling_tf_pytorch_utils",
         "modeling_tf_utils",
-        "modeling_tf_transfo_xl_utilities",
         "modeling_tf_vision_encoder_decoder",
         "modeling_vision_encoder_decoder",
     ]

@@ -2676,6 +2676,48 @@ class TrajectoryTransformerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class AdaptiveEmbedding(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TransfoXLForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TransfoXLLMHeadModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TransfoXLModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TransfoXLPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_transfo_xl(*args, **kwargs):
+    requires_backends(load_tf_weights_in_transfo_xl, ["torch"])
+
+
 VAN_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -7737,48 +7779,6 @@ class TimmBackbone(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
-
-TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class AdaptiveEmbedding(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TransfoXLForSequenceClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TransfoXLLMHeadModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TransfoXLModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TransfoXLPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-def load_tf_weights_in_transfo_xl(*args, **kwargs):
-    requires_backends(load_tf_weights_in_transfo_xl, ["torch"])
 
 
 TROCR_PRETRAINED_MODEL_ARCHIVE_LIST = None

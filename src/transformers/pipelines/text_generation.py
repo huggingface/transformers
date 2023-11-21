@@ -81,9 +81,7 @@ class TextGenerationPipeline(Pipeline):
                 prefix = self.model.config.prefix
             if prefix is None and self.model.__class__.__name__ in [
                 "XLNetLMHeadModel",
-                "TransfoXLLMHeadModel",
                 "TFXLNetLMHeadModel",
-                "TFTransfoXLLMHeadModel",
             ]:
                 # For XLNet and TransformerXL we add an article to the prompt to give more state to the model.
                 prefix = self.XL_PREFIX
@@ -159,9 +157,6 @@ class TextGenerationPipeline(Pipeline):
         Parse arguments and tokenize
         """
         # Parse arguments
-        if self.model.__class__.__name__ in ["TransfoXLLMHeadModel"]:
-            kwargs.update({"add_space_before_punct_symbol": True})
-
         return super()._parse_and_tokenize(*args, **kwargs)
 
     def __call__(self, text_inputs, **kwargs):
