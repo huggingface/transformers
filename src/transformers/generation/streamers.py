@@ -169,7 +169,7 @@ class TimedTextStreamer(TextStreamer):
     </Tip>
 
     Parameters:
-        tokenizer (`AutoTokenizer`, *optional*, defaults to `None`):
+        tokenizer (`AutoTokenizer`, *optional*):
             The tokenizer used to decode the tokens. If not supplied, the streamer
             will not print the generated text (more accurate time measurement).
         decode_kwargs (`dict`, *optional*):

@@ -368,3 +368,6 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] TextStreamer
 
 [[autodoc]] TextIteratorStreamer
+
+[[autodoc]] TimedTextStreamer
+
