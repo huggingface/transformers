@@ -104,9 +104,11 @@ class TextGenerationPipeline(Pipeline):
         handle_long_generation=None,
         stop_sequence=None,
         add_special_tokens=False,
+        tokenizer_kwargs=None,
         **generate_kwargs,
     ):
-        preprocess_params = {"add_special_tokens": add_special_tokens}
+        preprocess_params = {"add_special_tokens": add_special_tokens,
+                             "tokenizer_kwargs": tokenizer_kwargs}
         if prefix is not None:
             preprocess_params["prefix"] = prefix
         if prefix:
@@ -208,10 +210,15 @@ class TextGenerationPipeline(Pipeline):
         return super().__call__(text_inputs, **kwargs)
 
     def preprocess(
-        self, prompt_text, prefix="", handle_long_generation=None, add_special_tokens=False, **generate_kwargs
+        self, prompt_text, prefix="", handle_long_generation=None, add_special_tokens=False,
+            tokenizer_kwargs=None, **generate_kwargs
     ):
+        tokenizer_kwargs = tokenizer_kwargs or {}
+        tokenizer_kwargs['padding'] = False
+        tokenizer_kwargs['add_special_tokens'] = add_special_tokens
+
         inputs = self.tokenizer(
-            prefix + prompt_text, padding=False, add_special_tokens=add_special_tokens, return_tensors=self.framework
+            prefix + prompt_text, return_tensors=self.framework, **tokenizer_kwargs
         )
         inputs["prompt_text"] = prompt_text
 
