@@ -1267,7 +1267,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         # cross_attention_gate:
         # For any tokens attending to no images, the hidden_states comming out of the cross-attention should be zeroed-out.
-        # image_attention_mask has shape [bsz, 1, num_images, hidden_size] with elements equal to either 0.0 or a very negative number.
+        # `image_attention_mask` has shape [bsz, 1, num_images, hidden_size] with elements equal to either 0.0 or a very negative number.
         # If any of the elements are 0.0, then the token is attending to at least one image and the gate value is 1. Otherwise the gate value is 0.
         # cross_attention_gate has shape [bsz, seq_len] with elements equal to either 0.0 or 1.0.
         cross_attention_gate = ((((image_attention_mask == 0.0).any(dim=-1)).to(dtype=self.dtype)).squeeze(dim=1)).to(
