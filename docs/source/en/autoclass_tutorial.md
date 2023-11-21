@@ -150,7 +150,10 @@ Generally, we recommend using the `AutoTokenizer` class and the `TFAutoModelFor`
 ```py
 >>> from transformers import AutoImageProcessor, AutoBackbone
 >>> import torch
->>> image = torch.randn(3, 256, 256)
+>>> from PIL import Image
+>>> import requests
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
 >>> processor = AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
 >>> model = AutoBackbone.from_pretrained("microsoft/swin-tiny-patch4-window7-224", out_features=(0,))
 
