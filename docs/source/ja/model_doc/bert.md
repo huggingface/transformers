@@ -45,7 +45,7 @@ Toronto Book Corpus と Wikipedia からなる大規模なコーパスでの予�
 精度は 86.7% (絶対値 4.6% 向上)、SQuAD v1.1 質問応答テスト F1 は 93.2 (絶対値 1.5 ポイント)
 改善) および SQuAD v2.0 テスト F1 から 83.1 (5.1 ポイントの絶対改善)。*
 
-チップ：
+## Usage tips
 
 - BERT は絶対位置埋め込みを備えたモデルであるため、通常は入力を右側にパディングすることをお勧めします。
   左。
@@ -69,10 +69,10 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 
 <PipelineTag pipeline="text-classification"/>
 
-- [別の言語での BERT テキスト分類] に関するブログ投稿 (https://www.philschmid.de/bert-text-classification-in-a-different-language)。
-- [マルチラベル テキスト分類のための BERT (およびその友人) の微調整](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/BERT/Fine_tuning_BERT_(and_friends)_for_multi_label_text_classification) のノートブック.ipynb)。
-- [PyTorch を使用したマルチラベル分類のための BERT の微調整] 方法に関するノートブック (https://colab.research.google.com/github/abhmishra91/transformers-tutorials/blob/master/transformers_multi_label_classification.ipynb)。 🌎
-- [要約のために BERT を使用して EncoderDecoder モデルをウォームスタートする]方法に関するノートブック (https://colab.research.google.com/github/patrickvonplaten/notebooks/blob/master/BERT2BERT_for_CNN_Dailymail.ipynb)。
+- に関するブログ投稿 [別の言語での BERT テキスト分類](https://www.philschmid.de/bert-text-classification-in-a-different-language)。
+- [マルチラベル テキスト分類のための BERT (およびその友人) の微調整](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/BERT/Fine_tuning_BERT_(and_friends)_for_multi_label_text_classification.ipynb) のノートブック.
+-  方法に関するノートブック [PyTorch を使用したマルチラベル分類のための BERT の微調整](https://colab.research.google.com/github/abhmishra91/transformers-tutorials/blob/master/transformers_multi_label_classification.ipynb)。 
+- 方法に関するノートブック [要約のために BERT を使用して EncoderDecoder モデルをウォームスタートする](https://colab.research.google.com/github/patrickvonplaten/notebooks/blob/master/BERT2BERT_for_CNN_Dailymail.ipynb)。
 - [`BertForSequenceClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)。
 - [`TFBertForSequenceClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb)。
 - [`FlaxBertForSequenceClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb)。
@@ -80,7 +80,7 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 
 <PipelineTag pipeline="token-classification"/>
 
-- [Hugging Face Transformers with Keras: Fine-tune a non-English BERT for Named Entity Recognition] (https://www.philschmid.de/huggingface-transformers-keras-tf) の使用方法に関するブログ投稿。
+- [Hugging Face Transformers with Keras: Fine-tune a non-English BERT for Named Entity Recognition](https://www.philschmid.de/huggingface-transformers-keras-tf) の使用方法に関するブログ投稿。
 - 各単語の最初の単語部分のみを使用した [固有表現認識のための BERT の微調整](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/Custom_Named_Entity_Recognition_with_BERT_only_first_wordpiece.ipynb) のノートブックトークン化中の単語ラベル内。単語のラベルをすべての単語部分に伝播するには、代わりにノートブックのこの [バージョン](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/BERT/Custom_Named_Entity_Recognition_with_BERT.ipynb) を参照してください。
 - [`BertForTokenClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)。
 - [`TFBertForTokenClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)。
@@ -90,7 +90,7 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 
 <PipelineTag pipeline="fill-mask"/>
 
-- [`BertForMaskedLM`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked- language-modeling) でサポートされており、 [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)。
+- [`BertForMaskedLM`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) でサポートされており、 [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)。
 - [`TFBertForMaskedLM`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/lang-modeling#run_mlmpy) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)。
 - [`FlaxBertForMaskedLM`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling) および [ノートブック]( https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)。
 - [マスクされた言語モデリング](https://huggingface.co/course/chapter7/3?fw=pt) 🤗 顔ハグ コースの章。
@@ -111,19 +111,19 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 - [多肢選択タスク ガイド](../tasks/multiple_choice)
 
 ⚡️ **推論**
-- [Hugging Face Transformers と AWS Inferentia を使用して BERT 推論を高速化する] 方法に関するブログ投稿 (https://huggingface.co/blog/bert-inferentia-sagemaker)。
-- [GPU 上の DeepSpeed-Inference を使用して BERT 推論を高速化する] 方法に関するブログ投稿 (https://www.philschmid.de/bert-deepspeed-inference)。
+- 方法に関するブログ投稿  [Hugging Face Transformers と AWS Inferentia を使用して BERT 推論を高速化する](https://huggingface.co/blog/bert-inferentia-sagemaker)。
+- 方法に関するブログ投稿 [GPU 上の DeepSpeed-Inference を使用して BERT 推論を高速化する](https://www.philschmid.de/bert-deepspeed-inference)。
 
 ⚙️ **事前トレーニング**
 - [Hugging Face Transformers と Habana Gaudi を使用した BERT の事前トレーニング] に関するブログ投稿 (https://www.philschmid.de/pre-training-bert-habana)。
 
 🚀 **デプロイ**
-- [ハグフェイス最適化でトランスフォーマーを ONNX に変換する]方法に関するブログ投稿 (https://www.philschmid.de/convert-transformers-to-onnx)。
-- [AWS 上の Habana Gaudi を使用したハグ顔トランスフォーマーのための深層学習環境のセットアップ] 方法に関するブログ投稿 (https://www.philschmid.de/getting-started-habana-gaudi#conclusion)。
-- [Hugging Face Transformers、Amazon SageMaker、および Terraform モジュールを使用した自動スケーリング BERT] に関するブログ投稿 (https://www.philschmid.de/terraform-huggingface-amazon-sagemaker-advanced)。
-- [HuggingFace、AWS Lambda、Docker を使用したサーバーレス BERT] に関するブログ投稿 (https://www.philschmid.de/serverless-bert-with-huggingface-aws-lambda-docker)。
-- [Amazon SageMaker と Training Compiler を使用した Hugging Face Transformers BERT 微調整] に関するブログ投稿 (https://www.philschmid.de/huggingface-amazon-sagemaker-training-compiler)。
-- [Transformers と Amazon SageMaker を使用した BERT のタスク固有の知識の蒸留] に関するブログ投稿 (https://www.philschmid.de/knowledge-distillation-bert-transformers)
+- 方法に関するブログ投稿  [ハグフェイス最適化でトランスフォーマーを ONNX に変換する](https://www.philschmid.de/convert-transformers-to-onnx)。
+- 方法に関するブログ投稿 [AWS 上の Habana Gaudi を使用したハグ顔トランスフォーマーのための深層学習環境のセットアップ](https://www.philschmid.de/getting-started-habana-gaudi#conclusion)。
+- に関するブログ投稿  [Hugging Face Transformers、Amazon SageMaker、および Terraform モジュールを使用した自動スケーリング BERT](https://www.philschmid.de/terraform-huggingface-amazon-sagemaker-advanced)。
+- に関するブログ投稿  [HuggingFace、AWS Lambda、Docker を使用したサーバーレス BERT](https://www.philschmid.de/serverless-bert-with-huggingface-aws-lambda-docker)。
+- に関するブログ投稿 [Amazon SageMaker と Training Compiler を使用した Hugging Face Transformers BERT 微調整](https://www.philschmid.de/huggingface-amazon-sagemaker-training-compiler)。
+- に関するブログ投稿  [Transformers と Amazon SageMaker を使用した BERT のタスク固有の知識の蒸留](https://www.philschmid.de/knowledge-distillation-bert-transformers)
 
 ## BertConfig
 
@@ -138,13 +138,22 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
+<frameworkcontent>
+<pt>
+
 ## BertTokenizerFast
 
 [[autodoc]] BertTokenizerFast
 
+</pt>
+<tf>
+
 ## TFBertTokenizer
 
 [[autodoc]] TFBertTokenizer
+
+</tf>
+</frameworkcontent>
 
 ## Bert specific outputs
 
@@ -153,6 +162,9 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 [[autodoc]] models.bert.modeling_tf_bert.TFBertForPreTrainingOutput
 
 [[autodoc]] models.bert.modeling_flax_bert.FlaxBertForPreTrainingOutput
+
+<frameworkcontent>
+<pt>
 
 ## BertModel
 
@@ -199,6 +211,9 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 [[autodoc]] BertForQuestionAnswering
     - forward
 
+</pt>
+<tf>
+
 ## TFBertModel
 
 [[autodoc]] TFBertModel
@@ -244,6 +259,10 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 [[autodoc]] TFBertForQuestionAnswering
     - call
 
+</tf>
+<jax>
+
+
 ## FlaxBertModel
 
 [[autodoc]] FlaxBertModel
@@ -288,3 +307,6 @@ BERT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 
 [[autodoc]] FlaxBertForQuestionAnswering
     - __call__
+
+</jax>
+</frameworkcontent>

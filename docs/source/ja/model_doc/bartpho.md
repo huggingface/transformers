@@ -29,7 +29,9 @@ BARTpho モデルは、Nguyen Luong Tran、Duong Minh Le、Dat Quoc Nguyen に�
 強力なベースライン mBART を上回り、最先端の性能を向上させます。将来を容易にするためにBARTphoをリリースします
 生成的なベトナム語 NLP タスクの研究と応用。*
 
-使用例：
+このモデルは [dqnguyen](https://huggingface.co/dqnguyen) によって提供されました。元のコードは [こちら](https://github.com/VinAIResearch/BARTpho) にあります。
+
+## Usage example
 
 ```python
 >>> import torch
@@ -54,7 +56,7 @@ BARTpho モデルは、Nguyen Luong Tran、Duong Minh Le、Dat Quoc Nguyen に�
 >>> features = bartpho(**input_ids)
 ```
 
-チップ：
+## Usage tips
 
 - mBARTに続いて、BARTphoはBARTの「大規模な」アーキテクチャを使用し、その上に追加の層正規化層を備えています。
   エンコーダとデコーダの両方。したがって、[BART のドキュメント](bart) の使用例は、使用に適応する場合に使用されます。
@@ -78,8 +80,6 @@ BARTpho モデルは、Nguyen Luong Tran、Duong Minh Le、Dat Quoc Nguyen に�
   多言語 XLM-RoBERTa から利用できる事前トレーニング済み SentencePiece モデル`vocab_file`から抽出されます。
   他の言語 (サブワードにこの事前トレーニング済み多言語 SentencePiece モデル`vocab_file`を使用する場合)
   セグメンテーションにより、独自の言語に特化した`monolingual_vocab_file`を使用して BartphoTokenizer を再利用できます。
-
-このモデルは [dqnguyen](https://huggingface.co/dqnguyen) によって提供されました。元のコードは [こちら](https://github.com/VinAIResearch/BARTpho) にあります。
 
 ## BartphoTokenizer
 

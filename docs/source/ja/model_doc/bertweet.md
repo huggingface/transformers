@@ -28,8 +28,7 @@ al.、2019）。実験では、BERTweet が強力なベースラインである 
 2020)、3 つのツイート NLP タスクにおいて、以前の最先端モデルよりも優れたパフォーマンス結果が得られました。
 品詞タグ付け、固有表現認識およびテキスト分類。*
 
-使用例：
-
+## Usage example
 
 ```python
 >>> import torch
@@ -55,6 +54,12 @@ al.、2019）。実験では、BERTweet が強力なベースラインである 
 >>> # from transformers import TFAutoModel
 >>> # bertweet = TFAutoModel.from_pretrained("vinai/bertweet-base")
 ```
+<Tip>
+
+この実装は、トークン化方法を除いて BERT と同じです。詳細については、[BERT ドキュメント](bert) を参照してください。
+API リファレンス情報。
+
+</Tip>
 
 このモデルは [dqnguyen](https://huggingface.co/dqnguyen) によって提供されました。元のコードは [ここ](https://github.com/VinAIResearch/BERTweet) にあります。
 

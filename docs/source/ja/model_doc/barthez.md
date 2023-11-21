@@ -38,7 +38,14 @@ BARTHez のコーパス上で多言語 BART を事前訓練し、結果として
 
 このモデルは [moussakam](https://huggingface.co/moussakam) によって寄稿されました。著者のコードは[ここ](https://github.com/moussaKam/BARThez)にあります。
 
-### Examples
+<Tip>
+
+BARThez の実装は、トークン化を除いて BART と同じです。詳細については、[BART ドキュメント](bart) を参照してください。
+構成クラスとそのパラメータ。 BARThez 固有のトークナイザーについては以下に記載されています。
+
+</Tip>
+
+### Resources
 
 - BARThez は、BART と同様の方法でシーケンス間のタスクを微調整できます。以下を確認してください。
   [examples/pytorch/summarization/](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/README.md)。

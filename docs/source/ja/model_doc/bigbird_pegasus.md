@@ -41,7 +41,7 @@ BERT または RoBERTa と比較した要約。
 BigBird は、質問応答や要約などのさまざまな NLP タスクのパフォーマンスを大幅に向上させます。私達も
 ゲノミクスデータへの新しいアプリケーションを提案します。*
 
-チップ：
+## Usage tips
 
 - BigBird の注意がどのように機能するかについての詳細な説明については、[このブログ投稿](https://huggingface.co/blog/big-bird) を参照してください。
 - BigBird には、**original_full** と **block_sparse** の 2 つの実装が付属しています。シーケンス長が 1024 未満の場合、次を使用します。

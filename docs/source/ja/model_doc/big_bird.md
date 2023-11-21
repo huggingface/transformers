@@ -85,6 +85,9 @@ BigBird は、質問応答や要約などのさまざまな NLP タスクのパ�
 
 [[autodoc]] models.big_bird.modeling_big_bird.BigBirdForPreTrainingOutput
 
+<frameworkcontent>
+<pt>
+
 ## BigBirdModel
 
 [[autodoc]] BigBirdModel
@@ -125,6 +128,9 @@ BigBird は、質問応答や要約などのさまざまな NLP タスクのパ�
 [[autodoc]] BigBirdForQuestionAnswering
     - forward
 
+</pt>
+<jax>
+
 ## FlaxBigBirdModel
 
 [[autodoc]] FlaxBigBirdModel
@@ -164,3 +170,7 @@ BigBird は、質問応答や要約などのさまざまな NLP タスクのパ�
 
 [[autodoc]] FlaxBigBirdForQuestionAnswering
     - __call__
+
+</jax>
+</frameworkcontent>
+
