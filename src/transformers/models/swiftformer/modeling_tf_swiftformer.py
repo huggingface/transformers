@@ -433,7 +433,6 @@ class TFSwiftFormerStage(tf.keras.layers.Layer):
             block_dpr = config.drop_path_rate * (block_idx + sum(layer_depths[:index])) / (sum(layer_depths) - 1)
 
             if depth - block_idx <= 1:
-                # FIXME: no names?
                 self.blocks.append(
                     TFSwiftFormerEncoderBlock(config, dim=dim, drop_path=block_dpr, name=f"blocks_._{block_idx}")
                 )
@@ -513,21 +512,39 @@ class TFSwiftFormerPreTrainedModel(TFPreTrainedModel):
     main_input_name = "pixel_values"
 
 
-# FIXME: change to tensorflow doc
-SWIFTFORMER_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+TFSWIFTFORMER_START_DOCSTRING = r"""
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    Parameters:
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
+    <Tip>
+    TF 2.0 models accepts two formats as inputs:
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional arguments.
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
+    tensors in the first argument of the model call function: `model(inputs)`.
+    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
+    first positional argument :
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+      `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+      `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+    </Tip>
+
+
+    Args:
         config ([`SwiftFormerConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-SWIFTFORMER_INPUTS_DOCSTRING = r"""
+TFSWIFTFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
 
@@ -591,8 +608,8 @@ class TFSwiftFormerMainLayer(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    "The bare SwiftFormer Model transformer outputting raw hidden-states without any specific head on top.",
-    SWIFTFORMER_START_DOCSTRING,
+    "The bare TFSwiftFormer Model transformer outputting raw hidden-states without any specific head on top.",
+    TFSWIFTFORMER_START_DOCSTRING,
 )
 class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
     def __init__(self, config: SwiftFormerConfig, *inputs, **kwargs):
@@ -601,7 +618,7 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
         self.swiftformer = TFSwiftFormerMainLayer(config, name="swiftformer")
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(TFSWIFTFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithNoAttention,
@@ -614,7 +631,6 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithNoAttention, Tuple[tf.Tensor]]:
-        # TODO: docstring
         r"""
         encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -648,7 +664,7 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
     """
     TFSwiftFormer Model transformer with an image classification head on top (e.g. for ImageNet).
     """,
-    SWIFTFORMER_START_DOCSTRING,
+    TFSWIFTFORMER_START_DOCSTRING,
 )
 class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
     def __init__(self, config: SwiftFormerConfig, **kwargs) -> None:
@@ -673,7 +689,7 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         )
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(TFSWIFTFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=TFImageClassifierOutputWithNoAttention,
@@ -689,7 +705,7 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         training: bool = False,
     ) -> Union[tuple, TFImageClassifierOutputWithNoAttention]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+        labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
