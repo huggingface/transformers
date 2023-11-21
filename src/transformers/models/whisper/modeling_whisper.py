@@ -1875,6 +1875,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         >>> generated_ids = model.generate(**inputs)
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        >>> transcription[0]
+        ' Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile!'
         ```
 
         - *Shortform transcription*: If passed mel input features are < 30 seconds, the whole audio will be transcribed with a single call to generate.
@@ -2253,63 +2255,21 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     num_paddings = (seek_sequence == self.generation_config.pad_token_id).sum()
                     seek_sequence = seek_sequence[:-num_paddings]
 
-                # find the predicted "end of segment" predictions of Whisper
-                # "end of segment" predictions occur whenever Whisper predicts a timestamp token
-                timestamp_tokens: torch.Tensor = seek_sequence.ge(timestamp_begin)
-                single_timestamp_ending = timestamp_tokens[-2:].tolist() == cur_bsz * [[False, True]]
-                consecutive = torch.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
+                segment, segment_offset = self._retrieve_segment(
+                    seek_sequence=seek_sequence,
+                    seek_outputs=seek_outputs,
+                    time_offset=time_offset,
+                    timestamp_begin=timestamp_begin,
+                    seek_num_frames=seek_num_frames,
+                    cur_bsz=cur_bsz,
+                    time_precision=time_precision,
+                    input_stride=input_stride,
+                    prev_idx=prev_i,
+                    idx=i,
+                )
 
-                # If whisper predicted a "end of segment" via a timestep token, let's go ever each
-                # "end of segment" prediction and slice the decoding into segments accordingly
-                if len(consecutive) > 0:
-                    # if the output contains two consecutive timestamp tokens
-                    slices = consecutive.tolist()
-                    if single_timestamp_ending:
-                        slices.append(len(seek_sequence))
-
-                    last_slice = 0
-                    # Add each segment to list of all segments
-                    for current_slice in slices:
-                        sliced_tokens = seek_sequence[last_slice + 1 : current_slice + 1]
-                        start_timestamp_pos = sliced_tokens[0].item() - timestamp_begin
-                        end_timestamp_pos = sliced_tokens[-1].item() - timestamp_begin
-                        current_segments[prev_i].append(
-                            {
-                                "start": time_offset[prev_i] + start_timestamp_pos * time_precision,
-                                "end": time_offset[prev_i] + end_timestamp_pos * time_precision,
-                                "tokens": sliced_tokens,
-                                "result": seek_outputs[i],
-                            }
-                        )
-                        last_slice = current_slice
-
-                    if single_timestamp_ending:
-                        # single timestamp at the end means no speech after the last timestamp.
-                        seek[prev_i] += seek_num_frames[prev_i]
-                    else:
-                        # otherwise, ignore the unfinished segment and seek to the last timestamp
-                        # here we throw away all predictions after the last predicted "end of segment"
-                        # since we are cutting right in the middle of an audio
-                        last_timestamp_pos = seek_sequence[last_slice].item() - timestamp_begin
-                        seek[prev_i] += last_timestamp_pos * input_stride
-                else:
-                    # If whisper does not predict any "end of segment" token, then
-                    # the whole decoding is considered a segment and we add it to the list of segments
-                    timestamps = seek_sequence[timestamp_tokens.nonzero().flatten()]
-                    last_timestamp_pos = seek_num_frames[prev_i]
-                    if timestamps.numel() > 0 and timestamps[-1].item() != timestamp_begin:
-                        # no consecutive timestamps but it has a timestamp; use the last one.
-                        last_timestamp_pos = timestamps[-1].item() - timestamp_begin
-
-                    current_segments[prev_i].append(
-                        {
-                            "start": time_offset[prev_i],
-                            "end": time_offset[prev_i] + last_timestamp_pos * time_precision,
-                            "tokens": seek_sequence,
-                            "result": seek_outputs[i],
-                        }
-                    )
-                    seek[prev_i] += seek_num_frames[prev_i]
+                current_segments[prev_i].append(segment)
+                seek[prev_i] += segment_offset
 
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
@@ -2331,6 +2291,75 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             return {"sequences": sequences, "segments": current_segments}
 
         return sequences
+
+    @staticmethod
+    def _retrieve_segment(
+        seek_sequence,
+        seek_outputs,
+        time_offset,
+        timestamp_begin,
+        seek_num_frames,
+        cur_bsz,
+        time_precision,
+        input_stride,
+        prev_idx,
+        idx,
+    ):
+        # find the predicted "end of segment" predictions of Whisper
+        # "end of segment" predictions occur whenever Whisper predicts a timestamp token
+        timestamp_tokens: torch.Tensor = seek_sequence.ge(timestamp_begin)
+        single_timestamp_ending = timestamp_tokens[-2:].tolist() == cur_bsz * [[False, True]]
+        timestamp_segment_indices = torch.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
+
+        # If whisper predicted a "end of segment" via a timestep token, let's go ever each
+        # "end of segment" prediction and slice the decoding into segments accordingly
+        if len(timestamp_segment_indices) > 0:
+            # if the output contains two consecutive timestamp tokens
+            slices = timestamp_segment_indices.tolist()
+            if single_timestamp_ending:
+                slices.append(len(seek_sequence))
+
+            last_slice = 0
+            # Add each segment to list of all segments
+            for current_slice in slices:
+                sliced_tokens = seek_sequence[last_slice + 1 : current_slice + 1]
+                start_timestamp_pos = sliced_tokens[0].item() - timestamp_begin
+                end_timestamp_pos = sliced_tokens[-1].item() - timestamp_begin
+                segment = {
+                    "start": time_offset[prev_idx] + start_timestamp_pos * time_precision,
+                    "end": time_offset[prev_idx] + end_timestamp_pos * time_precision,
+                    "tokens": sliced_tokens,
+                    "result": seek_outputs[idx],
+                }
+                last_slice = current_slice
+
+            if single_timestamp_ending:
+                # single timestamp at the end means no speech after the last timestamp.
+                segment_offset = seek_num_frames[prev_idx]
+            else:
+                # otherwise, ignore the unfinished segment and seek to the last timestamp
+                # here we throw away all predictions after the last predicted "end of segment"
+                # since we are cutting right in the middle of an audio
+                last_timestamp_pos = seek_sequence[last_slice].item() - timestamp_begin
+                segment_offset = last_timestamp_pos * input_stride
+        else:
+            # If whisper does not predict any "end of segment" token, then
+            # the whole decoding is considered a segment and we add it to the list of segments
+            timestamps = seek_sequence[timestamp_tokens.nonzero().flatten()]
+            last_timestamp_pos = seek_num_frames[prev_idx]
+            if timestamps.numel() > 0 and timestamps[-1].item() != timestamp_begin:
+                # no consecutive timestamps but it has a timestamp; use the last one.
+                last_timestamp_pos = timestamps[-1].item() - timestamp_begin
+
+            segment = {
+                "start": time_offset[prev_idx],
+                "end": time_offset[prev_idx] + last_timestamp_pos * time_precision,
+                "tokens": seek_sequence,
+                "result": seek_outputs[idx],
+            }
+            segment_offset = seek_num_frames[prev_idx]
+
+        return segment, segment_offset
 
     def prepare_inputs_for_generation(
         self,

@@ -1519,15 +1519,17 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(
-        self, generate_config, detect_timestamp_from_logprob: Optional[bool] = None
+        self, generate_config, _detect_timestamp_from_logprob: Optional[bool] = None
     ):  # support for the kwargs
         self.eos_token_id = generate_config.eos_token_id
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
         self.timestamp_begin = generate_config.no_timestamps_token_id + 1
-        self.detect_timestamp_from_logprob = (
-            detect_timestamp_from_logprob
-            if detect_timestamp_from_logprob is not None
-            else getattr(generate_config, "detect_timestamp_from_logprob", True)
+
+        # this variable is mostly just used for testing
+        self._detect_timestamp_from_logprob = (
+            _detect_timestamp_from_logprob
+            if _detect_timestamp_from_logprob is not None
+            else getattr(generate_config, "_detect_timestamp_from_logprob", True)
         )
 
         self.begin_index = (
@@ -1579,7 +1581,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         for k in range(input_ids.shape[0]):
             timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
             max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
-            if timestamp_logprob > max_text_token_logprob and self.detect_timestamp_from_logprob:
+            if timestamp_logprob > max_text_token_logprob and self._detect_timestamp_from_logprob:
                 scores[k, : self.timestamp_begin] = -float("inf")
 
         return scores
