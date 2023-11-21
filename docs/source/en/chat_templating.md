@@ -376,7 +376,9 @@ input formats. Our default template for models that don't have a class-specific 
 ```
 
 If you like this one, here it is in one-liner form, ready to copy into your code. The one-liner also includes
-handy support for "generation prompts" - see the next section for more!
+handy support for [generation prompts](#what-are-generation-prompts), but note that it doesn't add BOS or EOS tokens!
+If your model expects those, they won't be added automatically by `apply_chat_template`, so be sure to include them
+in the template.
 
 ```
 tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
