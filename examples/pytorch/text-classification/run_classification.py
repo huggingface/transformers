@@ -396,7 +396,7 @@ def main():
             )
 
     # See more about loading any type of standard or custom dataset at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     if data_args.remove_splits is not None:
         for split in data_args.remove_splits.split(","):

@@ -32,7 +32,7 @@ rendered properly in your Markdown viewer.
 
 The DistilBERT model was proposed in the blog post [Smaller, faster, cheaper, lighter: Introducing DistilBERT, a
 distilled version of BERT](https://medium.com/huggingface/distilbert-8cf3380435b5), and the paper [DistilBERT, a
-distilled version of BERT: smaller, faster, cheaper and lighter](https://arxiv.org/papers/1910.01108). DistilBERT is a
+distilled version of BERT: smaller, faster, cheaper and lighter](https://arxiv.org/abs/1910.01108). DistilBERT is a
 small, fast, cheap and light Transformer model trained by distilling BERT base. It has 40% less parameters than
 *bert-base-uncased*, runs 60% faster while preserving over 95% of BERT's performances as measured on the GLUE language
 understanding benchmark.
