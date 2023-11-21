@@ -19,6 +19,7 @@
 # limitations under the License.
 """ PyTorch Persimmon model."""
 import math
+import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -54,6 +55,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "PersimmonConfig"
 
 
+# Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
@@ -244,6 +246,7 @@ class PersimmonAttention(nn.Module):
         self.rope_theta = config.rope_theta
         self.partial_rotary_factor = config.partial_rotary_factor
         self.is_causal = True
+        # self.attention_dropout = config.attention_dropout
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -328,7 +331,12 @@ class PersimmonAttention(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
         bsz, q_len, _ = hidden_states.size()
 
         # [batch_size, seq_length, 3 x hidden_size]
@@ -397,7 +405,9 @@ class PersimmonAttention(nn.Module):
         attn_weights = nn.functional.softmax(
             attn_weights, dtype=torch.float32, dim=-1
         ).to(query_states.dtype)
-        attn_weights = self.attention_dropout(attn_weights)
+
+        if self.training:
+            attn_weights = self.attention_dropout(attn_weights)
 
         attn_output = torch.matmul(attn_weights, value_states)
 
@@ -600,24 +610,29 @@ class PersimmonFlashAttention2(PersimmonAttention):
 
         return attn_output
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
     def _upad_input(
         self, query_layer, key_layer, value_layer, attention_mask, query_length
     ):
+        batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
+
+        # On the first iteration we need to properly re-create the padding mask
+        # by slicing it on the proper place
+        if kv_seq_len != attention_mask.shape[-1]:
+            attention_mask_num_tokens = attention_mask.shape[-1]
+            attention_mask = attention_mask[:, attention_mask_num_tokens - kv_seq_len :]
+
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
         key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
-            indices_k,
+            key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
         )
         value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
-            indices_k,
+            value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
         )
+
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim),
+                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim),
                 indices_k,
             )
             cu_seqlens_q = cu_seqlens_k
@@ -645,6 +660,52 @@ class PersimmonFlashAttention2(PersimmonAttention):
             (cu_seqlens_q, cu_seqlens_k),
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
+
+    # # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
+    # def _upad_input(
+    #     self, query_layer, key_layer, value_layer, attention_mask, query_length
+    # ):
+    #     indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
+    #     batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
+
+    #     key_layer = index_first_axis(
+    #         key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
+    #         indices_k,
+    #     )
+    #     value_layer = index_first_axis(
+    #         value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
+    #         indices_k,
+    #     )
+    #     if query_length == kv_seq_len:
+    #         query_layer = index_first_axis(
+    #             query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim),
+    #             indices_k,
+    #         )
+    #         cu_seqlens_q = cu_seqlens_k
+    #         max_seqlen_in_batch_q = max_seqlen_in_batch_k
+    #         indices_q = indices_k
+    #     elif query_length == 1:
+    #         max_seqlen_in_batch_q = 1
+    #         cu_seqlens_q = torch.arange(
+    #             batch_size + 1, dtype=torch.int32, device=query_layer.device
+    #         )  # There is a memcpy here, that is very bad.
+    #         indices_q = cu_seqlens_q[:-1]
+    #         query_layer = query_layer.squeeze(1)
+    #     else:
+    #         # The -q_len: slice assumes left padding.
+    #         attention_mask = attention_mask[:, -query_length:]
+    #         query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(
+    #             query_layer, attention_mask
+    #         )
+
+    #     return (
+    #         query_layer,
+    #         key_layer,
+    #         value_layer,
+    #         indices_q,
+    #         (cu_seqlens_q, cu_seqlens_k),
+    #         (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
+    #     )
 
 
 class PersimmonDecoderLayer(nn.Module):

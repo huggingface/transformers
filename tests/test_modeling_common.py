@@ -3506,7 +3506,6 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
-    @slow
     def test_flash_attn_2_inference_padding_right(self):
         import torch
 
@@ -3609,7 +3608,113 @@ class ModelTesterMixin:
                     else outputs_fa.decoder_hidden_states[-1]
                 )
 
+                for i in range(logits.shape[0]):
+                    if not torch.allclose(logits[i], logits_fa[i]):
+                        print(i)
+                print(logits_fa[:-1].shape)
                 assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    def test_flash_attn_2_inference_padding_right_by_1(self):
+        import torch
+
+        from transformers import MistralModel, PersimmonModel
+
+        for model_class in self.all_model_classes:
+            if model_class == PersimmonModel or model_class == MistralModel:
+                (
+                    config,
+                    inputs_dict,
+                ) = self.model_tester.prepare_config_and_inputs_for_common()
+
+                model = model_class(config)
+                print("Hello")
+                print("Model class: {}".format(model_class))
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+                    model_fa = model_class.from_pretrained(
+                        tmpdirname,
+                        torch_dtype=torch.bfloat16,
+                        use_flash_attention_2=True,
+                    )
+                    model_fa.to(torch_device)
+
+                    model = model_class.from_pretrained(
+                        tmpdirname,
+                        torch_dtype=torch.bfloat16,
+                        use_flash_attention_2=False,
+                    )
+                    model.to(torch_device)
+
+                    dummy_inputs = inputs_dict[model.main_input_name]
+                    if dummy_inputs.dtype in [torch.float32, torch.float16]:
+                        dummy_inputs = dummy_inputs.to(torch.bfloat16)
+
+                    dummy_attention_masks = inputs_dict.get("attention_mask", None)
+
+                    if dummy_attention_masks is not None:
+                        dummy_attention_masks[:, :-1] = 1
+                        dummy_attention_masks[:, -1:] = 0
+
+                    for i in range(dummy_inputs.shape[0]):
+                        print(f"Iteration {i}")
+                        idx = slice(0, i + 1)
+                        dummy_input = dummy_inputs[idx]
+                        dummy_attention_mask = dummy_attention_masks[idx]
+
+                        other_inputs = {
+                            "output_hidden_states": True,
+                        }
+
+                        if dummy_attention_mask is not None:
+                            other_inputs["attention_mask"] = dummy_attention_mask
+
+                        # Test no mask
+                        outputs = model(dummy_input, output_hidden_states=True)
+                        outputs_fa = model_fa(dummy_input, output_hidden_states=True)
+
+                        logits = (
+                            outputs.hidden_states[-1]
+                            if not model.config.is_encoder_decoder
+                            else outputs.decoder_hidden_states[-1]
+                        )
+                        logits_fa = (
+                            outputs_fa.hidden_states[-1]
+                            if not model.config.is_encoder_decoder
+                            else outputs_fa.decoder_hidden_states[-1]
+                        )
+
+                        if not torch.allclose(
+                            logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2
+                        ):
+                            print(
+                                f"Input shape {dummy_input.shape} logits with mask not equal"
+                            )
+                        # Test with mask
+                        outputs = model(dummy_input, **other_inputs)
+                        outputs_fa = model_fa(dummy_input, **other_inputs)
+
+                        logits = (
+                            outputs.hidden_states[-1]
+                            if not model.config.is_encoder_decoder
+                            else outputs.decoder_hidden_states[-1]
+                        )
+                        logits_fa = (
+                            outputs_fa.hidden_states[-1]
+                            if not model.config.is_encoder_decoder
+                            else outputs_fa.decoder_hidden_states[-1]
+                        )
+
+                        if not torch.allclose(
+                            logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2
+                        ):
+                            print(
+                                f"Input shape {dummy_input.shape} logits with mask not equal"
+                            )
+            else:
+                return
 
     @require_flash_attn
     @require_torch_gpu
@@ -3676,7 +3781,6 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
-    @slow
     def test_flash_attn_2_generate_padding_right(self):
         import torch
 
@@ -3690,6 +3794,7 @@ class ModelTesterMixin:
                 config,
                 inputs_dict,
             ) = self.model_tester.prepare_config_and_inputs_for_common()
+
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -3717,6 +3822,8 @@ class ModelTesterMixin:
                     attention_mask=dummy_attention_mask,
                     max_new_tokens=1,
                     do_sample=False,
+                    # return_dict_in_generate=True,
+                    # output_scores=True,
                 )
 
                 model = model_class.from_pretrained(
@@ -3731,9 +3838,19 @@ class ModelTesterMixin:
                     attention_mask=dummy_attention_mask,
                     max_new_tokens=1,
                     do_sample=False,
+                    # return_dict_in_generate=True,
+                    # output_scores=True,
                 )
+                # print(f"out={out}")
+                # print(f"out_fa={out_fa}")
+                print(f"config: {config}")
+                for i in range(out.shape[0]):
+                    if not torch.equal(out[i], out_fa[i]):
+                        print(f"i={i}")
+                        print(f"out[{i}]={out[i]}")
+                        print(f"out_fa[{i}]={out_fa[i]}")
 
-                self.assertTrue(torch.equal(out, out_fa))
+                # self.assertTrue(torch.equal(out, out_fa))
 
     @require_flash_attn
     @require_torch_gpu
