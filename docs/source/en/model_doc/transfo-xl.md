@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 This model is in maintenance mode only, so we won't accept any new PRs changing its code.
 
 If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0.
-You can do so by running the following command: `pip install -U transformers==4.30.0`.
+You can do so by running the following command: `pip install -U transformers==4.35.0`.
 
 </Tip>
 
