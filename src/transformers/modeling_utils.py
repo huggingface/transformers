@@ -1282,11 +1282,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 install_message = "Please refer to the documentation of https://github.com/Dao-AILab/flash-attention to install it. Make sure to have at least the version 2.1.0."
 
                 if importlib.util.find_spec("flash_attn") is None:
-                    raise ValueError(f"The packaging flash_attn seem to be not installed. {install_message}")
+                    raise ImportError(f"The packaging flash_attn seem to be not installed. {install_message}")
 
                 flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
                 if flash_attention_version < version.parse("2.1.0"):
-                    raise ValueError(
+                    raise ImportError(
                         f"You need flash_attn package version to be greater or equal than 2.1. Make sure to have that version installed - detected version {flash_attention_version}."
                     )
                 else:
@@ -1295,10 +1295,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 install_message = "Please refer to the documentation of https://github.com/ROCmSoftwarePlatform/flash-attention to install it for AMD GPUs, or use the Transformers + Flash Attention 2-compatible Dockerfile available at https://github.com/huggingface/optimum-amd/tree/main/docker/transformers-pytorch-nightly-amd-gpu-flash/Dockerfile."
 
                 if importlib.util.find_spec("flash_attn") is None:
-                    raise ValueError(f"The packaging flash_attn seem to be not installed. {install_message}")
+                    raise ImportError(f"The packaging flash_attn seem to be not installed. {install_message}")
                 flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
                 if flash_attention_version < version.parse("2.0.4"):
-                    raise ValueError(
+                    raise ImportError(
                         f"You need flash_attn package version to be greater or equal than 2.0.4. Make sure to have that version installed - detected version {flash_attention_version}."
                     )
                 else:
