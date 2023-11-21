@@ -325,7 +325,7 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
 
     We ignore the attention mask in some cases for batch_size = 1 to allow to dispatch to the flash attention kernel.
 
-    Note that as of PyTorch 2.1, SDPA can not dispatch to flash attention in case an attention mask is passed. A
+    Note that as of PyTorch 2.1, SDPA cannot dispatch to flash attention if an attention mask is passed. A
     possible solution is to use nested tensors.
     """
     attn_mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=sliding_window)
