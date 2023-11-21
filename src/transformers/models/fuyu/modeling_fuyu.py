@@ -58,7 +58,7 @@ class FuyuPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = []
     _skip_keys_device_placement = "past_key_values"
-
+    _supports_flash_attn_2 = True
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
@@ -149,7 +149,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        # I hard code torch.bfloat16 here because without it the model will be loaded as flaot32 and FA2 does not work with float32. Any better way to do this?
+        # Also it will trigger "You are attempting to use Flash Attention 2.0 with a model initialized on CPU....."
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config,use_flash_attention_2=getattr(config, "_flash_attn_2_enabled", False), torch_dtype=torch.bfloat16)
 
         self.vision_embed_tokens = nn.Linear(
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size

@@ -1,27 +1,28 @@
-import transformers
+# A simple test. To be removed when done.
+from transformers import FuyuProcessor, FuyuForCausalLM
+from PIL import Image
+import requests
+import time
 import torch
-device = "cuda:0"
-model_name = "adept/persimmon-8b-chat"
-model = transformers.AutoModelForCausalLM.from_pretrained(model_name,torch_dtype=torch.float16, device_map=device, use_flash_attention_2=True)
-tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
+# load model and processor
+model_id = "adept/fuyu-8b"
+processor = FuyuProcessor.from_pretrained(model_id)
+model = FuyuForCausalLM.from_pretrained(model_id, device_map="cuda:0", torch_dtype=torch.bfloat16, use_flash_attention_2=True)
 
+# prepare inputs for the model
+text_prompt = "Generate a coco-style caption.\n"
+url = "https://huggingface.co/adept/fuyu-8b/resolve/main/bus.png"
+image = Image.open(requests.get(url, stream=True).raw)
 
-def generate_response(user_input):
-    
-    # Format the input using the provided template
-    prompt = f"human: {user_input}\n\nadept:"
+inputs = processor(text=text_prompt, images=image, return_tensors="pt").to("cuda:0")
 
-    # Tokenize and encode the prompt
-    inputs = tokenizer.encode(prompt, return_tensors="pt").to(device)
+# autoregressively generate text
+# Test time
+start = time.time()
+for i in range(10):
+    generation_output = model.generate(**inputs, max_new_tokens=7)
+end = time.time()
+print(end - start)
 
-    # Generate a response
-    outputs = model.generate(inputs, max_new_tokens=256, do_sample=True, temperature=0.7, top_k=50, top_p=0.95)
-    response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-    # Extract only the assistant's response
-    return response
-
-
-user_input = "Who is Donald Trump?"
-response = generate_response(user_input)
-print(response)
+generation_text = processor.batch_decode(generation_output[:, -7:], skip_special_tokens=True)
+assert generation_text == ['A blue bus parked on the side of a road.']

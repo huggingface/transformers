@@ -375,7 +375,6 @@ class PersimmonFlashAttention2(PersimmonAttention):
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
  
-
         output_attentions = False
 
         bsz, q_len, _ = hidden_states.size()
@@ -440,7 +439,7 @@ class PersimmonFlashAttention2(PersimmonAttention):
             if hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             else:
-                target_dtype = self.q_proj.weight.dtype
+                target_dtype = self.query_key_value.weight.dtype
 
             logger.warning_once(
                 f"The input hidden states seems to be silently casted in float32, this might be related to"
