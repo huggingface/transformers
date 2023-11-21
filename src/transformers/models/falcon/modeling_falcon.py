@@ -38,6 +38,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_210,
     logging,
 )
 from .configuration_falcon import FalconConfig
@@ -515,6 +516,13 @@ class FalconFlashAttention2(FalconAttention):
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used
+        # to handle this difference.
+        self.flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_210()
 
     def forward(
         self,
