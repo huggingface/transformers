@@ -504,7 +504,7 @@ class LlamaFlashAttention2(LlamaAttention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        dropout_rate = 0.0 if not self.training else self.attention_dropout
+        dropout_rate = self.attention_dropout if self.training else 0.0
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -705,8 +705,7 @@ class LlamaSDPAAttention(LlamaAttention):
             key_states,
             value_states,
             attn_mask=attention_mask,
-            # Llama does not use dropout in the attention, hence the hard-coded dropout_p=0.0 independent of self.training.
-            dropout_p=0.0,
+            dropout_p=self.attention_dropout if self.training else 0.0,
             # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
             is_causal=self.is_causal and attention_mask is None and q_len > 1,
         )
