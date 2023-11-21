@@ -1437,6 +1437,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
             past_observed_mask=past_observed_mask,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
+            return_dict=return_dict,
         )
 
         # model_output[0]: [bs x num_channels x num_patches x patch_length] or
@@ -1450,7 +1451,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
 
         encoder_states = model_output.hidden_states
         if not return_dict:
-            outputs = (masked_loss, x_hat, model_output.hidden_states, model_output.attentions)
+            outputs = (masked_loss, x_hat) + model_output[1:3]
             return tuple(v for v in outputs if v is not None)
         return PatchTSTForPretrainingOutput(
             loss=masked_loss, prediction_output=x_hat, hidden_states=encoder_states, attentions=model_output.attentions
