@@ -554,7 +554,7 @@ class XLMRobertaXLEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->XLMRoberta
 class XLMRobertaXLPooler(nn.Module):
     def __init__(self, config):
         super().__init__()

@@ -1148,7 +1148,7 @@ class AlignTextEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert -> AlignText
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->AlignText
 class AlignTextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()

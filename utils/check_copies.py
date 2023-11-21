@@ -264,15 +264,6 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
     observed_code_header = observed_code.split("\n")[0]
     theoretical_code_header = theoretical_code.split("\n")[0]
 
-    # Catch the function/class name: it is expected that those do not match.
-    _re_class_match = re.compile(r"class\s+([^\(:]+)(?:\(|:)")
-    _re_func_match = re.compile(r"def\s+([^\(]+)\(")
-    for re_pattern in [_re_class_match, _re_func_match]:
-        if re_pattern.match(observed_code_header) is not None:
-            observed_obj_name = re_pattern.search(observed_code_header).groups()[0]
-            theoretical_name = re_pattern.search(theoretical_code_header).groups()[0]
-            theoretical_code_header = theoretical_code_header.replace(theoretical_name, observed_obj_name)
-
     # Find the first diff. Line 0 is special since we need to compare with the function/class names ignored.
     diff_index = 0
     if theoretical_code_header != observed_code_header:

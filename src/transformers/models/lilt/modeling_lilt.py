@@ -557,7 +557,7 @@ class LiltEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Lilt
 class LiltPooler(nn.Module):
     def __init__(self, config):
         super().__init__()

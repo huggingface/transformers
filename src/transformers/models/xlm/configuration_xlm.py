@@ -233,7 +233,7 @@ class XLMConfig(PretrainedConfig):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, **kwargs)
 
 
-# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig
+# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Bert->XLM
 class XLMOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:

@@ -402,7 +402,7 @@ class MPNetEncoder(nn.Module):
         return ret
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->MPNet
 class MPNetPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
