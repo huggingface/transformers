@@ -101,7 +101,7 @@ _import_structure = {
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
-    "generation": ["GenerationConfig", "TextIteratorStreamer", "TextStreamer"],
+    "generation": ["GenerationConfig", "TextIteratorStreamer", "TextStreamer", "TimedTextStreamer"],
     "hf_argparser": ["HfArgumentParser"],
     "hyperparameter_search": [],
     "image_transforms": [],
@@ -4339,7 +4339,7 @@ if TYPE_CHECKING:
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Generation
-    from .generation import GenerationConfig, TextIteratorStreamer, TextStreamer
+    from .generation import GenerationConfig, TextIteratorStreamer, TextStreamer, TimedTextStreamer
     from .hf_argparser import HfArgumentParser
 
     # Integrations

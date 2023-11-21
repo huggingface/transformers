@@ -19,7 +19,7 @@ from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_availab
 
 _import_structure = {
     "configuration_utils": ["GenerationConfig"],
-    "streamers": ["TextIteratorStreamer", "TextStreamer"],
+    "streamers": ["TextIteratorStreamer", "TextStreamer", "TimedTextStreamer"],
 }
 
 try:
@@ -164,7 +164,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_utils import GenerationConfig
-    from .streamers import TextIteratorStreamer, TextStreamer
+    from .streamers import TextIteratorStreamer, TextStreamer, TimedTextStreamer
 
     try:
         if not is_torch_available():

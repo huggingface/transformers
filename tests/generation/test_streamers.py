@@ -17,7 +17,7 @@ import unittest
 from queue import Empty
 from threading import Thread
 
-from transformers import AutoTokenizer, TextIteratorStreamer, TextStreamer, is_torch_available
+from transformers import AutoTokenizer, TextIteratorStreamer, TextStreamer, TimedTextStreamer, is_torch_available
 from transformers.testing_utils import CaptureStdout, require_torch, torch_device
 
 from ..test_modeling_common import ids_tensor
@@ -120,3 +120,43 @@ class StreamerTester(unittest.TestCase):
             streamer_text = ""
             for new_text in streamer:
                 streamer_text += new_text
+
+    def test_timed_text_streamer_non_printing_token_times(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model.config.eos_token_id = -1
+
+        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
+
+        with CaptureStdout() as cs:
+            streamer = TimedTextStreamer()
+            model.generate(input_ids, max_new_tokens=10, do_sample=False, streamer=streamer)
+        # The greedy text should be printed to stdout, except for the final "\n" in the streamer
+        streamer_text = cs.out[:-1]
+        times = streamer.get_token_times()
+        
+        self.assertEqual(streamer_text, "")
+        self.assertEqual(len(streamer.token_times), 10)
+        self.assertEqual({type(time) for time in times}, {float})
+
+    def test_timed_text_streamer_token_times_and_matches_non_streaming(self):
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model.config.eos_token_id = -1
+
+        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
+
+        with CaptureStdout() as cs:
+            streamer = TextStreamer(tokenizer, skip_prompt=True)
+            model.generate(input_ids, max_new_tokens=10, do_sample=False, streamer=streamer)
+
+        with CaptureStdout() as timed_cs:
+            streamer = TimedTextStreamer(tokenizer)
+            model.generate(input_ids, max_new_tokens=10, do_sample=False, streamer=streamer)
+        # The greedy text should be printed to stdout, except for the final "\n" in the streamer
+        timed_streamer_text = timed_cs.out[:-1]
+        streamer_text = cs.out[:-1]
+        times = streamer.get_token_times()
+        
+        self.assertEqual(streamer_text, timed_streamer_text)
+        self.assertEqual(len(streamer.token_times), 10)
+        self.assertEqual({type(time) for time in times}, {float})

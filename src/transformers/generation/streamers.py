@@ -15,7 +15,7 @@
 
 from queue import Queue
 from typing import TYPE_CHECKING, Optional
-
+from time import perf_counter
 
 if TYPE_CHECKING:
     from ..models.auto import AutoTokenizer
@@ -155,6 +155,105 @@ class TextStreamer(BaseStreamer):
 
         return False
 
+
+class TimedTextStreamer(TextStreamer):
+    """
+    A text streamer used for measuring per-token generation latency, for benchmarking purposes.
+    This streamer always skips the prompt.
+    
+    <Tip warning={true}>
+
+    The API for the streamer classes is still under development and may change in the future.
+
+    </Tip>
+
+    Parameters:
+        tokenizer (`AutoTokenizer`, *optional*, defaults to `None`):
+            The tokenizer used to decode the tokens. If not supplied, the streamer
+            will not print the generated text (more accurate time measurement).
+        decode_kwargs (`dict`, *optional*):
+            Additional keyword arguments to pass to the tokenizer's `decode` method.
+
+    Examples:
+
+        ```python
+        >>> from transformers import AutoModelForCausalLM, AutoTokenizer, TimedTextStreamer
+        
+        >>> tok = AutoTokenizer.from_pretrained("gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+        >>> inputs = tok(["An increasing sequence: one, two, three, four, five, six, seven,"], return_tensors="pt")
+
+        >>> # Option 1: Do not print the generated text (more accurate measurement)
+        >>> streamer = TimedTextStreamer()
+        >>> _ = model.generate(**inputs, streamer=streamer, max_new_tokens=5)
+        >>> streamer.get_token_times()
+        [146.61671698559076, 91.94262302480638, 16.620049951598048, 14.585152035579085, 14.050466008484364]
+
+        >>> # Option 2: Print the generated text as well
+        >>> streamer = TimedTextStreamer(tokenizer=tok)
+        >>> _ = model.generate(**inputs, streamer=streamer, max_new_tokens=5)
+         eight, nine, ten
+        >>> streamer.get_token_times()
+        [162.81271493062377, 18.371607991866767, 15.906393993645906, 14.754525036551058, 14.49775299988687]
+        ```
+    """
+    
+    def __init__(self, tokenizer: "AutoTokenizer" = None, **decode_kwargs):
+        super().__init__(tokenizer, skip_prompt=True, skip_special_tokens=False, **decode_kwargs)
+        self.print_text = tokenizer is not None
+        self.token_times = []
+        self.last_timestamp = None
+    
+    def put(self, value):
+        if len(value.shape) > 1 and value.shape[0] > 1:
+            raise ValueError("TextStreamer only supports batch size 1")
+        elif len(value.shape) > 1:
+            value = value[0]
+
+        if self.skip_prompt and self.next_tokens_are_prompt:
+            self.next_tokens_are_prompt = False
+            self.token_times = []
+            self.last_timestamp = perf_counter()
+            return
+        
+        if self.last_timestamp is None:
+            raise ValueError("TimedTextStreamer used incorrectly")
+        else:
+            time_in_ms = (perf_counter() - self.last_timestamp) * 1000
+            self.token_times.extend([time_in_ms / len(value)] * len(value))
+        
+        if self.print_text:
+        # Add the new token to the cache and decodes the entire thing.
+            self.token_cache.extend(value.tolist())
+            text = self.tokenizer.decode(self.token_cache, **self.decode_kwargs)
+
+            # After the symbol for a new line, we flush the cache.
+            if text.endswith("\n"):
+                printable_text = text[self.print_len :]
+                self.token_cache = []
+                self.print_len = 0
+            # If the last token is a CJK character, we print the characters.
+            elif len(text) > 0 and self._is_chinese_char(ord(text[-1])):
+                printable_text = text[self.print_len :]
+                self.print_len += len(printable_text)
+            # Otherwise, prints until the last space char (simple heuristic to avoid printing incomplete words,
+            # which may change with the subsequent token -- there are probably smarter ways to do this!)
+            else:
+                printable_text = text[self.print_len : text.rfind(" ") + 1]
+                self.print_len += len(printable_text)
+
+            self.on_finalized_text(printable_text)
+        
+        self.last_timestamp = perf_counter()
+
+    def end(self):
+        self.last_timestamp = None
+        if self.print_text:
+            super().end()
+        self.next_tokens_are_prompt = True
+
+    def get_token_times(self):
+        return self.token_times
 
 class TextIteratorStreamer(TextStreamer):
     """
