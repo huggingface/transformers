@@ -694,13 +694,9 @@ class SiglipTextTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
-        print("Final text hidden states:", last_hidden_state[0, :3, :3])
-
         # Assuming "sticky" EOS tokenization, last token is always EOS.
         pooled_output = last_hidden_state[:, -1, :]
         pooled_output = self.head(pooled_output)
-
-        print("First values of text pooled output:", pooled_output[0, :3])
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
