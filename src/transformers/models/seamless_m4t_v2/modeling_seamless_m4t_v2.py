@@ -624,7 +624,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
-        scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
+        attn_weights = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
 
         if self.position_embeddings_type == "relative_key":
             query_length, key_length = query.shape[2], key.shape[2]
@@ -637,25 +637,28 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
             positional_embedding = self.distance_embedding(distance + self.left_max_position_embeddings)
             positional_embedding = positional_embedding.to(dtype=query.dtype)  # fp16 compatibility
 
-            relative_position_scores = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
-            scores = scores + (relative_position_scores / math.sqrt(self.head_size))
+            relative_position_attn_weights = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
+            attn_weights = attn_weights + (relative_position_attn_weights / math.sqrt(self.head_size))
 
         # apply attention_mask if necessary
         if attention_mask is not None:
-            scores = scores + attention_mask
+            attn_weights = attn_weights + attention_mask
 
         # => (batch, head, time1, time2)
-        probs = torch.softmax(scores, dim=-1)
-        probs = self.dropout(probs)
+        attn_weights = torch.softmax(attn_weights, dim=-1)
+        attn_weights = self.dropout(attn_weights)
 
         # => (batch, head, time1, d_k)
-        hidden_states = torch.matmul(probs, value)
+        attn_output = torch.matmul(attn_weights, value)
 
         # => (batch, time1, hidden_size)
-        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, self.num_heads * self.head_size)
-        hidden_states = self.linear_out(hidden_states)
+        attn_output = attn_output.transpose(1, 2).reshape(batch_size, -1, self.num_heads * self.head_size)
+        attn_output = self.linear_out(attn_output)
+        
+        if not output_attentions:
+            attn_weights = None
 
-        return hidden_states, probs
+        return attn_output, attn_weights
 
 class SeamlessM4Tv2ConformerEncoderLayer(nn.Module):
     """Conformer block based on https://arxiv.org/abs/2005.08100."""
@@ -701,7 +704,7 @@ class SeamlessM4Tv2ConformerEncoderLayer(nn.Module):
 
         # 2. Self-Attention layer
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weigts = self.self_attn(
+        hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -721,7 +724,7 @@ class SeamlessM4Tv2ConformerEncoderLayer(nn.Module):
         hidden_states = hidden_states * 0.5 + residual
         hidden_states = self.final_layer_norm(hidden_states)
 
-        return hidden_states, attn_weigts
+        return hidden_states, attn_weights
 
 
 class SeamlessM4Tv2ConformerEncoder(nn.Module):
@@ -3984,9 +3987,19 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
         t2u_logits = t2u_output[0]
         padding_mask = t2u_output[1].bool()
 
-        # TODO: enrich with other decoding strategies ? (temperature and so on ?)
-        unit_ids = t2u_logits.argmax(dim=-1)
-
+        # The text-to-unit model is non auto-regressive. We keep the ability to use sampling with temperature
+        temperature = kwargs_speech.get("temperature", None)
+        if (temperature is None or temperature == 1.0) and kwargs_speech.get("do_sample", False):
+            unit_ids = t2u_logits.argmax(dim=-1)
+        else:
+            t2u_logits = t2u_logits / temperature
+            # apply softmax
+            probs = nn.functional.softmax(t2u_logits, dim=-1)
+            # reshape to 2D: (batch_size, seq_len, t2u_vocab_size) -> (batch_size*seq_len, t2u_vocab_size)
+            probs = probs.reshape((-1, probs.shape[2]))
+            # multinomial then reshape : (batch_size*seq_len)-> (batch_size,seq_len)
+            unit_ids = torch.multinomial(probs, num_samples=1).view(t2u_logits.shape[0], -1)
+                    
         output_unit_ids = unit_ids.detach().clone()
 
         replace_mask = (unit_ids == self.config.t2u_eos_token_id) | (~padding_mask)
@@ -4389,8 +4402,18 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel):
         t2u_logits = t2u_output[0]
         padding_mask = t2u_output[1].bool()
 
-        # TODO: enrich with other decoding strategies ? (temperature and so on ?)
-        unit_ids = t2u_logits.argmax(dim=-1)
+        # The text-to-unit model is non auto-regressive. We keep the ability to use sampling with temperature
+        temperature = kwargs_speech.get("temperature", None)
+        if (temperature is None or temperature == 1.0) and kwargs_speech.get("do_sample", False):
+            unit_ids = t2u_logits.argmax(dim=-1)
+        else:
+            t2u_logits = t2u_logits / temperature
+            # apply softmax
+            probs = nn.functional.softmax(t2u_logits, dim=-1)
+            # reshape to 2D: (batch_size, seq_len, t2u_vocab_size) -> (batch_size*seq_len, t2u_vocab_size)
+            probs = probs.reshape((-1, probs.shape[2]))
+            # multinomial then reshape : (batch_size*seq_len)-> (batch_size,seq_len)
+            unit_ids = torch.multinomial(probs, num_samples=1).view(t2u_logits.shape[0], -1)
 
         output_unit_ids = unit_ids.detach().clone()
 
@@ -4898,8 +4921,18 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
         t2u_logits = t2u_output[0]
         padding_mask = t2u_output[1].bool()
 
-        # TODO: enrich with other decoding strategies ? (temperature and so on ?)
-        unit_ids = t2u_logits.argmax(dim=-1)
+        # The text-to-unit model is non auto-regressive. We keep the ability to use sampling with temperature
+        temperature = kwargs_speech.get("temperature", None)
+        if (temperature is None or temperature == 1.0) and kwargs_speech.get("do_sample", False):
+            unit_ids = t2u_logits.argmax(dim=-1)
+        else:
+            t2u_logits = t2u_logits / temperature
+            # apply softmax
+            probs = nn.functional.softmax(t2u_logits, dim=-1)
+            # reshape to 2D: (batch_size, seq_len, t2u_vocab_size) -> (batch_size*seq_len, t2u_vocab_size)
+            probs = probs.reshape((-1, probs.shape[2]))
+            # multinomial then reshape : (batch_size*seq_len)-> (batch_size,seq_len)
+            unit_ids = torch.multinomial(probs, num_samples=1).view(t2u_logits.shape[0], -1)
 
         output_unit_ids = unit_ids.detach().clone()
 

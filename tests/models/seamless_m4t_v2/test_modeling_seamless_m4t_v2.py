@@ -982,10 +982,12 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
 
         input_speech["num_beams"] = 3
         input_speech["do_sample"] = True
+        input_speech["temperature"] = 0.5
         input_speech["num_return_sequences"] = 3
 
         input_text["num_beams"] = 3
         input_text["do_sample"] = True
+        input_text["temperature"] = 0.5
         input_text["num_return_sequences"] = 3
 
         for model_class in [SeamlessM4Tv2ForSpeechToSpeech, SeamlessM4Tv2ForSpeechToText, SeamlessM4Tv2Model]:
