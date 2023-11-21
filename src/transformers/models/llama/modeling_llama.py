@@ -284,11 +284,11 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: LlamaConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: LlamaConfig, layer_idx: int):
         super().__init__()
         self.config = config
-        self.attention_dropout = config.attention_dropout
         self.layer_idx = layer_idx
+        self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
@@ -435,7 +435,7 @@ class LlamaAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, (past_key_value if use_cache else None)
+        return attn_output, attn_weights, past_key_value
 
 
 class LlamaFlashAttention2(LlamaAttention):
@@ -539,7 +539,7 @@ class LlamaFlashAttention2(LlamaAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, (past_key_value if use_cache else None)
+        return attn_output, attn_weights, past_key_value
 
     def _flash_attention_forward(
         self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
@@ -640,7 +640,7 @@ class LlamaFlashAttention2(LlamaAttention):
 
 
 class LlamaDecoderLayer(nn.Module):
-    def __init__(self, config: LlamaConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: LlamaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = (
@@ -816,6 +816,9 @@ LLAMA_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        use_legacy_cache (`bool`, *optional*):
+            If set to `True` (default), will return `past_key_values` as described input above. Otherwise, will return
+            a subclass of `Cache`
 """
 
 
@@ -887,7 +890,7 @@ class LlamaModel(LlamaPreTrainedModel):
         past_key_values_length = 0
         if use_cache:
             if not isinstance(past_key_values, Cache):
-                past_key_values = self.from_legacy_cache(past_key_values)
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             past_key_values_length = past_key_values.get_seq_length()
 
         if position_ids is None:
@@ -964,7 +967,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         next_cache = None
         if use_cache:
-            next_cache = self.to_legacy_cache(next_decoder_cache) if use_legacy_cache else next_decoder_cache
+            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
@@ -973,12 +976,6 @@ class LlamaModel(LlamaPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
-    def from_legacy_cache(self, past_key_values: Optional[Tuple[Tuple[torch.Tensor]]]) -> Cache:
-        return DynamicCache.from_legacy_cache(past_key_values)
-
-    def to_legacy_cache(self, past_key_values: Cache) -> Tuple[Tuple[torch.Tensor]]:
-        return past_key_values.to_legacy_cache()
 
 
 class LlamaForCausalLM(LlamaPreTrainedModel):

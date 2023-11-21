@@ -1,18 +1,40 @@
-from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple, TypeVar
+from typing import List, Optional, Tuple
 
 import torch
 
 
-T = TypeVar("T")
-
-
-class Cache(ABC):
+class Cache:
     def __init__(self) -> None:
-        self.key_cache: Dict[int, Tuple[torch.Tensor]] = {}
-        self.value_cache: Dict[int, Tuple[torch.Tensor]] = {}
+        self.key_cache: List[Tuple[torch.Tensor]] = []
+        self.value_cache: List[Tuple[torch.Tensor]] = []
 
-    @abstractmethod
+    def __getitem__(self, key: int) -> List[Tuple[torch.Tensor]]:
+        """
+        Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
+        sequence length.
+        """
+        if key == 0:
+            return self.key_cache
+        elif key == 1:
+            return self.value_cache
+        else:
+            raise KeyError(f"Cache only supports 0 (key) and 1 (value) indexing, got {key}")
+
+    def __iter__(self):
+        """
+        Support for backwards-compatible `past_key_value` iteration, e.g. `for x in past_key_value:` to iterate over
+        keys and values
+        """
+        yield self.key_cache
+        yield self.value_cache
+
+    def __len__(self):
+        """
+        Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
+        to the number of layers in the model.
+        """
+        return len(self.key_cache)
+
     def update(
         self,
         key_states: torch.Tensor,
@@ -21,10 +43,10 @@ class Cache(ABC):
         cos: Optional[torch.Tensor] = None,
         sin: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        pass
+        raise NotImplementedError("Make sure to implement `update` in a subclass.")
 
-    def get_seq_length(self, layer_idx: int = 0) -> int:
-        if layer_idx not in self.key_cache:
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        if len(self.key_cache) <= layer_idx:
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
@@ -53,9 +75,9 @@ class DynamicCache(Cache):
         cos: Optional[torch.Tensor] = None,
         sin: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        if layer_idx not in self.key_cache:
-            self.key_cache[layer_idx] = key_states
-            self.value_cache[layer_idx] = value_states
+        if len(self.key_cache) <= layer_idx:
+            self.key_cache.append(key_states)
+            self.value_cache.append(value_states)
         else:
             self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
             self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
@@ -109,7 +131,7 @@ class SinkCache(Cache):
             )
         return self.cos_sin_cache[key_states.shape[-2]]
 
-    def get_seq_length(self, layer_idx: int = 0) -> int:
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         # Workaround to make 'key_states.shape[-2] + past_key_value.get_seq_length(self.layer_idx)' <= window_length
         return min(super().get_seq_length(layer_idx), self.window_length - 1)
 
@@ -122,10 +144,10 @@ class SinkCache(Cache):
         sin: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # [bsz, num_heads, seq_len, head_dim]
-        if layer_idx not in self.key_cache:
+        if len(self.key_cache) <= layer_idx:
             # Empty cache
-            self.key_cache[layer_idx] = key_states
-            self.value_cache[layer_idx] = value_states
+            self.key_cache.append(key_states)
+            self.value_cache.append(value_states)
 
         elif key_states.shape[-2] + self.get_seq_length(layer_idx) < self.window_length:
             # Growing cache
