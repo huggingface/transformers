@@ -1224,8 +1224,6 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         self.scaler = PatchTSTScaler(config)
         self.patchifier = PatchTSTPatchify(config)
         self.mask_input = config.mask_input
-        # get num_patches information from PatchTSTPatchify
-        config.num_patches = self.patchifier.num_patches
 
         if self.mask_input:
             self.masking = PatchTSTMasking(config)
