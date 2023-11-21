@@ -684,7 +684,6 @@ class PatchTSTPositionalEncoding(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
         self.use_cls_token = config.use_cls_token
-        self.d_model = config.d_model
         self.num_input_channels = config.num_input_channels
         if config.use_cls_token:
             # cls_token: [1 x num_input_channels x 1 x d_model]
