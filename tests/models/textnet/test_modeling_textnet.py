@@ -235,7 +235,8 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.config_tester.check_config_arguments_init()
 
     def create_and_test_config_common_properties(self):
-        return
+        config = self.model_tester.get_config()
+        self.assertTrue(hasattr(config, "hidden_sizes"))
 
     @unittest.skip(reason="TextNet does not output attentions")
     def test_attention_outputs(self):
@@ -280,8 +281,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
-            expected_num_stages = self.model_tester.num_stages - 1
-            self.assertEqual(len(hidden_states), expected_num_stages + 1)
+            self.assertEqual(len(hidden_states), self.model_tester.num_stages)
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),

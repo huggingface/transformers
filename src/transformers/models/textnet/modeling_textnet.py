@@ -110,10 +110,10 @@ class TextNetConvLayer(nn.Module):
 
 
 class TextNetRepConvLayer(nn.Module):
-    def __init__(self, config, num_channels, out_channels, kernel_size, stride):
+    def __init__(self, config, in_channels, out_channels, kernel_size, stride):
         super().__init__()
 
-        self.num_channels = num_channels
+        self.num_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
         self.stride = stride
@@ -123,7 +123,7 @@ class TextNetRepConvLayer(nn.Module):
         self.nonlinearity = nn.ReLU()
 
         self.main_conv = nn.Conv2d(
-            in_channels=num_channels,
+            in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
             stride=stride,
@@ -137,7 +137,7 @@ class TextNetRepConvLayer(nn.Module):
 
         if kernel_size[1] != 1:
             self.vertical_conv = nn.Conv2d(
-                in_channels=num_channels,
+                in_channels=in_channels,
                 out_channels=out_channels,
                 kernel_size=(kernel_size[0], 1),
                 stride=stride,
@@ -150,7 +150,7 @@ class TextNetRepConvLayer(nn.Module):
 
         if kernel_size[0] != 1:
             self.horizontal_conv = nn.Conv2d(
-                in_channels=num_channels,
+                in_channels=in_channels,
                 out_channels=out_channels,
                 kernel_size=(1, kernel_size[1]),
                 stride=stride,
@@ -162,8 +162,8 @@ class TextNetRepConvLayer(nn.Module):
             self.horizontal_conv, self.horizontal_batch_norm = None, None
 
         self.rbr_identity = (
-            nn.BatchNorm2d(num_features=num_channels, eps=config.batch_norm_eps)
-            if out_channels == num_channels and stride == 1
+            nn.BatchNorm2d(num_features=in_channels, eps=config.batch_norm_eps)
+            if out_channels == in_channels and stride == 1
             else None
         )
 
@@ -346,11 +346,8 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.textnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        last_hidden_state = outputs.last_hidden_state if return_dict else outputs[0]
-
+        last_hidden_state = outputs[0]
         logits = self.classifier(last_hidden_state)
-
         loss = None
 
         if labels is not None:
@@ -433,9 +430,8 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
         hidden_states = outputs.hidden_states if return_dict else outputs[2]
 
         feature_maps = ()
-        for idx, stage in enumerate(self.stage_names):
-            if stage in self.out_features:
-                feature_maps += (hidden_states[idx],)
+        for idx in self.out_indices:
+            feature_maps += (hidden_states[idx],)
 
         if not return_dict:
             output = (feature_maps,)
