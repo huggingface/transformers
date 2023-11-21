@@ -117,9 +117,9 @@ BEIT3_FOR_VISUAL_REASONING_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, 2 ,num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`BeitImageProcessor.__call__`] for details.
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, 2,num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained by combining two images after preprocessing using
+             [`AutoImageProcessor`]. See [`BeitImageProcessor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `({0})`):
             Padding mask for input tokens , of same shape as `input_ids`
             - 1 indicates the token is **not masked**,
@@ -176,10 +176,11 @@ BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
         language_masked_pos (`torch.LongTensor` of shape `({0})`):
             language_masked_pos for denoting tokens for captioning
 
-            - 1 indicates the token is **Present**,
+            - 1 indicates the token is **present**,
             - 0 indicates the token is **absent**.
         text_len (`torch.LongTensor` of shape `({0})`):
-            Length of text for captioning
+            Length of text for captioning, this is the length of the final caption to be generated, 
+            includes the input_ids and tokens marked as 64001 (token id marked as to be filled).
         past_key_value (`Dict`):
             A Dictionary containing the incremental states layerwise
         output_hidden_states (`bool`, *optional*):
@@ -240,9 +241,14 @@ BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.            
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.            
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -707,9 +713,6 @@ class Beit3Encoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        if attention_mask is None:
-            attention_mask = torch.ones(hidden_state.shape[:2], device=hidden_state.device).bool()
-
         hidden_state = self.add_position_embeddings(hidden_state, text_end_positions, multiway_split_position)
         hidden_state = hidden_state * (attention_mask.unsqueeze(-1).type_as(hidden_state))
 
@@ -834,18 +837,15 @@ class Beit3Model(Beit3PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # TODO remove this
         text_end_positions = None
         if input_ids is None and pixel_values is None:
             raise ValueError("You have to specify at least input_ids or pixel_values")
 
         if input_ids is None:
             embeddings = self.vision_embedding(pixel_values, vision_masked_position)
-            attention_mask = None
             multiway_split_position = -1
         elif pixel_values is None:
             embeddings = self.text_embedding(input_ids)
-            attention_mask = attention_mask
             multiway_split_position = 0
         else:
             vision_embeddings = self.vision_embedding(pixel_values, vision_masked_position)
@@ -855,15 +855,9 @@ class Beit3Model(Beit3PreTrainedModel):
 
             if attention_mask is not None:
                 zeros_for_vision_padding = torch.ones(vision_embeddings.shape[:-1]).to(vision_embeddings.device).bool()
-                attention_mask = torch.cat(
-                    [
-                        zeros_for_vision_padding,
-                        attention_mask,
-                    ],
-                    dim=1,
-                )
-            else:
-                attention_mask = None
+                attention_mask = torch.cat([zeros_for_vision_padding, attention_mask], dim=1)
+        if attention_mask is None:
+            attention_mask = torch.ones(embeddings.shape[:2], device=embeddings.device).bool()
 
         encoder_outputs = self.encoder(
             hidden_state=embeddings,
@@ -966,10 +960,7 @@ class Beit3ForImagesAndTextClassification(Beit3PreTrainedModel):
             output_attentions=output_attentions,
             return_dict=return_dict,
         )
-        if return_dict:
-            last_hidden_state = outputs.last_hidden_state
-        else:
-            last_hidden_state = outputs[0]
+        last_hidden_state = outputs[0]
 
         if input_ids is None:
             multiway_split_position = -1
@@ -1398,7 +1389,6 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> text = "This is photo of a cat"
 
         >>> inputs = processor(
         ...     text=["This is photo of a cat", "This is photo of a dog"], images=[image, image], return_tensors="pt"

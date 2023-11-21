@@ -33,7 +33,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
@@ -52,35 +51,35 @@ if is_vision_available():
 
 class Beit3ModelTester:
     def __init__(
-        self,
-        parent,
-        hidden_size=37,
-        num_attention_heads=1,
-        intermediate_size=2,
-        num_hidden_layers=1,
-        normalize_before=True,
-        activation_fn="gelu",
-        dropout=0.0,
-        drop_path_rate=0.0,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        deepnorm=False,
-        subln=True,
-        bert_init=False,
-        multiway=True,
-        max_source_positions=16,
-        layernorm_eps=1e-5,
-        vocab_size=50,
-        image_size=16,
-        patch_size=2,
-        num_channels=3,
-        num_labels=2,
-        batch_size=1,
-        seq_length=7,
-        use_labels=True,
-        is_training=True,
-        add_multiple_images=False,
-        num_images=1,
+            self,
+            parent,
+            hidden_size=37,
+            num_attention_heads=1,
+            intermediate_size=2,
+            num_hidden_layers=1,
+            normalize_before=True,
+            activation_fn="gelu",
+            dropout=0.0,
+            drop_path_rate=0.0,
+            attention_dropout=0.0,
+            activation_dropout=0.0,
+            deepnorm=False,
+            subln=True,
+            bert_init=False,
+            multiway=True,
+            max_source_positions=16,
+            layernorm_eps=1e-5,
+            vocab_size=50,
+            image_size=16,
+            patch_size=2,
+            num_channels=3,
+            num_labels=2,
+            batch_size=1,
+            seq_length=7,
+            use_labels=True,
+            is_training=True,
+            add_multiple_images=False,
+            num_images=1,
     ):
         self.parent = parent
         self.hidden_size = hidden_size
@@ -189,14 +188,6 @@ class Beit3ModelTester:
         config = self.get_config()
         label = torch.tensor([20, 5, 2])
         return config, {"language_masked_pos": language_masked_pos, "labels": label}
-
-    def prepare_config_and_inputs_for_basemodel(self):
-        language_masked_pos = torch.zeros((self.batch_size, self.seq_length))
-        to_fill = list(range(0, self.seq_length, 3))
-        language_masked_pos[:, to_fill] = 1
-        config = self.get_config()
-        torch.tensor([20, 5, 2])
-        return config, {}
 
     def prepare_config_and_inputs_for_visual_question_answering(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -331,7 +322,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif isinstance(tuple_object, Dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
-                            tuple_object.values(), dict_object.values()
+                                tuple_object.values(), dict_object.values()
                         ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif tuple_object is None:
@@ -407,7 +398,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    # override as the `logit_scale` parameter initilization is different for Blip
+    # override as the `logit_scale` parameter initilization is different for Beit3
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -642,7 +633,9 @@ class BeitModelIntegrationTest(unittest.TestCase):
         inputs = processor(text=["This is photo of a dog"], images=image, return_tensors="pt")
 
         language_masked_pos = torch.zeros_like(inputs.input_ids)
+        # From the text 'This is photo of a dog', we are going to ask model to predict 'dog', so masking it.
         language_masked_pos[:, 6] = 1
+        # In the input_ids , we should mark to predict tokens as 64001.
         inputs.input_ids[:, 6] = 64001
 
         output = model(
@@ -672,4 +665,8 @@ class BeitModelIntegrationTest(unittest.TestCase):
             return_loss=True,
         )
 
+        expected = np.array([[51.757538, 51.757538],
+                             [45.77479, 45.77479]])
+        np.testing.assert_allclose(outputs.logits_per_image.detach().numpy(), expected)
+        np.testing.assert_allclose(outputs.logits_per_text.detach().numpy(), expected.T)
         self.assertEqual(round(float(outputs.loss.detach().numpy()), 4), 1.8435)

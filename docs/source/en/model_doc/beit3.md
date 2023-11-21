@@ -37,7 +37,7 @@ image classification (ImageNet), visual reasoning (NLVR2), visual question answe
 This model was contributed by [Raghavan](https://huggingface.co/Raghavan).
 The original code can be found [here](https://github.com/microsoft/unilm/tree/master/beit3).
 
-## Examples
+## Usage example
 
 Here is a sample of Beit3 model for ImageClassification
 

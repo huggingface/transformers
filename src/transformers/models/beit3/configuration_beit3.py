@@ -46,7 +46,7 @@ class Beit3Config(PretrainedConfig):
             Activation function to apply within Mega encoder blocks. Choose one of `"silu"`, `"relu"`, `"linear"`,
             `"gelu"`, or `"gelu_accurate"`
         dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability.
+            The dropout probability to be used in Beit3FeedForwardNetwork and Beit3Encoder.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability of the attention layer.
         activation_dropout (`float`, *optional*, defaults to 0.0):
@@ -70,7 +70,7 @@ class Beit3Config(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         logit_scale_init_value (`float`, *optional*, defaults to 2.66):
-            The inital value of the *logit_scale* paramter. Default is used as per the original CLIP implementation.
+            The inital value of the *logit_scale* parameter. Default is used as per the original CLIP implementation.
 
     Example:
 
