@@ -55,6 +55,7 @@ else:
         "TFIdeficsForVisionText2Text",
         "TFIdeficsModel",
         "TFIdeficsPreTrainedModel",
+        "TFIdeficsProcessor"
     ]
 
 if TYPE_CHECKING:
@@ -83,7 +84,7 @@ if TYPE_CHECKING:
 
     try:
         if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
+            raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:

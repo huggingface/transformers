@@ -21,7 +21,7 @@ from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 
-from ...activations import ACT2FN
+from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
 from ...modeling_tf_utils import shape_list, TFPreTrainedModel
 from ...utils import ModelOutput, logging
@@ -77,7 +77,10 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
             kernel_size=self.patch_size,
             strides=self.patch_size,
             use_bias=False,
-            data_format="channels_last",
+            # TODO: Alazar, channel_first data format isn't supported on CPU
+            # but I was getting a weird crash when it is set to channels_last
+            # I will investigate later, just a temporary hack
+            data_format="channels_first",
             name="patch_embedding",
         )
 
@@ -119,7 +122,7 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         return tf.concat((class_pos_embed[tf.newaxis, :], patch_pos_embed), axis=1)
 
     def call(self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False) -> tf.Tensor:
-        batch_size, height, width, num_channels = shape_list(pixel_values)
+        batch_size, num_channels, height, width = shape_list(pixel_values)
         if not interpolate_pos_encoding:
             if height != self.image_size or width != self.image_size:
                 raise ValueError(
@@ -127,7 +130,7 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
                     f" ({self.image_size}*{self.image_size}). You should try to set `interpolate_pos_encoding=True`"
                 )
 
-        pixel_values = tf.transpose(pixel_values, perm=[0, 3, 1, 2])
+        #pixel_values = tf.transpose(pixel_values, perm=[0, 3, 1, 2])
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
 
         patch_embeds = tf.reshape(patch_embeds, [batch_size, self.num_patches, -1])
@@ -254,7 +257,7 @@ class TFIdeficsVisionMLP(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.activation_fn = get_tf_activation(config.hidden_act)
         self.fc1 = tf.keras.layers.Dense(config.intermediate_size, name="fc1")
         self.fc2 = tf.keras.layers.Dense(config.hidden_size, name="fc2")
 
