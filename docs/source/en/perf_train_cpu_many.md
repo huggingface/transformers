@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 # Efficient Training on Multiple CPUs
 
 When training on a single CPU is too slow, we can use multiple CPUs. This guide focuses on PyTorch-based DDP enabling
-distributed CPU training efficiently on [bare metal](#usage-in-trainer) and [Kubernetes](#usage-in-kubernetes).
+distributed CPU training efficiently on [bare metal](#usage-in-trainer) and [Kubernetes](#usage-with-kubernetes).
 
 ## Intel® oneCCL Bindings for PyTorch
 
