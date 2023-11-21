@@ -14,14 +14,14 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 通用实用程序
+# 通用工具
 
 此页面列出了在`utils.py`文件中找到的所有Transformers通用实用函数。
 
 其中大多数仅在您研究库中的通用代码时才有用。
 
 
-## Enums和namedtuples(命名元组）
+## Enums和namedtuples(命名元组)
 
 [[autodoc]] utils.ExplicitEnum
 

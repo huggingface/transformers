@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Tokenizers的实用程序
+# Tokenizers的工具
 
 并保留格式：此页面列出了tokenizers使用的所有实用函数，主要是类
 [`~tokenization_utils_base.PreTrained TokenizerBase`] 实现了常用方法之间的
@@ -34,7 +34,7 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] tokenization_utils_base.SpecialTokensMixin
 
-## Enums and namedtuples
+## Enums和namedtuples(命名元组)
 
 [[autodoc]] tokenization_utils_base.TruncationStrategy
 

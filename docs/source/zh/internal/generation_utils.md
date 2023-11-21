@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 用于生成的实用程序
+# 用于生成的工具
 
 此页面列出了所有由 [`~generation.GenerationMixin.generate`],
 [`~generation.GenerationMixin.greedy_search`],

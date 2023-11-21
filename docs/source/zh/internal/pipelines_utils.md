@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# pipelines的实用程序
+# pipelines的工具
 
 
 此页面列出了库为pipelines提供的所有实用程序功能。
@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 其中大多数只有在您研究库中模型的代码时才有用。
 
 
-## Argument handling
+## 参数处理
 
 [[autodoc]] pipelines.ArgumentHandler
 
@@ -30,7 +30,7 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] pipelines.QuestionAnsweringArgumentHandler
 
-## Data format
+## 数据格式
 
 [[autodoc]] pipelines.PipelineDataFormat
 
@@ -40,6 +40,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] pipelines.PipedPipelineDataFormat
 
-## Utilities
+## 实用函数
 
 [[autodoc]] pipelines.PipelineException

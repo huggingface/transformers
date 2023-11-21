@@ -14,14 +14,14 @@ rendered properly in your Markdown viewer.
 
 -->
 
-#  `FeatureExtractors`的实用程序
+#  `FeatureExtractors`的工具
 
 此页面列出了音频 [`FeatureExtractor`] 可以使用的所有实用函数，以便使用常见的算法（如 *Short Time Fourier Transform* 或 *log mel spectrogram*）从原始音频中计算特殊特征。
 
 其中大多数仅在您研究库中音频processors的代码时有用。
 
 
-## Audio Transformations
+## 音频转换
 
 [[autodoc]] audio_utils.hertz_to_mel
 

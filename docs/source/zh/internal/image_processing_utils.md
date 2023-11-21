@@ -14,14 +14,14 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Image Processors的实用程序
+# Image Processors的工具
 
-此页面列出了image processors使用的所有实用程序功能，主要是用于处理图像的功能变换。
+此页面列出了image processors使用的所有实用函数功能，主要是用于处理图像的功能变换。
 
 其中大多数仅在您研究库中image processors的代码时有用。
 
 
-## Image Transformations
+## 图像转换
 
 [[autodoc]] image_transforms.center_crop
 

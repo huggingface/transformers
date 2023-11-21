@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 时间序列实用程序
+# 时间序列工具
 
 
 此页面列出了可用于时间序列类模型的所有实用函数和类。
@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 其中大多数仅在您研究时间序列模型的代码，或希望添加到分布输出类集合时有用。
 
 
-## Distributional Output
+## 输出分布
 
 [[autodoc]] time_series_utils.NormalOutput
 

@@ -14,14 +14,14 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 自定义图层和实用程序
+# 自定义层和工具
 
 此页面列出了库使用的所有自定义层，以及它为模型提供的实用函数。
 
 其中大多数只有在您研究库中模型的代码时才有用。
 
 
-## Pytorch custom modules
+## Pytorch自定义模块
 
 [[autodoc]] pytorch_utils.Conv1D
 
@@ -42,7 +42,7 @@ rendered properly in your Markdown viewer.
 [[autodoc]] modeling_utils.SequenceSummary
     - forward
 
-## PyTorch Helper Functions
+## PyTorch帮助函数
 
 [[autodoc]] pytorch_utils.apply_chunking_to_forward
 
@@ -54,13 +54,13 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] pytorch_utils.prune_linear_layer
 
-## TensorFlow custom layers
+## TensorFlow自定义层
 
 [[autodoc]] modeling_tf_utils.TFConv1D
 
 [[autodoc]] modeling_tf_utils.TFSequenceSummary
 
-## TensorFlow loss functions
+## TensorFlow loss 函数
 
 [[autodoc]] modeling_tf_utils.TFCausalLanguageModelingLoss
 
@@ -74,7 +74,7 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] modeling_tf_utils.TFTokenClassificationLoss
 
-## TensorFlow Helper Functions
+## TensorFlow帮助函数
 
 [[autodoc]] modeling_tf_utils.get_initializer
 
