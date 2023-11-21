@@ -1680,10 +1680,19 @@ class DVCLiveCallback(TrainerCallback):
         if not self._initialized:
             self.setup(args, state, model)
         if state.is_world_process_zero:
+            from dvclive.plots import Metric
             from dvclive.utils import standardize_metric_name
 
             for key, value in logs.items():
-                self.live.log_metric(standardize_metric_name(key, "dvclive.huggingface"), value)
+                if Metric.could_log(value):
+                    self.live.log_metric(standardize_metric_name(key, "dvclive.huggingface"), value)
+                else:
+                    logger.warning(
+                        "Trainer is attempting to log a value of "
+                        f'"{value}" of type {type(value)} for key "{key}" as a scalar. '
+                        "This invocation of DVCLive's Live.log_metric() "
+                        "is incorrect so we dropped this attribute."
+                    )
             self.live.next_step()
 
     def on_save(self, args, state, control, **kwargs):
