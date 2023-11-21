@@ -21,6 +21,7 @@ from .feature_extraction_utils import BatchFeature
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
+ALL_LAYERNORM_LAYERS = [tf.keras.layers.LayerNormalization]
 
 logger = logging.get_logger(__name__)
 
