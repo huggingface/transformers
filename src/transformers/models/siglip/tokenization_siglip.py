@@ -121,6 +121,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
         split_special_tokens=True,
         **kwargs,
     ) -> None:
+        print("Pad token:", pad_token)
         pad_token = AddedToken(pad_token, rstrip=True, lstrip=True)
         unk_token = AddedToken(unk_token, rstrip=True, lstrip=True)
         eos_token = AddedToken(eos_token, rstrip=True, lstrip=True)
