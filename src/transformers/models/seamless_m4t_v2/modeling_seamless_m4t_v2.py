@@ -737,6 +737,33 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
+        
+    def _apply_chunk_attention(self, attention_mask, hidden_states):
+        sequence_len = hidden_states.shape[1]
+
+        chunk_indices = torch.arange(sequence_len, device=hidden_states.device)
+        chunk_indices = torch.div(chunk_indices, self.config.speech_encoder_chunk_size).long()
+        
+        
+        start_indices = torch.full_like(chunk_indices, 0)
+        if self.config.speech_encoder_left_chunk_num >= 0:
+            start_indices = (chunk_indices - self.config.speech_encoder_left_chunk_num).clamp_(min=0)
+            start_indices = start_indices * self.config.speech_encoder_chunk_size
+            start_indices = start_indices
+        start_indices = start_indices.unsqueeze(1).expand(-1, sequence_len)
+
+        end_indices = ((chunk_indices + 1) * self.config.speech_encoder_chunk_size).clamp_(max=sequence_len)
+
+        end_indices = end_indices.unsqueeze(1).expand(-1, sequence_len)
+
+        indices = torch.arange(sequence_len, device=hidden_states.device).unsqueeze(0).expand(sequence_len, -1)
+
+        chunk_mask = (indices < start_indices) | (indices >= end_indices)
+        chunk_mask = chunk_mask.unsqueeze(0).unsqueeze(0)
+
+        attention_mask = chunk_mask if attention_mask is None else (attention_mask.bool() | chunk_mask)
+        attention_mask = attention_mask.to(dtype=hidden_states.dtype)
+        return attention_mask
 
     def forward(
         self,
@@ -760,37 +787,7 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
             )
 
         if self.config.speech_encoder_chunk_size is not None:
-            sequence_len = hidden_states.shape[1]
-
-            chunk_indices = torch.div(
-                torch.arange(sequence_len, device=hidden_states.device), self.config.speech_encoder_chunk_size
-            ).long()
-
-            start_indices = (
-                (
-                    (chunk_indices - self.config.speech_encoder_left_chunk_num).clamp_(min=0)
-                    * self.config.speech_encoder_chunk_size
-                ).to(hidden_states.device)
-                if self.config.speech_encoder_left_chunk_num >= 0
-                else torch.full_like(chunk_indices, 0)
-            )
-            start_indices = start_indices.unsqueeze(1).expand(-1, sequence_len)
-
-            end_indices = (
-                ((chunk_indices + 1) * self.config.speech_encoder_chunk_size)
-                .clamp_(max=sequence_len)
-                .to(hidden_states.device)
-            )
-
-            end_indices = end_indices.unsqueeze(1).expand(-1, sequence_len)
-
-            indices = torch.arange(sequence_len, device=hidden_states.device).unsqueeze(0).expand(sequence_len, -1)
-
-            chunk_mask = (indices < start_indices) | (indices >= end_indices)
-            chunk_mask = chunk_mask.unsqueeze(0).unsqueeze(0)
-
-            attention_mask = chunk_mask if attention_mask is None else (attention_mask.bool() | chunk_mask)
-            attention_mask = attention_mask.to(dtype=hidden_states.dtype)
+            attention_mask = self._apply_chunk_attention(attention_mask, hidden_states)
 
         if attention_mask is not None:
             attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
