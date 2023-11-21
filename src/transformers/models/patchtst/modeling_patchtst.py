@@ -1283,11 +1283,13 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
             masked_values, mask = self.masking(patched_values), None
 
         encoder_output = self.encoder(
-            patch_input=masked_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
+            patch_input=masked_values, 
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
         )
 
         if not return_dict:
-            outputs = (encoder_output.last_hidden_state, encoder_output.hidden_states, encoder_output.attentions)
+            outputs = (encoder_output,) + encoder_output[1:]
             outputs = outputs + (patched_values, mask, loc, scale)
             return tuple(v for v in outputs if v is not None)
 
