@@ -2785,15 +2785,11 @@ else:
     _import_structure["models.seamless_m4t_v2"].extend(
         [
             "SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SeamlessM4Tv2CodeHifiGan",
             "SeamlessM4Tv2ForSpeechToSpeech",
             "SeamlessM4Tv2ForSpeechToText",
             "SeamlessM4Tv2ForTextToSpeech",
             "SeamlessM4Tv2ForTextToText",
-            "SeamlessM4Tv2HifiGan",
             "SeamlessM4Tv2Model",
-            "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
-            "SeamlessM4Tv2NARTextToUnitModel",
             "SeamlessM4Tv2PreTrainedModel",
         ]
     )
@@ -6703,15 +6699,11 @@ if TYPE_CHECKING:
         )
         from .models.seamless_m4t_v2 import (
             SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SeamlessM4Tv2CodeHifiGan,
             SeamlessM4Tv2ForSpeechToSpeech,
             SeamlessM4Tv2ForSpeechToText,
             SeamlessM4Tv2ForTextToSpeech,
             SeamlessM4Tv2ForTextToText,
-            SeamlessM4Tv2HifiGan,
             SeamlessM4Tv2Model,
-            SeamlessM4Tv2NARTextToUnitForConditionalGeneration,
-            SeamlessM4Tv2NARTextToUnitModel,
             SeamlessM4Tv2PreTrainedModel,
         )
         from .models.segformer import (

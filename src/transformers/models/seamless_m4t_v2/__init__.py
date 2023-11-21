@@ -38,10 +38,6 @@ else:
         "SeamlessM4Tv2ForSpeechToText",
         "SeamlessM4Tv2Model",
         "SeamlessM4Tv2PreTrainedModel",
-        "SeamlessM4Tv2CodeHifiGan",
-        "SeamlessM4Tv2HifiGan",
-        "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
-        "SeamlessM4Tv2NARTextToUnitModel",
     ]
 
 if TYPE_CHECKING:
@@ -55,15 +51,11 @@ if TYPE_CHECKING:
     else:
         from .modeling_seamless_m4t_v2 import (
             SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SeamlessM4Tv2CodeHifiGan,
             SeamlessM4Tv2ForSpeechToSpeech,
             SeamlessM4Tv2ForSpeechToText,
             SeamlessM4Tv2ForTextToSpeech,
             SeamlessM4Tv2ForTextToText,
-            SeamlessM4Tv2HifiGan,
             SeamlessM4Tv2Model,
-            SeamlessM4Tv2NARTextToUnitForConditionalGeneration,
-            SeamlessM4Tv2NARTextToUnitModel,
             SeamlessM4Tv2PreTrainedModel,
         )
 

@@ -38,16 +38,16 @@ class SeamlessM4Tv2Config(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 256102):
-            Vocabulary size of the text modality of the SeamlessM4Tv2 model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`~SeamlessM4Tv2Model`], [`~SeamlessM4Tv2ForTextToSpeech`] or
-            [`~SeamlessM4Tv2ForTextToText`].
+            Vocabulary size of the text modality of the SeamlessM4Tv2 model. Defines the number of different tokens
+            that can be represented by the `inputs_ids` passed when calling [`~SeamlessM4Tv2Model`],
+            [`~SeamlessM4Tv2ForTextToSpeech`] or [`~SeamlessM4Tv2ForTextToText`].
         t2u_vocab_size (`int`, *optional*, defaults to 10082):
             Unit vocabulary size of the SeamlessM4Tv2 model. Defines the number of different "unit tokens" that can be
             represented by the `inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4Tv2Model`],
             [`~SeamlessM4Tv2ForSpeechToSpeech`] or [`~SeamlessM4Tv2ForTextToSpeech`].
         char_vocab_size (`int`, *optional*, defaults to 10943):
-            Character vocabulary size of the SeamlessM4Tv2 model. Defines the number of different character tokens
-            that can be represented by the `char_inputs_ids` passed when calling the Text-To-Units sub-model of
+            Character vocabulary size of the SeamlessM4Tv2 model. Defines the number of different character tokens that
+            can be represented by the `char_inputs_ids` passed when calling the Text-To-Units sub-model of
             [`~SeamlessM4Tv2Model`], [`~SeamlessM4Tv2ForSpeechToSpeech`] or [`~SeamlessM4Tv2ForTextToSpeech`].
 
         > Parameters shared across sub-models

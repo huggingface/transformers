@@ -62,20 +62,3 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 ## SeamlessM4Tv2Config
 
 [[autodoc]] SeamlessM4Tv2Config
-
-
-## SeamlessM4Tv2CodeHifiGan
-
-[[autodoc]] SeamlessM4Tv2CodeHifiGan
-
-## SeamlessM4Tv2HifiGan
-
-[[autodoc]] SeamlessM4Tv2HifiGan
-
-## SeamlessM4Tv2NARTextToUnitModel
-
-[[autodoc]] SeamlessM4Tv2NARTextToUnitModel
-
-## SeamlessM4Tv2NARTextToUnitForConditionalGeneration
-
-[[autodoc]] SeamlessM4Tv2NARTextToUnitForConditionalGeneration

@@ -7216,13 +7216,6 @@ class SeamlessM4TTextToUnitModel(metaclass=DummyObject):
 SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class SeamlessM4Tv2CodeHifiGan(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class SeamlessM4Tv2ForSpeechToSpeech(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7251,28 +7244,7 @@ class SeamlessM4Tv2ForTextToText(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class SeamlessM4Tv2HifiGan(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class SeamlessM4Tv2Model(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class SeamlessM4Tv2NARTextToUnitForConditionalGeneration(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class SeamlessM4Tv2NARTextToUnitModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
