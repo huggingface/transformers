@@ -45,10 +45,6 @@ _CONFIG_FOR_DOC = "TextNetConfig"
 _CHECKPOINT_FOR_DOC = "Raghavan/textnet-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 512, 20, 20]
 
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "Raghavan/textnet-base"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_1"
-
 TEXTNET_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
@@ -336,12 +332,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TEXTNET_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @replace_return_docstrings(output_type=ImageClassifierOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -350,10 +341,22 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+        Returns:
+        Examples:
+        ```python
+        >>> from transformers import CLIPImageProcessor, TextNetForImageClassification
+        >>> from PIL import Image
+        >>> import requests
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> processor = CLIPImageProcessor.from_pretrained("Raghavan/textnet-base")
+        >>> model = TextNetForImageClassification.from_pretrained("Raghavan/textnet-base")
+        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> # forward pass
+        >>> outputs = model(**inputs)
+        >>> outputs.logits.shape
+        torch.Size([1, 2])
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.textnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
