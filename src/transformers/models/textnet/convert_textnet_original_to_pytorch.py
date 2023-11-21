@@ -168,30 +168,18 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--checkpoint_url",
-        default="https://conversationhub.blob.core.windows.net/beit-share-public/beit/beit_base_patch16_224_pt22k_ft22kto1k.pth",
+        default="https://github.com/czczup/FAST/releases/download/release/fast_base_ic17mlt_640.pth",
         type=str,
         help="URL to the original PyTorch checkpoint (.pth file).",
     )
     parser.add_argument(
         "--checkpoint_config_url",
-        default="https://conversationhub.blob.core.windows.net/beit-share-public/beit/beit_base_patch16_224_pt22k_ft22kto1k.pth",
+        default="https://raw.githubusercontent.com/czczup/FAST/main/config/fast/ic17mlt/fast_base_ic17mlt_640.py",
         type=str,
         help="URL to the original PyTorch checkpoint (.pth file).",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
-    )
-    parser.add_argument(
-        "--validate_logits",
-        default=False,
-        type=bool,
-        help="whether to assert logits outputs",
-    )
-    parser.add_argument(
-        "--save_backbone_separately",
-        default=False,
-        type=bool,
-        help="whether to assert logits outputs",
     )
     args = parser.parse_args()
 

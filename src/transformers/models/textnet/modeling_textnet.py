@@ -24,6 +24,7 @@ from transformers import PreTrainedModel, add_start_docstrings
 from transformers.activations import ACT2CLS
 from transformers.modeling_outputs import (
     BackboneOutput,
+    BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
@@ -225,13 +226,22 @@ class TextNetEncoder(nn.Module):
 
         self.stages = nn.ModuleList(stages)
 
-    def forward(self, hidden_state):
+    def forward(
+        self,
+        hidden_state,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
         hidden_states = []
         for stage in self.stages:
             hidden_state = stage(hidden_state)
             hidden_states.append(hidden_state)
 
-        return hidden_states
+        if not return_dict:
+            output = (hidden_state,)
+            return output + (hidden_states,) if output_hidden_states else output
+
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
 
 
 class TextNetPreTrainedModel(PreTrainedModel):
@@ -285,9 +295,14 @@ class TextNetModel(TextNetPreTrainedModel):
         hidden_state = self.stem(pixel_values)
         hidden_states = [hidden_state]
 
-        hidden_states = hidden_states + self.encoder(hidden_state)
+        encoder_outputs = self.encoder(
+            hidden_state, output_hidden_states=output_hidden_states, return_dict=return_dict
+        )
 
-        last_hidden_state = hidden_states[-1]
+        if output_hidden_states:
+            hidden_states = hidden_states + encoder_outputs[1]
+
+        last_hidden_state = encoder_outputs[0]
         pooled_output = self.pooler(last_hidden_state)
 
         if not return_dict:
@@ -295,8 +310,8 @@ class TextNetModel(TextNetPreTrainedModel):
             return output + (tuple(hidden_states),) if output_hidden_states else output
 
         return BaseModelOutputWithPoolingAndNoAttention(
-            pooler_output=pooled_output,
             last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
             hidden_states=tuple(hidden_states) if output_hidden_states else None,
         )
 
