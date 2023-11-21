@@ -40,10 +40,8 @@ import argparse
 import glob
 import os
 import re
+import subprocess
 from typing import List, Optional, Tuple
-
-import black
-from doc_builder.style_doc import style_docstrings_in_code
 
 from transformers.utils import direct_transformers_import
 
@@ -226,9 +224,17 @@ def get_indent(code: str) -> str:
     return ""
 
 
-def blackify(code: str) -> str:
+def run_ruff(code):
+    command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    stdout, _ = process.communicate(input=code.encode())
+    return stdout.decode()
+
+
+def stylify(code: str) -> str:
     """
-    Applies the black part of our `make style` command to some code.
+    Applies the ruff part of our `make style` command to some code. This formats the code using `ruff format`.
+    As `ruff` does not provide a python api this cannot be done on the fly.
 
     Args:
         code (`str`): The code to format.
@@ -239,10 +245,8 @@ def blackify(code: str) -> str:
     has_indent = len(get_indent(code)) > 0
     if has_indent:
         code = f"class Bla:\n{code}"
-    mode = black.Mode(target_versions={black.TargetVersion.PY37}, line_length=119)
-    result = black.format_str(code, mode=mode)
-    result, _ = style_docstrings_in_code(result)
-    return result[len("class Bla:\n") :] if has_indent else result
+    formatted_code = run_ruff(code)
+    return formatted_code[len("class Bla:\n") :] if has_indent else formatted_code
 
 
 def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int]:
@@ -351,8 +355,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False) -> Optional[List[
                 if option.strip() == "all-casing":
                     theoretical_code = re.sub(obj1.lower(), obj2.lower(), theoretical_code)
                     theoretical_code = re.sub(obj1.upper(), obj2.upper(), theoretical_code)
-
-            theoretical_code = blackify(theoretical_code)
+            theoretical_code = stylify(theoretical_code)
 
         # Test for a diff and act accordingly.
         diff_index = check_codes_match(observed_code, theoretical_code)

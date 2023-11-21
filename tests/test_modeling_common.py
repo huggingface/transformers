@@ -33,6 +33,7 @@ from pytest import mark
 import transformers
 from transformers import (
     AutoModel,
+    AutoModelForCausalLM,
     AutoModelForSequenceClassification,
     PretrainedConfig,
     is_torch_available,
@@ -2039,7 +2040,7 @@ class ModelTesterMixin:
         tf_inputs_dict = {}
         for key, tensor in pt_inputs_dict.items():
             # skip key that does not exist in tf
-            if type(tensor) == bool:
+            if isinstance(tensor, bool):
                 tf_inputs_dict[key] = tensor
             elif key == "input_values":
                 tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
@@ -3268,6 +3269,53 @@ class ModelTesterMixin:
 
                 # Check models are equal
                 self.assertTrue(check_models_equal(flax_model_1, flax_model_2))
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_from_config(self):
+        import torch
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            # TODO: to change it in the future with other relevant auto classes
+            fa2_model = AutoModelForCausalLM.from_config(
+                config, use_flash_attention_2=True, torch_dtype=torch.bfloat16
+            ).to(torch_device)
+
+            dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+            dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+
+            fa2_correctly_converted = False
+
+            for _, module in fa2_model.named_modules():
+                if "FlashAttention" in module.__class__.__name__:
+                    fa2_correctly_converted = True
+                    break
+
+            self.assertTrue(fa2_correctly_converted)
+
+            _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                fa2_model.save_pretrained(tmpdirname)
+
+                model_from_pretrained = AutoModelForCausalLM.from_pretrained(tmpdirname)
+
+                self.assertFalse(getattr(model_from_pretrained.config, "_flash_attn_2_enabled", False))
+
+                fa2_correctly_converted = False
+
+                for _, module in model_from_pretrained.named_modules():
+                    if "FlashAttention" in module.__class__.__name__:
+                        fa2_correctly_converted = True
+                        break
+
+                self.assertFalse(fa2_correctly_converted)
 
 
 global_rng = random.Random()

@@ -319,6 +319,7 @@ class FuyuProcessor(ProcessorMixin):
         tokenizer ([`LlamaTokenizerFast`]):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "FuyuImageProcessor"
     tokenizer_class = "AutoTokenizer"

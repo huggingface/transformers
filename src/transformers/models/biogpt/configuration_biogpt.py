@@ -93,6 +93,7 @@ class BioGptConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "biogpt"
 
     def __init__(
