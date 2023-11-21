@@ -15,7 +15,8 @@ rendered properly in your Markdown viewer.
 
 # Efficient Training on Multiple CPUs
 
-When training on a single CPU is too slow, we can use multiple CPUs. This guide focuses on PyTorch-based DDP enabling distributed CPU training efficiently.
+When training on a single CPU is too slow, we can use multiple CPUs. This guide focuses on PyTorch-based DDP enabling
+distributed CPU training efficiently on [bare metal](#usage-in-trainer) and [Kubernetes](#usage-in-kubernetes).
 
 ## Intel® oneCCL Bindings for PyTorch
 
@@ -133,9 +134,9 @@ Now, run the following command in node0 and **4DDP** will be enabled in node0 an
  --bf16
 ```
 
-## Usage with Kubeflow
+## Usage with Kubernetes
 
-The same distributed training job can be deployed to a Kubernetes cluster using the
+The same distributed training job from the previous section can be deployed to a Kubernetes cluster using the
 [Kubeflow PyTorchJob training operator](https://www.kubeflow.org/docs/components/training/pytorch/).
 
 ### Setup
@@ -250,14 +251,17 @@ spec:
             emptyDir:
               medium: Memory
 ```
-To run this example, update the yaml based on your training script and the nodes in your cluster. The CPU resource
-limits/requests in the yaml are defined in [cpu units](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#meaning-of-cpu)
+To run this example, update the yaml based on your training script and the nodes in your cluster.
+
+<Tip>
+The CPU resource limits/requests in the yaml are defined in [cpu units](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#meaning-of-cpu)
 where 1 CPU unit is equivalent to 1 physical CPU core or 1 virtual core (depending on whether the node is a physical
 host or a VM). The amount of CPU and memory limits/requests defined in the yaml should be less than the amount of
 available CPU/memory capacity on a single machine. It is usually a good idea to not use the entire machine's capacity in
 order to leave some resources for the kubelet and OS. In order to get ["guaranteed"](https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/#guaranteed)
 [quality of service](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/) for the worker pods,
 set the same CPU and memory amounts for both the resource limits and requests.
+</Tip>
 
 ### Deploy
 
@@ -292,4 +296,4 @@ are done with the job, the PyTorchJob resource can be deleted from the cluster u
 
 This guide covered running distributed PyTorch training jobs using multiple CPUs on bare metal and on a Kubernetes
 cluster. Both cases utilize Intel Extension for PyTorch and Intel oneCCL Bindings for PyTorch for optimal training
-performance, and can be used as a template to run your own workload one multiple nodes.
+performance, and can be used as a template to run your own workload on multiple nodes.
