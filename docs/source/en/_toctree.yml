@@ -59,7 +59,7 @@
     sections:
     - local: tasks/image_classification
       title: Image classification
-    - local: tasks/image_segmentation
+    - local: tasks/semantic_segmentation
       title: Image segmentation
     - local: tasks/video_classification
       title: Video classification
