@@ -3496,7 +3496,6 @@ class Trainer:
         self.hub_model_id = repo_url.repo_id
         self.push_in_progress = None
 
-
     def create_model_card(
         self,
         language: Optional[str] = None,
