@@ -858,11 +858,11 @@ class PatchTSTModelOutput(ModelOutput):
             the model at the output of each layer plus the optional initial embedding outputs.
         patch_input (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
             Patched input to the Transformer
-        mask: (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches)`,*optional*)
+        mask: (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches)`, *optional*)
             Bool masked tensor indicating which patches are masked
-        loc: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*)
+        loc: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*)
             Mean of the input data (batch_size, sequence_length, num_channels) over the sequence_length
-        scale: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*)
+        scale: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*)
             Std of the input data (batch_size, sequence_length, num_channels) over the sequence_length
     """
 
