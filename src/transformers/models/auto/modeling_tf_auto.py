@@ -81,7 +81,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("sam", "TFSamModel"),
         ("segformer", "TFSegformerModel"),
         ("speech_to_text", "TFSpeech2TextModel"),
-        ("swiftformer", "TFSwiftFormer"),
+        ("swiftformer", "TFSwiftFormerModel"),
         ("swin", "TFSwinModel"),
         ("t5", "TFT5Model"),
         ("tapas", "TFTapasModel"),
