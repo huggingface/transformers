@@ -140,7 +140,7 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             Number of convolutional layers that should be used in the adapter network. Only relevant if `add_adapter is
             True`.
         position_embeddings_type (`str`, *optional*, defaults to `"relative_key"`):
-            Can be specified to `relative`, `rotary`, `relative_key`. If left to `None`, no relative position embedding
+            Can be specified to `relative_key`. If left to `None`, no relative position embedding
             is applied. Only applied to the speech encoder. For more information on `"relative_key"`, please refer to
             [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
         rotary_embedding_base (`int`, *optional*, defaults to 10000):

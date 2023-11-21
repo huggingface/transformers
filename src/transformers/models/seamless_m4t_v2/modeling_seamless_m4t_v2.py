@@ -466,93 +466,6 @@ def format_speech_generation_kwargs(kwargs):
 
 ############ SPEECH ENCODER related code ################
 
-
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerRotaryPositionalEmbedding with Wav2Vec2->SeamlessM4Tv2, num_attention_heads->speech_encoder_attention_heads
-class SeamlessM4Tv2ConformerRotaryPositionalEmbedding(nn.Module):
-    """Rotary positional embedding
-    Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://arxiv.org/pdf/2104.09864.pdf
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        dim = config.hidden_size // config.speech_encoder_attention_heads
-        base = config.rotary_embedding_base
-
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
-        self.cached_sequence_length = None
-        self.cached_rotary_positional_embedding = None
-
-    def forward(self, hidden_states):
-        sequence_length = hidden_states.shape[1]
-
-        if sequence_length == self.cached_sequence_length and self.cached_rotary_positional_embedding is not None:
-            return self.cached_rotary_positional_embedding
-
-        self.cached_sequence_length = sequence_length
-        # Embeddings are computed in the dtype of the inv_freq constant
-        time_stamps = torch.arange(sequence_length).type_as(self.inv_freq)
-        freqs = torch.einsum("i,j->ij", time_stamps, self.inv_freq)
-        embeddings = torch.cat((freqs, freqs), dim=-1)
-
-        cos_embeddings = embeddings.cos()[:, None, None, :]
-        sin_embeddings = embeddings.sin()[:, None, None, :]
-        # Computed embeddings are cast to the dtype of the hidden state inputs
-        self.cached_rotary_positional_embedding = torch.stack([cos_embeddings, sin_embeddings]).type_as(hidden_states)
-        return self.cached_rotary_positional_embedding
-
-
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerRelPositionalEmbedding with Wav2Vec2->SeamlessM4Tv2
-class SeamlessM4Tv2ConformerRelPositionalEmbedding(nn.Module):
-    """Relative positional encoding module."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.max_len = config.max_source_positions
-        self.d_model = config.hidden_size
-        self.pe = None
-        self.extend_pe(torch.tensor(0.0).expand(1, self.max_len))
-
-    def extend_pe(self, x):
-        # Reset the positional encodings
-        if self.pe is not None:
-            # self.pe contains both positive and negative parts
-            # the length of self.pe is 2 * input_len - 1
-            if self.pe.size(1) >= x.size(1) * 2 - 1:
-                if self.pe.dtype != x.dtype or self.pe.device != x.device:
-                    self.pe = self.pe.to(dtype=x.dtype, device=x.device)
-                return
-        # Suppose `i` is the position of query vector and `j` is the
-        # position of key vector. We use positive relative positions when keys
-        # are to the left (i>j) and negative relative positions otherwise (i<j).
-        pe_positive = torch.zeros(x.size(1), self.d_model)
-        pe_negative = torch.zeros(x.size(1), self.d_model)
-        position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, self.d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / self.d_model)
-        )
-        pe_positive[:, 0::2] = torch.sin(position * div_term)
-        pe_positive[:, 1::2] = torch.cos(position * div_term)
-        pe_negative[:, 0::2] = torch.sin(-1 * position * div_term)
-        pe_negative[:, 1::2] = torch.cos(-1 * position * div_term)
-
-        # Reverse the order of positive indices and concat both positive and
-        # negative indices. This is used to support the shifting trick
-        # as in https://arxiv.org/abs/1901.02860
-        pe_positive = torch.flip(pe_positive, [0]).unsqueeze(0)
-        pe_negative = pe_negative[1:].unsqueeze(0)
-        pe = torch.cat([pe_positive, pe_negative], dim=1)
-        self.pe = pe.to(device=x.device, dtype=x.dtype)
-
-    def forward(self, hidden_states: torch.Tensor):
-        self.extend_pe(hidden_states)
-        start_idx = self.pe.size(1) // 2 - hidden_states.size(1) + 1
-        end_idx = self.pe.size(1) // 2 + hidden_states.size(1)
-        relative_position_embeddings = self.pe[:, start_idx:end_idx]
-
-        return relative_position_embeddings
-
-
 class SeamlessM4Tv2ConformerFeatureProjection(nn.Module):
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerFeatureProjection.__init__
     def __init__(self, config):
@@ -665,7 +578,7 @@ class SeamlessM4Tv2ConformerConvolutionModule(nn.Module):
 
 class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
     """Construct a SeamlessM4Tv2ConformerSelfAttention object.
-    Can be enhanced with rotary or relative position embeddings.
+    Can be enhanced with relative position embeddings.
     """
 
     def __init__(self, config, use_position_embeddings=True):
@@ -682,14 +595,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(p=config.speech_encoder_dropout)
 
-        if self.position_embeddings_type == "relative":
-            # linear transformation for positional encoding
-            self.linear_pos = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-            # these two learnable bias are used in matrix c and matrix d
-            # as described in https://arxiv.org/abs/1901.02860 Section 3.3
-            self.pos_bias_u = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
-            self.pos_bias_v = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
-        elif self.position_embeddings_type == "relative_key":
+        if self.position_embeddings_type == "relative_key":
             self.left_max_position_embeddings = config.left_max_position_embeddings
             self.right_max_position_embeddings = config.right_max_position_embeddings
             num_positions = self.left_max_position_embeddings + self.right_max_position_embeddings + 1
@@ -699,7 +605,6 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        relative_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # self-attention mechanism
@@ -708,13 +613,6 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
         # make sure query/key states can be != value states
         query_key_states = hidden_states
         value_states = hidden_states
-
-        if self.position_embeddings_type == "rotary":
-            if relative_position_embeddings is None:
-                raise ValueError(
-                    "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'rotary'"
-                )
-            query_key_states = self._apply_rotary_embedding(query_key_states, relative_position_embeddings)
 
         # project query_key_states and value_states
         query = self.linear_q(query_key_states).view(batch_size, -1, self.num_heads, self.head_size)
@@ -726,19 +624,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
-        if self.position_embeddings_type == "relative":
-            if relative_position_embeddings is None:
-                raise ValueError(
-                    "`relative_position_embeddings` has to be defined when `self.position_embeddings_type =="
-                    " 'relative'"
-                )
-            # apply relative_position_embeddings to qk scores
-            # as proposed in Transformer_XL: https://arxiv.org/abs/1901.02860
-            scores = self._apply_relative_embeddings(
-                query=query, key=key, relative_position_embeddings=relative_position_embeddings
-            )
-        else:
-            scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
+        scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
 
         if self.position_embeddings_type == "relative_key":
             query_length, key_length = query.shape[2], key.shape[2]
@@ -771,67 +657,6 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
 
         return hidden_states, probs
 
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerSelfAttention._apply_rotary_embedding
-    def _apply_rotary_embedding(self, hidden_states, relative_position_embeddings):
-        batch_size, sequence_length, hidden_size = hidden_states.size()
-        hidden_states = hidden_states.view(batch_size, sequence_length, self.num_heads, self.head_size)
-
-        cos = relative_position_embeddings[0, :sequence_length, ...]
-        sin = relative_position_embeddings[1, :sequence_length, ...]
-
-        # rotate hidden_states with rotary embeddings
-        hidden_states = hidden_states.transpose(0, 1)
-        rotated_states_begin = hidden_states[..., : self.head_size // 2]
-        rotated_states_end = hidden_states[..., self.head_size // 2 :]
-        rotated_states = torch.cat((-rotated_states_end, rotated_states_begin), dim=rotated_states_begin.ndim - 1)
-        hidden_states = (hidden_states * cos) + (rotated_states * sin)
-        hidden_states = hidden_states.transpose(0, 1)
-
-        hidden_states = hidden_states.view(batch_size, sequence_length, self.num_heads * self.head_size)
-
-        return hidden_states
-
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerSelfAttention._apply_relative_embeddings
-    def _apply_relative_embeddings(self, query, key, relative_position_embeddings):
-        # 1. project positional embeddings
-        # => (batch, head, 2*time1-1, d_k)
-        proj_relative_position_embeddings = self.linear_pos(relative_position_embeddings)
-        proj_relative_position_embeddings = proj_relative_position_embeddings.view(
-            relative_position_embeddings.size(0), -1, self.num_heads, self.head_size
-        )
-        proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(1, 2)
-        proj_relative_position_embeddings = proj_relative_position_embeddings.transpose(2, 3)
-
-        # 2. Add bias to query
-        # => (batch, head, time1, d_k)
-        query = query.transpose(1, 2)
-        q_with_bias_u = (query + self.pos_bias_u).transpose(1, 2)
-        q_with_bias_v = (query + self.pos_bias_v).transpose(1, 2)
-
-        # 3. attention score: first compute matrix a and matrix c
-        # as described in https://arxiv.org/abs/1901.02860 Section 3.3
-        # => (batch, head, time1, time2)
-        scores_ac = torch.matmul(q_with_bias_u, key.transpose(-2, -1))
-
-        # 4. then compute matrix b and matrix d
-        # => (batch, head, time1, 2*time1-1)
-        scores_bd = torch.matmul(q_with_bias_v, proj_relative_position_embeddings)
-
-        # 5. shift matrix b and matrix d
-        zero_pad = torch.zeros((*scores_bd.size()[:3], 1), device=scores_bd.device, dtype=scores_bd.dtype)
-        scores_bd_padded = torch.cat([zero_pad, scores_bd], dim=-1)
-        scores_bd_padded_shape = scores_bd.size()[:2] + (scores_bd.shape[3] + 1, scores_bd.shape[2])
-        scores_bd_padded = scores_bd_padded.view(*scores_bd_padded_shape)
-        scores_bd = scores_bd_padded[:, :, 1:].view_as(scores_bd)
-        scores_bd = scores_bd[:, :, :, : scores_bd.size(-1) // 2 + 1]
-
-        # 6. sum matrices
-        # => (batch, head, time1, time2)
-        scores = (scores_ac + scores_bd) / math.sqrt(self.head_size)
-
-        return scores
-
-
 class SeamlessM4Tv2ConformerEncoderLayer(nn.Module):
     """Conformer block based on https://arxiv.org/abs/2005.08100."""
 
@@ -858,12 +683,10 @@ class SeamlessM4Tv2ConformerEncoderLayer(nn.Module):
         self.ffn2 = SeamlessM4Tv2ConformerFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerEncoderLayer.forward
     def forward(
         self,
         hidden_states,
         attention_mask: Optional[torch.Tensor] = None,
-        relative_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         conv_attention_mask: Optional[torch.Tensor] = None,
     ):
@@ -881,7 +704,6 @@ class SeamlessM4Tv2ConformerEncoderLayer(nn.Module):
         hidden_states, attn_weigts = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            relative_position_embeddings=relative_position_embeddings,
             output_attentions=output_attentions,
         )
         hidden_states = self.self_attn_dropout(hidden_states)
@@ -903,17 +725,9 @@ class SeamlessM4Tv2ConformerEncoderLayer(nn.Module):
 
 
 class SeamlessM4Tv2ConformerEncoder(nn.Module):
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerEncoder.__init__ with SeamlessM4T->SeamlessM4Tv2
     def __init__(self, config):
         super().__init__()
         self.config = config
-
-        if config.position_embeddings_type == "relative":
-            self.embed_positions = SeamlessM4Tv2ConformerRelPositionalEmbedding(config)
-        elif config.position_embeddings_type == "rotary":
-            self.embed_positions = SeamlessM4Tv2ConformerRotaryPositionalEmbedding(config)
-        else:
-            self.embed_positions = None
 
         self.dropout = nn.Dropout(config.speech_encoder_dropout)
         self.layers = nn.ModuleList(
@@ -983,11 +797,6 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
 
         hidden_states = self.dropout(hidden_states)
 
-        if self.embed_positions is not None:
-            relative_position_embeddings = self.embed_positions(hidden_states)
-        else:
-            relative_position_embeddings = None
-
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
         for i, layer in enumerate(self.layers):
@@ -1007,13 +816,11 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
                         layer.__call__,
                         hidden_states,
                         attention_mask,
-                        relative_position_embeddings,
                     )
                 else:
                     layer_outputs = layer(
                         hidden_states,
                         attention_mask=attention_mask,
-                        relative_position_embeddings=relative_position_embeddings,
                         output_attentions=output_attentions,
                         conv_attention_mask=conv_attention_mask,
                     )
