@@ -303,7 +303,7 @@ def prepare_batch(repo_id="hf-internal-testing/etth1-hourly-batch", file="train-
 class PatchTSTModelIntegrationTests(unittest.TestCase):
     # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
     def test_pretrain_head(self):
-        model = PatchTSTForPretraining.from_pretrained("ibm/patchtst-etth1-pretrain").to(torch_device)
+        model = PatchTSTForPretraining.from_pretrained("namctin/patchtst_etth1_pretrain").to(torch_device)
         batch = prepare_batch()
 
         torch.manual_seed(0)
@@ -316,7 +316,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-0.5409]], [[0.3093]], [[-0.3759]], [[0.5068]], [[-0.8387]], [[0.0937]], [[0.2809]]],
+            [[[-0.0173]], [[-1.0379]], [[-0.1030]], [[0.3642]], [[0.1601]], [[-1.3136]], [[0.8780]]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
