@@ -600,12 +600,12 @@ class AwqConfig(QuantizationConfigMixin):
             if major < 8:
                 raise ValueError("LLM-AWQ backend is only supported on GPUs with compute capability >= 8.0")
 
-        if self.is_using_fused_modules and self.fuse_max_seq_len is None:
+        if self.has_fused_modules and self.fuse_max_seq_len is None:
             raise ValueError(
                 "You cannot enable fused modules without specifying a `fuse_max_seq_len`, make sure to pass a valid `fuse_max_seq_len` for your usecase"
             )
 
-        if self.is_using_fused_modules and self.modules_to_fuse is not None:
+        if self.has_fused_modules and self.modules_to_fuse is not None:
             required_keys = ["hidden_size", "num_attention_heads", "num_key_value_heads"]
             if not all(key in self.modules_to_fuse for key in required_keys):
                 raise ValueError(
@@ -615,5 +615,5 @@ class AwqConfig(QuantizationConfigMixin):
         # TODO: awq version check for fused modules.
 
     @property
-    def is_using_fused_modules(self):
+    def has_fused_modules(self):
         return self.do_fuse or (self.modules_to_fuse is not None and len(self.modules_to_fuse) > 0)

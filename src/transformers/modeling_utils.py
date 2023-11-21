@@ -2052,7 +2052,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if (
             getattr(self.config, "quantization_config", None) is not None
             and self.config.quantization_config.quant_method == QuantizationMethod.AWQ
-            and self.config.quantization_config.is_using_fused_modules
+            and self.config.quantization_config.has_fused_modules
         ):
             raise ValueError("You cannot save an AWQ model that uses fused modules!")
 
@@ -3556,7 +3556,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if (
             quantization_config is not None
             and quantization_config.quant_method == QuantizationMethod.AWQ
-            and quantization_config.is_using_fused_modules
+            and quantization_config.has_fused_modules
         ):
             model = fuse_awq_modules(model, quantization_config)
 
