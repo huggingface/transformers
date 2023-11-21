@@ -681,16 +681,14 @@ class PatchTSTPositionalEncoding(nn.Module):
     Class for positional encoding
     """
 
-    def __init__(self, config: PatchTSTConfig):
+    def __init__(self, config: PatchTSTConfig, num_patches: int):
         super().__init__()
         self.use_cls_token = config.use_cls_token
         self.num_input_channels = config.num_input_channels
         if config.use_cls_token:
             # cls_token: [1 x num_input_channels x 1 x d_model]
             self.cls_token = nn.Parameter(torch.zeros(1, 1, 1, config.d_model))
-            num_patches = config.num_patches + 1
-        else:
-            num_patches = config.num_patches
+            num_patches += 1
         # postional encoding: [num_patches x d_model]
         self.position_enc = self._init_pe(config, num_patches)
         # Positional dropout
@@ -739,14 +737,14 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
     PatchTST Encoder
     """
 
-    def __init__(self, config: PatchTSTConfig):
+    def __init__(self, config: PatchTSTConfig, num_patches: int):
         super().__init__(config)
         self.gradient_checkpointing = False
 
         # Input embedding: projection of feature vectors onto a d-dim vector space
         self.embedder = PatchTSTEmbedding(config)
         # Positional encoding
-        self.positional_encoder = PatchTSTPositionalEncoding(config)
+        self.positional_encoder = PatchTSTPositionalEncoding(config, num_patches)
         # Encoder
         self.layers = nn.ModuleList([PatchTSTEncoderLayer(config) for i in range(config.num_hidden_layers)])
 
@@ -1224,12 +1222,14 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         self.scaler = PatchTSTScaler(config)
         self.patchifier = PatchTSTPatchify(config)
         self.mask_input = config.mask_input
+        # get num_patches information from PatchTSTPatchify
+        num_patches = self.patchifier.num_patches
 
         if self.mask_input:
             self.masking = PatchTSTMasking(config)
         else:
             self.masking = nn.Identity()
-        self.encoder = PatchTSTEncoder(config)
+        self.encoder = PatchTSTEncoder(config, num_patches=num_patches)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1283,13 +1283,11 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
             masked_values, mask = self.masking(patched_values), None
 
         encoder_output = self.encoder(
-            patch_input=masked_values, 
-            output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions,
+            patch_input=masked_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
         )
 
         if not return_dict:
-            outputs = (encoder_output,) + encoder_output[1:]
+            outputs = (encoder_output.last_hidden_state, encoder_output.hidden_states, encoder_output.attentions)
             outputs = outputs + (patched_values, mask, loc, scale)
             return tuple(v for v in outputs if v is not None)
 
@@ -1332,6 +1330,10 @@ class PatchTSTMaskPretrainHead(nn.Module):
         return embedding
 
 
+@add_start_docstrings(
+    "The PatchTST for pretrain Model.",
+    PATCHTST_START_DOCSTRING,
+)
 class PatchTSTForPretraining(PatchTSTPreTrainedModel):
     """
     Mask pretrain model: PatchTST model + pretrain head
@@ -1430,12 +1432,12 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
             past_observed_mask=past_observed_mask,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        # model_output[0]: [bs x num_channels x num_patches x patch_length] or
+        # last_hidden_state: [bs x num_channels x num_patches x patch_length] or
         # [bs x num_channels x (num_patches+1) x patch_length] if use cls_token
-        x_hat = self.head(model_output[0])
+        x_hat = self.head(model_output.last_hidden_state)
 
         # calculate masked_loss
         loss = nn.MSELoss(reduction="none")
@@ -1488,6 +1490,10 @@ class PatchTSTClassificationHead(nn.Module):
         return output
 
 
+@add_start_docstrings(
+    "The PatchTST for classification Model.",
+    PATCHTST_START_DOCSTRING,
+)
 class PatchTSTForClassification(PatchTSTPreTrainedModel):
     """
     PatchTST model for classification. The model contains PatchTST model + classification head
@@ -1569,8 +1575,9 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
             past_observed_mask=past_observed_mask,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
+            return_dict=True,
         )
-        y_hat = self.head(model_output[0])
+        y_hat = self.head(model_output.last_hidden_state)
 
         loss_val = None
         if target_values is not None:
@@ -1588,6 +1595,10 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    "The PatchTST for regression Model.",
+    PATCHTST_START_DOCSTRING,
+)
 class PatchTSTPredictionHead(nn.Module):
     def __init__(self, config: PatchTSTConfig, distribution_output=None):
         super().__init__()
@@ -1678,6 +1689,10 @@ class PatchTSTPredictionHead(nn.Module):
         return output
 
 
+@add_start_docstrings(
+    "The PatchTST for prediction Model.",
+    PATCHTST_START_DOCSTRING,
+)
 class PatchTSTForPrediction(PatchTSTPreTrainedModel):
     """
     PatchTST for forecasting. The model contains PatchTST model + Forecasting head
@@ -2036,7 +2051,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
                 distribution = self.distribution_output.distribution(y_hat)
                 loss = nll(distribution, target_values)
                 # take average of the loss
-                loss = weighted_average(loss_val)
+                loss = weighted_average(loss)
             else:
                 loss = nn.MSELoss(reduction="mean")
                 loss = loss(y_hat, target_values)
@@ -2046,7 +2061,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             outputs = (loss,) + outputs if loss is not None else outputs
             return outputs
         return PatchTSTForRegressionOutput(
-            loss=loss_val,
+            loss=loss,
             forecast_outputs=y_hat,
             hidden_states=model_output.hidden_states,
             attentions=model_output.attentions,
