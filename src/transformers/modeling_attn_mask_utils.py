@@ -188,48 +188,49 @@ class AttentionMaskConverter:
     def _unmask_unattended(
         expanded_mask: torch.Tensor, attention_mask: torch.Tensor, unmasked_value: Union[bool, float]
     ):
+        # fmt: off
         """
         Attend to all tokens in masked rows from the expanded attention mask, for example the relevant first rows when
         using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
         Details: https://github.com/pytorch/pytorch/issues/110213
 
         `expanded_mask` is [bsz, num_masks, tgt_seq_len, src_seq_len] or [bsz, tgt_seq_len, src_seq_len].
-        `attention_mask`
-        is [bsz, src_seq_len].
+        `attention_mask` is [bsz, src_seq_len].
 
         The dimension num_masks is most often 1, but it can also be the number of heads in the case of alibi.
 
-        If attention_mask is
+        For example, if `attention_mask` is
         ```
         [[0, 0, 1]
-        [1, 1, 1]
-        [0, 1, 1]]
+         [1, 1, 1]
+         [0, 1, 1]]
         ```
-        and expanded_mask is (e.g. here left-padding case)
+        and `expanded_mask` is (e.g. here left-padding case)
         ```
         [[[[0, 0, 0],
-        [0, 0, 0],
-        [0, 0, 1]]],
-        [[[1, 0, 0],
-        [1, 1, 0],
-        [1, 1, 1]]],
-        [[[0, 0, 0],
-        [0, 1, 0],
-        [0, 1, 1]]]]
+           [0, 0, 0],
+           [0, 0, 1]]],
+         [[[1, 0, 0],
+           [1, 1, 0],
+           [1, 1, 1]]],
+         [[[0, 0, 0],
+           [0, 1, 0],
+           [0, 1, 1]]]]
         ```
-        then the modified expanded_mask will be
+        then the modified `expanded_mask` will be
         ```
         [[[[1, 1, 1],   <-- modified
-        [1, 1, 1],   <-- modified
-        [0, 0, 1]]],
-        [[[1, 0, 0],
-        [1, 1, 0],
-        [1, 1, 1]]],
-        [[[1, 1, 1],   <-- modified
-        [0, 1, 0],
-        [0, 1, 1]]]]
+           [1, 1, 1],   <-- modified
+           [0, 0, 1]]],
+         [[[1, 0, 0],
+           [1, 1, 0],
+           [1, 1, 1]]],
+         [[[1, 1, 1],   <-- modified
+           [0, 1, 0],
+           [0, 1, 1]]]]
         ```
         """
+
         # Get the index of the first non-zero value for every sample in the batch.
         # In the above example, indices = [[2], [0], [1]]]
         tmp = torch.arange(attention_mask.shape[1], 0, -1)
@@ -323,7 +324,7 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
     """
     Prepares the correct `attn_mask` argument to be used by `torch.nn.functional.scaled_dot_product_attention`.
 
-    In case no token is masked in the `attention_mask` argument, we simply set it to `None` for the cases `query_length == 1` and 
+    In case no token is masked in the `attention_mask` argument, we simply set it to `None` for the cases `query_length == 1` and
     `key_value_length == query_length`, and rely instead on SDPA `is_causal` argument to use causal/non-causal masks,
     allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is passed).
     """
