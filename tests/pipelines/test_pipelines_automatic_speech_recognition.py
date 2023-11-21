@@ -16,7 +16,7 @@ import unittest
 
 import numpy as np
 import pytest
-from datasets import load_dataset
+from datasets import Audio, load_dataset
 from huggingface_hub import hf_hub_download, snapshot_download
 
 from transformers import (
@@ -1086,6 +1086,35 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         self.assertEqual(output, [{"text": ANY(str)}])
         self.assertEqual(output[0]["text"][:6], "<s> <s")
+
+    @require_torch
+    @slow
+    def test_whisper_longform(self):
+        # fmt: off
+        EXPECTED_RESULT = """ Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out of fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct denny's, set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile!"""
+        # fmt: on
+
+        processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model = model.to("cuda")
+
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            max_new_tokens=128,
+            device="cuda:0",
+        )
+
+        ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
+        ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+        audio = ds[0]["audio"]
+
+        result = pipe(audio)["text"]
+        print(result)
+
+        assert result == EXPECTED_RESULT
 
     @require_torch
     @slow
