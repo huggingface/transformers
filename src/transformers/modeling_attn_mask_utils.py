@@ -321,7 +321,7 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
     sliding_window: Optional[int] = None,
 ):
     """
-    Prepares the correct attn_mask argument to be used by torch.nn.functional.scaled_dot_product_attention.
+    Prepares the correct `attn_mask` argument to be used by `torch.nn.functional.scaled_dot_product_attention`.
 
     We ignore the attention mask in some cases for batch_size = 1 to allow to dispatch to the flash attention kernel.
 
