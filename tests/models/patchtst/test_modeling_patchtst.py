@@ -323,8 +323,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
 
     # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
     def test_prediction_head(self):
-        model = PatchTSTForPrediction.from_pretrained("ibm/patchtst-etth1-forecast").to(torch_device)
-
+        model = PatchTSTForPrediction.from_pretrained("namctin/patchtst_etth1_forecast").to(torch_device)
         batch = prepare_batch(file="test-batch.pt")
 
         torch.manual_seed(0)
@@ -337,14 +336,14 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.3228, 0.4320, 0.4591, 0.4066, -0.3461, 0.3094, -0.8426]],
+            [[0.5142, 0.6928, 0.6118, 0.5724, -0.3735, -0.1336, -0.7124]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
 
     def test_prediction_generation(self):
-        model = PatchTSTForPrediction.from_pretrained("ibm/patchtst-etth1-forecast").to(torch_device)
-        batch = prepare_batch("test-batch.pt")
+        model = PatchTSTForPrediction.from_pretrained("namctin/patchtst_etth1_forecast").to(torch_device)
+        batch = prepare_batch(file="test-batch.pt")
 
         torch.manual_seed(0)
         with torch.no_grad():
@@ -361,8 +360,8 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=TOLERANCE))
 
     def test_regression_generation(self):
-        model = PatchTSTForRegression.from_pretrained("ibm/patchtst-etth1-forecast").to(torch_device)
-        batch = prepare_batch("test-batch.pt")
+        model = PatchTSTForRegression.from_pretrained("namctin/patchtst_etth1_regression").to(torch_device)
+        batch = prepare_batch(file="test-batch.pt")
 
         torch.manual_seed(0)
         with torch.no_grad():
@@ -375,4 +374,5 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             device=torch_device,
         )
         mean_prediction = outputs.sequences.mean(dim=1)
+
         self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=TOLERANCE))
