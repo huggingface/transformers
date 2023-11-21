@@ -605,6 +605,13 @@ class AwqConfig(QuantizationConfigMixin):
                 "You cannot enable fused modules without specifying a `fuse_max_seq_len`, make sure to pass a valid `fuse_max_seq_len` for your usecase"
             )
 
+        if self.is_using_fused_modules and self.fusing_mapping is not None:
+            required_keys = ["hidden_size", "num_attention_heads", "num_key_value_heads"]
+            if not all(key in self.fusing_mapping for key in required_keys):
+                raise ValueError(
+                    f"Required fiels are missing in the fusing mapping, required fields are {required_keys}"
+                )
+
         # TODO: awq version check for fused modules.
 
     @property
