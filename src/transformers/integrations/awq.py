@@ -13,6 +13,7 @@
 # limitations under the License.
 "AWQ (Activation aware Weight Quantization) integration file"
 from ..activations import ACT2FN
+from ..modeling_utils import PreTrainedModel
 from ..utils import is_auto_awq_available, is_torch_available
 from ..utils.quantization_config import AwqBackendPackingMethod, AWQLinearVersion
 
@@ -132,6 +133,9 @@ def get_fusing_mapping(model, quantization_config):
         quantization_config (`~transformers.quantization_config.AWQConfig`):
             The quantization configuration to use.
     """
+    if not isinstance(model, PreTrainedModel):
+        raise ValueError(f"The model should be an instance of `PreTrainedModel`, got {model.__class__.__name__}")
+
     # Always default to `quantization_config.fusing_mapping`
     if quantization_config.fusing_mapping is not None:
         current_fused_mapping = quantization_config.fusing_mapping
