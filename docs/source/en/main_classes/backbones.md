@@ -23,20 +23,20 @@ Backbones are models used for feature extraction for computer vision tasks. One 
 
 ## Using AutoBackbone 
 
-You can use `AutoBackbone` class to initialize a model as a backbone and get the feature maps for any stage.
+You can use `AutoBackbone` class to initialize a model as a backbone and get the feature maps for any stage. You can define `out_indices` to indicate the index of the layers which you would like to get the feature maps from. You can also use `out_features` if you know the name of the layers. You can use them interchangeably. If you are using both `out_indices` and `out_features`, ensure they are consistent. Not passing any of the feature map arguments will make the backbone yield the feature maps of the last layer.
 
 ```py
 >>> from transformers import AutoImageProcessor, AutoBackbone
 >>> processor = AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
 >>> model = AutoBackbone.from_pretrained(
-"microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+"microsoft/swin-tiny-patch4-window7-224", out_indices=(0,)
 )
 
 >>> inputs = processor(image, return_tensors="pt")
 >>> outputs = model(**inputs)
 >>> feature_maps = outputs.feature_maps
 >>> list(feature_maps[-1].shape)
-[1, 768, 7, 7]
+[1, 96, 56, 56]
 ```
 
 ## Initializing Backbone Configuration
@@ -50,10 +50,19 @@ backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-50")
 config = MaskFormerConfig(backbone_config=backbone_config)
 model = MaskFormerForInstanceSegmentation(config)
 ```
-You can also use initialize a backbone with random weights to initialize the model neck with it. 
+You can also initialize a backbone with random weights to initialize the model neck with it. 
 
 ```py
 backbone_config = ResNetConfig()
 config = MaskFormerConfig(backbone_config=backbone_config)
 model = MaskFormerForInstanceSegmentation(config)
+```
+
+`timm` models are also supported in transformers through `TimmBackbone` and `TimmBackboneConfig`.
+
+```python
+from transformers import TimmBackboneConfig, TimmBackbone
+
+backbone_config = TimmBackboneConfig("resnet50")
+model = TimmBackbone(config=backbone_config)
 ```
