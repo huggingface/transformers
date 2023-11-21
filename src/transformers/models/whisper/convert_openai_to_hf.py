@@ -21,13 +21,22 @@ import os
 import tempfile
 import urllib
 import warnings
+from typing import Any, Optional, Tuple
 
 import torch
 from huggingface_hub.utils import insecure_hashlib
 from torch import nn
 from tqdm import tqdm
 
-from transformers import WhisperConfig, WhisperForConditionalGeneration, WhisperTokenizer
+from transformers import (
+    GenerationConfig,
+    WhisperConfig,
+    WhisperFeatureExtractor,
+    WhisperForConditionalGeneration,
+    WhisperProcessor,
+    WhisperTokenizer,
+    WhisperTokenizerFast,
+)
 from transformers.models.whisper.tokenization_whisper import LANGUAGES, bytes_to_unicode
 from transformers.utils.import_utils import _is_package_available
 
@@ -43,12 +52,45 @@ _MODELS = {
     "medium": "https://openaipublic.azureedge.net/main/whisper/models/345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/medium.pt",
     "large": "https://openaipublic.azureedge.net/main/whisper/models/e4b87e7e0bf463eb8e6956e646f1e277e901512310def2c24bf0e11bd3c28e9a/large.pt",
     "large-v2": "https://openaipublic.azureedge.net/main/whisper/models/81f7c96c852ee8fc832187b0132e569d6c3065a3252ed18e56effd0b6a73e524/large-v2.pt",
+    "large-v3": "https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt",
 }
+
 
 _TOKENIZERS = {
     "multilingual": "https://raw.githubusercontent.com/openai/whisper/main/whisper/assets/multilingual.tiktoken",
     "english": "https://raw.githubusercontent.com/openai/whisper/main/whisper/assets/gpt2.tiktoken",
 }
+
+
+def _get_generation_config(
+    is_multilingual: bool,
+    num_languages: int = 100,
+    openai_version: Optional[str] = None,
+) -> GenerationConfig:
+    """
+    Loads the appropriate generation config from HF repo
+    """
+    if openai_version is not None:
+        repo = f"openai/whisper-{openai_version}"
+    elif not is_multilingual:
+        repo = "openai/whisper-medium.en"
+    elif num_languages < 100:
+        repo = "openai/whisper-large-v2"
+    else:
+        repo = "openai/whisper-large-v3"
+
+    gen_cfg = GenerationConfig.from_pretrained(repo)
+    if openai_version is None:
+        gen_cfg.alignment_heads = None
+        warnings.warn(
+            "Alignment heads have not been included in the generation config, since they are available "
+            "only for the original OpenAI checkpoints."
+            "If you want to use word-level timestamps with a custom version of Whisper,"
+            "see https://github.com/openai/whisper/blob/main/notebooks/Multilingual_ASR.ipynb"
+            "for the example of how to produce word-level timestamps manually."
+        )
+
+    return gen_cfg
 
 
 def remove_ignore_keys_(state_dict):
@@ -102,7 +144,7 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
-def _download(url: str, root: str) -> io.BytesIO:
+def _download(url: str, root: str) -> Any:
     os.makedirs(root, exist_ok=True)
     filename = os.path.basename(url)
 
@@ -140,12 +182,17 @@ def _download(url: str, root: str) -> io.BytesIO:
     return torch.load(io.BytesIO(model_bytes))
 
 
-def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
+def convert_openai_whisper_to_tfms(
+    checkpoint_path, pytorch_dump_folder_path
+) -> Tuple[WhisperForConditionalGeneration, bool, int]:
     if ".pt" not in checkpoint_path:
         root = os.path.dirname(pytorch_dump_folder_path) or "."
         original_checkpoint = _download(_MODELS[checkpoint_path], root)
+        openai_version = checkpoint_path
     else:
         original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        openai_version = None
+
     dimensions = original_checkpoint["dims"]
     state_dict = original_checkpoint["model_state_dict"]
     proj_out_weights = state_dict["decoder.token_embedding.weight"]
@@ -153,6 +200,9 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
     rename_keys(state_dict)
     tie_embeds = True
     ffn_dim = state_dict["decoder.layers.0.fc1.weight"].shape[0]
+
+    # a hacky way to properly set up the bos/eos/pad token ids in the model
+    endoftext_id = 50257 if dimensions["n_vocab"] > 51865 else 50256
 
     config = WhisperConfig(
         vocab_size=dimensions["n_vocab"],
@@ -166,6 +216,10 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
         decoder_layers=dimensions["n_text_layer"],
         decoder_attention_heads=dimensions["n_text_head"],
         max_source_positions=dimensions["n_audio_ctx"],
+        eos_token_id=endoftext_id,
+        bos_token_id=endoftext_id,
+        pad_token_id=endoftext_id,
+        decoder_start_token_id=endoftext_id + 1,
     )
 
     model = WhisperForConditionalGeneration(config)
@@ -184,7 +238,17 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
     else:
         model.proj_out.weight.data = proj_out_weights
 
-    model.save_pretrained(pytorch_dump_folder_path)
+    # determine those parameters from a model checkpoint as Whisper repo does
+    is_multilingual = model.config.vocab_size >= 51865
+    num_languages = model.config.vocab_size - 51765 - int(is_multilingual)
+
+    model.generation_config = _get_generation_config(
+        is_multilingual,
+        num_languages,
+        openai_version,
+    )
+
+    return model, is_multilingual, num_languages
 
 
 # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
@@ -225,7 +289,7 @@ def convert_tiktoken_bpe_to_hf(tiktoken_url: str):
 
 
 def convert_tiktoken_to_hf(
-    pytorch_dump_folder_path: str, multilingual: bool = True, num_languages: int = 100, time_precision=0.02
+    multilingual: bool = True, num_languages: int = 100, time_precision=0.02
 ) -> WhisperTokenizer:
     # requires whisper, unless we use the path to the tiktoken file
     tiktoken_tokenizer_path = _TOKENIZERS["multilingual" if multilingual else "english"]
@@ -260,7 +324,7 @@ def convert_tiktoken_to_hf(
 
     hf_tokenizer.add_tokens(start_of_transcript + language_tokens + control_tokens, special_tokens=True)
     hf_tokenizer.add_tokens(timestamp_tokens, special_tokens=False)
-    hf_tokenizer.save_pretrained(pytorch_dump_folder_path)
+    return hf_tokenizer
 
 
 if __name__ == "__main__":
@@ -269,26 +333,18 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_path", type=str, help="Patht to the downloaded checkpoints")
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument(
-        "--convert_tokenizer",
+        "--convert_preprocessor",
         type=bool,
         default=False,
-        help="Whether or not the tokenizer should be converted along with the model.",
-    )
-    parser.add_argument(
-        "--whisper_version",
-        type=int,
-        default=2,
-        help="Version of the whisper release",
-    )
-    parser.add_argument(
-        "--multilingual",
-        type=bool,
-        default="store_true",
-        help="Whether or not the model is multilingual or english only",
+        help="Whether or not the preprocessor (tokenizer + feature extractor) should be converted along with the model.",
     )
     args = parser.parse_args()
 
-    if args.convert_tokenizer:
+    model, is_multilingual, num_languages = convert_openai_whisper_to_tfms(
+        args.checkpoint_path, args.pytorch_dump_folder_path
+    )
+
+    if args.convert_preprocessor:
         try:
             if not _is_package_available("tiktoken"):
                 raise """`tiktoken` is not installed, use `pip install tiktoken` to convert the tokenizer"""
@@ -297,9 +353,16 @@ if __name__ == "__main__":
         else:
             from tiktoken.load import load_tiktoken_bpe
 
-            NUM_LANGUAGES_PER_RELEASE = {1: 99, 2: 99, 3: 100}
-            convert_tiktoken_to_hf(
-                args.pytorch_dump_folder_path, args.multilingual, NUM_LANGUAGES_PER_RELEASE[args.whisper_version]
+            tokenizer = convert_tiktoken_to_hf(is_multilingual, num_languages)
+            feature_extractor = WhisperFeatureExtractor(
+                feature_size=model.config.num_mel_bins,
+                # the rest of default parameters are the same as hardcoded in openai/whisper
             )
+            processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+            processor.save_pretrained(args.pytorch_dump_folder_path)
 
-    convert_openai_whisper_to_tfms(args.checkpoint_path, args.pytorch_dump_folder_path)
+            # save fast tokenizer as well
+            fast_tokenizer = WhisperTokenizerFast.from_pretrained(args.pytorch_dump_folder_path)
+            fast_tokenizer.save_pretrained(args.pytorch_dump_folder_path, legacy_format=False)
+
+    model.save_pretrained(args.pytorch_dump_folder_path)

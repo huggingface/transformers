@@ -219,7 +219,7 @@ accelerate launch --num_processes 2 trainer-program.py ...
 deepspeed --num_gpus 2 trainer-program.py ...
 ```
 
-You don't need to use the Accelerate or [the Deepspeed integration](Deepspeed) features to use these launchers.
+You don't need to use the Accelerate or [the Deepspeed integration](deepspeed) features to use these launchers.
 
 
 Until now you were able to tell the program how many GPUs to use. Now let's discuss how to select specific GPUs and control their order.
