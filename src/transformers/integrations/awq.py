@@ -218,9 +218,11 @@ def fuse_awq_modules(model, quantization_config):
             if isinstance(q_proj, WQLinear_GEMV):
                 target_cls = WQLinear_GEMV
                 cat_dim = 0
-            else:
+            elif isinstance(q_proj, WQLinear_GEMM):
                 target_cls = WQLinear_GEMM
                 cat_dim = 1
+            else: 
+                raise ValueError("Unsupported q_proj type: {type(q_proj)}")
 
             k_proj = getattr(module, modules_to_fuse["attention"][1])
             v_proj = getattr(module, modules_to_fuse["attention"][2])
