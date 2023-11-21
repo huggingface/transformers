@@ -238,7 +238,7 @@ class TvpModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 796, 128))
         assert outputs.last_hidden_state.shape == expected_shape
         expected_slice = torch.tensor(
-            [[-0.4715, -0.4075, -1.7910], [-0.1982, 2.1252, -0.9496], [0.1366, 0.5033, -0.1846]]
+            [[-0.4902, -0.4121, -1.7872], [-0.2184, 2.1211, -0.9371], [0.1180, 0.5003, -0.1727]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
@@ -257,5 +257,5 @@ class TvpModelIntegrationTests(unittest.TestCase):
 
         expected_shape = torch.Size((1, 2))
         assert outputs.logits.shape == expected_shape
-        expected_slice = torch.tensor([[0.5060, 0.4988]]).to(torch_device)
+        expected_slice = torch.tensor([[0.5061, 0.4988]]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits, expected_slice, atol=1e-4))

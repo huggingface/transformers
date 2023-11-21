@@ -89,7 +89,7 @@ class TvpImageProcessor(BaseImageProcessor):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"longest_edge": 448}`):
-            Size of the output image after resizing. The shortest edge of the image will be resized to
+            Size of the output image after resizing. The longest edge of the image will be resized to
             `size["longest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
             `size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
@@ -190,7 +190,7 @@ class TvpImageProcessor(BaseImageProcessor):
             size (`Dict[str, int]`):
                 Size of the output image. If `size` is of the form `{"height": h, "width": w}`, the output image will
                 have the size `(h, w)`. If `size` is of the form `{"longest_edge": s}`, the output image will have its
-                shortest edge of length `s` while keeping the aspect ratio of the original image.
+                longest edge of length `s` while keeping the aspect ratio of the original image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):

@@ -40,7 +40,7 @@ class TvpImageProcessingTester(unittest.TestCase):
         self,
         parent,
         do_resize: bool = True,
-        size: Dict[str, int] = {"shortest_edge": 40},
+        size: Dict[str, int] = {"longest_edge": 40},
         do_center_crop: bool = False,
         crop_size: Dict[str, int] = None,
         do_rescale: bool = False,
@@ -147,10 +147,10 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 40})
+        self.assertEqual(image_processor.size, {"longest_edge": 40})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size={"shortest_edge": 12})
-        self.assertEqual(image_processor.size, {"shortest_edge": 12})
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size={"longest_edge": 12})
+        self.assertEqual(image_processor.size, {"longest_edge": 12})
 
     def test_call_pil(self):
         # Initialize image_processing
