@@ -42,6 +42,7 @@ from .test_pipelines_common import ANY
 if is_torch_available():
     import torch
 
+
 if is_vision_available():
     from PIL import Image
 else:
