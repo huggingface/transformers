@@ -606,7 +606,15 @@ class AwqConfig(QuantizationConfigMixin):
             )
 
         if self.has_fused_modules and self.modules_to_fuse is not None:
-            required_keys = ["hidden_size", "num_attention_heads", "num_key_value_heads"]
+            required_keys = [
+                "hidden_size",
+                "num_attention_heads",
+                "num_key_value_heads",
+                "mlp",
+                "attention",
+                "layernorm",
+                "use_alibi",
+            ]
             if not all(key in self.modules_to_fuse for key in required_keys):
                 raise ValueError(
                     f"Required fiels are missing in the fusing mapping, required fields are {required_keys}"
