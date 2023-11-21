@@ -28,10 +28,13 @@ You can use `AutoBackbone` class to initialize a model as a backbone and get the
 ```py
 >>> from transformers import AutoImageProcessor, AutoBackbone
 >>> import torch
+>>> from PIL import Image
+>>> import requests
 
 >>> processor = AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
 >>> model = AutoBackbone.from_pretrained("microsoft/swin-tiny-patch4-window7-224", out_indices=(0,))
->>> image = torch.randn(3, 256, 256)
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> inputs = processor(image, return_tensors="pt")
 >>> outputs = model(**inputs)
