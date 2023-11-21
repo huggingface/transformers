@@ -14,8 +14,9 @@
 # limitations under the License.
 
 from queue import Queue
-from typing import TYPE_CHECKING, Optional
 from time import perf_counter
+from typing import TYPE_CHECKING, Optional
+
 
 if TYPE_CHECKING:
     from ..models.auto import AutoTokenizer
@@ -160,7 +161,7 @@ class TimedTextStreamer(TextStreamer):
     """
     A text streamer used for measuring per-token generation latency, for benchmarking purposes.
     This streamer always skips the prompt.
-    
+
     <Tip warning={true}>
 
     The API for the streamer classes is still under development and may change in the future.
@@ -178,7 +179,7 @@ class TimedTextStreamer(TextStreamer):
 
         ```python
         >>> from transformers import AutoModelForCausalLM, AutoTokenizer, TimedTextStreamer
-        
+
         >>> tok = AutoTokenizer.from_pretrained("gpt2")
         >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
         >>> inputs = tok(["An increasing sequence: one, two, three, four, five, six, seven,"], return_tensors="pt")
@@ -197,13 +198,13 @@ class TimedTextStreamer(TextStreamer):
         [162.81271493062377, 18.371607991866767, 15.906393993645906, 14.754525036551058, 14.49775299988687]
         ```
     """
-    
+
     def __init__(self, tokenizer: "AutoTokenizer" = None, **decode_kwargs):
         super().__init__(tokenizer, skip_prompt=True, skip_special_tokens=False, **decode_kwargs)
         self.print_text = tokenizer is not None
         self.token_times = []
         self.last_timestamp = None
-    
+
     def put(self, value):
         if len(value.shape) > 1 and value.shape[0] > 1:
             raise ValueError("TextStreamer only supports batch size 1")
@@ -215,15 +216,15 @@ class TimedTextStreamer(TextStreamer):
             self.token_times = []
             self.last_timestamp = perf_counter()
             return
-        
+
         if self.last_timestamp is None:
             raise ValueError("TimedTextStreamer used incorrectly")
         else:
             time_in_ms = (perf_counter() - self.last_timestamp) * 1000
             self.token_times.extend([time_in_ms / len(value)] * len(value))
-        
+
         if self.print_text:
-        # Add the new token to the cache and decodes the entire thing.
+            # Add the new token to the cache and decodes the entire thing.
             self.token_cache.extend(value.tolist())
             text = self.tokenizer.decode(self.token_cache, **self.decode_kwargs)
 
@@ -243,7 +244,7 @@ class TimedTextStreamer(TextStreamer):
                 self.print_len += len(printable_text)
 
             self.on_finalized_text(printable_text)
-        
+
         self.last_timestamp = perf_counter()
 
     def end(self):
@@ -254,6 +255,7 @@ class TimedTextStreamer(TextStreamer):
 
     def get_token_times(self):
         return self.token_times
+
 
 class TextIteratorStreamer(TextStreamer):
     """

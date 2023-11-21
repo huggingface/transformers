@@ -133,7 +133,7 @@ class StreamerTester(unittest.TestCase):
         # The greedy text should be printed to stdout, except for the final "\n" in the streamer
         streamer_text = cs.out[:-1]
         times = streamer.get_token_times()
-        
+
         self.assertEqual(streamer_text, "")
         self.assertEqual(len(streamer.token_times), 10)
         self.assertEqual({type(time) for time in times}, {float})
@@ -156,7 +156,7 @@ class StreamerTester(unittest.TestCase):
         timed_streamer_text = timed_cs.out[:-1]
         streamer_text = cs.out[:-1]
         times = streamer.get_token_times()
-        
+
         self.assertEqual(streamer_text, timed_streamer_text)
         self.assertEqual(len(streamer.token_times), 10)
         self.assertEqual({type(time) for time in times}, {float})
