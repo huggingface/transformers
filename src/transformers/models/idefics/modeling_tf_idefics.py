@@ -28,7 +28,7 @@ from ...activations_tf import get_tf_activation
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PretrainedConfig
 from ...modeling_tf_utils import shape_list
-#from ...pytorch_utils import ALL_LAYERNORM_LAYERS
+from ...tf_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -487,7 +487,7 @@ class TFIdeficsRMSNorm(tf.keras.layers.Layer):
         return self.weight * hidden_states
 
 
-#ALL_LAYERNORM_LAYERS.append(TFIdeficsRMSNorm)
+ALL_LAYERNORM_LAYERS.append(TFIdeficsRMSNorm)
 
 
 class TFIdeficsEmbedding(tf.keras.layers.Layer):
