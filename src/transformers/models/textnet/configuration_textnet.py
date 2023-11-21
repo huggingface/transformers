@@ -85,6 +85,7 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     r"""
     [Raghavan/textnet-base](https://huggingface.co/Raghavan/textnet-base)
     """
