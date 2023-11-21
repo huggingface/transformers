@@ -99,9 +99,7 @@
     - local: tasks/prompting
       title: LLM プロンプト ガイド
     title: プロンプト
-<<<<<<< HEAD
   title: タスクガイド
-=======
     sections:
     - local: generation_strategies
       title: 生成戦略をカスタマイズする
