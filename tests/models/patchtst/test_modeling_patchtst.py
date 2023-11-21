@@ -291,8 +291,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         super().test_retain_grad_hidden_states_attentions()
 
 
-# Note: Publishing of this dataset is under internal review. The dataset is not yet downloadable.
-def prepare_batch(repo_id="ibm/etth1-forecast-test", file="train-batch.pt"):
+def prepare_batch(repo_id="hf-internal-testing/etth1-hourly-batch", file="train-batch.pt"):
     file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
     batch = torch.load(file, map_location=torch_device)
     return batch
