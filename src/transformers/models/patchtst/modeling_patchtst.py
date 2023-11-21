@@ -2032,24 +2032,26 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             past_observed_mask=past_observed_mask,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
+            return_dict=return_dict,
         )
         # get output head. y_hat is of shape [bs x num_targets] or tuple of this shape
-        y_hat = self.head(model_output.last_hidden_state)
+        y_hat = self.head(model_output[0])
 
-        loss_val = None
+        loss = None
         if target_values is not None:
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(y_hat)
-                loss_val = nll(distribution, target_values)
+                loss = nll(distribution, target_values)
                 # take average of the loss
-                loss_val = weighted_average(loss_val)
+                loss = weighted_average(loss_val)
             else:
                 loss = nn.MSELoss(reduction="mean")
-                loss_val = loss(y_hat, target_values)
+                loss = loss(y_hat, target_values)
 
         if not return_dict:
-            outputs = (loss_val, y_hat, model_output.hidden_states, model_output.attentions)
-            return tuple(v for v in outputs if v is not None)
+            outputs = (y_hat,) + model_output[1:]
+            outputs = (loss,) + outputs if loss is not None else outputs
+            return outputs
         return PatchTSTForRegressionOutput(
             loss=loss_val,
             forecast_outputs=y_hat,
