@@ -92,6 +92,8 @@ class TFTrainingArguments(TrainingArguments):
             Total number of training epochs to perform.
         max_steps (`int`, *optional*, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
+            In case of using a finite dataset, the training will cycle through the dataset repeatedly until
+            `max_steps` is reached.
         warmup_ratio (`float`, *optional*, defaults to 0.0):
             Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
         warmup_steps (`int`, *optional*, defaults to 0):
