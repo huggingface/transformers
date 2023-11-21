@@ -34,6 +34,7 @@ class Beit3Processor(ProcessorMixin):
         tokenizer ([`XLMRobertaTokenizer`, `XLMRobertaTokenizerFast`]):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "BeitImageProcessor"
     tokenizer_class = ("XLMRobertaTokenizer", "XLMRobertaTokenizerFast")

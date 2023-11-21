@@ -86,6 +86,7 @@ class Beit3Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "beit3"
 
     def __init__(
