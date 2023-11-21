@@ -27,8 +27,11 @@ You can use `AutoBackbone` class to initialize a model as a backbone and get the
 
 ```py
 >>> from transformers import AutoImageProcessor, AutoBackbone
+>>> import torch
+
 >>> processor = AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
 >>> model = AutoBackbone.from_pretrained("microsoft/swin-tiny-patch4-window7-224", out_indices=(0,))
+>>> image = torch.randn(3, 256, 256)
 
 >>> inputs = processor(image, return_tensors="pt")
 >>> outputs = model(**inputs)
