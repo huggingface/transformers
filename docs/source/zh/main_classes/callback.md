@@ -60,9 +60,11 @@ Callbacks是“只读”的代码片段，除了它们返回的[TrainerControl]�
 
 [[autodoc]] integrations.TensorBoardCallback
 
-[[autodoc]] integrations.WandbCallback - setup
+[[autodoc]] integrations.WandbCallback 
+    - setup
 
-[[autodoc]] integrations.MLflowCallback - setup
+[[autodoc]] integrations.MLflowCallback 
+    - setup
 
 [[autodoc]] integrations.AzureMLCallback
 
