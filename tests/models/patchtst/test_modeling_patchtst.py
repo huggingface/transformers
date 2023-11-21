@@ -265,15 +265,10 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     "past_values",
                     "past_observed_mask",
                 ]
-            elif (
-                model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) 
-                or model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING)
+            elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
+                MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
             ):
-                expected_arg_names = [
-                    "past_values",
-                    "target_values",
-                    "past_observed_mask"
-                ]
+                expected_arg_names = ["past_values", "target_values", "past_observed_mask"]
             else:
                 expected_arg_names = [
                     "past_values",
@@ -363,6 +358,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             device=torch_device,
         )
         mean_prediction = outputs.sequences.mean(dim=1)
+
         self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=TOLERANCE))
 
     def test_regression_generation(self):
