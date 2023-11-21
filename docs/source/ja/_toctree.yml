@@ -105,7 +105,6 @@
       title: 生成戦略をカスタマイズする
     title: Generation
   title: Task Guides
->>>>>>> e31069eb8b52107d88705b4c75373350a24ba4e7
 - sections:
   - local: fast_tokenizers
     title: 🤗 トークナイザーの高速トークナイザーを使用する
