@@ -631,6 +631,12 @@ class FalconFlashAttention2(FalconAttention):
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
+        if not self.flash_attn_uses_top_left_mask:
+            causal = self.is_causal
+        else:
+            # NOTE: `causal=self.is_causal and query_length != 1` is required for compatibility with flash_attn>=2.0,<2.1, reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0. We need to remove this check `query_length != 1` once Flash Attention for RoCm is bumped to 2.1. With flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen ==1) produces a wrong mask (top-left).
+            causal = self.is_causal and query_length != 1
+
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
@@ -641,7 +647,6 @@ class FalconFlashAttention2(FalconAttention):
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
 
-            # NOTE: `causal=self.is_causal and query_length != 1` is required for compatibility with flash_attn>=2.0,<2.1, reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0. We need to remove the check `query_length != 1` once Flash Attention for RoCm is bumped to 2.1. With flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen ==1) produces a wrong mask (top-left).
             attn_output_unpad = flash_attn_varlen_func(
                 query_states,
                 key_states,
@@ -652,7 +657,7 @@ class FalconFlashAttention2(FalconAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=self.is_causal and query_length != 1,
+                causal=causal,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
@@ -663,7 +668,7 @@ class FalconFlashAttention2(FalconAttention):
                 value_states,
                 dropout,
                 softmax_scale=softmax_scale,
-                causal=self.is_causal and query_length != 1,
+                causal=causal,
             )
 
         return attn_output
@@ -729,16 +734,6 @@ class FalconDecoderLayer(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-
-        num_kv_heads = config.num_kv_heads if (config.new_decoder_architecture or not config.multi_query) else 1
-        if (
-            getattr(config, "_flash_attn_2_enabled", False)
-            and not (config.new_decoder_architecture or config.num_attention_heads == num_kv_heads)
-            and torch.version.hip
-        ):
-            raise ValueError(
-                "The Falcon model being used uses multi-query attention or grouped-query attention, which is not supported by Flash Attention 2 on RoCm devices. Please use use_flash_attention_2=False."
-            )
 
         self.self_attention = (
             FalconAttention(config)

@@ -37,6 +37,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_210,
     logging,
     replace_return_docstrings,
 )
@@ -311,6 +312,12 @@ class MistralFlashAttention2(MistralAttention):
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
+
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.flash_attn_uses_top_left_mask = is_flash_attn_greater_or_equal_210()
 
     def forward(
         self,

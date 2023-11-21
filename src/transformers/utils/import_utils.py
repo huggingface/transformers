@@ -629,6 +629,13 @@ def is_flash_attn_2_available():
         return False
 
 
+def is_flash_attn_greater_or_equal_210():
+    if not _is_package_available("flash_attn"):
+        return False
+
+    return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
+
+
 def is_flash_attn_available():
     logger.warning(
         "Using `is_flash_attn_available` is deprecated and will be removed in v4.38. "
