@@ -197,7 +197,7 @@ class AttentionMaskConverter:
         `expanded_mask` is [bsz, num_masks, tgt_seq_len, src_seq_len] or [bsz, tgt_seq_len, src_seq_len].
         `attention_mask` is [bsz, src_seq_len].
 
-        The dimension num_masks is most often 1, but it can also be the number of heads in the case of alibi.
+        The dimension num_masks of `expanded_mask` is most often 1, but it can also be the number of heads in the case of alibi attention bias.
 
         For example, if `attention_mask` is
         ```
