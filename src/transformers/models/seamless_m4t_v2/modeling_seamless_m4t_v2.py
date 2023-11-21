@@ -325,8 +325,8 @@ M4T_T2U_INPUTS_DOCSTRING = r"""
         char_input_ids (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`):
             Character indices. The correspondence between characters and indices can be found in `char_to_id`, a
             dictionary in the generation configuration.
-        char_sequence_length (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`):
-            Length of each character.
+        char_count_per_id (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Number of characters per input id.
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1565,6 +1565,9 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
         return seq_lens.floor()
 
     def _indices_to_subwords(self, input_ids):
+        """
+        Returns the corresponding text string for each input id.
+        """
         if not hasattr(self.generation_config, "id_to_text"):
             raise ValueError(
                 """This model generation config doesn't have a `id_to_text` key which maps
@@ -1590,9 +1593,25 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
         unk_token_id=1,
         space="▁",
     ):
+        """
+        Counts the number of characters per text string associated with the input token id.
+        Args:
+            input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+            subwords_batch (`List[List[str]]` of shape `(batch_size, sequence_length)`):
+                Corresponding text string for each input id.
+            merge_space_with_prev_subword (`bool`, *optional*, defaults to `False`):
+                Indicates if the space character is merged with the previous subword. If `False`, it will be merged with the next subword.
+            pad_token_id (`int`, *optional*, defaults to 0):
+                The id of the _padding_ text token. If it is encountered when calculating the length of a subword sample, the lengths of subsequent subwords will be set to 0.
+            unk_token_id (`int`, *optional*, defaults to 1):
+                The id of the _unknown_ text token. Associated to a subword of length 1. 
+            space (`str`, *optional*, defaults to `"▁"`):
+                The space character.
+        """
         batch_size, _ = input_ids.shape
 
-        char_sequence_length = input_ids.new_zeros(input_ids.size())
+        char_count_per_id = input_ids.new_zeros(input_ids.size())
 
         subword_lens = input_ids.ne(pad_token_id).sum(1)
 
@@ -1642,11 +1661,27 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
                         elif i > 0 and is_punc[i - 1] and is_next_start_with_space[i - 1]:
                             char_len -= 1
 
-                char_sequence_length[batch_id, i] = char_len
+                char_count_per_id[batch_id, i] = char_len
 
-        return char_sequence_length
+        return char_count_per_id
 
-    def _get_char_seqs(self, input_ids, subwords_batch, char_sequence_length, pad_token_id=0, unk_token_id=1):
+    def _get_char_input_ids(self, input_ids, subwords_batch, char_count_per_id, pad_token_id=0, unk_token_id=1):
+        """
+        Counts the number of characters per text string associated with the input token id.
+        Args:
+            input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+            subwords_batch (`List[List[str]]` of shape `(batch_size, sequence_length)`):
+                Corresponding text string for each input id.
+            char_count_per_id (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+                Number of characters per input id.
+            pad_token_id (`int`, *optional*, defaults to 0):
+                The id of the _padding_ text token. If it is encountered when calculating the length of a subword sample, the lengths of subsequent subwords will be set to 0.
+            unk_token_id (`int`, *optional*, defaults to 1):
+                The id of the _unknown_ text token. Associated to a subword of length 1. 
+        Returns:
+            `torch.Tensor`: Tensor of shape `(batch_size, char_sequence_length)` containing the id of each character.
+        """
         if not hasattr(self.generation_config, "char_to_id"):
             raise ValueError(
                 """This model generation config doesn't have a `char_to_id` key which maps
@@ -1654,7 +1689,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
             )
 
         batch_size = input_ids.shape[0]
-        max_len = int(char_sequence_length.sum(1).max().item())
+        max_len = int(char_count_per_id.sum(1).max().item())
 
         char_seqs = input_ids.new_zeros((batch_size, max_len)).fill_(pad_token_id)
 
@@ -1677,8 +1712,8 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
 
     def _hard_upsample(self, hidden_states, durations):
         """
-        Args:
         Repeats the time dimension of each sample in the batch based on the corresponding duration.
+        Args:
             hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, *)`, *optional*):
                 The sequence to repeat, where `*` is any number of sequence-specific dimensions including none.
             durations (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2326,24 +2361,10 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    def _get_dur_output_lengths(self, input_ids, dur_out):
-        """
-        Computes the output length after the duration layer.
-        """
-        unit_lengths = (input_ids != self.pad_token_id).sum(1)
-
-        # take care of edge cases where no padding or too many padding
-        unit_lengths = torch.clamp(unit_lengths, 0, dur_out.shape[1] - 1)
-
-        cumulative_dur_out = torch.cumsum(dur_out, dim=1)
-        unit_lengths = cumulative_dur_out.gather(dim=1, index=unit_lengths.unsqueeze(1)).squeeze()
-
-        return unit_lengths
-
     def forward(
         self,
         char_input_ids: torch.LongTensor = None,
-        char_sequence_length: torch.LongTensor = None,
+        char_count_per_id: torch.LongTensor = None,
         encoder_hidden_states: torch.FloatTensor = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -2355,8 +2376,8 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
             char_input_ids (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`):
                 Character indices. The correspondence between characters and indices can be found in `char_to_id`, a
                 dictionary in the generation configuration.
-            char_sequence_length (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`):
-                Length of each character.
+            char_count_per_id (`torch.Tensor` of shape `(batch_size, encoder_sequence_length)`):
+                Number of characters per text input id.
             encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
@@ -2381,10 +2402,10 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # create padding mask for character lengths
-        char_padding_mask = _compute_new_attention_mask(char_input_ids, char_sequence_length.sum(1))
+        char_padding_mask = _compute_new_attention_mask(char_input_ids, char_count_per_id.sum(1))
 
         # upsample hidden states according to characters sequence lengths
-        char_hidden_states = self._hard_upsample(encoder_hidden_states, char_sequence_length)
+        char_hidden_states = self._hard_upsample(encoder_hidden_states, char_count_per_id)
         # embed char positions
         char_positions = self.pos_emb_alpha_char * self.embed_char_positions(inputs_embeds=char_hidden_states)
         # update char hidden states with positions and char embeddings
@@ -2483,7 +2504,7 @@ class SeamlessM4Tv2TextToUnitModel(SeamlessM4Tv2PreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         char_input_ids: torch.LongTensor = None,
-        char_sequence_length: torch.LongTensor = None,
+        char_count_per_id: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
@@ -2519,7 +2540,7 @@ class SeamlessM4Tv2TextToUnitModel(SeamlessM4Tv2PreTrainedModel):
         # decoder outputs consists of (dec_features, dec_hidden, dec_attn, padding_mask)
         decoder_outputs = self.decoder(
             char_input_ids=char_input_ids,
-            char_sequence_length=char_sequence_length,
+            char_count_per_id=char_count_per_id,
             encoder_hidden_states=encoder_outputs[0],
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2605,7 +2626,7 @@ class SeamlessM4Tv2TextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrainedMod
         self,
         input_ids: torch.LongTensor = None,
         char_input_ids: torch.LongTensor = None,
-        char_sequence_length: torch.LongTensor = None,
+        char_count_per_id: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
@@ -2621,7 +2642,7 @@ class SeamlessM4Tv2TextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrainedMod
         outputs = self.model(
             input_ids,
             char_input_ids=char_input_ids,
-            char_sequence_length=char_sequence_length,
+            char_count_per_id=char_count_per_id,
             attention_mask=attention_mask,
             encoder_outputs=encoder_outputs,
             head_mask=head_mask,
@@ -3941,22 +3962,22 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
 
         # compute t2u_char_input_ids
         t2u_subwords = self._indices_to_subwords(t2u_input_ids)
-        t2u_char_sequence_length = self._count_character_length_in_subword(
+        t2u_char_count_per_id = self._count_character_length_in_subword(
             t2u_input_ids, t2u_subwords, pad_token_id=pad_token_id
         )
 
         # Add pads for lang, EOS tokens as per NLLB "source" tokenizer mode.
-        pad_zero = t2u_char_sequence_length.new_zeros((t2u_char_sequence_length.shape[0], 1))
-        t2u_char_sequence_length = torch.cat([pad_zero, t2u_char_sequence_length, pad_zero], dim=1)
-        t2u_char_input_ids = self._get_char_seqs(
-            t2u_input_ids, t2u_subwords, t2u_char_sequence_length, pad_token_id=pad_token_id
+        pad_zero = t2u_char_count_per_id.new_zeros((t2u_char_count_per_id.shape[0], 1))
+        t2u_char_count_per_id = torch.cat([pad_zero, t2u_char_count_per_id, pad_zero], dim=1)
+        t2u_char_input_ids = self._get_char_input_ids(
+            t2u_input_ids, t2u_subwords, t2u_char_count_per_id, pad_token_id=pad_token_id
         )
 
         # second pass
         t2u_output = self.t2u_model(
             inputs_embeds=t2u_input_embeds,
             char_input_ids=t2u_char_input_ids,
-            char_sequence_length=t2u_char_sequence_length,
+            char_count_per_id=t2u_char_count_per_id,
             **kwargs_speech,
         )
 
@@ -4346,22 +4367,22 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel):
 
         # compute t2u_char_input_ids
         t2u_subwords = self._indices_to_subwords(t2u_input_ids)
-        t2u_char_sequence_length = self._count_character_length_in_subword(
+        t2u_char_count_per_id = self._count_character_length_in_subword(
             t2u_input_ids, t2u_subwords, pad_token_id=pad_token_id
         )
 
         # Add pads for lang, EOS tokens as per NLLB "source" tokenizer mode.
-        pad_zero = t2u_char_sequence_length.new_zeros((t2u_char_sequence_length.shape[0], 1))
-        t2u_char_sequence_length = torch.cat([pad_zero, t2u_char_sequence_length, pad_zero], dim=1)
-        t2u_char_input_ids = self._get_char_seqs(
-            t2u_input_ids, t2u_subwords, t2u_char_sequence_length, pad_token_id=pad_token_id
+        pad_zero = t2u_char_count_per_id.new_zeros((t2u_char_count_per_id.shape[0], 1))
+        t2u_char_count_per_id = torch.cat([pad_zero, t2u_char_count_per_id, pad_zero], dim=1)
+        t2u_char_input_ids = self._get_char_input_ids(
+            t2u_input_ids, t2u_subwords, t2u_char_count_per_id, pad_token_id=pad_token_id
         )
 
         # second pass
         t2u_output = self.t2u_model(
             inputs_embeds=t2u_input_embeds,
             char_input_ids=t2u_char_input_ids,
-            char_sequence_length=t2u_char_sequence_length,
+            char_count_per_id=t2u_char_count_per_id,
             **kwargs_speech,
         )
 
@@ -4855,22 +4876,22 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
 
         # compute t2u_char_input_ids
         t2u_subwords = self._indices_to_subwords(t2u_input_ids)
-        t2u_char_sequence_length = self._count_character_length_in_subword(
+        t2u_char_count_per_id = self._count_character_length_in_subword(
             t2u_input_ids, t2u_subwords, pad_token_id=pad_token_id
         )
 
         # Add pads for lang, EOS tokens as per NLLB "source" tokenizer mode.
-        pad_zero = t2u_char_sequence_length.new_zeros((t2u_char_sequence_length.shape[0], 1))
-        t2u_char_sequence_length = torch.cat([pad_zero, t2u_char_sequence_length, pad_zero], dim=1)
-        t2u_char_input_ids = self._get_char_seqs(
-            t2u_input_ids, t2u_subwords, t2u_char_sequence_length, pad_token_id=pad_token_id
+        pad_zero = t2u_char_count_per_id.new_zeros((t2u_char_count_per_id.shape[0], 1))
+        t2u_char_count_per_id = torch.cat([pad_zero, t2u_char_count_per_id, pad_zero], dim=1)
+        t2u_char_input_ids = self._get_char_input_ids(
+            t2u_input_ids, t2u_subwords, t2u_char_count_per_id, pad_token_id=pad_token_id
         )
 
         # second pass
         t2u_output = self.t2u_model(
             inputs_embeds=t2u_input_embeds,
             char_input_ids=t2u_char_input_ids,
-            char_sequence_length=t2u_char_sequence_length,
+            char_count_per_id=t2u_char_count_per_id,
             **kwargs_speech,
         )
 
