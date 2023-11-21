@@ -466,6 +466,7 @@ def format_speech_generation_kwargs(kwargs):
 
 ############ SPEECH ENCODER related code ################
 
+
 class SeamlessM4Tv2ConformerFeatureProjection(nn.Module):
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerFeatureProjection.__init__
     def __init__(self, config):
@@ -654,11 +655,12 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
         # => (batch, time1, hidden_size)
         attn_output = attn_output.transpose(1, 2).reshape(batch_size, -1, self.num_heads * self.head_size)
         attn_output = self.linear_out(attn_output)
-        
+
         if not output_attentions:
             attn_weights = None
 
         return attn_output, attn_weights
+
 
 class SeamlessM4Tv2ConformerEncoderLayer(nn.Module):
     """Conformer block based on https://arxiv.org/abs/2005.08100."""
@@ -740,18 +742,19 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
-        
+
     def _apply_chunk_attention(self, attention_mask, hidden_states):
         """
-        Creates a chunk attention mask. It creates a mask to prevent attention across chunks, ensuring that each position attends only to positions within its own chunk.
-        If a left chunk overlap is specified (`speech_encoder_chunk_size` in the configuration), the attention mask is adjusted accordingly to allow each position to also attends the `speech_encoder_chunk_size - 1` previous chunks.
+        Creates a chunk attention mask. It creates a mask to prevent attention across chunks, ensuring that each
+        position attends only to positions within its own chunk. If a left chunk overlap is specified
+        (`speech_encoder_chunk_size` in the configuration), the attention mask is adjusted accordingly to allow each
+        position to also attends the `speech_encoder_chunk_size - 1` previous chunks.
         """
         sequence_len = hidden_states.shape[1]
 
         chunk_indices = torch.arange(sequence_len, device=hidden_states.device)
         chunk_indices = torch.div(chunk_indices, self.config.speech_encoder_chunk_size).long()
-        
-        
+
         start_indices = torch.full_like(chunk_indices, 0)
         if self.config.speech_encoder_left_chunk_num >= 0:
             start_indices = (chunk_indices - self.config.speech_encoder_left_chunk_num).clamp_(min=0)
@@ -1598,17 +1601,20 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
     ):
         """
         Counts the number of characters per text string associated with the input token id.
+
         Args:
             input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary.
             subwords_batch (`List[List[str]]` of shape `(batch_size, sequence_length)`):
                 Corresponding text string for each input id.
             merge_space_with_prev_subword (`bool`, *optional*, defaults to `False`):
-                Indicates if the space character is merged with the previous subword. If `False`, it will be merged with the next subword.
+                Indicates if the space character is merged with the previous subword. If `False`, it will be merged
+                with the next subword.
             pad_token_id (`int`, *optional*, defaults to 0):
-                The id of the _padding_ text token. If it is encountered when calculating the length of a subword sample, the lengths of subsequent subwords will be set to 0.
+                The id of the _padding_ text token. If it is encountered when calculating the length of a subword
+                sample, the lengths of subsequent subwords will be set to 0.
             unk_token_id (`int`, *optional*, defaults to 1):
-                The id of the _unknown_ text token. Associated to a subword of length 1. 
+                The id of the _unknown_ text token. Associated to a subword of length 1.
             space (`str`, *optional*, defaults to `"▁"`):
                 The space character.
         """
@@ -1671,6 +1677,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
     def _get_char_input_ids(self, input_ids, subwords_batch, char_count_per_id, pad_token_id=0, unk_token_id=1):
         """
         Counts the number of characters per text string associated with the input token id.
+
         Args:
             input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary.
@@ -1679,9 +1686,10 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
             char_count_per_id (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Number of characters per input id.
             pad_token_id (`int`, *optional*, defaults to 0):
-                The id of the _padding_ text token. If it is encountered when calculating the length of a subword sample, the lengths of subsequent subwords will be set to 0.
+                The id of the _padding_ text token. If it is encountered when calculating the length of a subword
+                sample, the lengths of subsequent subwords will be set to 0.
             unk_token_id (`int`, *optional*, defaults to 1):
-                The id of the _unknown_ text token. Associated to a subword of length 1. 
+                The id of the _unknown_ text token. Associated to a subword of length 1.
         Returns:
             `torch.Tensor`: Tensor of shape `(batch_size, char_sequence_length)` containing the id of each character.
         """
@@ -1716,6 +1724,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
     def _hard_upsample(self, hidden_states, durations):
         """
         Repeats the time dimension of each sample in the batch based on the corresponding duration.
+
         Args:
             hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, *)`, *optional*):
                 The sequence to repeat, where `*` is any number of sequence-specific dimensions including none.
@@ -3999,7 +4008,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
             probs = probs.reshape((-1, probs.shape[2]))
             # multinomial then reshape : (batch_size*seq_len)-> (batch_size,seq_len)
             unit_ids = torch.multinomial(probs, num_samples=1).view(t2u_logits.shape[0], -1)
-                    
+
         output_unit_ids = unit_ids.detach().clone()
 
         replace_mask = (unit_ids == self.config.t2u_eos_token_id) | (~padding_mask)

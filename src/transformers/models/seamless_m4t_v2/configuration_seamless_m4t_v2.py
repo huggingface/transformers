@@ -140,15 +140,9 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             Number of convolutional layers that should be used in the adapter network. Only relevant if `add_adapter is
             True`.
         position_embeddings_type (`str`, *optional*, defaults to `"relative_key"`):
-            Can be specified to `relative_key`. If left to `None`, no relative position embedding
-            is applied. Only applied to the speech encoder. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
-        rotary_embedding_base (`int`, *optional*, defaults to 10000):
-            If `"rotary"` position embeddings are used, defines the size of the embedding base. Only applied to the
-            speech encoder.
-        max_source_positions (`int`, *optional*, defaults to 4096):
-            if `"relative"` position embeddings are used, defines the maximum source input positions. Only applied to
-            the speech encoder.
+            Can be specified to `relative_key`. If left to `None`, no relative position embedding is applied. Only
+            applied to the speech encoder. For more information on `"relative_key"`, please refer to [Self-Attention
+            with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
         conv_depthwise_kernel_size (`int`, *optional*, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks. Only applied to the speech encoder.
         left_max_position_embeddings (`int`, *optional*, defaults to 64):
@@ -294,8 +288,6 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         adaptor_dropout=0.1,
         num_adapter_layers=1,
         position_embeddings_type="relative_key",
-        rotary_embedding_base=10000,
-        max_source_positions=4096,
         conv_depthwise_kernel_size=31,
         left_max_position_embeddings=64,
         right_max_position_embeddings=8,
@@ -378,8 +370,6 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         self.adaptor_dropout = adaptor_dropout
         self.num_adapter_layers = num_adapter_layers
         self.position_embeddings_type = position_embeddings_type
-        self.rotary_embedding_base = rotary_embedding_base
-        self.max_source_positions = max_source_positions
         self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
         self.add_adapter = add_adapter
         self.left_max_position_embeddings = left_max_position_embeddings
