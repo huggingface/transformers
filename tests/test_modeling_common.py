@@ -3109,7 +3109,7 @@ class ModelTesterMixin:
                     dummy_input = dummy_input.to(torch.float16)
 
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # make sure we do left padding
+                # make sure we do right padding
                 dummy_attention_mask[:, :-1] = 1
                 dummy_attention_mask[:, -1:] = 0
 
