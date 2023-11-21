@@ -232,7 +232,7 @@ class TextNetEncoder(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        hidden_states = []
+        hidden_states = [hidden_state]
         for stage in self.stages:
             hidden_state = stage(hidden_state)
             hidden_states.append(hidden_state)
@@ -293,26 +293,22 @@ class TextNetModel(TextNetPreTrainedModel):
         )
 
         hidden_state = self.stem(pixel_values)
-        hidden_states = [hidden_state]
 
         encoder_outputs = self.encoder(
             hidden_state, output_hidden_states=output_hidden_states, return_dict=return_dict
         )
-
-        if output_hidden_states:
-            hidden_states = hidden_states + encoder_outputs[1]
 
         last_hidden_state = encoder_outputs[0]
         pooled_output = self.pooler(last_hidden_state)
 
         if not return_dict:
             output = (last_hidden_state, pooled_output)
-            return output + (tuple(hidden_states),) if output_hidden_states else output
+            return output + (encoder_outputs[1],) if output_hidden_states else output
 
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=tuple(hidden_states) if output_hidden_states else None,
+            hidden_states=encoder_outputs[1] if output_hidden_states else None,
         )
 
 
