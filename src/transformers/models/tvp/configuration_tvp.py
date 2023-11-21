@@ -74,9 +74,9 @@ class TvpConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         max_grid_col_position_embeddings (`int`, *optional*, defaults to 100):
-            The maximum column sequence length of visual position embeddings.
+            The largest number of horizontal patches from a video frame.
         max_grid_row_position_embeddings (`int`, *optional*, defaults to 100):
-            The maximum row sequence length of visual position embeddings.
+            The largest number of vertical patches from a video frame.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability of hidden layers.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):

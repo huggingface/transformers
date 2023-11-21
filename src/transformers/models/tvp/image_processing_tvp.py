@@ -172,7 +172,6 @@ class TvpImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
-    # Copied from transformers.models.vivit.image_processing_vivit.VivitImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -203,8 +202,7 @@ class TvpImageProcessor(BaseImageProcessor):
         if "height" in size and "width" in size:
             output_size = (size["height"], size["width"])
         elif "longest_edge" in size:
-            max_size = size["longest_edge"]
-            output_size = get_resize_output_image_size(image, max_size, input_data_format)
+            output_size = get_resize_output_image_size(image, size["longest_edge"], input_data_format)
         else:
             raise ValueError(f"Size must have 'height' and 'width' or 'longest_edge' as keys. Got {size.keys()}")
 

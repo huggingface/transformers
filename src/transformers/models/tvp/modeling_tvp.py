@@ -664,10 +664,12 @@ class TvpFramePadPrompter(nn.Module):
         )
 
     def forward(self, pixel_values):
-        if self.visual_prompter_apply != "add":
+        if self.visual_prompter_apply not in ("add", "remove", "replace"):
+            raise ValueError(f"Invalid visual_prompter_apply value {self.visual_prompter_apply}")
+        if self.visual_prompter_apply in ("replace", "remove"):
             visual_prompt_mask = torch.ones([self.max_img_size, self.max_img_size], dtype=pixel_values.dtype)
             pixel_values *= visual_prompt_mask
-        if self.visual_prompter_apply != "remove":
+        if self.visual_prompter_apply in ("replace", "add"):
             base = torch.zeros(1, self.num_frames, 3, self.base_size, self.base_size)
             prompt = torch.cat([self.pad_left, base, self.pad_right], dim=4)
             prompt = torch.cat([self.pad_up, prompt, self.pad_down], dim=3)
