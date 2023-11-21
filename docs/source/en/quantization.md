@@ -441,3 +441,31 @@ model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13
 ## Optimum
 
 The [Optimum](https://huggingface.co/docs/optimum/index) library supports quantization for Intel, Furiosa, ONNX Runtime, GPTQ, and lower-level PyTorch quantization functions. Consider using Optimum for quantization if you're using specific and optimized hardware like Intel CPUs, Furiosa NPUs or a model accelerator like ONNX Runtime.
+
+## Benchmarks
+
+To compare the speed, throughput, and latency of each quantization scheme, check the following benchmarks obtained from the [optimum-benchmark](https://github.com/huggingface/optimum-benchmark) library. The benchmark was run on a NVIDIA A1000 for the [TheBloke/Mistral-7B-v0.1-AWQ](https://huggingface.co/TheBloke/Mistral-7B-v0.1-AWQ) and [TheBloke/Mistral-7B-v0.1-GPTQ](https://huggingface.co/TheBloke/Mistral-7B-v0.1-GPTQ) models. These were also tested against the bitsandbytes quantization methods as well as a native fp16 model.
+
+<div class="flex gap-4">
+  <div>
+    <img class="rounded-xl" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/forward_memory_plot.png" alt="forward peak memory per batch size" />
+    <figcaption class="mt-2 text-center text-sm text-gray-500">forward peak memory/batch size</figcaption>
+  </div>
+  <div>
+    <img class="rounded-xl" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/generate_memory_plot.png" alt="generate peak memory per batch size" />
+    <figcaption class="mt-2 text-center text-sm text-gray-500">generate peak memory/batch size</figcaption>
+  </div>
+</div>
+
+<div class="flex gap-4">
+  <div>
+    <img class="rounded-xl" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/generate_throughput_plot.png" alt="generate throughput per batch size" />
+    <figcaption class="mt-2 text-center text-sm text-gray-500">generate throughput/batch size</figcaption>
+  </div>
+  <div>
+    <img class="rounded-xl" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/forward_latency_plot.png" alt="forward latency per batch size" />
+    <figcaption class="mt-2 text-center text-sm text-gray-500">forward latency/batch size</figcaption>
+  </div>
+</div>
+
+The benchmarks indicate AWQ quantization is the fastest for inference, text generation, and has the lowest peak memory for text generation. However, AWQ has the largest forward latency per batch size. For a more detailed discussion about the pros and cons of each quantization method, read the [Overview of natively supported quantization schemes in 🤗 Transformers](https://huggingface.co/blog/overview-quantization-transformers) blog post.
