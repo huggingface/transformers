@@ -311,7 +311,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
 
-            # NOTE: `causal=query_length != 1` is required for compatibility with flash_attn>=2.0,<2.1, reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0. We need to use again `causal=self.is_causal` once Flash Attention for RoCm is bumped to 2.1, as using q_seqlen != k_seqlen (except for the case q_seqlen ==1) produces a wrong mask with flash_attn<2.1.
+            # NOTE: `causal=self.is_causal and query_length != 1` is required for compatibility with flash_attn>=2.0,<2.1, reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0. We need to remove the check `query_length != 1` once Flash Attention for RoCm is bumped to 2.1. With flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen ==1) produces a wrong mask (top-left).
             attn_output_unpad = flash_attn_varlen_func(
                 query_states,
                 key_states,
@@ -322,13 +322,18 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=query_length != 1,
+                causal=self.is_causal and query_length != 1,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=query_length != 1
+                query_states,
+                key_states,
+                value_states,
+                dropout,
+                softmax_scale=softmax_scale,
+                causal=self.is_causal and query_length != 1,
             )
 
         return attn_output
