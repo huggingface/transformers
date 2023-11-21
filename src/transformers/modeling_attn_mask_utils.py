@@ -323,10 +323,9 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
     """
     Prepares the correct `attn_mask` argument to be used by `torch.nn.functional.scaled_dot_product_attention`.
 
-    We ignore the attention mask in some cases for batch_size = 1 to allow to dispatch to the flash attention kernel.
-
-    Note that as of PyTorch 2.1, SDPA cannot dispatch to flash attention if an attention mask is passed. A
-    possible solution is to use nested tensors.
+    In case no token is masked in the `attention_mask` argument, we simply set it to `None` for the cases `query_length == 1` and 
+    `key_value_length == query_length`, and rely instead on SDPA `is_causal` argument to use causal/non-causal masks,
+    allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is passed).
     """
     attn_mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=sliding_window)
 
