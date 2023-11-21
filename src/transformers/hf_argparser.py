@@ -34,9 +34,9 @@ DataClassType = NewType("DataClassType", Any)
 def string_to_bool(v):
     if isinstance(v, bool):
         return v
-    if v.lower() in ("yes", "true", "t", "y", "1"):
+    if v.lower() in {"yes", "true", "t", "y", "1"}:
         return True
-    elif v.lower() in ("no", "false", "f", "n", "0"):
+    elif v.lower() in {"no", "false", "f", "n", "0"}:
         return False
     else:
         raise ArgumentTypeError(
@@ -175,8 +175,10 @@ class HfArgumentParser(ArgumentParser):
         # A variable to store kwargs for a boolean field, if needed
         # so that we can init a `no_*` complement argument (see below)
         bool_kwargs = {}
-        if origin_type is Literal or (isinstance(field.type, type) and issubclass(field.type, Enum)):
-            if origin_type is Literal:
+        origin_type_is_literal = origin_type is Literal
+        field_type_is_bool = field.type is bool
+        if origin_type_is_literal or isinstance(field.type, (type, Enum)):
+            if origin_type_is_literal:
                 kwargs["choices"] = field.type.__args__
             else:
                 kwargs["choices"] = [x.value for x in field.type]
@@ -187,14 +189,14 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["default"] = field.default
             else:
                 kwargs["required"] = True
-        elif field.type is bool or field.type == Optional[bool]:
+        elif field_typs_is_bool or field.type == Optional[bool]:
             # Copy the currect kwargs to use to instantiate a `no_*` complement argument below.
             # We do not initialize it here because the `no_*` alternative must be instantiated after the real argument
             bool_kwargs = copy(kwargs)
 
             # Hack because type=bool in argparse does not behave as we want.
             kwargs["type"] = string_to_bool
-            if field.type is bool or (field.default is not None and field.default is not dataclasses.MISSING):
+            if field_typs_is_bool or (field.default is not None and field.default is not dataclasses.MISSING):
                 # Default value is False if we have no default when of type bool.
                 default = False if field.default is dataclasses.MISSING else field.default
                 # This is the value that will get picked if we don't include --field_name in any way
@@ -224,7 +226,7 @@ class HfArgumentParser(ArgumentParser):
         # Order is important for arguments with the same destination!
         # We use a copy of earlier kwargs because the original kwargs have changed a lot before reaching down
         # here and we do not need those changes/additional keys.
-        if field.default is True and (field.type is bool or field.type == Optional[bool]):
+        if field.default is True and (field_typs_is_bool or field.type == Optional[bool]):
             bool_kwargs["default"] = False
             parser.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **bool_kwargs)
 

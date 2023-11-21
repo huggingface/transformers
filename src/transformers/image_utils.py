@@ -51,9 +51,8 @@ if is_vision_available():
     else:
         PILImageResampling = PIL.Image
 
-if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
+if TYPE_CHECKING and is_torch_available():
+    import torch
 
 
 ImageInput = Union[
