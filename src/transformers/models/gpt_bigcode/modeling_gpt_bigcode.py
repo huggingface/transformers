@@ -297,7 +297,9 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.flash_attn_uses_top_left_mask = is_flash_attn_greater_or_equal_210()
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used
+        # to handle this difference.
+        self.flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_210()
 
     def forward(
         self,
