@@ -741,11 +741,6 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
 
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
-        self.num_input_channels = config.num_input_channels
-        self.patch_length = config.patch_length
-        self.d_model = config.d_model
-        self.share_embedding = config.share_embedding
-        self.use_cls_token = config.use_cls_token
         self.gradient_checkpointing = False
 
         # Input embedding: projection of feature vectors onto a d-dim vector space
