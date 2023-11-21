@@ -67,7 +67,7 @@ class PatchTSTConfig(PretrainedConfig):
         ffn_dim (`int`, *optional*, defaults to 256):
             Dimension of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         norm_type (`str` , *optional*, defaults to `"batchnorm"`):
-            Normalization at each Transformer layer. Can be `"BatchNorm"` or `"LayerNorm"`.
+            Normalization at each Transformer layer. Can be `"batchnorm"` or `"layernorm"`.
         norm_eps (`float`, *optional*, defaults to 1e-05):
             A value added to the denominator for numerical stability of normalization.
         attention_dropout (`float`, *optional*, defaults to 0.0):
