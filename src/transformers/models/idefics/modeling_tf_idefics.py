@@ -985,7 +985,8 @@ class TFIdeficsPreTrainedModel(TFPreTrainedModel):
             module.embeddings = tf.random.normal(shape=module.embeddings.shape, mean=0.0, stddev=std)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, TFIdeficsModel):
+        # TODO: Alazar, should below be TFIdeficsModel instead?
+        if isinstance(module, TFIdeficsMainLayer):
             module.gradient_checkpointing = value
 
 
@@ -1055,7 +1056,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
-class TFIdeficsModel(TFIdeficsPreTrainedModel):
+class TFIdeficsMainLayer(tf.keras.layers.Layer):
     """
     Transformer decoder consisting of `config.num_hidden_layers` layers. Each layer is a [`IdeficsDecoderLayer`]
 
@@ -1063,8 +1064,8 @@ class TFIdeficsModel(TFIdeficsPreTrainedModel):
         config: IdeficsConfig
     """
 
-    def __init__(self, config: IdeficsConfig, **kwargs):
-        super().__init__(config, **kwargs)
+    def __init__(self, config: IdeficsConfig, add_pooling_year: bool = True, **kwargs):
+        super().__init__(**kwargs)
         self.config = config
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1094,7 +1095,7 @@ class TFIdeficsModel(TFIdeficsPreTrainedModel):
                 name="perceiver_resampler",
             )
 
-        self.layers = [TFIdeficsDecoderLayer(config, name=f"layers_{i}") for i in range(config.num_hidden_layers)]
+        self.decoder_layers = [TFIdeficsDecoderLayer(config, name=f"layers_{i}") for i in range(config.num_hidden_layers)]
 
         self.cross_layer_interval = config.cross_layer_interval
         num_cross_layers = config.num_hidden_layers // self.cross_layer_interval
@@ -1107,10 +1108,8 @@ class TFIdeficsModel(TFIdeficsPreTrainedModel):
         self.norm = TFIdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="norm")
 
         self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
-        self.post_init()
-
-        self.freeze_relevant_params(config)
+        # TODO: Alazar
+        #self.freeze_relevant_params(config)
 
     def freeze_relevant_params(self, config=None):
         if config is None:
@@ -1123,7 +1122,7 @@ class TFIdeficsModel(TFIdeficsPreTrainedModel):
             freeze_model(self.vision_model, module_exceptions=config.freeze_vision_module_exceptions)
 
     def freeze_text_layers(self, module_exceptions=[]):
-        for module in [self.layers, self.norm]:
+        for module in [self.decoder_layers, self.norm]:
             freeze_model(module, module_exceptions=module_exceptions)
 
     def freeze_vision_layers(self, module_exceptions=[]):
@@ -1218,7 +1217,7 @@ class TFIdeficsModel(TFIdeficsPreTrainedModel):
             no_images = tf.reduce_sum(tf.cast(pixel_values, dtype=tf.int32)) == 0
             pixel_values = tf.cast(pixel_values, dtype=self.dtype)  # fp16 compatibility
             batch_size, num_images = shape_list(pixel_values)[:2]
-            pixel_values = tf.reshape(pixel_values, (batch_size * num_images, *shape_list(pixel_values)[2:]))
+            pixel_values = tf.reshape(pixel_values, [batch_size * num_images, *pixel_values.shape[2:]])
 
             # Get sequence from the vision encoder
             image_hidden_states = self.vision_model(
@@ -1407,6 +1406,49 @@ class TFIdeficsModel(TFIdeficsPreTrainedModel):
             image_hidden_states=image_hidden_states,
         )
 
+class TFIdeficsModel(TFIdeficsPreTrainedModel):
+    def __init__(self, config: IdeficsConfig, **kwargs):
+        super().__init__(config, **kwargs)
+
+        self.model = TFIdeficsMainLayer(config, name="idefics")
+
+    def call(
+        self,
+        input_ids: tf.Tensor = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        past_key_values: Optional[List[tf.Tensor]] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        pixel_values: Optional[tf.Tensor] = None,
+        image_encoder_embeddings: Optional[tf.Tensor] = None,
+        perceiver_embeddings: Optional[tf.Tensor] = None,
+        image_attention_mask: Optional[tf.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = None,
+    ) -> Union[Tuple, TFIdeficsBaseModelOutputWithPast]:
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            image_encoder_embeddings=image_encoder_embeddings,
+            perceiver_embeddings=perceiver_embeddings,
+            image_attention_mask=image_attention_mask,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=return_dict,
+            training=training,
+        )
+        return outputs
+
 
 class TFIdeficsForVisionText2Text(TFPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
@@ -1414,7 +1456,7 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel):
 
     def __init__(self, config, vision_model=None, **kwargs):
         super().__init__(config, **kwargs)
-        self.model = TFIdeficsModel(config)
+        self.model = TFIdeficsMainLayer(config)
 
         self.lm_head = TFIdeficsDecoupledLinear(
             config.hidden_size,
@@ -1424,8 +1466,6 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel):
             partially_freeze=config.freeze_lm_head,
         )
 
-        # Initialize weights and apply final processing
-        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.embed_tokens

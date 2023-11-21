@@ -34,8 +34,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFIdeficsForVisionText2Text, TFIdeficsModel, TFIdeficsProcessor
-    from transformers.models.idefics.configuration_idefics import TFIdeficsPerceiverConfig, TFIdeficsVisionConfig
+    from transformers import TFIdeficsForVisionText2Text, TFIdeficsModel, IdeficsProcessor
+    from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
     from transformers.models.idefics.modeling_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
@@ -279,7 +279,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def setUp(self):
         self.model_tester = IdeficsModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=TFIdeficsConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -335,7 +335,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         for model_class in self.all_model_classes:
             # IdeficsModel does not support training, users should use
             # IdeficsForVisionText2Text for this purpose
-            if model_class == IdeficsModel:
+            if model_class == TFIdeficsModel:
                 return
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -354,7 +354,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         for model_class in self.all_model_classes:
             # IdeficsModel does not support training, users should use
             # IdeficsForVisionText2Text for this purpose
-            if model_class == IdeficsModel:
+            if model_class == TFIdeficsModel:
                 return
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
