@@ -90,9 +90,9 @@ class SeamlessM4Tv2GenerationOutput(ModelOutput):
 
 
 @dataclass
-class SeamlessM4Tv2NARDecoderOutput(ModelOutput):
+class SeamlessM4Tv2TextToUnitDecoderOutput(ModelOutput):
     """
-    Class defining the outputs from [`SeamlessM4Tv2NARDecoder`].
+    Class defining the outputs from [`SeamlessM4Tv2TextToUnitDecoder`].
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -120,9 +120,10 @@ class SeamlessM4Tv2NARDecoderOutput(ModelOutput):
 
 
 @dataclass
-class SeamlessM4Tv2NARTextToUnitOutput(ModelOutput):
+class SeamlessM4Tv2TextToUnitOutput(ModelOutput):
     """
-    Base class for sequence-to-sequence language models outputs.
+        Class defining the outputs from [`SeamlessM4Tv2TextToUnitForConditionalGeneration`] and
+        [`SeamlessM4Tv2TextToUnitModel`].
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -1610,7 +1611,7 @@ class SeamlessM4Tv2DecoderLayer(nn.Module):
         return outputs
 
 
-class SeamlessM4Tv2NARDecoderLayer(nn.Module):
+class SeamlessM4Tv2TextToUnitDecoderLayer(nn.Module):
     def __init__(self, config: SeamlessM4Tv2Config, decoder_ffn_dim=None, decoder_attention_heads=None):
         super().__init__()
         decoder_ffn_dim = config.decoder_ffn_dim if decoder_ffn_dim is None else decoder_ffn_dim
@@ -1713,7 +1714,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
         "SeamlessM4Tv2EncoderLayer",
         "SeamlessM4Tv2DecoderLayer",
         "SeamlessM4Tv2ConformerEncoderLayer",
-        "SeamlessM4Tv2NARDecoderLayer",
+        "SeamlessM4Tv2TextToUnitDecoderLayer",
     ]
 
     def _init_weights(self, module):
@@ -2452,7 +2453,7 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
             Input embedding
     """,
 )
-class SeamlessM4Tv2NARDecoder(SeamlessM4Tv2PreTrainedModel):
+class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
     def __init__(
         self,
         config: SeamlessM4Tv2Config,
@@ -2498,7 +2499,7 @@ class SeamlessM4Tv2NARDecoder(SeamlessM4Tv2PreTrainedModel):
         layers = []
         for _ in range(config.decoder_layers):
             layers.append(
-                SeamlessM4Tv2NARDecoderLayer(
+                SeamlessM4Tv2TextToUnitDecoderLayer(
                     config,
                     decoder_attention_heads=config.decoder_attention_heads,
                     decoder_ffn_dim=config.decoder_ffn_dim,
@@ -2540,7 +2541,7 @@ class SeamlessM4Tv2NARDecoder(SeamlessM4Tv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SeamlessM4Tv2NARDecoderOutput]:
+    ) -> Union[Tuple, SeamlessM4Tv2TextToUnitDecoderOutput]:
         r"""
         Args:
             char_input_ids (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`):
@@ -2640,7 +2641,7 @@ class SeamlessM4Tv2NARDecoder(SeamlessM4Tv2PreTrainedModel):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attns, padding_mask] if v is not None)
-        return SeamlessM4Tv2NARDecoderOutput(
+        return SeamlessM4Tv2TextToUnitDecoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
@@ -2649,14 +2650,14 @@ class SeamlessM4Tv2NARDecoder(SeamlessM4Tv2PreTrainedModel):
 
 
 @add_start_docstrings(
-    "Transformer bare text-to-unit encoder-decoder. The encoder is a [`SeamlessM4Tv2Encoder`] without embeddings and the decoder is a [`SeamlessM4Tv2Decoder`].",
+    "Transformer bare text-to-unit encoder-decoder. The encoder is a [`SeamlessM4Tv2Encoder`] without embeddings and the decoder is a [`SeamlessM4Tv2TextToUnitDecoder`].",
     SEAMLESS_M4T_V2_START_DOCSTRING,
     """
         embed_tokens_decoder (`nn.Embedding`, *optional*): input embedding of the decoder.
     """,
 )
-class SeamlessM4Tv2NARTextToUnitModel(SeamlessM4Tv2PreTrainedModel):
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TTextToUnitModel.__init__ with SeamlessM4T->SeamlessM4Tv2, Decoder->NARDecoder
+class SeamlessM4Tv2TextToUnitModel(SeamlessM4Tv2PreTrainedModel):
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TTextToUnitModel.__init__ with SeamlessM4T->SeamlessM4Tv2, Decoder->TextToUnitDecoder
     def __init__(
         self,
         config: SeamlessM4Tv2Config,
@@ -2665,7 +2666,7 @@ class SeamlessM4Tv2NARTextToUnitModel(SeamlessM4Tv2PreTrainedModel):
         super().__init__(config)
 
         self.encoder = SeamlessM4Tv2Encoder(config, is_t2u_encoder=True)
-        self.decoder = SeamlessM4Tv2NARDecoder(config, embed_tokens_decoder)
+        self.decoder = SeamlessM4Tv2TextToUnitDecoder(config, embed_tokens_decoder)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2720,7 +2721,7 @@ class SeamlessM4Tv2NARTextToUnitModel(SeamlessM4Tv2PreTrainedModel):
         if not return_dict:
             return decoder_outputs + encoder_outputs
 
-        return SeamlessM4Tv2NARTextToUnitOutput(
+        return SeamlessM4Tv2TextToUnitOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             padding_mask=decoder_outputs.padding_mask,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -2732,13 +2733,13 @@ class SeamlessM4Tv2NARTextToUnitModel(SeamlessM4Tv2PreTrainedModel):
 
 
 @add_start_docstrings(
-    "Transformer text-to-unit encoder-decoder with a language model head. The base encoder-decoder model is a [`SeamlessM4Tv2NARTextToUnitModel`].",
+    "Transformer text-to-unit encoder-decoder with a language model head. The base encoder-decoder model is a [`SeamlessM4Tv2TextToUnitModel`].",
     SEAMLESS_M4T_V2_START_DOCSTRING,
     """
         embed_tokens_decoder (`nn.Embedding`, *optional*): input embedding of the decoder.
     """,
 )
-class SeamlessM4Tv2NARTextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrainedModel):
+class SeamlessM4Tv2TextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         "vocoder",
         "speech_encoder",
@@ -2747,7 +2748,7 @@ class SeamlessM4Tv2NARTextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrained
     ]
     _tied_weights_keys = ["decoder.embed_tokens.weight", "lm_head.weight"]
 
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TTextToUnitForConditionalGeneration.__init__ with SeamlessM4T->SeamlessM4Tv2, TextToUnit->NARTextToUnit
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TTextToUnitForConditionalGeneration.__init__ with SeamlessM4T->SeamlessM4Tv2
     def __init__(
         self,
         config: SeamlessM4Tv2Config,
@@ -2760,7 +2761,7 @@ class SeamlessM4Tv2NARTextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrained
                 config.__setattr__(param[4:], val)
         super().__init__(config)
 
-        self.model = SeamlessM4Tv2NARTextToUnitModel(config, embed_tokens_decoder)
+        self.model = SeamlessM4Tv2TextToUnitModel(config, embed_tokens_decoder)
 
         self.lm_head = nn.Linear(config.hidden_size, config.t2u_vocab_size, bias=False)
 
@@ -2833,7 +2834,7 @@ class SeamlessM4Tv2NARTextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrained
             output = (lm_logits,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
-        return SeamlessM4Tv2NARTextToUnitOutput(
+        return SeamlessM4Tv2TextToUnitOutput(
             last_hidden_state=lm_logits,
             padding_mask=outputs.padding_mask,
             decoder_hidden_states=outputs.decoder_hidden_states,
@@ -3126,7 +3127,7 @@ class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
 
         return input_lengths
 
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TCodeHifiGan.forward with SeamlessM4T->SeamlessM4Tv2NAR
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TCodeHifiGan.forward with SeamlessM4T->SeamlessM4Tv2
     def forward(
         self, input_ids: torch.LongTensor, spkr_id: torch.Tensor, lang_id: torch.Tensor
     ) -> Tuple[torch.Tensor]:
@@ -3135,7 +3136,7 @@ class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary.
 
-                Indices can be obtained using [`SeamlessM4Tv2NARTextToUnitForConditionalGeneration`]. [What are input
+                Indices can be obtained using [`SeamlessM4Tv2TextToUnitForConditionalGeneration`]. [What are input
                 IDs?](../glossary#input-ids)
             spkr_id (`int`, *optional*):
                 The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
@@ -3844,7 +3845,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
         "text_decoder.embed_tokens.weight",
     ]
 
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.__init__ with SeamlessM4T->SeamlessM4Tv2,TextToUnitForConditionalGeneration->NARTextToUnitForConditionalGeneration
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.__init__ with SeamlessM4T->SeamlessM4Tv2
     def __init__(self, config: SeamlessM4Tv2Config):
         super().__init__(config)
 
@@ -3857,7 +3858,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-        self.t2u_model = SeamlessM4Tv2NARTextToUnitForConditionalGeneration(config)
+        self.t2u_model = SeamlessM4Tv2TextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4Tv2CodeHifiGan(config)
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.get_encoder
@@ -3894,7 +3895,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
     @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.forward with SeamlessM4T->SeamlessM4Tv2, TextToUnit->NARTextToUnit
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToSpeech.forward with SeamlessM4T->SeamlessM4Tv2
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -3934,7 +3935,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
             # if encoder_outputs is not None, it's probably used within a .generate method so no need to warn
             logger.warning(
                 "This is the same forward method as `SeamlessM4Tv2ForTextToText`."
-                "It doesn't use the text-to-unit model `SeamlessM4Tv2NARTextToUnitForConditionalGeneration`."
+                "It doesn't use the text-to-unit model `SeamlessM4Tv2TextToUnitForConditionalGeneration`."
                 "If you want to generate speech, use the `.generate` method."
             )
             encoder_outputs = self.text_encoder(
@@ -4239,7 +4240,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel):
         "text_decoder.embed_tokens.weight",
     ]
 
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.__init__ with SeamlessM4T->SeamlessM4Tv2,TextToUnitForConditionalGeneration->NARTextToUnitForConditionalGeneration
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.__init__ with SeamlessM4T->SeamlessM4Tv2
     def __init__(self, config):
         super().__init__(config)
 
@@ -4251,7 +4252,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-        self.t2u_model = SeamlessM4Tv2NARTextToUnitForConditionalGeneration(config)
+        self.t2u_model = SeamlessM4Tv2TextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4Tv2CodeHifiGan(config)
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.get_encoder
@@ -4646,7 +4647,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
         "text_decoder.embed_tokens.weight",
     ]
 
-    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TModel.__init__ with SeamlessM4T->SeamlessM4Tv2,TextToUnitForConditionalGeneration->NARTextToUnitForConditionalGeneration
+    # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TModel.__init__ with SeamlessM4T->SeamlessM4Tv2
     def __init__(self, config, current_modality="text"):
         super().__init__(config)
 
@@ -4665,7 +4666,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
             self.main_input_name = "input_features"
 
         # these models already call post_init in their initialization
-        self.t2u_model = SeamlessM4Tv2NARTextToUnitForConditionalGeneration(config)
+        self.t2u_model = SeamlessM4Tv2TextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4Tv2CodeHifiGan(config)
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TModel.set_modality
