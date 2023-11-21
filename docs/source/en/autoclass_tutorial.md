@@ -151,12 +151,12 @@ Generally, we recommend using the `AutoTokenizer` class and the `TFAutoModelFor`
 >>> from transformers import AutoImageProcessor, AutoBackbone
 >>> processor = AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
 >>> model = AutoBackbone.from_pretrained(
-"microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+"microsoft/swin-tiny-patch4-window7-224", out_features=(0,)
 )
 
 >>> inputs = processor(image, return_tensors="pt")
 >>> outputs = model(**inputs)
 >>> feature_maps = outputs.feature_maps
 >>> list(feature_maps[-1].shape)
-[1, 768, 7, 7]
+[1, 96, 56, 56]
 ```
