@@ -1303,6 +1303,7 @@ else:
     _import_structure["activations"] = []
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
     _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
+    _import_structure["cache_utils"] = []
     _import_structure["data.datasets"] = [
         "GlueDataset",
         "GlueDataTrainingArguments",
