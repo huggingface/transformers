@@ -179,8 +179,8 @@ BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
             - 1 indicates the token is **present**,
             - 0 indicates the token is **absent**.
         text_len (`torch.LongTensor` of shape `({0})`):
-            Length of text for captioning, this is the length of the final caption to be generated, 
-            includes the input_ids and tokens marked as 64001 (token id marked as to be filled).
+            Length of text for captioning, this is the length of the final caption to be generated, includes the
+            input_ids and tokens marked as 64001 (token id marked as to be filled).
         past_key_value (`Dict`):
             A Dictionary containing the incremental states layerwise
         output_hidden_states (`bool`, *optional*):
@@ -242,13 +242,13 @@ BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
         return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss.            
+            Whether or not to return the contrastive loss.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.            
+            tensors for more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
