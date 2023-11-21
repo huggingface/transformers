@@ -23,7 +23,6 @@ import numpy as np
 from parameterized import parameterized
 
 from transformers import is_torch_available, pipeline, set_seed
-from transformers.cache_utils import DynamicCache
 from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
@@ -55,6 +54,7 @@ if is_torch_available():
         SpeechEncoderDecoderModel,
         top_k_top_p_filtering,
     )
+    from transformers.cache_utils import DynamicCache
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
