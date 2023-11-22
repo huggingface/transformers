@@ -16,7 +16,14 @@ import argparse
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import LlavaForVisionText2Text, LlavaConfig, AutoConfig, CLIPImageProcessor, AutoTokenizer, LlavaProcessor
+from transformers import (
+    AutoConfig,
+    AutoTokenizer,
+    CLIPImageProcessor,
+    LlavaConfig,
+    LlavaForVisionText2Text,
+    LlavaProcessor,
+)
 
 
 IMAGE_TOKEN_INDEX = -200
@@ -32,15 +39,17 @@ KEYS_TO_MODIFY_MAPPING = {
     "multi_modal_projector.2": "multi_modal_projector.linear_2",
 }
 
+
 def convert_state_dict_to_hf(state_dict):
     new_state_dict = {}
     for key, value in state_dict.items():
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in key:
                 key = key.replace(key_to_modify, new_key)
-        
+
         new_state_dict[key] = value
     return new_state_dict
+
 
 def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id):
     torch.set_default_dtype(torch.float16)
@@ -62,9 +71,10 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
     state_dict = convert_state_dict_to_hf(state_dict)
 
     model.load_state_dict(state_dict, strict=True, assign=True)
-    
+
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)
+
 
 def main():
     parser = argparse.ArgumentParser()
