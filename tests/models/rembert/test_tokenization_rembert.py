@@ -15,7 +15,6 @@
 """ Testing suite for the RemBert tokenizer. """
 
 
-import os
 import unittest
 
 from transformers import RemBertTokenizer, RemBertTokenizerFast
@@ -24,7 +23,6 @@ from transformers.testing_utils import get_tests_dir, require_sentencepiece, req
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-os.environ["CURL_CA_BUNDLE"] = ""
 SENTENCEPIECE_UNDERLINE = "▁"
 SPIECE_UNDERLINE = SENTENCEPIECE_UNDERLINE  # Kept for backward compatibility
 
