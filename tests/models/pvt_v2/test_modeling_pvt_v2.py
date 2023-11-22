@@ -57,7 +57,7 @@ class PvtV2ModelTester:
         self,
         parent,
         batch_size=13,
-        image_size=64,
+        image_size=None,
         num_channels=3,
         num_encoder_blocks=4,
         depths=[2, 2, 2, 2],
@@ -77,7 +77,7 @@ class PvtV2ModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.image_size = image_size
+        self.image_size = {"height": 64, "width": 64} if image_size is None else image_size
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
         self.sr_ratios = sr_ratios
