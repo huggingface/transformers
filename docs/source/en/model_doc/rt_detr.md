@@ -32,8 +32,6 @@ The original code can be found [here](https://github.com/lyuwenyu/RT-DETR/).
 
 Initially, an image is processed using a pre-trained convolutional neural network, specifically a Resnet-D variant as referenced in the original code. This network extracts features from the final three layers of the architecture. Following this, a hybrid encoder is employed to convert the multi-scale features into a sequential array of image features. Then, a decoder, equipped with auxiliary prediction heads to refine object queries. This process facilitates the direct generation of bounding boxes, eliminating the need for any additional post-processing to acquire the logits and coordinates for the bounding boxes.
 
-<frameworkcontent>
-<pt>
 
 ## RTDetrConfig
 
@@ -49,6 +47,3 @@ Initially, an image is processed using a pre-trained convolutional neural networ
 
 [[autodoc]] RTDetrModel
     - forward
-
-</pt>
-</frameworkcontent>
