@@ -65,7 +65,7 @@ def main(
         "csv", data_files=[rag_example_args.csv_path], split="train", delimiter="\t", column_names=["title", "text"]
     )
 
-    # More info about loading csv files in the documentation: https://huggingface.co/docs/datasets/loading_datasets.html?highlight=csv#csv-files
+    # More info about loading csv files in the documentation: https://huggingface.co/docs/datasets/loading_datasets?highlight=csv#csv-files
 
     # Then split the documents into passages of 100 words
     dataset = dataset.map(split_documents, batched=True, num_proc=processing_args.num_proc)

@@ -100,6 +100,7 @@ class AltCLIPTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "altclip_text_model"
 
     def __init__(

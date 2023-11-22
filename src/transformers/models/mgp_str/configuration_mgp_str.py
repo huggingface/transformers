@@ -89,6 +89,7 @@ class MgpstrConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mgp-str"
 
     def __init__(

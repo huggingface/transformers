@@ -48,7 +48,7 @@ import huggingface_hub.utils as hf_hub_utils
 import numpy as np
 import torch
 import torch.distributed as dist
-from huggingface_hub import Repository, create_repo, upload_folder
+from huggingface_hub import create_repo, upload_folder
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
@@ -1838,6 +1838,17 @@ class Trainer:
             step = -1
             for step, inputs in enumerate(epoch_iterator):
                 total_batched_samples += 1
+
+                if self.args.include_num_input_tokens_seen:
+                    main_input_name = getattr(self.model, "main_input_name", "input_ids")
+                    if main_input_name not in inputs:
+                        logger.warning(
+                            "Tried to track the number of tokens seen, however the current model is "
+                            "not configured properly to know what item is the input. To fix this, add "
+                            "a `main_input_name` attribute to the model class you are using."
+                        )
+                    else:
+                        self.state.num_input_tokens_seen += self.accelerator.gather(inputs[main_input_name]).numel()
                 if rng_to_sync:
                     self._load_rng_state(resume_from_checkpoint)
                     rng_to_sync = False
@@ -2640,6 +2651,8 @@ class Trainer:
         """
         if self.state.epoch is not None:
             logs["epoch"] = round(self.state.epoch, 2)
+        if self.args.include_num_input_tokens_seen:
+            logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
 
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
@@ -3208,13 +3221,13 @@ class Trainer:
 
             # Update containers on host
             if loss is not None:
-                losses = self.accelerator.gather_for_metrics((loss.repeat(batch_size)))
+                losses = self.gather_function((loss.repeat(batch_size)))
                 losses_host = losses if losses_host is None else nested_concat(losses_host, losses, padding_index=-100)
             if labels is not None:
                 labels = self.accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
             if inputs_decode is not None:
                 inputs_decode = self.accelerator.pad_across_processes(inputs_decode, dim=1, pad_index=-100)
-                inputs_decode = self.accelerator.gather_for_metrics((inputs_decode))
+                inputs_decode = self.gather_function((inputs_decode))
                 inputs_host = (
                     inputs_decode
                     if inputs_host is None
@@ -3224,11 +3237,11 @@ class Trainer:
                 logits = self.accelerator.pad_across_processes(logits, dim=1, pad_index=-100)
                 if self.preprocess_logits_for_metrics is not None:
                     logits = self.preprocess_logits_for_metrics(logits, labels)
-                logits = self.accelerator.gather_for_metrics((logits))
+                logits = self.gather_function((logits))
                 preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
 
             if labels is not None:
-                labels = self.accelerator.gather_for_metrics((labels))
+                labels = self.gather_function((labels))
                 labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
 
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
@@ -3261,6 +3274,8 @@ class Trainer:
                 # Set back to None to begin a new accumulation
                 losses_host, preds_host, inputs_host, labels_host = None, None, None, None
 
+        # After all calls to `.gather_function`, reset to `gather_for_metrics`:
+        self.gather_function = self.accelerator.gather_for_metrics
         if args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
             delattr(self, "_past")
@@ -3479,63 +3494,6 @@ class Trainer:
 
         repo_url = create_repo(repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True)
         self.hub_model_id = repo_url.repo_id
-        self.push_in_progress = None
-
-    def init_git_repo(self, at_init: bool = False):
-        """
-        Initializes a git repo in `self.args.hub_model_id`.
-
-        <Tip warning={true}>
-
-        This function is deprecated and will be removed in v4.34.0 of Transformers.
-
-        </Tip>
-
-        Args:
-            at_init (`bool`, *optional*, defaults to `False`):
-                Whether this function is called before any training or not. If `self.args.overwrite_output_dir` is
-                `True` and `at_init` is `True`, the path to the repo (which is `self.args.output_dir`) might be wiped
-                out.
-        """
-        warnings.warn(
-            "`Trainer.init_git_repo` is deprecated and will be removed in v4.34.0 of Transformers. Use "
-            "`Trainer.init_hf_repo` instead."
-        )
-        if not self.is_world_process_zero():
-            return
-
-        # Make sure the repo exists + retrieve "real" repo_id
-        repo_name = self.args.hub_model_id
-        if repo_name is None:
-            repo_name = Path(self.args.output_dir).absolute().name
-        repo_id = create_repo(
-            repo_id=repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True
-        ).repo_id
-
-        try:
-            self.repo = Repository(self.args.output_dir, clone_from=repo_id, token=self.args.hub_token)
-        except EnvironmentError:
-            if self.args.overwrite_output_dir and at_init:
-                # Try again after wiping output_dir
-                shutil.rmtree(self.args.output_dir)
-                self.repo = Repository(self.args.output_dir, clone_from=repo_id, token=self.args.hub_token)
-            else:
-                raise
-
-        self.repo.git_pull()
-
-        # By default, ignore the checkpoint folders
-        if (
-            not os.path.exists(os.path.join(self.args.output_dir, ".gitignore"))
-            and self.args.hub_strategy != HubStrategy.ALL_CHECKPOINTS
-        ):
-            with open(os.path.join(self.args.output_dir, ".gitignore"), "w", encoding="utf-8") as writer:
-                writer.writelines(["checkpoint-*/"])
-
-        # Add "*.sagemaker" to .gitignore if using SageMaker
-        if os.environ.get("SM_TRAINING_ENV"):
-            self._add_sm_patterns_to_gitignore()
-
         self.push_in_progress = None
 
     def create_model_card(
@@ -3930,6 +3888,8 @@ class Trainer:
             deepspeed_plugin=self.args.deepspeed_plugin,
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
+        # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
+        self.gather_function = self.accelerator.gather_for_metrics
 
         # deepspeed and accelerate flags covering both trainer args and accelerate launcher
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None

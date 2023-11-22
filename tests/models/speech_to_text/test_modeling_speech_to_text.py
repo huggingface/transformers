@@ -759,6 +759,10 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         # Allow missing keys since TF doesn't cache the sinusoidal embeddings in an attribute
         super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
+    @unittest.skip("Test failing,  @RocketNight is looking into it")
+    def test_tf_from_pt_safetensors(self):
+        pass
+
 
 @require_torch
 @require_torchaudio

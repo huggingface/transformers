@@ -119,6 +119,7 @@ class IdeficsProcessor(ProcessorMixin):
             An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
         image_size (`int`, *optional*, defaults to 224): Image size (assuming a square image)
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "IdeficsImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"

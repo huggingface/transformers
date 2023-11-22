@@ -72,6 +72,7 @@ class IdeficsVisionConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
+
     model_type = "idefics"
     attribute_map = {
         "hidden_size": "embed_dim",
@@ -134,6 +135,7 @@ class IdeficsPerceiverConfig(PretrainedConfig):
         qk_layer_norms_perceiver (`bool`, *optional*, defaults to `False`):
             Whether or not to use qk layer norms in perceiver
     """
+
     model_type = "idefics"
 
     def __init__(
@@ -236,6 +238,7 @@ class IdeficsConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "idefics"
     is_composition = False
 

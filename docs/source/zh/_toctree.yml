@@ -45,6 +45,12 @@
 - sections:
   - local: performance
     title: 综述
+  - sections:
+    - local: perf_hardware
+      title: 用于训练的定制硬件
+    - local: hpo_train
+      title: 使用Trainer API 进行超参数搜索
+    title: 高效训练技术
   - local: big_models
     title: 实例化大模型
   - local: debugging
@@ -60,3 +66,13 @@
   - local: tokenizer_summary
     title: 分词器的摘要
   title: 概念指南
+- sections:
+  - sections:
+    - local: main_classes/model
+      title: 模型
+    - local: main_classes/trainer
+      title: Trainer
+    - local: main_classes/deepspeed
+      title: DeepSpeed集成
+    title: 主要类
+  title: 应用程序接口 (API) 
