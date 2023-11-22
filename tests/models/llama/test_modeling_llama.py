@@ -22,6 +22,7 @@ from parameterized import parameterized
 
 from transformers import LlamaConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -385,6 +386,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     @require_flash_attn
     @require_torch_gpu
+    @require_bitsandbytes
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_generate_padding_right(self):
