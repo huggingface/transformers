@@ -18,9 +18,9 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Mistral-7B-v0.1 is Mistral AI’s first Large Language Model (LLM). 
+Mistral-7B-v0.1 is Mistral AI's first Large Language Model (LLM). 
 
-## Model Details
+### Model Details
 
 Mistral-7B-v0.1 is a decoder-based LM with the following architectural choices:
 * Sliding Window Attention - Trained with 8k context length and fixed cache size, with a theoretical attention span of 128K tokens
@@ -31,11 +31,11 @@ We also provide an instruction fine-tuned model: `Mistral-7B-Instruct-v0.1` whic
 
 For more details please read our [release blog post](https://mistral.ai/news/announcing-mistral-7b/)
 
-## License
+### License
 
 Both `Mistral-7B-v0.1` and `Mistral-7B-Instruct-v0.1` are released under the Apache 2.0 license.
 
-## Usage
+## Usage tips
 
 `Mistral-7B-v0.1` and `Mistral-7B-Instruct-v0.1` can be found on the [Huggingface Hub](https://huggingface.co/mistralai)
 

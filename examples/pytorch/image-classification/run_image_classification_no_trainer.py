@@ -32,6 +32,7 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import (
     CenterCrop,
     Compose,
+    Lambda,
     Normalize,
     RandomHorizontalFlip,
     RandomResizedCrop,
@@ -47,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.35.0.dev0")
+check_min_version("4.36.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -331,7 +332,11 @@ def main():
         size = image_processor.size["shortest_edge"]
     else:
         size = (image_processor.size["height"], image_processor.size["width"])
-    normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
+    normalize = (
+        Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
+        if hasattr(image_processor, "image_mean") and hasattr(image_processor, "image_std")
+        else Lambda(lambda x: x)
+    )
     train_transforms = Compose(
         [
             RandomResizedCrop(size),

@@ -122,6 +122,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "convnext",
     "deberta",
     "deberta-v2",
+    "dinov2",
     "distilbert",
     "donut-swin",
     "electra",
@@ -174,7 +175,7 @@ _SPECIAL_SUPPORTED_MODELS = [
     "Speech2Text2Decoder",
     "TrOCRDecoder",
     "PeftModelForCausalLM",
-    "PeftModelForSeq2SeqLM"
+    "PeftModelForSeq2SeqLM",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]

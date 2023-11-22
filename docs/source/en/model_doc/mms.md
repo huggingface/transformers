@@ -306,7 +306,6 @@ with torch.no_grad():
    outputs = model(**inputs)
 ```
 
-
 ### Language Identification (LID)
 
 Different LID models are available based on the number of languages they can recognize - [126](https://huggingface.co/facebook/mms-lid-126), [256](https://huggingface.co/facebook/mms-lid-256), [512](https://huggingface.co/facebook/mms-lid-512), [1024](https://huggingface.co/facebook/mms-lid-1024), [2048](https://huggingface.co/facebook/mms-lid-2048), [4017](https://huggingface.co/facebook/mms-lid-4017). 
@@ -378,4 +377,13 @@ processor.id2label.values()
 
 ### Audio Pretrained Models
 
-Pretrained models are available for two different sizes - [300M](https://huggingface.co/facebook/mms-300m) , [1Bil](https://huggingface.co/facebook/mms-1b). The architecture is based on the Wav2Vec2 model, so one can refer to [Wav2Vec2's documentation page](wav2vec2) for further details on how to finetune with models for various downstream tasks.
+Pretrained models are available for two different sizes - [300M](https://huggingface.co/facebook/mms-300m) , 
+[1Bil](https://huggingface.co/facebook/mms-1b). 
+
+<Tip>
+
+The MMS for ASR architecture is based on the Wav2Vec2 model, refer to [Wav2Vec2's documentation page](wav2vec2) for further 
+details on how to finetune with models for various downstream tasks.
+
+MMS-TTS uses the same model architecture as VITS, refer to [VITS's documentation page](vits) for API reference.
+</Tip>

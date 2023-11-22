@@ -94,6 +94,7 @@ class VideoMAEConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "videomae"
 
     def __init__(

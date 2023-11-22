@@ -34,7 +34,9 @@ are replaced with a special token, viewed as a question representation, that is 
 the answer span. The resulting model obtains surprisingly good results on multiple benchmarks (e.g., 72.7 F1 on SQuAD
 with only 128 training examples), while maintaining competitive performance in the high-resource setting.
 
-Tips:
+This model was contributed by [yuvalkirstain](https://huggingface.co/yuvalkirstain) and [oriram](https://huggingface.co/oriram). The original code can be found [here](https://github.com/oriram/splinter).
+
+## Usage tips
 
 - Splinter was trained to predict answers spans conditioned on a special [QUESTION] token. These tokens contextualize
   to question representations which are used to predict the answers. This layer is called QASS, and is the default
@@ -49,9 +51,7 @@ Tips:
   doesn't (*tau/splinter-base* and *tau/splinter-large*). This is done to support randomly initializing this layer at
   fine-tuning, as it is shown to yield better results for some cases in the paper.
 
-This model was contributed by [yuvalkirstain](https://huggingface.co/yuvalkirstain) and [oriram](https://huggingface.co/oriram). The original code can be found [here](https://github.com/oriram/splinter).
-
-## Documentation resources
+## Resources
 
 - [Question answering task guide](../tasks/question-answering)
 

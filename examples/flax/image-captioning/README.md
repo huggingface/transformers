@@ -10,7 +10,7 @@ way which enables simple and efficient model parallelism.
 `run_image_captioning_flax.py` is a lightweight example of how to download and preprocess a dataset from the 🤗 Datasets
 library or use your own files (jsonlines or csv), then fine-tune one of the architectures above on it.
 
-For custom datasets in `jsonlines` format please see: https://huggingface.co/docs/datasets/loading_datasets.html#json-files and you also will find examples of these below.
+For custom datasets in `jsonlines` format please see: https://huggingface.co/docs/datasets/loading_datasets#json-files and you also will find examples of these below.
 
 ### Download COCO dataset (2017)
 This example uses COCO dataset (2017) through a custom dataset script, which requires users to manually download the

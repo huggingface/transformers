@@ -137,7 +137,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
     {% else -%}
     keys_to_ignore_at_inference = ["past_key_values"]
     {% endif -%}
-    
+
     {% if cookiecutter.is_encoder_decoder_model == "False" %}
     {%- else %}
     attribute_map = {
@@ -238,4 +238,3 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             **kwargs
         )
 
-    

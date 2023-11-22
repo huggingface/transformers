@@ -40,15 +40,16 @@ and code publicly available. Human evaluations show our best models are superior
 dialogue in terms of engagingness and humanness measurements. We then discuss the limitations of this work by analyzing
 failure cases of our models.*
 
-Tips:
-
-- Blenderbot Small is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
-  the left.
-
 This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The authors' code can be
 found [here](https://github.com/facebookresearch/ParlAI).
 
-## Documentation resources
+## Usage tips
+
+Blenderbot Small is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than 
+the left.
+
+
+## Resources
 
 - [Causal language modeling task guide](../tasks/language_modeling)
 - [Translation task guide](../tasks/translation)
@@ -70,6 +71,9 @@ found [here](https://github.com/facebookresearch/ParlAI).
 
 [[autodoc]] BlenderbotSmallTokenizerFast
 
+<frameworkcontent>
+<pt>
+
 ## BlenderbotSmallModel
 
 [[autodoc]] BlenderbotSmallModel
@@ -85,6 +89,9 @@ found [here](https://github.com/facebookresearch/ParlAI).
 [[autodoc]] BlenderbotSmallForCausalLM
     - forward
 
+</pt>
+<tf>
+
 ## TFBlenderbotSmallModel
 
 [[autodoc]] TFBlenderbotSmallModel
@@ -94,6 +101,9 @@ found [here](https://github.com/facebookresearch/ParlAI).
 
 [[autodoc]] TFBlenderbotSmallForConditionalGeneration
     - call
+
+</tf>
+<jax>
 
 ## FlaxBlenderbotSmallModel
 
@@ -108,3 +118,6 @@ found [here](https://github.com/facebookresearch/ParlAI).
     - __call__
     - encode
     - decode
+
+</jax>
+</frameworkcontent>

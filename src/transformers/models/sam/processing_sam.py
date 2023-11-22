@@ -44,6 +44,7 @@ class SamProcessor(ProcessorMixin):
         image_processor (`SamImageProcessor`):
             An instance of [`SamImageProcessor`]. The image processor is a required input.
     """
+
     attributes = ["image_processor"]
     image_processor_class = "SamImageProcessor"
 
