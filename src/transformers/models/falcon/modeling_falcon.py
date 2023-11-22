@@ -465,16 +465,16 @@ class FalconAttention(nn.Module):
             attn_output = attn_output.permute(0, 2, 1, 3)
             attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
 
-            output_tensor = self.dense(attn_output)
+            attn_output = self.dense(attn_output)
 
             if output_attentions:
-                return output_tensor, present, attention_scores
+                return attn_output, present, attention_scores
             else:
-                return output_tensor, present
+                return attn_output, present
 
         else:
             if hasattr(F, "scaled_dot_product_attention") and not output_attentions and head_mask is None:
-                context_layer = torch.nn.functional.scaled_dot_product_attention(
+                attn_output = torch.nn.functional.scaled_dot_product_attention(
                     query_layer,
                     key_layer,
                     value_layer,
@@ -482,10 +482,10 @@ class FalconAttention(nn.Module):
                     dropout_p=self.attention_dropout.p if self.training else 0.0,
                     is_causal=self.is_causal and attention_mask is None and query_length > 1,
                 )
-                context_layer = context_layer.transpose(1, 2)
-                context_layer = context_layer.reshape(batch_size, query_length, self.num_heads * self.head_dim)
+                attn_output = attn_output.transpose(1, 2)
+                attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
 
-                output_tensor = self.dense(context_layer)
+                attn_output = self.dense(attn_output)
             else:
                 matmul_result = query_layer @ key_layer.transpose(-1, -2)
 
@@ -511,17 +511,17 @@ class FalconAttention(nn.Module):
                 attention_probs_reshaped = attention_probs.view(batch_size, self.num_heads, query_length, kv_length)
 
                 # matmul: [batch_size * num_heads, q_length, head_dim]
-                context_layer = (attention_probs_reshaped @ value_layer).flatten(0, 1)
+                attn_output = (attention_probs_reshaped @ value_layer).flatten(0, 1)
 
                 # change view [batch_size, q_length, num_heads * head_dim]
-                context_layer = self._merge_heads(context_layer)
+                attn_output = self._merge_heads(attn_output)
 
-                output_tensor = self.dense(context_layer)
+                attn_output = self.dense(attn_output)
 
             if output_attentions:
-                return output_tensor, present, attention_probs
+                return attn_output, present, attention_probs
             else:
-                return output_tensor, present
+                return attn_output, present
 
 
 class FalconFlashAttention2(FalconAttention):

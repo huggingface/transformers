@@ -1151,7 +1151,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         # Save config and origin of the pretrained weights if given in model
-        config = self._autoset_attn_implementation(config, torch_dtype=torch.get_default_dtype(), check_device_map=False)
+        config = self._autoset_attn_implementation(
+            config, torch_dtype=torch.get_default_dtype(), check_device_map=False
+        )
         self.config = config
 
         self.name_or_path = config.name_or_path
@@ -1192,7 +1194,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in _from_config.
-        config = cls._autoset_attn_implementation(config, use_flash_attention_2=use_flash_attention_2, check_device_map=False)
+        config = cls._autoset_attn_implementation(
+            config, use_flash_attention_2=use_flash_attention_2, check_device_map=False
+        )
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
@@ -1232,8 +1236,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
     @classmethod
-    def _autoset_attn_implementation(cls, config, use_flash_attention_2: Optional[bool] = None, torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, Dict[str, int]]] = None, check_device_map: bool = True):
+    def _autoset_attn_implementation(
+        cls,
+        config,
+        use_flash_attention_2: Optional[bool] = None,
+        torch_dtype: Optional[torch.dtype] = None,
+        device_map: Optional[Union[str, Dict[str, int]]] = None,
+        check_device_map: bool = True,
+    ):
         """
         Automatically checks and dispatches to a default attention implementation. In order of priority:
             1. An implementation specified in `config.attn_implementation`.
@@ -1246,7 +1256,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if config._attn_implementation is None:
             auto_dispatch_attention = True
         else:
-            if (config.attn_implementation != "flash_attention_2" and use_flash_attention_2):
+            if config.attn_implementation != "flash_attention_2" and use_flash_attention_2:
                 raise ValueError(
                     f'Both config.attn_implementation ("{config.attn_implementation}") and use_flash_attention_2=True are used, and are incompatible.'
                 )
@@ -1256,7 +1266,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if use_flash_attention_2:
             cls._check_and_enable_flash_attn_2(
-                config, torch_dtype=torch_dtype, device_map=device_map, enable=auto_dispatch_attention, check_device_map=check_device_map,
+                config,
+                torch_dtype=torch_dtype,
+                device_map=device_map,
+                enable=auto_dispatch_attention,
+                check_device_map=check_device_map,
             )
         elif is_torch_sdpa_available() and cls._supports_sdpa:
             # use_flash_attention_2 takes priority over SDPA.
@@ -3346,7 +3360,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             init_contexts.append(init_empty_weights())
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
-        config = cls._autoset_attn_implementation(config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map)
+        config = cls._autoset_attn_implementation(
+            config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
+        )
 
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
