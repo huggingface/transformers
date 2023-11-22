@@ -188,21 +188,3 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         )
 
 
-class PvtOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 12
