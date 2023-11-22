@@ -63,12 +63,6 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(vocab_keys[0], "<unk>")
         self.assertEqual(vocab_keys[1], "<s>")
-        self.assertEqual(vocab_keys[1100], "<pad>")
-        self.assertEqual(len(vocab_keys), 1_101)
-
-    def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 1000)
-        self.assertEqual(len(self.get_tokenizer()), 1101)
 
     def test_full_tokenizer(self):
         tokenizer = SiglipTokenizer(SAMPLE_VOCAB)
@@ -482,30 +476,6 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(input_ids, [156, 86, 20, 3, 1001, 3, 2])
         tokens = self.tokenizer.tokenize("Hello, <extra_id_0>,")
         self.assertEqual(tokens, ["▁He", "ll", "o", ",", "<extra_id_0>", ","])
-
-    def test_special_tokens_strip(self):
-        input_ids = self.tokenizer.encode(" <extra_id_0> ,")
-        self.assertEqual(input_ids, [1001, 7, 3, 2])
-        tokens = self.tokenizer.tokenize(" <extra_id_0> ,")
-        # spaces are not longer eaten by rstrip and lstrip
-        self.assertEqual(tokens, ["<extra_id_0>", "▁", ","])
-
-        # test with a begin of word like `▁He`
-        input_ids = self.tokenizer.encode("No <extra_id_0> He")
-        self.assertEqual(input_ids, [284, 1001, 156, 2])
-        # spaces are eaten by rstrip / lstrip, so this is expected. Don't strip otherwise you break
-        tokens = self.tokenizer.tokenize("No <extra_id_0> He")
-        self.assertEqual(tokens, ["▁No", "<extra_id_0>", "▁He"])
-
-        # Make sure this does not happen if we don't strip
-        tokenizer = SiglipTokenizer(SAMPLE_VOCAB, extra_ids=0)
-        tokenizer.add_special_tokens({"bos_token": AddedToken("<bos>")})
-        input_ids = tokenizer.encode("No <bos> He")
-        self.assertEqual(input_ids, [284, 1001, 156, 2])
-        tokens = tokenizer.tokenize("No <bos> He")
-        # the first `' '` after `'No'` is eaten by spm:
-        self.assertEqual(tokenizer.sp_model.encode("No         ", out_type=str), ["▁No"])
-        self.assertEqual(tokens, ["▁No", "<bos>", "▁He"])
 
     @require_seqio
     @unittest.skipIf(

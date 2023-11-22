@@ -19,9 +19,9 @@ import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
+from ...tokenization_utils_base import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
-from ...tokenization_utils_base import AddedToken
 
 
 if is_sentencepiece_available():
@@ -165,12 +165,13 @@ class SiglipTokenizerFast(PreTrainedTokenizerFast):
             token_ids_1 = token_ids_1 + [self.eos_token_id]
             return self.prefix_tokens + token_ids_0 + token_ids_1
 
+    # Copied from transformers.models.siglip.tokenization_siglip.SiglipTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. SigLIP does not make
-        use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Siglip does not
+        make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (`List[int]`):

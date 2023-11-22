@@ -460,6 +460,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         model.resize_token_embeddings(len(tokenizer))
         ```"""
+        print("New tokens:", new_tokens)
         added_tokens = 0
         if new_tokens is None:
             return added_tokens
@@ -485,11 +486,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 # this is important and the only reason why the AddedTokens in each class are normalized by default
                 token.__setstate__({"special": True, "normalized": token.normalized})
             if token in self._added_tokens_decoder:
+                print("we are here")
                 continue
             if not token.special and token.normalized and getattr(self, "do_lower_case", False):
                 # Normalize if requested
+                print("Normalizing")
                 token.content = token.content.lower()
             if token.content not in current_vocab:
+                print("we should add the token")
                 token_index = new_idx + added_tokens
                 current_vocab[token.content] = token_index
                 added_tokens += 1
@@ -510,6 +514,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     def _update_trie(self, unique_no_split_tokens: Optional[str] = []):
         for token in self._added_tokens_decoder.values():
             if token not in self.tokens_trie._tokens:
+                print("Adding to trie:", token.content)
                 self.tokens_trie.add(token.content)
         for token in unique_no_split_tokens:
             if token not in self.tokens_trie._tokens:

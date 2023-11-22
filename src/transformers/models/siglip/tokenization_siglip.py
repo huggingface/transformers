@@ -121,8 +121,6 @@ class SiglipTokenizer(PreTrainedTokenizer):
             The maximum length (in number of tokens) for model inputs.
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
-        split_special_tokens (`bool`, *optional*, defaults to `True`):
-            Whether or not to split the special tokens apart.
     Attributes:
         sp_model (`SentencePieceProcessor`):
             The *SentencePiece* processor that is used for every conversion (string, tokens and IDs).
@@ -143,7 +141,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         model_max_length=64,
         do_lower_case=True,
-        split_special_tokens=True,
+        # split_special_tokens=True,
         **kwargs,
     ) -> None:
         pad_token = AddedToken(pad_token, rstrip=True, lstrip=True) if isinstance(pad_token, str) else pad_token
@@ -169,7 +167,6 @@ class SiglipTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             model_max_length=model_max_length,
             do_lower_case=do_lower_case,
-            split_special_tokens=split_special_tokens,
             **kwargs,
         )
 
@@ -301,7 +298,9 @@ class SiglipTokenizer(PreTrainedTokenizer):
         """
         Converts a string to a list of tokens.
         """
-        text = canonicalize_text(text, keep_punctuation_exact_string="{}")
+        print("Text before canonicalize_text: ", text)
+        # text = canonicalize_text(text, keep_punctuation_exact_string="{}")
+        print("Text after canonicalize_text: ", text)
 
         if len(text) == 0:
             return super().tokenize(text, **kwargs)
