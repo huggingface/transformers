@@ -26,6 +26,7 @@ from transformers.testing_utils import require_tf, require_torch, slow
 
 logger = logging.getLogger()
 
+
 @require_torch
 class TestDocLists(unittest.TestCase):
     def test_flash_support_list(self):
@@ -50,13 +51,17 @@ class TestDocLists(unittest.TestCase):
 
         for arch in archs_supporting_fa2:
             if arch not in doctext:
-                raise ValueError(f"{arch} should be in listed in the flash attention documentation but is not. Please update the documentation.")
+                raise ValueError(
+                    f"{arch} should be in listed in the flash attention documentation but is not. Please update the documentation."
+                )
 
     def test_sdpa_support_list(self):
         with open("./docs/source/en/perf_infer_gpu_one.md", "r") as f:
             doctext = f.read()
 
-            doctext = doctext.split("For now, Transformers supports inference and training through SDPA for the following architectures:")[1]
+            doctext = doctext.split(
+                "For now, Transformers supports inference and training through SDPA for the following architectures:"
+            )[1]
             doctext = doctext.split("Note that FlashAttention can only be used for models using the")[0]
 
         patterns = glob("./src/transformers/models/**/modeling_*.py")
@@ -74,7 +79,9 @@ class TestDocLists(unittest.TestCase):
 
         for arch in archs_supporting_sdpa:
             if arch not in doctext:
-                raise ValueError(f"{arch} should be in listed in the SDPA documentation but is not. Please update the documentation.")
+                raise ValueError(
+                    f"{arch} should be in listed in the SDPA documentation but is not. Please update the documentation."
+                )
 
 
 @unittest.skip("Temporarily disable the doc tests.")
