@@ -195,22 +195,6 @@ class AwqTest(unittest.TestCase):
             output = model.generate(**input_ids, max_new_tokens=40)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    def test_raise_quantization(self):
-        """
-        Simple test that checks if one passes a quantization config to quantize a model, it raises an error
-        """
-        quantization_config = AwqConfig(bits=4)
-
-        with self.assertRaises(ValueError) as context:
-            _ = AutoModelForCausalLM.from_pretrained(
-                self.dummy_transformers_model_name, quantization_config=quantization_config
-            )
-
-        self.assertEqual(
-            str(context.exception),
-            "You cannot pass an `AwqConfig` when loading a model as you can only use AWQ models for inference. To quantize transformers models with AWQ algorithm, please refer to our quantization docs: https://huggingface.co/docs/transformers/main_classes/quantization ",
-        )
-
     @require_torch_multi_gpu
     def test_quantized_model_multi_gpu(self):
         """

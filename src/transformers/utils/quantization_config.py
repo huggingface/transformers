@@ -578,7 +578,7 @@ class AwqConfig(QuantizationConfigMixin):
         else:
             self.do_fuse = do_fuse
         self.fuse_max_seq_len = fuse_max_seq_len
-        
+
         self.post_init()
 
     def post_init(self):
@@ -626,4 +626,3 @@ class AwqConfig(QuantizationConfigMixin):
                 )
 
         # TODO: awq version check for fused modules.
-
