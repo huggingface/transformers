@@ -3226,8 +3226,9 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
+                using_new_cache = isinstance(model_kwargs["past_key_values"], Cache)
                 model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
-                if not isinstance(model_kwargs["past_key_values"], Cache):
+                if using_new_cache:
                     model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
 
             if return_dict_in_generate and output_scores:
@@ -3563,8 +3564,9 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
+                using_new_cache = isinstance(model_kwargs["past_key_values"], Cache)
                 model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
-                if not isinstance(model_kwargs["past_key_values"], Cache):
+                if using_new_cache:
                     model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
 
             if return_dict_in_generate and output_scores:
@@ -3950,10 +3952,11 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
+                using_new_cache = isinstance(model_kwargs["past_key_values"], Cache)
                 model_kwargs["past_key_values"] = self._reorder_cache(
                     model_kwargs["past_key_values"], reordering_indices
                 )
-                if not isinstance(model_kwargs["past_key_values"], Cache):
+                if using_new_cache:
                     model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
 
             # increase cur_len
@@ -4294,8 +4297,9 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
+                using_new_cache = isinstance(model_kwargs["past_key_values"], Cache)
                 model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
-                if not isinstance(model_kwargs["past_key_values"], Cache):
+                if using_new_cache:
                     model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
 
             if return_dict_in_generate and output_scores:
