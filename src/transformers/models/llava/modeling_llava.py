@@ -1035,6 +1035,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
                     attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
             else:
+                # TODO: refactor `prepare_inputs_labels_for_multimodal`
                 (
                     input_ids,
                     position_ids,
