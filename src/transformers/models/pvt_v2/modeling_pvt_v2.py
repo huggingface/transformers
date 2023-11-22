@@ -103,6 +103,7 @@ class PvtV2OverlapPatchEmbeddings(nn.Module):
 
     def __init__(
         self,
+        config: PvtV2Config,
         patch_size: Union[int, Iterable[int]],
         stride: int,
         num_channels: int,
@@ -129,7 +130,7 @@ class PvtV2OverlapPatchEmbeddings(nn.Module):
 
 
 class PvTV2DWConv(nn.Module):
-    def __init__(self, dim=768):
+    def __init__(self, config: PvtV2Config, dim: int = 768):
         super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, bias=True, groups=dim)
 
@@ -257,7 +258,7 @@ class PvtV2ConvFFN(nn.Module):
         super().__init__()
         out_features = out_features if out_features is not None else in_features
         self.dense1 = nn.Linear(in_features, hidden_features)
-        self.dwconv = PvTV2DWConv(hidden_features)
+        self.dwconv = PvTV2DWConv(config, hidden_features)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -337,6 +338,7 @@ class PvtV2Encoder(nn.Module):
         for i in range(config.num_encoder_blocks):
             embeddings.append(
                 PvtV2OverlapPatchEmbeddings(
+                    config=config,
                     patch_size=config.patch_sizes[i],
                     stride=config.strides[i],
                     num_channels=config.num_channels if i == 0 else config.hidden_sizes[i - 1],
