@@ -28,7 +28,6 @@ from ...activations_tf import get_tf_activation
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PretrainedConfig
 from ...modeling_tf_utils import shape_list
-#from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -252,6 +251,9 @@ def freeze_model(model, module_exceptions=[]):
         "Embedding": tf.keras.layers.Embedding,
     }
     module_exceptions_mapped = [mapping[m] for m in module_exceptions]
+    if not hasattr(model, "layers"):
+        model.trainable = False # It is just a layer
+        return model
     for layer in model.layers:
         if module_exceptions and any(isinstance(layer, t) for t in module_exceptions_mapped):
             layer.trainable = True  # Explicitly setting it to true to avoid any mistakes
@@ -1108,8 +1110,7 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         self.norm = TFIdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="norm")
 
         self.gradient_checkpointing = False
-        # TODO: Alazar
-        #self.freeze_relevant_params(config)
+        self.freeze_relevant_params(config)
 
     def freeze_relevant_params(self, config=None):
         if config is None:
