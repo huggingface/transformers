@@ -34,9 +34,9 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = RemBertTokenizer
     rust_tokenizer_class = RemBertTokenizerFast
-    test_slow_tokenizer = True
+    space_between_special_tokens = True
     test_rust_tokenizer = True
-    test_sentencepiece = True
+    test_sentencepiece_ignore_case = True
 
     def setUp(self):
         super().setUp()
