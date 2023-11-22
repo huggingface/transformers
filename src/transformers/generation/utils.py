@@ -1391,43 +1391,6 @@ class GenerationMixin:
                     UserWarning,
                 )
 
-    def _extend_attention_mask(self, model_kwargs: Dict[str, Any], new_mask_length: int) -> Dict[str, Any]:
-        if self.config.is_encoder_decoder:
-            key = "decoder_attention_mask"
-        else:
-            key = "attention_mask"
-
-        if key not in model_kwargs:
-            return model_kwargs
-
-        mask = model_kwargs[key]
-        mask_extension_length = new_mask_length - mask.shape[1]
-
-        if mask_extension_length < 0:
-            raise ValueError("Cannot extend attention mask to a length less than it already is")
-
-        model_kwargs[key] = torch.cat(
-            [mask, mask.new_ones((mask.shape[0], mask_extension_length))],
-            dim=-1,
-        )
-
-        return model_kwargs
-
-    def _extend_token_type_ids(self, model_kwargs: Dict[str, Any], new_length: int) -> Dict[str, Any]:
-        if "token_type_ids" not in model_kwargs or model_kwargs["token_type_ids"] is None:
-            return model_kwargs
-
-        token_type_ids = model_kwargs["token_type_ids"]
-        final_token_type = token_type_ids[:, -1].unsqueeze(-1)
-        extension_length = new_length - token_type_ids.shape[1]
-        token_type_copies = final_token_type.repeat(1, extension_length)
-        model_kwargs["token_type_ids"] = torch.cat(
-            [model_kwargs["token_type_ids"], token_type_copies],
-            dim=-1,
-        )
-
-        return model_kwargs
-
     @torch.no_grad()
     def generate(
         self,
