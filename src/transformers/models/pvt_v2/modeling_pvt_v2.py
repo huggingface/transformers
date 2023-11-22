@@ -23,7 +23,6 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.nn.modules.utils import _ntuple
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, ImageClassifierOutput
@@ -283,7 +282,7 @@ class PvtV2ConvFFN(nn.Module):
         return hidden_states
 
 
-class PvtV2Layer(nn.Module):
+class PvtV2BlockLayer(nn.Module):
     def __init__(
         self,
         config: PvtV2Config,
@@ -329,56 +328,71 @@ class PvtV2Layer(nn.Module):
         return outputs
 
 
+class PvtV2EncoderLayer(nn.Module):
+    def __init__(
+        self,
+        config: PvtV2Config,
+        layer_idx: int,
+    ):
+        super().__init__()
+        # Patch embedding
+        self.patch_embedding = PvtV2OverlapPatchEmbeddings(
+            config=config,
+            patch_size=config.patch_sizes[layer_idx],
+            stride=config.strides[layer_idx],
+            num_channels=config.num_channels if layer_idx == 0 else config.hidden_sizes[layer_idx - 1],
+            hidden_size=config.hidden_sizes[layer_idx],
+        )
+
+        # Transformer block
+        # stochastic depth decay rule
+        drop_path_decays = torch.linspace(0, config.drop_path_rate, sum(config.depths)).tolist()
+        # each block consists of layers
+        block_layers = []
+        for i in range(config.depths[layer_idx]):
+            block_layers.append(
+                PvtV2BlockLayer(
+                    config=config,
+                    hidden_size=config.hidden_sizes[layer_idx],
+                    num_attention_heads=config.num_attention_heads[layer_idx],
+                    drop_path=drop_path_decays[sum(config.depths[:layer_idx]) + i],
+                    sr_ratio=config.sr_ratios[layer_idx],
+                    mlp_ratio=config.mlp_ratios[layer_idx],
+                )
+            )
+        self.blocks = nn.ModuleList(block_layers)
+
+        # Layer norm
+        self.layer_norm = nn.LayerNorm(config.hidden_sizes[layer_idx], eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states, output_attentions):
+        all_self_attentions = () if output_attentions else None
+        # first, obtain patch embeddings
+        hidden_states, height, width = self.patch_embedding(hidden_states)
+        # second, send embeddings through blocks
+        for block in self.blocks:
+            layer_outputs = block(hidden_states, height, width, output_attentions)
+            hidden_states = layer_outputs[0]
+            if output_attentions:
+                all_self_attentions += (layer_outputs[1],)
+        # third, apply layer norm
+        hidden_states = self.layer_norm(hidden_states)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (all_self_attentions,)
+
+        return outputs, height, width
+
+
 class PvtV2Encoder(nn.Module):
     def __init__(self, config: PvtV2Config):
         super().__init__()
         self.config = config
 
-        # stochastic depth decay rule
-        drop_path_decays = torch.linspace(0, config.drop_path_rate, sum(config.depths)).tolist()
-
-        # patch embeddings
-        embeddings = []
-
-        for i in range(config.num_encoder_blocks):
-            embeddings.append(
-                PvtV2OverlapPatchEmbeddings(
-                    config=config,
-                    patch_size=config.patch_sizes[i],
-                    stride=config.strides[i],
-                    num_channels=config.num_channels if i == 0 else config.hidden_sizes[i - 1],
-                    hidden_size=config.hidden_sizes[i],
-                )
-            )
-        self.patch_embeddings = nn.ModuleList(embeddings)
-
-        # Transformer blocks
-        blocks = []
-        cur = 0
-        for i in range(config.num_encoder_blocks):
-            # each block consists of layers
-            layers = []
-            if i != 0:
-                cur += config.depths[i - 1]
-            for j in range(config.depths[i]):
-                layers.append(
-                    PvtV2Layer(
-                        config=config,
-                        hidden_size=config.hidden_sizes[i],
-                        num_attention_heads=config.num_attention_heads[i],
-                        drop_path=drop_path_decays[cur + j],
-                        sr_ratio=config.sr_ratios[i],
-                        mlp_ratio=config.mlp_ratios[i],
-                    )
-                )
-            blocks.append(nn.ModuleList(layers))
-
-        self.block = nn.ModuleList(blocks)
-
-        # Layer norms
-        self.layer_norms = nn.ModuleList(
-            [nn.LayerNorm(config.hidden_sizes[i], eps=config.layer_norm_eps) for i in range(config.num_encoder_blocks)]
-        )
+        # encoder layers
+        self.layers = nn.ModuleList([PvtV2EncoderLayer(config, i) for i in range(config.num_encoder_blocks)])
 
     def forward(
         self,
@@ -392,21 +406,15 @@ class PvtV2Encoder(nn.Module):
 
         batch_size = pixel_values.shape[0]
         hidden_states = pixel_values
-        for idx, x in enumerate(zip(self.patch_embeddings, self.block, self.layer_norms)):
-            embedding_layer, block_layer, norm_layer = x
-            # first, obtain patch embeddings
-            hidden_states, height, width = embedding_layer(hidden_states)
-            # second, send embeddings through blocks
-            for block in block_layer:
-                layer_outputs = block(hidden_states, height, width, output_attentions)
-                hidden_states = layer_outputs[0]
-                if output_attentions:
-                    all_self_attentions = all_self_attentions + (layer_outputs[1],)
-            # third, apply layer norm
-            hidden_states = norm_layer(hidden_states)
-            # fourth, optionally reshape back to (batch_size, num_channels, height, width)
-            if idx != len(self.patch_embeddings) - 1 or (
-                idx == len(self.patch_embeddings) - 1 and self.config.reshape_last_stage
+        for idx, layer in enumerate(self.layers):
+            layer_output = layer(hidden_states, output_attentions)
+            outputs, height, width = layer_output
+            hidden_states = outputs[0]
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (outputs[1],)
+            # optionally reshape back to (batch_size, num_channels, height, width)
+            if idx != len(self.layers) - 1 or (
+                idx == len(self.layers) - 1 and self.config.reshape_last_stage
             ):
                 hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
             if output_hidden_states:
