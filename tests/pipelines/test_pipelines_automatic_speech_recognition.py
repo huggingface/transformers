@@ -1379,7 +1379,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             audio,
             return_timestamps=True,
         )
-        print(out)
         self.assertEqual(
             out,
             {
