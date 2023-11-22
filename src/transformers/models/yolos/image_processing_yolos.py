@@ -118,29 +118,17 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
         if max_original_size / min_original_size * size > max_size:
             size = int(round(max_size * min_original_size / max_original_size))
 
-    if (height <= width and height == size) or (width <= height and width == size):
-        width_mod = np.mod(width, 16)
-        height_mod = np.mod(height, 16)
-        height = height - height_mod
-        width = width - width_mod
-        return (height, width)
-
-    if width < height:
-        output_w = size
-        output_h = int(size * height / width)
-        output_w_mod = np.mod(output_w, 16)
-        output_h_mod = np.mod(output_h, 16)
-        output_w = output_w - output_w_mod
-        output_h = output_h - output_h_mod
-    else:
-        output_h = size
-        output_w = int(size * width / height)
-        output_w_mod = np.mod(output_w, 16)
-        output_h_mod = np.mod(output_h, 16)
-        output_w = output_w - output_w_mod
-        output_h = output_h - output_h_mod
-
-    return (output_h, output_w)
+    if width < height and width != size:
+        height = int(size * height / width)
+        width = size
+    elif height < width and height != size:
+        width = int(size * width / height)
+        height = size
+    width_mod = np.mod(width, 16)
+    height_mod = np.mod(height, 16)
+    width = width - width_mod
+    height = height - height_mod
+    return (height, width)
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_resize_output_image_size
