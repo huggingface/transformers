@@ -37,7 +37,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto import AutoModelForCausalLM
-
 from .configuration_llava import LlavaConfig, LlavaVisionConfig
 
 
@@ -941,7 +940,6 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
 
     def tie_weights(self):
         return self.language_model.tie_weights()
-            
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -953,6 +951,8 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        vision_feature_layer: Optional[int] = None,
+        vision_feature_select_strategy: Optional[str] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -990,18 +990,31 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        vision_feature_layer = (
+            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+        )
+        vision_feature_select_strategy = (
+            vision_feature_select_strategy
+            if vision_feature_select_strategy is not None
+            else self.config.vision_feature_select_strategy
+        )
 
         if inputs_embeds is None:
             if pixel_values is None or input_ids.shape[1] == 1:
-                # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of 
+                # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
                 # generation without image information
-                if past_key_values is not None and self.vision_tower is not None and pixel_values is not None and input_ids.shape[1] == 1:
+                if (
+                    past_key_values is not None
+                    and self.vision_tower is not None
+                    and pixel_values is not None
+                    and input_ids.shape[1] == 1
+                ):
                     target_seqlen = past_key_values[-1][-1].shape[-2] + 1
 
                     extended_attention_mask = torch.ones(
                         (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
                         dtype=attention_mask.dtype,
-                        device=attention_mask.device
+                        device=attention_mask.device,
                     )
 
                     attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
@@ -1013,14 +1026,16 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
                     attention_mask,
                     past_key_values,
                     inputs_embeds,
-                    labels
+                    labels,
                 ) = self.prepare_inputs_labels_for_multimodal(
                     input_ids,
                     position_ids,
                     attention_mask,
                     past_key_values,
                     labels,
-                    pixel_values
+                    pixel_values,
+                    vision_feature_layer,
+                    vision_feature_select_strategy,
                 )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
@@ -1063,12 +1078,29 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def prepare_inputs_labels_for_multimodal(
-        self, input_ids, position_ids, attention_mask, past_key_values, labels, pixel_values
+        self,
+        input_ids,
+        position_ids,
+        attention_mask,
+        past_key_values,
+        labels,
+        pixel_values,
+        vision_feature_layer,
+        vision_feature_select_strategy,
     ):
-        image_features = self.vision_tower(pixel_values).last_hidden_state
-        image_features = self.multi_modal_projector(image_features)
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+
+        if vision_feature_select_strategy == "default":
+            selected_image_feature = selected_image_feature[:, 1:]
+        elif vision_feature_select_strategy == "full":
+            selected_image_feature = selected_image_feature
+        else:
+            raise ValueError(f"Unexpected select feature: {self.config.select_feature}")
+
+        image_features = self.multi_modal_projector(selected_image_feature)
 
         # Let's just add dummy tensors if they do not exist,
         # it is a headache to deal with None all the time.
@@ -1088,7 +1120,9 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
             labels = torch.full_like(input_ids, self.config.ignore_index)
 
         # remove the padding using attention_mask -- TODO: double check
-        input_ids = [cur_input_ids[cur_attention_mask] for cur_input_ids, cur_attention_mask in zip(input_ids, attention_mask)]
+        input_ids = [
+            cur_input_ids[cur_attention_mask] for cur_input_ids, cur_attention_mask in zip(input_ids, attention_mask)
+        ]
         labels = [cur_labels[cur_attention_mask] for cur_labels, cur_attention_mask in zip(labels, attention_mask)]
 
         new_input_embeds = []
@@ -1105,13 +1139,17 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
                 cur_image_idx += 1
                 continue
 
-            image_token_indices = [-1] + torch.where(cur_input_ids == self.config.image_token_index)[0].tolist() + [cur_input_ids.shape[0]]
+            image_token_indices = (
+                [-1]
+                + torch.where(cur_input_ids == self.config.image_token_index)[0].tolist()
+                + [cur_input_ids.shape[0]]
+            )
             cur_input_ids_noim = []
             cur_labels = labels[batch_idx]
             cur_labels_noim = []
             for i in range(len(image_token_indices) - 1):
-                cur_input_ids_noim.append(cur_input_ids[image_token_indices[i]+1:image_token_indices[i+1]])
-                cur_labels_noim.append(cur_labels[image_token_indices[i]+1:image_token_indices[i+1]])
+                cur_input_ids_noim.append(cur_input_ids[image_token_indices[i] + 1 : image_token_indices[i + 1]])
+                cur_labels_noim.append(cur_labels[image_token_indices[i] + 1 : image_token_indices[i + 1]])
             split_sizes = [x.shape[0] for x in cur_labels_noim]
             cur_input_embeds = self.get_input_embeddings()(torch.cat(cur_input_ids_noim))
             cur_input_embeds_no_im = torch.split(cur_input_embeds, split_sizes, dim=0)
@@ -1125,7 +1163,14 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
                     cur_image_features = image_features[cur_image_idx]
                     cur_image_idx += 1
                     cur_new_input_embeds.append(cur_image_features)
-                    cur_new_labels.append(torch.full((cur_image_features.shape[0],), self.config.ignore_index, device=cur_labels.device, dtype=cur_labels.dtype))
+                    cur_new_labels.append(
+                        torch.full(
+                            (cur_image_features.shape[0],),
+                            self.config.ignore_index,
+                            device=cur_labels.device,
+                            dtype=cur_labels.dtype,
+                        )
+                    )
 
             cur_new_input_embeds = torch.cat(cur_new_input_embeds)
             cur_new_labels = torch.cat(cur_new_labels)
@@ -1134,7 +1179,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
             new_labels.append(cur_new_labels)
 
         # Truncate sequences to max length as image embeddings can make the sequence longer
-        tokenizer_model_max_length = getattr(self.config, 'tokenizer_model_max_length', None)
+        tokenizer_model_max_length = getattr(self.config, "tokenizer_model_max_length", None)
         if tokenizer_model_max_length is not None:
             new_input_embeds = [x[:tokenizer_model_max_length] for x in new_input_embeds]
             new_labels = [x[:tokenizer_model_max_length] for x in new_labels]
@@ -1144,30 +1189,54 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         batch_size = len(new_input_embeds)
 
         new_input_embeds_padded = []
-        new_labels_padded = torch.full((batch_size, max_len), self.config.ignore_index, dtype=new_labels[0].dtype, device=new_labels[0].device)
+        new_labels_padded = torch.full(
+            (batch_size, max_len), self.config.ignore_index, dtype=new_labels[0].dtype, device=new_labels[0].device
+        )
         attention_mask = torch.zeros((batch_size, max_len), dtype=attention_mask.dtype, device=attention_mask.device)
         position_ids = torch.zeros((batch_size, max_len), dtype=position_ids.dtype, device=position_ids.device)
 
         for i, (cur_new_embed, cur_new_labels) in enumerate(zip(new_input_embeds, new_labels)):
             cur_len = cur_new_embed.shape[0]
-            if getattr(self.config, 'tokenizer_padding_side', 'right') == "left":
-                new_input_embeds_padded.append(torch.cat((
-                    torch.zeros((max_len - cur_len, cur_new_embed.shape[1]), dtype=cur_new_embed.dtype, device=cur_new_embed.device),
-                    cur_new_embed
-                ), dim=0))
+            if getattr(self.config, "tokenizer_padding_side", "right") == "left":
+                new_input_embeds_padded.append(
+                    torch.cat(
+                        (
+                            torch.zeros(
+                                (max_len - cur_len, cur_new_embed.shape[1]),
+                                dtype=cur_new_embed.dtype,
+                                device=cur_new_embed.device,
+                            ),
+                            cur_new_embed,
+                        ),
+                        dim=0,
+                    )
+                )
                 if cur_len > 0:
                     new_labels_padded[i, -cur_len:] = cur_new_labels
                     attention_mask[i, -cur_len:] = True
-                    position_ids[i, -cur_len:] = torch.arange(0, cur_len, dtype=position_ids.dtype, device=position_ids.device)
+                    position_ids[i, -cur_len:] = torch.arange(
+                        0, cur_len, dtype=position_ids.dtype, device=position_ids.device
+                    )
             else:
-                new_input_embeds_padded.append(torch.cat((
-                    cur_new_embed,
-                    torch.zeros((max_len - cur_len, cur_new_embed.shape[1]), dtype=cur_new_embed.dtype, device=cur_new_embed.device)
-                ), dim=0))
+                new_input_embeds_padded.append(
+                    torch.cat(
+                        (
+                            cur_new_embed,
+                            torch.zeros(
+                                (max_len - cur_len, cur_new_embed.shape[1]),
+                                dtype=cur_new_embed.dtype,
+                                device=cur_new_embed.device,
+                            ),
+                        ),
+                        dim=0,
+                    )
+                )
                 if cur_len > 0:
                     new_labels_padded[i, :cur_len] = cur_new_labels
                     attention_mask[i, :cur_len] = True
-                    position_ids[i, :cur_len] = torch.arange(0, cur_len, dtype=position_ids.dtype, device=position_ids.device)
+                    position_ids[i, :cur_len] = torch.arange(
+                        0, cur_len, dtype=position_ids.dtype, device=position_ids.device
+                    )
 
         new_input_embeds = torch.stack(new_input_embeds_padded, dim=0)
 
@@ -1188,6 +1257,8 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
         pixel_values = kwargs.pop("pixel_values", None)
-        model_input = self.language_model.prepare_inputs_for_generation(input_ids, past_key_values, inputs_embeds=inputs_embeds, **kwargs)
+        model_input = self.language_model.prepare_inputs_for_generation(
+            input_ids, past_key_values, inputs_embeds=inputs_embeds, **kwargs
+        )
         model_input.update({"pixel_values": pixel_values})
         return model_input

@@ -45,8 +45,8 @@ if TYPE_CHECKING:
         from .modeling_llava import (
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LlavaForVisionText2Text,
-            LlavaVisionModel,
             LlavaPreTrainedModel,
+            LlavaVisionModel,
         )
 
 
