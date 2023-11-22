@@ -163,54 +163,54 @@ conda install -c huggingface transformers
 
 ## Configuration du cache
 
-Pretrained models are downloaded and locally cached at: `~/.cache/huggingface/hub`. This is the default directory given by the shell environment variable `TRANSFORMERS_CACHE`. On Windows, the default directory is given by `C:\Users\username\.cache\huggingface\hub`. You can change the shell environment variables shown below - in order of priority - to specify a different cache directory:
+Les modèles pré-entraînés sont téléchargés et cachés localement dans le dossier suivant : `~/.cache/huggingface/hub`. C'est le dossier par défaut donné par la variable d'environnement `TRANSFORMERS_CACHE`. Sur Windows, le dossier par défaut est `C:\Users\nom_utilisateur\.cache\huggingface\hub`. Vous pouvez modifier les variables d'environnement indiquées ci-dessous - par ordre de priorité - pour spécifier un dossier de cache différent :
 
-1. Shell environment variable (default): `HUGGINGFACE_HUB_CACHE` or `TRANSFORMERS_CACHE`.
-2. Shell environment variable: `HF_HOME`.
-3. Shell environment variable: `XDG_CACHE_HOME` + `/huggingface`.
+1. Variable d'environnement (par défaut) : `HUGGINGFACE_HUB_CACHE` ou `TRANSFORMERS_CACHE`.
+2. Variable d'environnement : `HF_HOME`.
+3. Variable d'environnement : `XDG_CACHE_HOME` + `/huggingface`.
 
 <Tip>
 
-🤗 Transformers will use the shell environment variables `PYTORCH_TRANSFORMERS_CACHE` or `PYTORCH_PRETRAINED_BERT_CACHE` if you are coming from an earlier iteration of this library and have set those environment variables, unless you specify the shell environment variable `TRANSFORMERS_CACHE`.
+🤗 Transformers utilisera les variables d'environnement `PYTORCH_TRANSFORMERS_CACHE` ou `PYTORCH_PRETRAINED_BERT_CACHE` si vous utilisez une version précédente de cette librairie et avez défini ces variables d'environnement, sauf si vous spécifiez la variable d'environnement `TRANSFORMERS_CACHE`.
 
 </Tip>
 
 ## Mode hors ligne
 
-🤗 Transformers is able to run in a firewalled or offline environment by only using local files. Set the environment variable `TRANSFORMERS_OFFLINE=1` to enable this behavior.
+🤗 Transformers  peut fonctionner dans un environnement cloisonné ou hors ligne en n'utilisant que des fichiers locaux. Définissez la variable d'environnement `TRANSFORMERS_OFFLINE=1` pour activer ce mode.
 
 <Tip>
 
-Add [🤗 Datasets](https://huggingface.co/docs/datasets/) to your offline training workflow by setting the environment variable `HF_DATASETS_OFFLINE=1`.
+Ajoutez [🤗 Datasets](https://huggingface.co/docs/datasets/) à votre processus d'entraînement hors ligne en définissant la variable d'environnement `HF_DATASETS_OFFLINE=1`.
 
 </Tip>
 
-For example, you would typically run a program on a normal network firewalled to external instances with the following command:
+Par example, vous exécuteriez généralement un programme sur un réseau normal cloisonné des instances externes avec la commande suivante :
 
 ```bash
 python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
-Run this same program in an offline instance with:
+Exécutez ce même programme dans une instance hors ligne avec :
 
 ```bash
 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
 python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
-The script should now run without hanging or waiting to timeout because it knows it should only look for local files.
+Le script devrait maintenant s'exécuter sans rester en attente ou attendre une expiration, car il sait qu'il ne doit rechercher que des fichiers locaux.
 
-### Fetch models and tokenizers to use offline
+### Récupérer des modèles et des tokenizers pour une utilisation hors ligne
 
-Another option for using 🤗 Transformers offline is to download the files ahead of time, and then point to their local path when you need to use them offline. There are three ways to do this:
+Une autre option pour utiliser 🤗 Transformers hors ligne est de télécharger les fichiers à l'avance, puis d'utiliser vers leur chemin local lorsque vous en avez besoin en mode hors ligne. Il existe trois façons de faire cela :
 
-* Download a file through the user interface on the [Model Hub](https://huggingface.co/models) by clicking on the ↓ icon.
+* Téléchargez un fichier via l'interface utilisateur sur le [Model Hub](https://huggingface.co/models) en cliquant sur l'icône ↓.
 
     ![download-icon](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/download-icon.png)
 
-* Use the [`PreTrainedModel.from_pretrained`] and [`PreTrainedModel.save_pretrained`] workflow:
+* Utilisez les fonctions [`PreTrainedModel.from_pretrained`] et [`PreTrainedModel.save_pretrained`] :
 
-    1. Download your files ahead of time with [`PreTrainedModel.from_pretrained`]:
+    1. Téléchargez vos fichiers à l'avance avec [`PreTrainedModel.from_pretrained`]:
 
     ```py
     >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
@@ -219,29 +219,29 @@ Another option for using 🤗 Transformers offline is to download the files ahea
     >>> model = AutoModelForSeq2SeqLM.from_pretrained("bigscience/T0_3B")
     ```
 
-    2. Save your files to a specified directory with [`PreTrainedModel.save_pretrained`]:
+    2. Sauvegardez les fichiers dans un dossier de votre choix avec [`PreTrainedModel.save_pretrained`]:
 
     ```py
     >>> tokenizer.save_pretrained("./your/path/bigscience_t0")
     >>> model.save_pretrained("./your/path/bigscience_t0")
     ```
 
-    3. Now when you're offline, reload your files with [`PreTrainedModel.from_pretrained`] from the specified directory:
+    3. Maintenant, lorsque vous êtes hors ligne, rechargez vos fichiers avec [`PreTrainedModel.from_pretrained`] depuis le dossier où vous les avez sauvegardés :
 
     ```py
     >>> tokenizer = AutoTokenizer.from_pretrained("./your/path/bigscience_t0")
     >>> model = AutoModel.from_pretrained("./your/path/bigscience_t0")
     ```
 
-* Programmatically download files with the [huggingface_hub](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub) library:
+* Téléchargez des fichiers de manière automatique avec la librairie [huggingface_hub](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub) :
 
-    1. Install the `huggingface_hub` library in your virtual environment:
+    1. Installez la librairie `huggingface_hub`  dans votre environnement virtuel :
 
     ```bash
     python -m pip install huggingface_hub
     ```
 
-    2. Use the [`hf_hub_download`](https://huggingface.co/docs/hub/adding-a-library#download-files-from-the-hub) function to download a file to a specific path. For example, the following command downloads the `config.json` file from the [T0](https://huggingface.co/bigscience/T0_3B) model to your desired path:
+    2. Utilisez la fonction [`hf_hub_download`](https://huggingface.co/docs/hub/adding-a-library#download-files-from-the-hub) pour télécharger un fichier vers un chemin de votre choix.  Par exemple, la commande suivante télécharge le fichier `config.json` du modèle [T0](https://huggingface.co/bigscience/T0_3B) vers le chemin de votre choix :
 
     ```py
     >>> from huggingface_hub import hf_hub_download
@@ -249,7 +249,7 @@ Another option for using 🤗 Transformers offline is to download the files ahea
     >>> hf_hub_download(repo_id="bigscience/T0_3B", filename="config.json", cache_dir="./your/path/bigscience_t0")
     ```
 
-Once your file is downloaded and locally cached, specify it's local path to load and use it:
+Une fois que votre fichier est téléchargé et caché localement, spécifiez son chemin local pour le charger et l'utiliser :
 
 ```py
 >>> from transformers import AutoConfig
@@ -259,6 +259,6 @@ Once your file is downloaded and locally cached, specify it's local path to load
 
 <Tip>
 
-See the [How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream) section for more details on downloading files stored on the Hub.
+Consultez la section [How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream) pour plus de détails sur le téléchargement de fichiers stockés sur le Hub.
 
 </Tip>
