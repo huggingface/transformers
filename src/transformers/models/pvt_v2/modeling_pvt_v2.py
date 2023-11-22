@@ -130,6 +130,11 @@ class PvtV2OverlapPatchEmbeddings(nn.Module):
 
 
 class PvTV2DWConv(nn.Module):
+    """
+    Depth-wise (DW) convolution to infuse positional information using zero-padding. Depth-wise convolutions
+    have an equal number of groups to the number of input channels, meaning one filter per input channel. This
+    reduces the overall parameters and compute costs since the key purpose of this layer is position encoding.
+    """
     def __init__(self, config: PvtV2Config, dim: int = 768):
         super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, bias=True, groups=dim)
