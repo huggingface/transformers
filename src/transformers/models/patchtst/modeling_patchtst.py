@@ -1858,15 +1858,18 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             past_observed_mask=past_observed_mask,
             output_hidden_states=False,
         )
+        if self.distribution_output:
+            # get distribution
+            distribution = self.distribution_output.distribution(
+                outputs.prediction_outputs, loc=outputs.loc, scale=outputs.scale
+            )
+            # get samples: list of [bs x forecast_len x num_channels]
+            samples = [distribution.sample() for _ in range(num_parallel_samples)]
+            # samples: [bs x num_samples x forecast_len x num_channels]
+            samples = torch.stack(samples, dim=1)
+        else:
+            samples = outputs.prediction_outputs.unsqueeze(1)
 
-        # get distribution
-        distribution = self.distribution_output.distribution(
-            outputs.prediction_outputs, loc=outputs.loc, scale=outputs.scale
-        )
-        # get samples: list of [bs x forecast_len x num_channels]
-        samples = [distribution.sample() for _ in range(num_parallel_samples)]
-        # samples: [bs x num_samples x forecast_len x num_channels]
-        samples = torch.stack(samples, dim=1)
         return SamplePatchTSTOutput(sequences=samples)
 
 

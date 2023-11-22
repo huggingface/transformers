@@ -348,16 +348,16 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         torch.manual_seed(0)
         with torch.no_grad():
             outputs = model.generate(past_values=batch["past_values"].to(torch_device))
-        expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
+        expected_shape = torch.Size((64, 1, model.config.prediction_length, model.config.num_input_channels))
+
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.3228, 0.4320, 0.4591, 0.4066, -0.3461, 0.3094, -0.8426]],
+            [[0.4075, 0.3716, 0.4786, 0.2842, -0.3107, -0.0569, -0.7489]],
             device=torch_device,
         )
         mean_prediction = outputs.sequences.mean(dim=1)
-
-        self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=TOLERANCE))
+        self.assertTrue(torch.allclose(mean_prediction[0, -1:], expected_slice, atol=TOLERANCE))
 
     def test_regression_generation(self):
         model = PatchTSTForRegression.from_pretrained("namctin/patchtst_etth1_regression").to(torch_device)
