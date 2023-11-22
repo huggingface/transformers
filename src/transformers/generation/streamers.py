@@ -187,14 +187,14 @@ class TimedTextStreamer(TextStreamer):
         >>> # Option 1: Do not print the generated text (more accurate measurement)
         >>> streamer = TimedTextStreamer()
         >>> _ = model.generate(**inputs, streamer=streamer, max_new_tokens=5)
-        >>> streamer.get_token_times()
+        >>> _ = streamer.get_token_times()
         >>> # [146.61671698559076, 91.94262302480638, 16.620049951598048, 14.585152035579085, 14.050466008484364]
 
         >>> # Option 2: Print the generated text as well
         >>> streamer = TimedTextStreamer(tokenizer=tok)
         >>> _ = model.generate(**inputs, streamer=streamer, max_new_tokens=5)
          eight, nine, ten
-        >>> streamer.get_token_times()
+        >>> _ = streamer.get_token_times()
         >>> # [162.81271493062377, 18.371607991866767, 15.906393993645906, 14.754525036551058, 14.49775299988687]
         ```
     """
