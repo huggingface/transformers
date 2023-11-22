@@ -27,7 +27,7 @@ else:
     _import_structure["modeling_llava"] = [
         "LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LlavaForVisionText2Text",
-        "LlavaModel",
+        "LlavaVisionModel",
         "LlavaPreTrainedModel",
     ]
     _import_structure["processing_llava"] = ["IdeficsProcessor"]
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
         from .modeling_llava import (
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LlavaForVisionText2Text,
-            LlavaModel,
+            LlavaVisionModel,
             LlavaPreTrainedModel,
         )
 

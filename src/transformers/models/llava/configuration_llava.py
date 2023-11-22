@@ -32,7 +32,7 @@ LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class LlavaVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LlavaModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`LlavaVisionModel`]. It is used to instantiate an
     Llava model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Llava-9B.
 
@@ -72,18 +72,18 @@ class LlavaVisionConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
 
-    model_type = "llava-transformers"
+    model_type = "llava"
     attribute_map = {
         "hidden_size": "embed_dim",
     }
 
     def __init__(
         self,
-        embed_dim=768,
-        image_size=224,
-        intermediate_size=5120,
+        embed_dim=1024,
+        image_size=336,
+        intermediate_size=4096,
         patch_size=14,
-        num_hidden_layers=32,
+        num_hidden_layers=24,
         num_attention_heads=16,
         num_channels=3,
         hidden_act="gelu",
@@ -109,57 +109,9 @@ class LlavaVisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class LlavaPerceiverConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`LlavaModel`]. It is used to instantiate an
-    Llava model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Llava-9B.
-
-    e.g. [HuggingFaceM4/llava-9b](https://huggingface.co/HuggingFaceM4/llava-9b)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        use_resampler (`bool`, *optional*, defaults to `False`):
-            Whether or not to use the resampler
-        resampler_n_latents (`int`, *optional*, defaults to ):
-            Number of latent embeddings to resample ("compress") the input sequence to (usually < 128).
-        resampler_depth (`int`, *optional*, defaults to 6):
-            Depth of the Perceiver Resampler (Transformer w/ cross attention). Should be shallow (< 3).
-        resampler_n_heads (`int`, *optional*, defaults to 16):
-            Number of heads in each Transformer block (for multi-headed self-attention).
-        resampler_head_dim (`int`, *optional*, defaults to 96):
-            Dimensionality of each head projection in the Transformer block.
-        qk_layer_norms_perceiver (`bool`, *optional*, defaults to `False`):
-            Whether or not to use qk layer norms in perceiver
-    """
-
-    model_type = "llava-transformers"
-
-    def __init__(
-        self,
-        use_resampler=False,
-        resampler_n_latents=64,
-        resampler_depth=6,
-        resampler_n_heads=16,
-        resampler_head_dim=96,
-        qk_layer_norms_perceiver=False,
-        **kwargs,
-    ):
-        self.use_resampler = use_resampler
-        self.resampler_n_latents = resampler_n_latents
-        self.resampler_depth = resampler_depth
-        self.resampler_n_heads = resampler_n_heads
-        self.resampler_head_dim = resampler_head_dim
-        self.qk_layer_norms_perceiver = qk_layer_norms_perceiver
-
-        super().__init__(**kwargs)
-
-
 class LlavaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LlavaModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`LlavaVisionModel`]. It is used to instantiate an
     Llava model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Llava-9B.
 
@@ -174,7 +126,7 @@ class LlavaConfig(PretrainedConfig):
             are always trainable whereas regular vocab tokens can be frozen or not.
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Llava model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~LlavaModel`]
+            `inputs_ids` passed when calling [`~LlavaVisionModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -221,24 +173,23 @@ class LlavaConfig(PretrainedConfig):
             Exceptions to freezing vision layers when `freeze_vision_layers` is `True`
         use_resampler (`bool`, *optional*, defaults to `False`): Whether to use the Resampler
         vision_config (`LlavaVisionConfig`,  *optional*): Custom vision config or dict
-        perceiver_config (`LlavaPerceiverConfig`,  *optional*): Custom perceiver config or dict
 
     Example:
 
     ```python
-    >>> from transformers import LlavaModel, LlavaConfig
+    >>> from transformers import LlavaVisionModel, LlavaConfig
 
     >>> # Initializing a Llava llava-9b style configuration
     >>> configuration = LlavaConfig()
 
     >>> # Initializing a model from the llava-9b style configuration
-    >>> model = LlavaModel(configuration)
+    >>> model = LlavaVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "llava-transformers"
+    model_type = "llava"
     is_composition = False
 
     def __init__(
@@ -270,7 +221,10 @@ class LlavaConfig(PretrainedConfig):
         freeze_vision_module_exceptions=[],
         use_resampler=False,
         vision_config=None,
-        perceiver_config=None,
+        text_config=None,
+        ignore_index=-100,
+        image_token_index=-200,
+        projector_hidden_act="gelu",
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -298,13 +252,9 @@ class LlavaConfig(PretrainedConfig):
         self.freeze_lm_head = freeze_lm_head
 
         self.use_resampler = use_resampler
-
-        if perceiver_config is None:
-            self.perceiver_config = LlavaPerceiverConfig()
-        elif isinstance(perceiver_config, dict):
-            self.perceiver_config = LlavaPerceiverConfig(**perceiver_config)
-        elif isinstance(perceiver_config, LlavaPerceiverConfig):
-            self.perceiver_config = perceiver_config
+        self.ignore_index = ignore_index
+        self.image_token_index = image_token_index
+        self.projector_hidden_act = projector_hidden_act
 
         if vision_config is None:
             self.vision_config = LlavaVisionConfig()
@@ -313,6 +263,8 @@ class LlavaConfig(PretrainedConfig):
         elif isinstance(vision_config, LlavaVisionConfig):
             self.vision_config = vision_config
 
+        self.text_config = text_config
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -320,9 +272,3 @@ class LlavaConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-        # IMPORTANT: Do not do any __init__ args-based checks in the constructor, since
-        # PretrainedConfig.from_dict first instantiates the class with the config dict and only then
-        # updates the config object with `kwargs` from from_pretrained, so during the instantiation
-        # of this object many attributes have default values and haven't yet been overridden.
-        # Do any required checks inside `from_pretrained` once the superclass' `from_pretrained` was run.
