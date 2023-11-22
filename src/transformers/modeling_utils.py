@@ -473,12 +473,12 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             )
         return safe_load_file(checkpoint_file)
     try:
-        if (is_deepspeed_zero3_enabled()) and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0:
+        if is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0:
             map_location = "meta"
         else:
             map_location = "cpu"
 
-        map_location = "cpu" if is_fsdp_enabled_and_local_dist_rank_0 else "meta"
+        map_location = "cpu" if is_fsdp_enabled_and_local_dist_rank_0() else "meta"
         return torch.load(checkpoint_file, map_location=map_location)
     except Exception as e:
         try:
