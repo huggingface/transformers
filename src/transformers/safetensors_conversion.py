@@ -1,5 +1,6 @@
 from typing import Optional
 
+import requests
 from huggingface_hub import Discussion, HfApi
 
 from .utils import cached_file, logging
@@ -25,41 +26,42 @@ def previous_pr(api: "HfApi", model_id: str, pr_title: str) -> Optional["Discuss
 
 def spawn_conversion(token: str, model_id: str):
     print("Sending conversion request")
-    import asyncio
     import json
     import uuid
 
-    import websockets
+    sse_url = "https://safetensors-convert.hf.space/queue/join"
+    sse_data_url = "https://safetensors-convert.hf.space/queue/data"
+    hash_data = {"fn_index": 1, "session_hash": str(uuid.uuid4())}
 
-    async def start(websocket, payload):
-        _hash = str(uuid.uuid4())
-        while True:
-            data = await websocket.recv()
-            print(f"<{data}")
-            data = json.loads(data)
-            if data["msg"] == "send_hash":
-                data = json.dumps({"fn_index": 0, "session_hash": _hash})
-                print(f">{data}")
-                await websocket.send(data)
-            elif data["msg"] == "send_data":
-                data = json.dumps({"fn_index": 0, "session_hash": _hash, "data": payload})
-                print(f">{data}")
-                await websocket.send(data)
-            elif data["msg"] == "process_completed":
-                break
+    def start(_sse_connection, payload):
+        for line in _sse_connection.iter_lines():
+            line = line.decode()
+            if line.startswith("data:"):
+                resp = json.loads(line[5:])
+                print(resp)
 
-    async def main():
-        print("======================")
-        uri = "wss://safetensors-convert.hf.space/queue/join"
-        async with websockets.connect(uri) as websocket:
-            # inputs and parameters are classic, "id" is a way to track that query
-            data = [token, model_id]
-            try:
-                await start(websocket, data)
-            except Exception as e:
-                print(f"Error during space conversion: {e}")
+                if resp["msg"] == "queue_full":
+                    raise ValueError("Queue is full! Please try again.")
+                elif resp["msg"] == "send_data":
+                    event_id = resp["event_id"]
+                    response = requests.post(
+                        sse_data_url,
+                        stream=True,
+                        params=hash_data,
+                        json={"event_id": event_id, **payload, **hash_data},
+                    )
+                    response.raise_for_status()
+                elif resp["msg"] == "process_completed":
+                    return
 
-    asyncio.run(main())
+    print("======================")
+
+    with requests.get(sse_url, stream=True, params=hash_data) as sse_connection:
+        data = {"data": [model_id, False, token]}
+        try:
+            start(sse_connection, data)
+        except Exception as e:
+            print(f"Error during space conversion: {repr(e)}")
 
 
 def get_sha(model_id: str, filename: str, **kwargs):
