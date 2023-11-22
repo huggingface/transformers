@@ -1363,7 +1363,7 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
 
         >>> processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224")
         >>> model = AutoBackbone.from_pretrained(
-        ...     "microsoft/resnet-50", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ...     "microsoft/beit-base-patch16-224", out_features=["stage1", "stage2", "stage3", "stage4"]
         ... )
 
         >>> inputs = processor(image, return_tensors="pt")
