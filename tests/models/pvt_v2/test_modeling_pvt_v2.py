@@ -359,7 +359,7 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
         """
         model = PvtV2ForImageClassification.from_pretrained("FoamoftheSea/pvt_v2_b0", torch_dtype=torch.float16)
         model.to(torch_device)
-        image_processor = PvtV2ImageProcessor(size=224)
+        image_processor = PvtV2ImageProcessor(size={"height": 224, "width": 224})
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
