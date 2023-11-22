@@ -976,6 +976,18 @@ class IdeficsPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+    # Adapted from transformers.modeling_utils.PreTrainedModel._check_and_enable_sdpa
+    @classmethod
+    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False) -> PretrainedConfig:
+        # We remove the checks on `is_torch_sdpa_available()` and `cls._supports_sdpa` as Falcon supports SDPA from torch==2.0.0 (no requirement on 2.1).
+        _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
+        if _is_bettertransformer:
+            return config
+
+        if not hard_check_only:
+            config.attn_implementation = "sdpa"
+        return config
+
 
 LLAMA_INPUTS_DOCSTRING = r"""
     Args:

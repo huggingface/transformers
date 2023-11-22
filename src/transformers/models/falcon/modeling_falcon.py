@@ -16,7 +16,7 @@
 
 import math
 import warnings
-from typing import Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -46,6 +46,9 @@ from ...utils import (
 )
 from .configuration_falcon import FalconConfig
 
+
+if TYPE_CHECKING:
+    from ...configuration_utils import PretrainedConfig
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -931,6 +934,18 @@ class FalconPreTrainedModel(PreTrainedModel):
         elif isinstance(module, LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    # Adapted from transformers.modeling_utils.PreTrainedModel._check_and_enable_sdpa
+    @classmethod
+    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False) -> "PretrainedConfig":
+        # We remove the checks on `is_torch_sdpa_available()` and `cls._supports_sdpa` as Falcon supports SDPA from torch==2.0.0 (no requirement on 2.1).
+        _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
+        if _is_bettertransformer:
+            return config
+
+        if not hard_check_only:
+            config.attn_implementation = "sdpa"
+        return config
 
 
 @add_start_docstrings(

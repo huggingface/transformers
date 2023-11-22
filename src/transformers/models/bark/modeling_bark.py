@@ -1864,7 +1864,7 @@ class BarkModel(BarkPreTrainedModel):
         config,
         torch_dtype: Optional[torch.dtype] = None,
         device_map: Optional[Union[str, Dict[str, int]]] = None,
-        enable: bool = True,
+        hard_check_only: bool = False,
     ):
         """
         `_check_and_enable_flash_attn_2` originally don't expand flash attention enabling to the model
@@ -1881,10 +1881,12 @@ class BarkModel(BarkPreTrainedModel):
         The method checks if the current setup is compatible with Flash Attention as it requires the model to be in
         half precision and not ran on CPU.
 
-        If all checks pass, the method will set the config attribute `attn_implementation` to "flash_attention_2" so that the model
+        If all checks pass and `hard_check_only` is False, the method will set the config attribute `attn_implementation` to "flash_attention_2" so that the model
         can initialize the correct attention module
         """
-        config = super()._check_and_enable_flash_attn_2(config, torch_dtype, device_map, enable=enable)
+        config = super()._check_and_enable_flash_attn_2(
+            config, torch_dtype, device_map, hard_check_only=hard_check_only
+        )
 
         config.semantic_config.attn_implementation = config.attn_implementation
         config.coarse_acoustics_config.attn_implementation = config.attn_implementation
