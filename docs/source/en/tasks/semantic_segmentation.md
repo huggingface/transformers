@@ -41,7 +41,7 @@ The task illustrated in this tutorial is supported by the following model archit
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install -q datasets transformers evaluate
+pip install -q datasets transformers evaluate accelerate
 ```
 
 We encourage you to log in to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to log in:
