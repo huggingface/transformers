@@ -14,8 +14,9 @@
 # limitations under the License.
 """ Tokenization class for SigLIP model."""
 
-
 import os
+import re
+import string
 import warnings
 from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -47,6 +48,30 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 SPIECE_UNDERLINE = "▁"
+
+
+# source: https://github.com/google-research/big_vision/blob/3b8e5ab6ad4f96e32b32826f9e1b8fd277914f9c/big_vision/evaluators/proj/image_text/prompt_engineering.py#L94
+def canonicalize_text(text, *, keep_punctuation_exact_string=None):
+    """Returns canonicalized `text` (lowercase and puncuation removed).
+
+    Args:
+      text (`str`):
+          String to be canonicalized.
+      keep_punctuation_exact_string (`str`, *optional*):
+          If provided, then this exact string kept. For example providing '{}' will keep any occurrences of '{}'
+          (but will still remove '{' and '}' that appear separately).
+    """
+    text = text.replace("_", " ")
+    if keep_punctuation_exact_string:
+        text = keep_punctuation_exact_string.join(
+            part.translate(str.maketrans("", "", string.punctuation))
+            for part in text.split(keep_punctuation_exact_string)
+        )
+    else:
+        text = text.translate(str.maketrans("", "", string.punctuation))
+    text = text.lower()
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 
 class SiglipTokenizer(PreTrainedTokenizer):
@@ -121,10 +146,9 @@ class SiglipTokenizer(PreTrainedTokenizer):
         split_special_tokens=True,
         **kwargs,
     ) -> None:
-        print("Pad token:", pad_token)
-        pad_token = AddedToken(pad_token, rstrip=True, lstrip=True)
-        unk_token = AddedToken(unk_token, rstrip=True, lstrip=True)
-        eos_token = AddedToken(eos_token, rstrip=True, lstrip=True)
+        pad_token = AddedToken(pad_token, rstrip=True, lstrip=True) if isinstance(pad_token, str) else pad_token
+        unk_token = AddedToken(unk_token, rstrip=True, lstrip=True) if isinstance(unk_token, str) else unk_token
+        eos_token = AddedToken(eos_token, rstrip=True, lstrip=True) if isinstance(eos_token, str) else eos_token
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
@@ -277,6 +301,8 @@ class SiglipTokenizer(PreTrainedTokenizer):
         """
         Converts a string to a list of tokens.
         """
+        text = canonicalize_text(text, keep_punctuation_exact_string="{}")
+
         if len(text) == 0:
             return super().tokenize(text, **kwargs)
 

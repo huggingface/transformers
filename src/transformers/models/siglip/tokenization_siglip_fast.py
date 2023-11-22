@@ -21,6 +21,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
+from ...tokenization_utils_base import AddedToken
 
 
 if is_sentencepiece_available():
@@ -98,6 +99,10 @@ class SiglipTokenizerFast(PreTrainedTokenizerFast):
         additional_special_tokens=None,
         **kwargs,
     ):
+        pad_token = AddedToken(pad_token, rstrip=True, lstrip=True) if isinstance(pad_token, str) else pad_token
+        unk_token = AddedToken(unk_token, rstrip=True, lstrip=True) if isinstance(unk_token, str) else unk_token
+        eos_token = AddedToken(eos_token, rstrip=True, lstrip=True) if isinstance(eos_token, str) else eos_token
+
         super().__init__(
             vocab_file,
             tokenizer_file=tokenizer_file,
