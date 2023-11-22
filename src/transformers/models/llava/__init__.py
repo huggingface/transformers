@@ -18,6 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {"configuration_llava": ["LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlavaConfig"]}
 
+
 try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
@@ -30,7 +31,7 @@ else:
         "LlavaVisionModel",
         "LlavaPreTrainedModel",
     ]
-    _import_structure["processing_llava"] = ["IdeficsProcessor"]
+    _import_structure["processing_llava"] = ["LlavaProcessor"]
 
 
 if TYPE_CHECKING:
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
             LlavaPreTrainedModel,
             LlavaVisionModel,
         )
+        from .processing_llava import LlavaProcessor
 
 
 else:
