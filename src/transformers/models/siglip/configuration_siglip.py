@@ -67,11 +67,6 @@ class SiglipTextConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
         pad_token_id (`int`, *optional*, defaults to 1):
             The id of the padding token in the vocabulary.
         bos_token_id (`int`, *optional*, defaults to 49406):
@@ -107,8 +102,6 @@ class SiglipTextConfig(PretrainedConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
-        initializer_range=0.02,
-        initializer_factor=1.0,
         # This differs from `CLIPTokenizer`'s default and from openai/siglip
         # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
         pad_token_id=1,
@@ -126,8 +119,6 @@ class SiglipTextConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
 
     @classmethod
@@ -181,11 +172,6 @@ class SiglipVisionConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
 
     Example:
 
@@ -216,8 +202,6 @@ class SiglipVisionConfig(PretrainedConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
-        initializer_range=0.02,
-        initializer_factor=1.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -229,8 +213,6 @@ class SiglipVisionConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
