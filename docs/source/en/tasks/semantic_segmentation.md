@@ -106,6 +106,7 @@ The next step is to load a SegFormer image processor to prepare the images and a
 
 >>> checkpoint = "nvidia/mit-b0"
 >>> image_processor = AutoImageProcessor.from_pretrained(checkpoint, reduce_labels=True)
+>>> image_processor.push_to_hub("username/reponame") # replace with your HF username to store the preprocessor with your model
 ```
 
 <frameworkcontent>
