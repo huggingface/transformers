@@ -42,6 +42,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     rust_tokenizer_class = SiglipTokenizerFast
     test_rust_tokenizer = False
     test_sentencepiece = True
+    test_sentencepiece_ignore_case = True
 
     def setUp(self):
         super().setUp()
