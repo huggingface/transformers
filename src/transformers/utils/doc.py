@@ -1075,6 +1075,7 @@ def add_code_sample_docstrings(
     expected_output=None,
     expected_loss=None,
     real_checkpoint=None,
+    revision=None,
 ):
     def docstring_decorator(fn):
         # model_class defaults to function's class if not specified otherwise
@@ -1102,6 +1103,7 @@ def add_code_sample_docstrings(
             "real_checkpoint": real_checkpoint,
             "fake_checkpoint": checkpoint,
             "true": "{true}",  # For <Tip warning={true}> syntax that conflicts with formatting.
+            "revision": revision,
         }
 
         if ("SequenceClassification" in model_class or "AudioClassification" in model_class) and modality == "audio":
@@ -1140,6 +1142,15 @@ def add_code_sample_docstrings(
         )
         if real_checkpoint is not None:
             code_sample = FAKE_MODEL_DISCLAIMER + code_sample
+        if revision is not None:
+            if "refs/pr/" not in revision:
+                raise ValueError(
+                    f"The provided revision '{revision}' is incorrect. It should point to"
+                    " a pull request reference on the hub like 'refs/pr/6'"
+                )
+            code_sample.replace(
+                f'from_pretrained("{checkpoint}")', 'from_pretrained("{checkpoint}", revision="{revision}")'
+            )
         func_doc = (fn.__doc__ or "") + "".join(docstr)
         output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
         built_doc = code_sample.format(**doc_kwargs)
