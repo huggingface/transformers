@@ -429,12 +429,19 @@ class PretrainedConfig(PushToHubMixin):
 
     @property
     def attn_implementation(self):
-        return self._attn_implementation
+        if hasattr(self, "_attn_implementation"):
+            if self._attn_implementation is None:
+                # `config.attn_implementation` should never be None, for backward compatibility.
+                return "eager"
+            else:
+                return self._attn_implementation
+        else:
+            return None
 
     @attn_implementation.setter
     def attn_implementation(self, value):
         # No specific check is implemented here, as we want to allow syntax as `config.attn_implementation = "flash_attention_2"` before the model
-        # loading.
+        # loading. Proper implementation/external library availability checks are done at load time.
         # Modifying this property alone on an already loaded model (model.config) has no impact, `model.use_attn_implementation("flash_attention_2")` should be used instead.
         self._attn_implementation = value
 

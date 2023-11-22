@@ -1151,8 +1151,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         # Save config and origin of the pretrained weights if given in model
+        config = self._autoset_attn_implementation(config, torch_dtype=torch.get_default_dtype(), check_device_map=False)
         self.config = config
-        self.config = self._autoset_attn_implementation(self.config, torch_dtype=torch.get_default_dtype(), check_device_map=False)
 
         self.name_or_path = config.name_or_path
         self.warnings_issued = {}
@@ -1191,6 +1191,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if torch_dtype is not None:
             dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
+        config = copy.deepcopy(config)  # We do not want to modify the config inplace in _from_config.
         config = cls._autoset_attn_implementation(config, use_flash_attention_2=use_flash_attention_2, check_device_map=False)
 
         if is_deepspeed_zero3_enabled():
@@ -1240,9 +1241,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             3. SDPA implementation, if available and supported by the model type.
             4. Manual implementation otherwise.
         """
-        config = copy.deepcopy(config)  # We do not want to modify the config inplace.
-
-        if config.attn_implementation is None:
+        # Here we use config._attn_implementation to check whether the attention implementation was explicitely set by the user.
+        # The property `PretrainedConfig.attn_implementation` is never `None`, for backward compatibility.
+        if config._attn_implementation is None:
             auto_dispatch_attention = True
         else:
             if (config.attn_implementation != "flash_attention_2" and use_flash_attention_2):
@@ -3344,6 +3345,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif load_in_8bit or load_in_4bit or low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
 
+        config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         config = cls._autoset_attn_implementation(config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map)
 
         with ContextManagers(init_contexts):
