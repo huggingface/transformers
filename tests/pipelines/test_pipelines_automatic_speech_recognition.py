@@ -329,16 +329,16 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(
             res,
             {
-                "text": " Conquered returned to its place amidst the tents.",
-                "chunks": [
-                    {"text": " Conquered", "timestamp": (0.5, 1.2)},
-                    {"text": " returned", "timestamp": (1.2, 1.64)},
-                    {"text": " to", "timestamp": (1.64, 1.84)},
-                    {"text": " its", "timestamp": (1.84, 2.02)},
-                    {"text": " place", "timestamp": (2.02, 2.28)},
-                    {"text": " amidst", "timestamp": (2.28, 2.78)},
-                    {"text": " the", "timestamp": (2.78, 2.96)},
-                    {"text": " tents.", "timestamp": (2.96, 3.48)},
+                'text': ' Conquered returned to its place amidst the tents.',
+                'chunks': [
+                    {'text': ' Conquered', 'timestamp': (0.5, 1.2)},
+                    {'text': ' returned', 'timestamp': (1.2, 1.64)},
+                    {'text': ' to', 'timestamp': (1.64, 1.84)},
+                    {'text': ' its', 'timestamp': (1.84, 2.02)},
+                    {'text': ' place', 'timestamp': (2.02, 2.28)},
+                    {'text': ' amidst', 'timestamp': (2.28, 2.8)},
+                    {'text': ' the', 'timestamp': (2.8, 2.98)},
+                    {'text': ' tents.', 'timestamp': (2.98, 3.48)},
                 ],
             },
         )
@@ -776,27 +776,27 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(
             output,
             {
-                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
-                "chunks": [
-                    {'text': ' Mr.', 'timestamp': (0.0, 1.02)},
-                    {'text': ' Quilter', 'timestamp': (1.02, 1.18)},
+                'text': ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.',
+                'chunks': [
+                    {'text': ' Mr.', 'timestamp': (0.38, 1.04)},
+                    {'text': ' Quilter', 'timestamp': (1.04, 1.18)},
                     {'text': ' is', 'timestamp': (1.18, 1.44)},
                     {'text': ' the', 'timestamp': (1.44, 1.58)},
                     {'text': ' apostle', 'timestamp': (1.58, 1.98)},
-                    {'text': ' of', 'timestamp': (1.98, 2.3)},
-                    {'text': ' the', 'timestamp': (2.3, 2.46)},
+                    {'text': ' of', 'timestamp': (1.98, 2.32)},
+                    {'text': ' the', 'timestamp': (2.32, 2.46)},
                     {'text': ' middle', 'timestamp': (2.46, 2.56)},
-                    {'text': ' classes,', 'timestamp': (2.56, 3.38)},
-                    {'text': ' and', 'timestamp': (3.38, 3.52)},
-                    {'text': ' we', 'timestamp': (3.52, 3.6)},
-                    {'text': ' are', 'timestamp': (3.6, 3.72)},
+                    {'text': ' classes,', 'timestamp': (2.56, 3.4)},
+                    {'text': ' and', 'timestamp': (3.4, 3.54)},
+                    {'text': ' we', 'timestamp': (3.54, 3.62)},
+                    {'text': ' are', 'timestamp': (3.62, 3.72)},
                     {'text': ' glad', 'timestamp': (3.72, 4.0)},
                     {'text': ' to', 'timestamp': (4.0, 4.26)},
-                    {'text': ' welcome', 'timestamp': (4.26, 4.54)},
-                    {'text': ' his', 'timestamp': (4.54, 4.92)},
-                    {'text': ' gospel.', 'timestamp': (4.92, 6.66)},
-                ],
-            },
+                    {'text': ' welcome', 'timestamp': (4.26, 4.56)},
+                    {'text': ' his', 'timestamp': (4.56, 4.92)},
+                    {'text': ' gospel.', 'timestamp': (4.92, 5.84)}
+                ]
+            }
         )
         # fmt: on
 
@@ -1109,10 +1109,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
         ds = ds.cast_column("audio", Audio(sampling_rate=16000))
-        audio = ds[0]["audio"]
+        audio = ds[:1]["audio"]
 
-        result = pipe(audio)["text"]
-        print(result)
+        result = pipe(audio)[0]["text"]
 
         assert result == EXPECTED_RESULT
 
@@ -1380,11 +1379,12 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             audio,
             return_timestamps=True,
         )
+        print(out)
         self.assertEqual(
             out,
             {
                 "chunks": [
-                    {"text": "", "timestamp": (18.94, 0.0)},
+                    {"text": "", "timestamp": (18.94, 0.02)},
                     {"text": "मिर्ची में कितने विभिन्न प्रजातियां हैं", "timestamp": (None, None)},
                 ],
                 "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं",

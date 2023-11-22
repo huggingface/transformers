@@ -2255,7 +2255,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     num_paddings = (seek_sequence == self.generation_config.pad_token_id).sum()
                     seek_sequence = seek_sequence[:-num_paddings]
 
-                segment, segment_offset = self._retrieve_segment(
+                segments, segment_offset = self._retrieve_segment(
                     seek_sequence=seek_sequence,
                     seek_outputs=seek_outputs,
                     time_offset=time_offset,
@@ -2268,7 +2268,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     idx=i,
                 )
 
-                current_segments[prev_i].append(segment)
+                current_segments[prev_i] += segments
                 seek[prev_i] += segment_offset
 
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
@@ -2316,6 +2316,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if len(timestamp_segment_indices) > 0:
             # if the output contains two consecutive timestamp tokens
             slices = timestamp_segment_indices.tolist()
+            segments = []
             if single_timestamp_ending:
                 slices.append(len(seek_sequence))
 
@@ -2325,12 +2326,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 sliced_tokens = seek_sequence[last_slice + 1 : current_slice + 1]
                 start_timestamp_pos = sliced_tokens[0].item() - timestamp_begin
                 end_timestamp_pos = sliced_tokens[-1].item() - timestamp_begin
-                segment = {
-                    "start": time_offset[prev_idx] + start_timestamp_pos * time_precision,
-                    "end": time_offset[prev_idx] + end_timestamp_pos * time_precision,
-                    "tokens": sliced_tokens,
-                    "result": seek_outputs[idx],
-                }
+                segments.append(
+                    {
+                        "start": time_offset[prev_idx] + start_timestamp_pos * time_precision,
+                        "end": time_offset[prev_idx] + end_timestamp_pos * time_precision,
+                        "tokens": sliced_tokens,
+                        "result": seek_outputs[idx],
+                    }
+                )
                 last_slice = current_slice
 
             if single_timestamp_ending:
@@ -2351,15 +2354,17 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 # no consecutive timestamps but it has a timestamp; use the last one.
                 last_timestamp_pos = timestamps[-1].item() - timestamp_begin
 
-            segment = {
-                "start": time_offset[prev_idx],
-                "end": time_offset[prev_idx] + last_timestamp_pos * time_precision,
-                "tokens": seek_sequence,
-                "result": seek_outputs[idx],
-            }
+            segments = [
+                {
+                    "start": time_offset[prev_idx],
+                    "end": time_offset[prev_idx] + last_timestamp_pos * time_precision,
+                    "tokens": seek_sequence,
+                    "result": seek_outputs[idx],
+                }
+            ]
             segment_offset = seek_num_frames[prev_idx]
 
-        return segment, segment_offset
+        return segments, segment_offset
 
     def prepare_inputs_for_generation(
         self,
