@@ -170,7 +170,7 @@ class PvtV2SelfAttention(nn.Module):
         self.proj_drop = nn.Dropout(config.hidden_dropout_prob)
 
         self.sr_ratio = sr_ratio
-        if self.attn_reduce == "AP":
+        if self.attn_reduce == "averagepooling":
             self.pool = nn.AdaptiveAvgPool2d(7)
             self.sr = nn.Conv2d(hidden_size, hidden_size, kernel_size=1, stride=1)
             self.layer_norm = nn.LayerNorm(hidden_size)
@@ -194,7 +194,7 @@ class PvtV2SelfAttention(nn.Module):
         batch_size, seq_len, num_channels = hidden_states.shape
         query_layer = self.transpose_for_scores(self.query(hidden_states))
 
-        if self.attn_reduce == "AP":
+        if self.attn_reduce == "averagepooling":
             hidden_states = hidden_states.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
             hidden_states = self.sr(self.pool(hidden_states)).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
             hidden_states = self.act(self.layer_norm(hidden_states))
@@ -265,7 +265,7 @@ class PvtV2ConvFFN(nn.Module):
             self.intermediate_act_fn = config.hidden_act
         self.dense2 = nn.Linear(hidden_features, out_features)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.relu = nn.ReLU() if config.attn_reduce == "AP" else nn.Identity()
+        self.relu = nn.ReLU() if config.attn_reduce == "averagepooling" else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor, height, width) -> torch.Tensor:
         hidden_states = self.dense1(hidden_states)
