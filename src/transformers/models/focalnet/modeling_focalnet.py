@@ -1018,9 +1018,9 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
         hidden_states = outputs.reshaped_hidden_states
 
         feature_maps = ()
-        for stage in self.out_features:
-            idx = self.stage_names.index(stage)
-            feature_maps += (hidden_states[idx],)
+        for idx, stage in enumerate(self.stage_names):
+            if stage in self.out_features:
+                feature_maps += (hidden_states[idx],)
 
         if not return_dict:
             output = (feature_maps,)

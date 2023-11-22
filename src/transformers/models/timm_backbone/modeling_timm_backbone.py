@@ -77,10 +77,10 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         if getattr(config, "freeze_batch_norm_2d", False):
             self.freeze_batch_norm_2d()
 
-        # We force the backbone to return all of the hidden states and then filter them in the forward pass.
-        # This is to match the behavior of the other backbones in the library.
-        all_layers = {layer["module"]: str(i) for i, layer in enumerate(self._backbone.feature_info.info)}
-        self._backbone.return_layers = all_layers
+        # These are used to control the output of the model when called. If output_hidden_states is True, then
+        # return_layers is modified to include all layers.
+        self._return_layers = self._backbone.return_layers
+        self._all_layers = {layer["module"]: str(i) for i, layer in enumerate(self._backbone.feature_info.info)}
         super()._init_backbone(config)
 
     @classmethod
@@ -136,10 +136,14 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         if output_attentions:
             raise ValueError("Cannot output attentions for timm backbones at the moment")
 
-        hidden_states = self._backbone(pixel_values, **kwargs)
-        feature_maps = tuple(hidden_states[i] for i in self.out_indices)
-
-        if not output_hidden_states:
+        if output_hidden_states:
+            # We modify the return layers to include all the stages of the backbone
+            self._backbone.return_layers = self._all_layers
+            hidden_states = self._backbone(pixel_values, **kwargs)
+            self._backbone.return_layers = self._return_layers
+            feature_maps = tuple(hidden_states[i] for i in self.out_indices)
+        else:
+            feature_maps = self._backbone(pixel_values, **kwargs)
             hidden_states = None
 
         feature_maps = tuple(feature_maps)

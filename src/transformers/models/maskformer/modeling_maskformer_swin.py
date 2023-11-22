@@ -874,19 +874,17 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
             pixel_values, output_hidden_states=True, output_attentions=output_attentions, return_dict=True
         )
 
-        hidden_states = outputs.hidden_states
+        # we skip the stem
+        hidden_states = outputs.hidden_states[1:]
 
         # we need to reshape the hidden states to their original spatial dimensions
         # spatial dimensions contains all the heights and widths of each stage, including after the embeddings
+        spatial_dimensions: Tuple[Tuple[int, int]] = outputs.hidden_states_spatial_dimensions
         feature_maps = ()
-        for stage in self.out_features:
-            idx = self.stage_names.index(stage)
-            # we skip the stem
-            if idx == 0:
-                raise ValueError("The stem is not supported.")
-            hidden_state = hidden_states[idx]
-            (height, width) = outputs.hidden_states_spatial_dimensions[idx - 1]
-            norm = self.hidden_states_norms[idx - 1]
+        for i, (hidden_state, stage, (height, width)) in enumerate(
+            zip(hidden_states, self.stage_names[1:], spatial_dimensions)
+        ):
+            norm = self.hidden_states_norms[i]
             # the last element corespond to the layer's last block output but before patch merging
             hidden_state_unpolled = hidden_state[-1]
             hidden_state_norm = norm(hidden_state_unpolled)
@@ -896,7 +894,8 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
             hidden_state_permuted = (
                 hidden_state_norm.permute(0, 2, 1).view((batch_size, hidden_size, height, width)).contiguous()
             )
-            feature_maps += (hidden_state_permuted,)
+            if stage in self.out_features:
+                feature_maps += (hidden_state_permuted,)
 
         if not return_dict:
             output = (feature_maps,)

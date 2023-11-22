@@ -830,20 +830,19 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
         hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         feature_maps = ()
-        for stage in self.out_features:
-            idx = self.stage_names.index(stage)
-            hidden_state = hidden_states[idx]
-            if self.config.apply_layernorm:
-                hidden_state = self.layernorm(hidden_state)
-            if self.config.reshape_hidden_states:
-                hidden_state = hidden_state[:, 1:]
-                # this was actually a bug in the original implementation that we copied here,
-                # cause normally the order is height, width
-                batch_size, _, height, width = pixel_values.shape
-                patch_size = self.config.patch_size
-                hidden_state = hidden_state.reshape(batch_size, height // patch_size, width // patch_size, -1)
-                hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
-            feature_maps += (hidden_state,)
+        for stage, hidden_state in zip(self.stage_names, hidden_states):
+            if stage in self.out_features:
+                if self.config.apply_layernorm:
+                    hidden_state = self.layernorm(hidden_state)
+                if self.config.reshape_hidden_states:
+                    hidden_state = hidden_state[:, 1:]
+                    # this was actually a bug in the original implementation that we copied here,
+                    # cause normally the order is height, width
+                    batch_size, _, height, width = pixel_values.shape
+                    patch_size = self.config.patch_size
+                    hidden_state = hidden_state.reshape(batch_size, height // patch_size, width // patch_size, -1)
+                    hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
+                feature_maps += (hidden_state,)
 
         if not return_dict:
             if output_hidden_states:
