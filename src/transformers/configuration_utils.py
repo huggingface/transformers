@@ -236,6 +236,8 @@ class PretrainedConfig(PushToHubMixin):
 
             This attribute is currently not being used during model loading time, but this may change in the future
             versions. But we can already start preparing for the future by saving the dtype with save_pretrained.
+        attn_implementation (`str`, *optional*):
+            The attention implementation to use in the model. Can be any of "eager" (manual implementation of the attention), "sdpa" (attention using [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), or "flash_attention_2" (attention using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
 
         > TensorFlow specific parameters
 
@@ -374,6 +376,9 @@ class PretrainedConfig(PushToHubMixin):
         # Config hash
         self._commit_hash = kwargs.pop("_commit_hash", None)
 
+        # Attention implementation to use, if relevant.
+        self._attn_implementation = kwargs.pop("attn_implementation", None)
+
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
 
@@ -424,19 +429,13 @@ class PretrainedConfig(PushToHubMixin):
 
     @property
     def attn_implementation(self):
-        if not hasattr(self, "_attn_implementation"):
-            return "eager"
-        else:
-            return self._attn_implementation
+        return self._attn_implementation
 
     @attn_implementation.setter
     def attn_implementation(self, value):
-        if hasattr(self, "attn_implementation_set") and self.attn_implementation_set:
-            raise NotImplementedError(
-                "Modifying the attention implementation through this attribute is currently not implemented."
-            )
-        self.attn_implementation_set = True
-
+        # No specific check is implemented here, as we want to allow syntax as `config.attn_implementation = "flash_attention_2"` before the model
+        # loading.
+        # Modifying this property alone on an already loaded model (model.config) has no impact, `model.use_attn_implementation("flash_attention_2")` should be used instead.
         self._attn_implementation = value
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
@@ -878,8 +877,8 @@ class PretrainedConfig(PushToHubMixin):
 
         self.dict_torch_dtype_to_str(serializable_config_dict)
 
-        if "attention_implementation" in serializable_config_dict:
-            del serializable_config_dict["attention_implementation"]
+        if "_attn_implementation" in serializable_config_dict:
+            del serializable_config_dict["_attn_implementation"]
 
         return serializable_config_dict
 
@@ -897,8 +896,8 @@ class PretrainedConfig(PushToHubMixin):
             del output["_auto_class"]
         if "_commit_hash" in output:
             del output["_commit_hash"]
-        if "attention_implementation" in output:
-            del output["attention_implementation"]
+        if "_attn_implementation" in output:
+            del output["_attn_implementation"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__

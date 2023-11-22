@@ -1152,31 +1152,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         # Save config and origin of the pretrained weights if given in model
         self.config = config
+        self.config = self._autoset_attn_implementation(self.config, torch_dtype=torch.get_default_dtype(), check_device_map=False)
+
         self.name_or_path = config.name_or_path
         self.warnings_issued = {}
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
-
-        # TODO: This is TEMPORARY and need to be discussed, should it rather be in XXXPreTrainedModel __init__?
-        if config.attn_implementation == "flash_attention_2":
-            if not self._supports_flash_attn_2:
-                raise ValueError(
-                    f'Passed config.attn_implementation == "flash_attention_2" but {self.__class__.__name__} does not support Flash Attention yet.'
-                )
-
-            if not is_flash_attn_2_available():
-                raise ImportError(
-                    "Flash Attention 2 is not available. Please refer to the documentation of https://github.com/Dao-AILab/flash-attention for"
-                    " installing it. Make sure to have at least the version 2.1.0"
-                )
-
-        if config.attn_implementation == "sdpa":
-            if not self._supports_sdpa:
-                raise ValueError(
-                    f'Passed config.attn_implementation == "sdpa" but {self.__class__.__name__} does not support SDPA yet.'
-                )
-
-            if not is_torch_sdpa_available():
-                raise ImportError("SDPA is not available. Please use torch>=2.1.1 in order to use SDPA.")
 
     def post_init(self):
         """
@@ -1211,8 +1191,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if torch_dtype is not None:
             dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
-        if use_flash_attention_2:
-            config = cls._check_and_enable_flash_attn_2(config, torch_dtype)
+        config = cls._autoset_attn_implementation(config, use_flash_attention_2=use_flash_attention_2, check_device_map=False)
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
@@ -1230,6 +1209,61 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             torch.set_default_dtype(dtype_orig)
 
         return model
+
+    def use_attn_implementation(self, attn_implementation: str):
+        """
+        Specifies the attention implementation to use in the model.
+
+        Args:
+            attn_implementation (`str`):
+                The attention implementation to use. Can be any of "eager" (manual implementation of the attention), "sdpa" (attention using [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), or "flash_attention_2" (attention using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)).
+        """
+        # TODO: Implement it. An implementation could be to define `self._eager_attn_class = XXXAttention`, `self._sdpa_attn_class = XXXSdpaAttention`, `self._flash_attn_class = XXXFlashAttention2` in the __init__ of XXXPreTrainedModel, and leverage those attributes here to replace the correct submodules.
+        raise NotImplementedError("model.use_attn_implementation is currently not implemented.")
+
+        if attn_implementation == "sdpa":
+            self.config = self._check_and_enable_sdpa(self.config, enable=True)
+        elif attn_implementation == "flash_attention_2":
+            # TODO: define torch_dtype properly
+            torch_dtype = None
+            self.config = self._check_and_enable_flash_attn_2(
+                self.config, torch_dtype=torch_dtype, device_map=getattr(self, "hf_device_map", None), enable=True
+            )
+
+    @classmethod
+    def _autoset_attn_implementation(cls, config, use_flash_attention_2: Optional[bool] = None, torch_dtype: Optional[torch.dtype] = None,
+        device_map: Optional[Union[str, Dict[str, int]]] = None, check_device_map: bool = True):
+        """
+        Automatically checks and dispatches to a default attention implementation. In order of priority:
+            1. An implementation specified in `config.attn_implementation`.
+            2. If specified, flash attention through use_flash_attention_2=True.
+            3. SDPA implementation, if available and supported by the model type.
+            4. Manual implementation otherwise.
+        """
+        config = copy.deepcopy(config)  # We do not want to modify the config inplace.
+
+        if config.attn_implementation is None:
+            auto_dispatch_attention = True
+        else:
+            if (config.attn_implementation != "flash_attention_2" and use_flash_attention_2):
+                raise ValueError(
+                    f'Both config.attn_implementation ("{config.attn_implementation}") and use_flash_attention_2=True are used, and are incompatible.'
+                )
+
+            # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config.
+            auto_dispatch_attention = False
+
+        if use_flash_attention_2:
+            cls._check_and_enable_flash_attn_2(
+                config, torch_dtype=torch_dtype, device_map=device_map, enable=auto_dispatch_attention, check_device_map=check_device_map,
+            )
+        elif is_torch_sdpa_available() and cls._supports_sdpa:
+            # use_flash_attention_2 takes priority over SDPA.
+            config = cls._check_and_enable_sdpa(config, enable=auto_dispatch_attention)
+        elif auto_dispatch_attention:
+            config.attn_implementation = "eager"
+
+        return config
 
     @classmethod
     def _set_default_torch_dtype(cls, dtype: torch.dtype) -> torch.dtype:
@@ -1285,25 +1319,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         config,
         torch_dtype: Optional[torch.dtype] = None,
         device_map: Optional[Union[str, Dict[str, int]]] = None,
+        check_device_map: bool = True,
         enable: bool = True,
     ) -> PretrainedConfig:
         """
-        If you don't know about Flash Attention, check out the official repository of flash attention:
-        https://github.com/Dao-AILab/flash-attention
+        Checks the availability of Flash Attention 2 and compatibility with the current model.
 
-        For using Flash Attention 1.0 you can do it directly via the `BetterTransformer` API, have a look at this
-        specific section of the documentation to learn more about it:
-        https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#decoder-models
-
-        The method checks if the current setup is compatible with Flash Attention as it requires the model to be in
-        half precision and not ran on CPU.
-
-        If all checks pass, the method will set the config attribute `attn_implementation` to "flash_attention_2" so that the model
-        can initialize the correct attention module
+        If all checks pass and `enable` is True, the method will set the config attribute `attn_implementation` to "flash_attention_2" so that the model can initialize the correct attention module.
         """
         if not cls._supports_flash_attn_2:
             raise ValueError(
-                "The current architecture does not support Flash Attention 2.0. Please open an issue on GitHub to "
+                f"{cls.__name__} does not support Flash Attention 2.0 yet. Please open an issue on GitHub to "
                 "request support for this architecture: https://github.com/huggingface/transformers/issues/new"
             )
 
@@ -1337,20 +1363,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " unexpected behaviour."
             )
 
-        if device_map is None:
+        # The check `torch.empty(0).device.type != "cuda"` is needed as the model may be initialized after `torch.set_default_device` has been called,
+        # or the model may be initialized under the context manager `with torch.device("cuda"):`.
+        if check_device_map and device_map is None and torch.empty(0).device.type != "cuda":
             if torch.cuda.is_available():
                 logger.warning(
-                    "You are attempting to use Flash Attention 2.0 with a model initialized on CPU. Make sure to move the model to GPU"
+                    "You are attempting to use Flash Attention 2.0 with a model not initialized on GPU. Make sure to move the model to GPU"
                     " after initializing it on CPU with `model.to('cuda')`."
                 )
             else:
                 raise ValueError(
-                    "You are attempting to use Flash Attention 2.0 with a model initialized on CPU and with no GPU available. "
+                    "You are attempting to use Flash Attention 2.0 with a model not initialized on GPU and with no GPU available. "
                     "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
                     "or initialising the model on CPU and then moving it to GPU."
                 )
         elif (
-            device_map is not None
+            check_device_map
+            and device_map is not None
             and isinstance(device_map, dict)
             and ("cpu" in device_map.values() or "disk" in device_map.values())
         ):
@@ -1365,11 +1394,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @classmethod
     def _check_and_enable_sdpa(cls, config, enable: bool = True) -> PretrainedConfig:
         """
-        Enables the use of SDPA natively in Transformers if supported by the model, and if BetterTransformer is not
-        being used.
+        Checks the availability of SDPA for a given model.
+
+        If all checks pass and `enable` is True, the method will set the config attribute `attn_implementation` to "flash_attention_2" so that the model can initialize the correct attention module.
         """
         if not cls._supports_sdpa:
-            return config
+            raise ValueError(
+                f"{cls.__name__} does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention. Please open an issue on GitHub to "
+                "request support for this architecture: https://github.com/huggingface/transformers/issues/new"
+            )
 
         _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
         if _is_bettertransformer:
@@ -2852,9 +2885,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             model_kwargs = kwargs
 
-            # We do not want to modify inplace the PretrainedConfig passed to from_pretrained.
-            config = copy.deepcopy(config)
-
         quantizer = None
         quantization_method_from_config = None
         if hasattr(config, "quantization_config"):
@@ -3314,30 +3344,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif load_in_8bit or load_in_4bit or low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
 
-        if (
-            hasattr(config, "attn_implementation")
-            and config.attn_implementation != "flash_attention_2"
-            and use_flash_attention_2
-        ):
-            raise ValueError(
-                f"Both config.attn_implementation ({config.attn_implementation}) and use_flash_attention_2=True were passed to from_pretrained and are incompatible."
-            )
-
-        # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config.
-        if hasattr(config, "attn_implementation"):
-            auto_dispatch_attention = False
-        else:
-            auto_dispatch_attention = True
-
-        if use_flash_attention_2:
-            config = cls._check_and_enable_flash_attn_2(
-                config, torch_dtype=torch_dtype, device_map=device_map, enable=auto_dispatch_attention
-            )
-        elif is_torch_sdpa_available():
-            # use_flash_attention_2 takes priority.
-            config = cls._check_and_enable_sdpa(config, enable=auto_dispatch_attention)
-        elif not hasattr(config, "attn_implementation"):
-            config.attn_implementation = "eager"
+        config = cls._autoset_attn_implementation(config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map)
 
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
