@@ -2655,7 +2655,7 @@ class Trainer:
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
 
         output = {**logs, **{"step": self.state.global_step}}
-        output["learning_rate"] = "{:.2e}".format(output["learning_rate"])
+        output["learning_rate"] = "{:.2e}".format(logs["learning_rate"])
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
