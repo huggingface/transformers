@@ -695,6 +695,8 @@
         title: LayoutXLM
       - local: model_doc/lilt
         title: LiLT
+      - local: model_doc/llava
+        title: Llava
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/matcha
