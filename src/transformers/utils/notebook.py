@@ -337,7 +337,11 @@ class NotebookProgressCallback(TrainerCallback):
             for log in reversed(state.log_history):
                 if "loss" in log:
                     values["Training Loss"] = log["loss"]
+                    break
+            for log in reversed(state.log_history):
+                if "learning_rate" in log:
                     values["Learning Rate"] = f"{log['learning_rate']:0.2e}"
+                    break
 
             if self.first_column == "Epoch":
                 values["Epoch"] = int(state.epoch)
