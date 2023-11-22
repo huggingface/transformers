@@ -736,17 +736,19 @@ class FalconMLP(nn.Module):
         return x
 
 
+FALCON_ATTENTION_CLASSES = {
+    "eager": FalconAttention,
+    "flash_attention_2": FalconFlashAttention2,
+}
+
+
 class FalconDecoderLayer(nn.Module):
     def __init__(self, config: FalconConfig):
         super().__init__()
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
 
-        if config.attn_implementation == "flash_attention_2":
-            self.self_attention = FalconFlashAttention2(config)
-        else:
-            self.self_attention = FalconAttention(config)
-
+        self.self_attention = FALCON_ATTENTION_CLASSES[config.attn_implementation](config)
         self.mlp = FalconMLP(config)
         self.hidden_dropout = config.hidden_dropout
         self.config = config

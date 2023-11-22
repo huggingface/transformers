@@ -471,6 +471,12 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         )
 
 
+GPT_NEO_ATTENTION_CLASSES = {
+    "eager": GPTNeoSelfAttention,
+    "flash_attention_2": GPTNeoFlashAttention2,
+}
+
+
 class GPTNeoAttention(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
@@ -479,11 +485,7 @@ class GPTNeoAttention(nn.Module):
         self.attention_type = self.attention_layers[layer_id]
 
         if self.attention_type in ["global", "local"]:
-            self.attention = (
-                GPTNeoSelfAttention(config, self.attention_type)
-                if config.attn_implementation == "eager"
-                else GPTNeoFlashAttention2(config, self.attention_type)
-            )
+            self.attention = GPT_NEO_ATTENTION_CLASSES[config.attn_implementation](config, self.attention_type)
         else:
             raise NotImplementedError(
                 "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: "

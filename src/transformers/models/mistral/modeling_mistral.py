@@ -575,15 +575,18 @@ class MistralFlashAttention2(MistralAttention):
         )
 
 
+MISTRAL_ATTENTION_CLASSES = {
+    "eager": MistralAttention,
+    "flash_attention_2": MistralFlashAttention2,
+}
+
+
 class MistralDecoderLayer(nn.Module):
     def __init__(self, config: MistralConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        if config.attn_implementation == "flash_attention_2":
-            self.self_attn = MistralFlashAttention2(config)
-        else:
-            self.self_attn = MistralAttention(config=config)
+        self.self_attn = MISTRAL_ATTENTION_CLASSES[config.attn_implementation](config)
 
         self.mlp = MistralMLP(config)
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

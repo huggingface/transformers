@@ -455,6 +455,12 @@ class FFN(nn.Module):
         return x
 
 
+DISTILBERT_ATTENTION_CLASSES = {
+    "eager": MultiHeadSelfAttention,
+    "flash_attention_2": DistilBertFlashAttention2,
+}
+
+
 class TransformerBlock(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
@@ -463,11 +469,7 @@ class TransformerBlock(nn.Module):
         if config.dim % config.n_heads != 0:
             raise ValueError(f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly")
 
-        if config.attn_implementation == "flash_attention_2":
-            self.attention = DistilBertFlashAttention2(config)
-        else:
-            self.attention = MultiHeadSelfAttention(config)
-
+        self.attention = DISTILBERT_ATTENTION_CLASSES[config.attn_implementation](config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
         self.ffn = FFN(config)
