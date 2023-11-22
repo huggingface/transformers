@@ -99,7 +99,6 @@ def get_max_height_width(
     return (max_height, max_width)
 
 
-# Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
 def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size.
@@ -120,15 +119,28 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
             size = int(round(max_size * min_original_size / max_original_size))
 
     if (height <= width and height == size) or (width <= height and width == size):
-        return height, width
+        width_mod = np.mod(width, 16)
+        height_mod = np.mod(height, 16)
+        height = height - height_mod
+        width = width - width_mod
+        return (height, width)
 
     if width < height:
-        ow = size
-        oh = int(size * height / width)
+        output_w = size
+        output_h = int(size * height / width)
+        output_w_mod = np.mod(output_w, 16)
+        output_h_mod = np.mod(output_h, 16)
+        output_w = output_w - output_w_mod
+        output_h = output_h - output_h_mod
     else:
-        oh = size
-        ow = int(size * width / height)
-    return (oh, ow)
+        output_h = size
+        output_w = int(size * width / height)
+        output_w_mod = np.mod(output_w, 16)
+        output_h_mod = np.mod(output_h, 16)
+        output_w = output_w - output_w_mod
+        output_h = output_h - output_h_mod
+
+    return (output_h, output_w)
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_resize_output_image_size
