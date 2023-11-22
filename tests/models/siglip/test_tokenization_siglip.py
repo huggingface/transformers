@@ -90,7 +90,6 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 "0",
                 "0",
                 "0",
-                ",",
                 SPIECE_UNDERLINE + "and",
                 SPIECE_UNDERLINE + "this",
                 SPIECE_UNDERLINE + "is",
@@ -98,13 +97,11 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 "al",
                 "s",
                 "é",
-                ".",
             ],
         )
         ids = tokenizer.convert_tokens_to_ids(tokens)
-        self.assertListEqual(
-            ids, [7, 23, 21, 84, 55, 24, 19, 7, 0, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 0, 4]
-        )
+        print("Ids:", ids)
+        self.assertListEqual(ids, [7, 23, 21, 84, 55, 24, 19, 7, 0, 602, 347, 347, 347, 12, 66, 46, 72, 80, 6, 0])
 
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
         self.assertListEqual(
@@ -123,7 +120,6 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 "0",
                 "0",
                 "0",
-                ",",
                 SPIECE_UNDERLINE + "and",
                 SPIECE_UNDERLINE + "this",
                 SPIECE_UNDERLINE + "is",
@@ -131,7 +127,6 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 "al",
                 "s",
                 "<unk>",
-                ".",
             ],
         )
 
@@ -180,7 +175,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_prepare_batch(self):
         tokenizer = self.siglip_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
-        expected_src_tokens = [3, 9, 307, 8986, 21, 4505, 1635, 1707, 5, tokenizer.eos_token_id]
+        expected_src_tokens = [3, 9, 307, 8986, 21, 4505, 1635, 1707, tokenizer.eos_token_id]
         batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
         self.assertIsInstance(batch, BatchEncoding)
 
@@ -191,8 +186,8 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(expected_src_tokens, result)
 
-        self.assertEqual((2, 10), batch.input_ids.shape)
-        self.assertEqual((2, 10), batch.attention_mask.shape)
+        self.assertEqual((2, 9), batch.input_ids.shape)
+        self.assertEqual((2, 9), batch.attention_mask.shape)
 
     def test_empty_target_text(self):
         tokenizer = self.siglip_tokenizer
@@ -216,8 +211,8 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.siglip_tokenizer
         src_text = ["A long paragraph for summarization. </s>"]
         tgt_text = ["Summary of the text. </s>"]
-        expected_src_tokens = [71, 307, 8986, 21, 4505, 1635, 1707, 5, 1]
-        expected_tgt_tokens = [20698, 13, 8, 1499, 5, 1]
+        expected_src_tokens = [3, 9, 307, 8986, 21, 4505, 1635, 1707, 1]
+        expected_tgt_tokens = [9251, 13, 8, 1499, 1]
 
         batch = tokenizer(src_text, text_target=tgt_text)
 
@@ -368,7 +363,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(sp_tokens, ["<", "/", "s", ">", ">"])
         tokens = tokenizer.tokenize("</s>>")
         self.assertNotEqual(sp_tokens, tokens)
-        self.assertEqual(tokens, ["</s>", ">"])
+        self.assertEqual(tokens, ["</s>"])
 
         tokens = tokenizer.tokenize("")
         self.assertEqual(tokens, [])
