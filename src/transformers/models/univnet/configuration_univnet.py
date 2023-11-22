@@ -87,6 +87,7 @@ class UnivNetConfig(PretrainedConfig):
     >>> configuration = model.config
     ```
     """
+
     model_type = "univnet"
 
     def __init__(
