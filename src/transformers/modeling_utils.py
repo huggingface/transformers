@@ -3552,7 +3552,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if (
             quantization_config is not None
             and quantization_config.quant_method == QuantizationMethod.AWQ
-            and quantization_config.has_fused_modules
+            and quantization_config.do_fuse
         ):
             model = fuse_awq_modules(model, quantization_config)
             model._awq_is_fused = True

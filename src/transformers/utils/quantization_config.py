@@ -558,7 +558,7 @@ class AwqConfig(QuantizationConfigMixin):
         zero_point: bool = True,
         version: AWQLinearVersion = AWQLinearVersion.GEMM,
         backend: AwqBackendPackingMethod = AwqBackendPackingMethod.AUTOAWQ,
-        do_fuse: Optional[bool] = False,
+        do_fuse: Optional[bool] = None,
         fuse_max_seq_len: Optional[int] = None,
         modules_to_fuse: Optional[dict] = None,
         **kwargs,
@@ -570,10 +570,15 @@ class AwqConfig(QuantizationConfigMixin):
         self.zero_point = zero_point
         self.version = version
         self.backend = backend
-        self.do_fuse = do_fuse
         self.fuse_max_seq_len = fuse_max_seq_len
-        self.modules_to_fuse = modules_to_fuse
 
+        self.modules_to_fuse = modules_to_fuse
+        if do_fuse is None:
+            self.do_fuse = modules_to_fuse is not None and len(modules_to_fuse > 0)
+        else:
+            self.do_fuse = do_fuse
+        self.fuse_max_seq_len = fuse_max_seq_len
+        
         self.post_init()
 
     def post_init(self):
@@ -600,12 +605,12 @@ class AwqConfig(QuantizationConfigMixin):
             if major < 8:
                 raise ValueError("LLM-AWQ backend is only supported on GPUs with compute capability >= 8.0")
 
-        if self.has_fused_modules and self.fuse_max_seq_len is None:
+        if self.do_fuse and self.fuse_max_seq_len is None:
             raise ValueError(
                 "You cannot enable fused modules without specifying a `fuse_max_seq_len`, make sure to pass a valid `fuse_max_seq_len` for your usecase"
             )
 
-        if self.has_fused_modules and self.modules_to_fuse is not None:
+        if self.do_fuse and self.modules_to_fuse is not None:
             required_keys = [
                 "hidden_size",
                 "num_attention_heads",
@@ -622,6 +627,3 @@ class AwqConfig(QuantizationConfigMixin):
 
         # TODO: awq version check for fused modules.
 
-    @property
-    def has_fused_modules(self):
-        return self.do_fuse or (self.modules_to_fuse is not None and len(self.modules_to_fuse) > 0)
