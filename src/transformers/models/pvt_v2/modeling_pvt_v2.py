@@ -134,6 +134,7 @@ class PvTV2DWConv(nn.Module):
     have an equal number of groups to the number of input channels, meaning one filter per input channel. This
     reduces the overall parameters and compute costs since the key purpose of this layer is position encoding.
     """
+
     def __init__(self, config: PvtV2Config, dim: int = 768):
         super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, bias=True, groups=dim)
@@ -409,11 +410,7 @@ class PvtV2Encoder(nn.Module):
         hidden_states = pixel_values
         for idx, layer in enumerate(self.layers):
             if self.gradient_checkpointing and self.training:
-                layer_output = self._gradient_checkpointing_func(
-                    layer.__call__,
-                    hidden_states,
-                    output_attentions
-                )
+                layer_output = self._gradient_checkpointing_func(layer.__call__, hidden_states, output_attentions)
             else:
                 layer_output = layer(hidden_states, output_attentions)
             outputs, height, width = layer_output
@@ -421,9 +418,7 @@ class PvtV2Encoder(nn.Module):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[1],)
             # optionally reshape back to (batch_size, num_channels, height, width)
-            if idx != len(self.layers) - 1 or (
-                idx == len(self.layers) - 1 and self.config.reshape_last_stage
-            ):
+            if idx != len(self.layers) - 1 or (idx == len(self.layers) - 1 and self.config.reshape_last_stage):
                 hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
