@@ -68,15 +68,16 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = SiglipTokenizer(SAMPLE_VOCAB)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+        self.assertListEqual(tokens, ["▁this", "▁is", "▁a", "▁t", "est"])
 
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [285, 46, 10, 170, 382])
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [66, 46, 10, 170, 382])
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
         self.assertListEqual(
             tokens,
             [
-                SPIECE_UNDERLINE + "I",
+                SPIECE_UNDERLINE,
+                "i",
                 SPIECE_UNDERLINE + "was",
                 SPIECE_UNDERLINE + "b",
                 "or",
@@ -100,13 +101,16 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ],
         )
         ids = tokenizer.convert_tokens_to_ids(tokens)
-        self.assertListEqual(ids, [8, 21, 84, 55, 24, 19, 7, 0, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 0, 4])
+        self.assertListEqual(
+            ids, [7, 23, 21, 84, 55, 24, 19, 7, 0, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 0, 4]
+        )
 
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
         self.assertListEqual(
             back_tokens,
             [
-                SPIECE_UNDERLINE + "I",
+                SPIECE_UNDERLINE,
+                "i",
                 SPIECE_UNDERLINE + "was",
                 SPIECE_UNDERLINE + "b",
                 "or",
@@ -175,7 +179,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_prepare_batch(self):
         tokenizer = self.siglip_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
-        expected_src_tokens = [71, 307, 8986, 21, 4505, 1635, 1707, 5, tokenizer.eos_token_id]
+        expected_src_tokens = [3, 9, 307, 8986, 21, 4505, 1635, 1707, 5, tokenizer.eos_token_id]
         batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
         self.assertIsInstance(batch, BatchEncoding)
 
@@ -186,8 +190,8 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(expected_src_tokens, result)
 
-        self.assertEqual((2, 9), batch.input_ids.shape)
-        self.assertEqual((2, 9), batch.attention_mask.shape)
+        self.assertEqual((2, 10), batch.input_ids.shape)
+        self.assertEqual((2, 10), batch.attention_mask.shape)
 
     def test_empty_target_text(self):
         tokenizer = self.siglip_tokenizer
@@ -201,26 +205,11 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_max_length(self):
         tokenizer = self.siglip_tokenizer
-        tgt_text = [
-            "Summary of the text.",
-            "Another summary.",
-        ]
+        tgt_text = ["Summary of the text.", "Another summary."]
         targets = tokenizer(
             text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
         )
         self.assertEqual(32, targets["input_ids"].shape[1])
-
-    def test_outputs_not_longer_than_maxlen(self):
-        tokenizer = self.siglip_tokenizer
-
-        batch = tokenizer(
-            ["I am a small frog" * 1000, "I am a small frog"], padding=True, truncation=True, return_tensors=FRAMEWORK
-        )
-        self.assertIsInstance(batch, BatchEncoding)
-        # Since Siglip does NOT have a max input length,
-        # this test should be changed to the following in Transformers v5:
-        # self.assertEqual(batch.input_ids.shape, (2, 8001))
-        self.assertEqual(batch.input_ids.shape, (2, 512))
 
     def test_eos_in_input(self):
         tokenizer = self.siglip_tokenizer

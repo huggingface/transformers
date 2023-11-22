@@ -50,30 +50,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 SPIECE_UNDERLINE = "▁"
 
 
-# source: https://github.com/google-research/big_vision/blob/3b8e5ab6ad4f96e32b32826f9e1b8fd277914f9c/big_vision/evaluators/proj/image_text/prompt_engineering.py#L94
-def canonicalize_text(text, *, keep_punctuation_exact_string=None):
-    """Returns canonicalized `text` (lowercase and puncuation removed).
-
-    Args:
-      text (`str`):
-          String to be canonicalized.
-      keep_punctuation_exact_string (`str`, *optional*):
-          If provided, then this exact string kept. For example providing '{}' will keep any occurrences of '{}'
-          (but will still remove '{' and '}' that appear separately).
-    """
-    text = text.replace("_", " ")
-    if keep_punctuation_exact_string:
-        text = keep_punctuation_exact_string.join(
-            part.translate(str.maketrans("", "", string.punctuation))
-            for part in text.split(keep_punctuation_exact_string)
-        )
-    else:
-        text = text.translate(str.maketrans("", "", string.punctuation))
-    text = text.lower()
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
-
-
 class SiglipTokenizer(PreTrainedTokenizer):
     """
     Construct a Siglip tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -141,7 +117,6 @@ class SiglipTokenizer(PreTrainedTokenizer):
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         model_max_length=64,
         do_lower_case=True,
-        # split_special_tokens=True,
         **kwargs,
     ) -> None:
         pad_token = AddedToken(pad_token, rstrip=True, lstrip=True) if isinstance(pad_token, str) else pad_token
@@ -294,13 +269,36 @@ class SiglipTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
+    # source: https://github.com/google-research/big_vision/blob/3b8e5ab6ad4f96e32b32826f9e1b8fd277914f9c/big_vision/evaluators/proj/image_text/prompt_engineering.py#L94
+    def canonicalize_text(self, text, *, keep_punctuation_exact_string=None):
+        """Returns canonicalized `text` (lowercase and puncuation removed).
+
+        Args:
+        text (`str`):
+            String to be canonicalized.
+        keep_punctuation_exact_string (`str`, *optional*):
+            If provided, then this exact string kept. For example providing '{}' will keep any occurrences of '{}'
+            (but will still remove '{' and '}' that appear separately).
+        """
+        text = text.replace("_", " ")
+        if keep_punctuation_exact_string:
+            text = keep_punctuation_exact_string.join(
+                part.translate(str.maketrans("", "", string.punctuation))
+                for part in text.split(keep_punctuation_exact_string)
+            )
+        else:
+            text = text.translate(str.maketrans("", "", string.punctuation))
+        if self.do_lower_case:
+            text = text.lower()
+        text = re.sub(r"\s+", " ", text)
+        return text.strip()
+
     def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
         """
         Converts a string to a list of tokens.
         """
-        print("Text before canonicalize_text: ", text)
+        # TODO include this
         # text = canonicalize_text(text, keep_punctuation_exact_string="{}")
-        print("Text after canonicalize_text: ", text)
 
         if len(text) == 0:
             return super().tokenize(text, **kwargs)
