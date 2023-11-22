@@ -99,7 +99,6 @@ from .trainer_utils import (
     BestRun,
     EvalLoopOutput,
     EvalPrediction,
-    FSDPOption,
     HPSearchBackend,
     HubStrategy,
     IntervalStrategy,
