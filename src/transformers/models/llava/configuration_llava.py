@@ -121,12 +121,12 @@ class LlavaConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        additional_vocab_size (`int`, *optional`, defaults to 0):
-            Additional vocabulary size of the model, typically for the special "<img>" token. Additional vocab tokens
-            are always trainable whereas regular vocab tokens can be frozen or not.
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Llava model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`~LlavaVisionModel`]
+        additional_vocab_size (`int`, *optional`, defaults to 0, *optional*, defaults to 0):
+            Additional vocabulary size of the model, typically for the special "<img>" token. Additional vocab tokens
+            are always trainable whereas regular vocab tokens can be frozen or not.
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -148,20 +148,20 @@ class LlavaConfig(PretrainedConfig):
             Attention.
         alpha_type (`str`, *optional*, defaults to `"float"`):
             Whether the gating alphas should be vectors or single floats.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*, defaults to 0)
+        pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 1)
+        bos_token_id (`int`, *optional*, defaults to 1):
             Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 2)
+        eos_token_id (`int`, *optional*, defaults to 2):
             End of stream token id.
-        tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        cross_layer_interval (`int`, *optional*, default to 1)
+        tie_word_embeddings (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        cross_layer_interval (`int`, *optional*, defaults to 1):
             Interval for cross attention (from text to image) layers.
         qk_layer_norms (`bool`, *optional*, defaults to `False`): Whether to add layer norm after q and k
         freeze_text_layers (`bool`, *optional*, defaults to `True`): Whether to freeze text layers
@@ -173,6 +173,12 @@ class LlavaConfig(PretrainedConfig):
             Exceptions to freezing vision layers when `freeze_vision_layers` is `True`
         use_resampler (`bool`, *optional*, defaults to `False`): Whether to use the Resampler
         vision_config (`LlavaVisionConfig`,  *optional*): Custom vision config or dict
+        text_config (`<fill_type>`, *optional*): <fill_docstring>
+        ignore_index (`<fill_type>`, *optional*, defaults to -100): <fill_docstring>
+        image_token_index (`<fill_type>`, *optional*, defaults to -200): <fill_docstring>
+        projector_hidden_act (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
+        vision_feature_select_strategy (`<fill_type>`, *optional*, defaults to `"default"`): <fill_docstring>
+        vision_feature_layer (`<fill_type>`, *optional*, defaults to -2): <fill_docstring>
 
     Example:
 

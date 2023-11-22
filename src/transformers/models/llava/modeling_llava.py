@@ -128,7 +128,7 @@ class LlavaBaseModelOutputWithPast(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_pixel_values,
+            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
             sequence_length, hidden_size)`.
 
             image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
@@ -170,7 +170,7 @@ class LlavaCausalLMOutputWithPast(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_pixel_values,
+            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
             sequence_length, hidden_size)`.
 
             image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
@@ -654,7 +654,7 @@ class LlavaPreTrainedModel(PreTrainedModel):
     config_class = LlavaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
+    _no_split_modules = ["LlavaDecoderLayer", "LlavaGatedCrossAttentionLayer"]
 
     def _init_weights(self, module):
         # important: this ported version of Llava isn't meant for training from scratch - only
@@ -751,7 +751,7 @@ class LlavaVisionModel(LlavaPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(LLAMA_START_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=LlavaVisionConfig)
     def forward(
         self,
@@ -768,15 +768,15 @@ class LlavaVisionModel(LlavaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, CLIPVisionModel
+        >>> from transformers import AutoProcessor, LlavaVisionModel
 
-        >>> model = CLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = LlavaVisionModel.from_pretrained("openai/clip-vit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-        >>> url = "http://pixel_values.cocodataset.org/val2017/000000039769.jpg"
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(pixel_values=image, return_tensors="pt")
+        >>> inputs = processor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
