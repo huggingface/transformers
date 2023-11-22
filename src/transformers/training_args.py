@@ -468,7 +468,7 @@ class TrainingArguments:
                     If `"True"`, each individually wrapped FSDP unit will broadcast module parameters from rank 0 to
                     ensure they are the same across all ranks after initialization
                 - activation_checkpointing (`bool`, *optional*, defaults to `False`):
-                    If True, activation checkpointing is a technique to reduce memory usage by clearing activations of
+                    If `"True"`, activation checkpointing is a technique to reduce memory usage by clearing activations of
                     certain layers and recomputing them during a backward pass. Effectively, this trades extra
                     computation time for reduced memory usage.
                 - xla (`bool`, *optional*, defaults to `False`):
