@@ -291,7 +291,7 @@ class NotebookProgressCallback(TrainerCallback):
         self.first_column = "Epoch" if args.evaluation_strategy == IntervalStrategy.EPOCH else "Step"
         self.training_loss = 0
         self.last_log = 0
-        column_names = [self.first_column] + ["Training Loss", "Learning Rate"]
+        column_names = [self.first_column] + ["Training Loss"]
         if args.evaluation_strategy != IntervalStrategy.NO:
             column_names.append("Validation Loss")
         column_names.append("Learning Rate")
