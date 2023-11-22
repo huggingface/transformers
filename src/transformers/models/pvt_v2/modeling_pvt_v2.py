@@ -109,7 +109,6 @@ class PvtV2OverlapPatchEmbeddings(nn.Module):
         hidden_size: int,
     ):
         super().__init__()
-        self.fp16_enabled = False
         patch_size = (patch_size, patch_size) if isinstance(patch_size, int) else patch_size
         self.patch_size = patch_size
         self.proj = nn.Conv2d(
