@@ -179,7 +179,7 @@ class Data2VecVisionConfig(PretrainedConfig):
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
 
-# Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
+# Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig with ViT->Data2VecVision
 class Data2VecVisionOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 

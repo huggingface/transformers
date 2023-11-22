@@ -421,7 +421,7 @@ class AltRobertaSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput
+# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput with Roberta->AltRoberta
 class AltRobertaSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -502,7 +502,7 @@ class AltRobertaIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaOutput
+# Copied from transformers.models.roberta.modeling_roberta.RobertaOutput with Roberta->AltRoberta
 class AltRobertaOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -698,7 +698,7 @@ class AltRobertaEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaPooler
+# Copied from transformers.models.roberta.modeling_roberta.RobertaPooler with Roberta->AltRoberta
 class AltRobertaPooler(nn.Module):
     def __init__(self, config):
         super().__init__()

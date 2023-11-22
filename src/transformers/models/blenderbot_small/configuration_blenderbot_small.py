@@ -168,7 +168,7 @@ class BlenderbotSmallConfig(PretrainedConfig):
         )
 
 
-# Copied from transformers.models.bart.configuration_bart.BartOnnxConfig
+# Copied from transformers.models.bart.configuration_bart.BartOnnxConfig with Bart->Blenderbot
 class BlenderbotSmallOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:

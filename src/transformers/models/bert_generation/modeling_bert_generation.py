@@ -360,7 +360,7 @@ class BertGenerationLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->BertGeneration
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with BertLayer->BertGenerationLayer
 class BertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()

@@ -129,7 +129,7 @@ class LevitConfig(PretrainedConfig):
         ]
 
 
-# Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
+# Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig with ViT->Levit
 class LevitOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 

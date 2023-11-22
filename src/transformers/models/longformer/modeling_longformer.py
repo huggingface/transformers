@@ -1129,7 +1129,7 @@ class LongformerSelfAttention(nn.Module):
         return global_attn_output, global_attn_probs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Longformer
 class LongformerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()

@@ -465,7 +465,7 @@ class LayoutLMv3SelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput
+# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput with Roberta->LayoutLMv3
 class LayoutLMv3SelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -716,7 +716,7 @@ class LayoutLMv3Intermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaOutput
+# Copied from transformers.models.roberta.modeling_roberta.RobertaOutput with Roberta->LayoutLMv3
 class LayoutLMv3Output(nn.Module):
     def __init__(self, config):
         super().__init__()

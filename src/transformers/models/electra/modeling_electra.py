@@ -347,7 +347,7 @@ class ElectraSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Electra
 class ElectraSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()

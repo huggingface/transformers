@@ -631,7 +631,7 @@ class XmodEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaPooler
+# Copied from transformers.models.roberta.modeling_roberta.RobertaPooler with Roberta->Xmod
 class XmodPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
