@@ -207,6 +207,7 @@ from . import (
     transfo_xl,
     trocr,
     tvlt,
+    tvp,
     umt5,
     unispeech,
     unispeech_sat,

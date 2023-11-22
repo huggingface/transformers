@@ -48,7 +48,7 @@ import huggingface_hub.utils as hf_hub_utils
 import numpy as np
 import torch
 import torch.distributed as dist
-from huggingface_hub import Repository, create_repo, upload_folder
+from huggingface_hub import create_repo, upload_folder
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
@@ -3494,63 +3494,6 @@ class Trainer:
 
         repo_url = create_repo(repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True)
         self.hub_model_id = repo_url.repo_id
-        self.push_in_progress = None
-
-    def init_git_repo(self, at_init: bool = False):
-        """
-        Initializes a git repo in `self.args.hub_model_id`.
-
-        <Tip warning={true}>
-
-        This function is deprecated and will be removed in v4.34.0 of Transformers.
-
-        </Tip>
-
-        Args:
-            at_init (`bool`, *optional*, defaults to `False`):
-                Whether this function is called before any training or not. If `self.args.overwrite_output_dir` is
-                `True` and `at_init` is `True`, the path to the repo (which is `self.args.output_dir`) might be wiped
-                out.
-        """
-        warnings.warn(
-            "`Trainer.init_git_repo` is deprecated and will be removed in v4.34.0 of Transformers. Use "
-            "`Trainer.init_hf_repo` instead."
-        )
-        if not self.is_world_process_zero():
-            return
-
-        # Make sure the repo exists + retrieve "real" repo_id
-        repo_name = self.args.hub_model_id
-        if repo_name is None:
-            repo_name = Path(self.args.output_dir).absolute().name
-        repo_id = create_repo(
-            repo_id=repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True
-        ).repo_id
-
-        try:
-            self.repo = Repository(self.args.output_dir, clone_from=repo_id, token=self.args.hub_token)
-        except EnvironmentError:
-            if self.args.overwrite_output_dir and at_init:
-                # Try again after wiping output_dir
-                shutil.rmtree(self.args.output_dir)
-                self.repo = Repository(self.args.output_dir, clone_from=repo_id, token=self.args.hub_token)
-            else:
-                raise
-
-        self.repo.git_pull()
-
-        # By default, ignore the checkpoint folders
-        if (
-            not os.path.exists(os.path.join(self.args.output_dir, ".gitignore"))
-            and self.args.hub_strategy != HubStrategy.ALL_CHECKPOINTS
-        ):
-            with open(os.path.join(self.args.output_dir, ".gitignore"), "w", encoding="utf-8") as writer:
-                writer.writelines(["checkpoint-*/"])
-
-        # Add "*.sagemaker" to .gitignore if using SageMaker
-        if os.environ.get("SM_TRAINING_ENV"):
-            self._add_sm_patterns_to_gitignore()
-
         self.push_in_progress = None
 
     def create_model_card(
