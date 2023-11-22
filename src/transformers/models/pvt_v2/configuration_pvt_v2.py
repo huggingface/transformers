@@ -48,7 +48,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        image_size (`Union[int, Tuple[int, int]]`, *optional*, defaults to `224`):
+        image_size (`Union[int, Tuple[int, int]]`, *optional*, defaults to 224):
             The input image size. Pass int value for square image, or tuple of (height, width).
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
