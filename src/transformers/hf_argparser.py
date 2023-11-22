@@ -231,12 +231,7 @@ class HfArgumentParser(ArgumentParser):
         # here and we do not need those changes/additional keys.
         if field.default is True and (field_type_is_bool or field.type == Optional[bool]):
             bool_kwargs["default"] = False
-            parser.add_argument(
-                f"--no_{field.name}",
-                action="store_false",
-                dest=field.name,
-                **bool_kwargs
-            )
+            parser.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **bool_kwargs)
 
     def _add_dataclass_arguments(self, dtype: DataClassType):
         if hasattr(dtype, "_argument_group_name"):
