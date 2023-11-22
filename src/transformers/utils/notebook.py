@@ -291,9 +291,9 @@ class NotebookProgressCallback(TrainerCallback):
         self.first_column = "Epoch" if args.evaluation_strategy == IntervalStrategy.EPOCH else "Step"
         self.training_loss = 0
         self.last_log = 0
-        column_names = [self.first_column] + ["Training Loss"]
         if args.evaluation_strategy != IntervalStrategy.NO:
             column_names.append("Validation Loss")
+        column_names.append("Learning Rate")
         self.training_tracker = NotebookTrainingTracker(state.max_steps, column_names)
 
     def on_step_end(self, args, state, control, **kwargs):
@@ -341,10 +341,7 @@ class NotebookProgressCallback(TrainerCallback):
             for log in reversed(state.log_history):
                 if "learning_rate" in log:
                     values["Learning Rate"] = f"{log['learning_rate']:0.2e}"
-                    print("FOUND A LEARNING RATE")
                     break
-                else:
-                    print("NO LEARNING RATE")
 
             if self.first_column == "Epoch":
                 values["Epoch"] = int(state.epoch)
