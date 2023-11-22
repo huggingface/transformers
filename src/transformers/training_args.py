@@ -234,7 +234,7 @@ class TrainingArguments:
             the last epoch before stopping training).
         max_steps (`int`, *optional*, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
-            For a finite dataset, training is reiterated through a dataset (if all data is exhausted) until
+            For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
             `max_steps` is reached.
         lr_scheduler_type (`str` or [`SchedulerType`], *optional*, defaults to `"linear"`):
             The scheduler type to use. See the documentation of [`SchedulerType`] for all possible values.
@@ -2182,7 +2182,7 @@ class TrainingArguments:
                 of the last epoch before stopping training).
             max_steps (`int`, *optional*, defaults to -1):
                 If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
-                In case of using a finite dataset, the training will cycle through the dataset repeatedly until
+                For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
                 `max_steps` is reached.
             gradient_accumulation_steps (`int`, *optional*, defaults to 1):
                 Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
@@ -2589,7 +2589,7 @@ class TrainingArguments:
                 of the last epoch before stopping training).
             max_steps (`int`, *optional*, defaults to -1):
                 If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
-                In case of using a finite dataset, the training will cycle through the dataset repeatedly until
+                For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
                 `max_steps` is reached.
             warmup_ratio (`float`, *optional*, defaults to 0.0):
                 Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
