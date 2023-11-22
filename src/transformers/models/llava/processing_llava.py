@@ -17,46 +17,33 @@ Processor class for Llava.
 """
 
 from typing import Callable, List, Optional, Union
-from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
-from ...utils import TensorType, is_torch_available
-
-
-if is_torch_available():
-    import torch
+from ...utils import TensorType
 
 
 IMAGE_TOKEN = "<image>"
-
-def is_url(string):
-    """Checks if the passed string contains a valid url and nothing else. e.g. if space is included it's immediately
-    invalidated the url"""
-    if " " in string:
-        return False
-    result = urlparse(string)
-    return all([result.scheme, result.netloc])
 
 
 class LlavaProcessor(ProcessorMixin):
     r"""
     Constructs a Llava processor which wraps a LLama tokenizer and Llava image processor into a single processor.
 
-    [`LlavaProcessor`] offers all the functionalities of [`LlavaImageProcessor`] and [`LlamaTokenizerFast`]. See
+    [`LlavaProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See
     the docstring of [`~LlavaProcessor.__call__`] and [`~LlavaProcessor.decode`] for more information.
 
     Args:
-        image_processor (`LlavaImageProcessor`):
-            An instance of [`LlavaImageProcessor`]. The image processor is a required input.
+        image_processor (`CLIPImageProcessor`):
+            An instance of [`CLIPImageProcessor`]. The image processor is a required input.
         tokenizer (`LlamaTokenizerFast`):
             An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
         image_size (`int`, *optional*, defaults to 224): Image size (assuming a square image)
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "IdeficsImageProcessor"
+    image_processor_class = "CLIPImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
@@ -67,30 +54,15 @@ class LlavaProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
-        self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
-
-        self.default_image_dims = (
-            self.image_processor.image_num_channels,
-            self.image_processor.image_size,
-            self.image_processor.image_size,
-        )
-
-        self.tokenizer_was_trained_with_end_of_utterance_token = (
-            True
-            if "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
-            else False
-        )
 
     def __call__(
         self,
         prompts: Union[List[TextInput], List[List[TextInput]]],
+        images=None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         transform: Callable = None,
-        add_eos_token=False,
-        add_end_of_utterance_token=None,
-        debug=False,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchEncoding:
         """This method takes batched or non-batched prompts made of text and images and converts them into prompts that
@@ -142,121 +114,22 @@ class LlavaProcessor(ProcessorMixin):
         When the processor encounters an image it'll inject `<fake_token_around_image><image><fake_token_around_image>`
         entry into the prompt.
         """
+        if images is not None:
+            pixel_values = self.image_processor(images, transform=transform, return_tensors=return_tensors)[
+                "pixel_values"
+            ]
+        else:
+            pixel_values = None
 
-        # if the value isn't overriden by the user, check if the tokenizer was trained with this token and then use it
-        if add_end_of_utterance_token is None:
-            add_end_of_utterance_token = self.tokenizer_was_trained_with_end_of_utterance_token
-
-        # turn non-batched prompts into batched
-        if not any(isinstance(i, list) for i in prompts):
-            prompts = [prompts]
-
-        fake_token = "<fake_token_around_image>"
-        image_token = "<image>"
-        end_of_utterance_token = "<end_of_utterance>"
-
-        def image_tokens(last_was_image):
-            if last_was_image:
-                return image_token + fake_token
-            else:
-                return fake_token + image_token + fake_token
-
-        all_prompts = []
-        all_images = []
-        for sample in prompts:
-            # the model was trained on samples starting with <s>
-            full_text = f"{self.tokenizer.bos_token}"
-
-            # an image can either be an image object in the item or the url, everything else is a verbatim prompt text
-            image_objects = []
-            last_was_image = False
-            last_was_text = False
-            for i, item in enumerate(sample):
-                if i > 0:
-                    last_was_text = True if not last_was_image else False
-
-                if isinstance(item, str):
-                    item = item.strip(" ")
-                    if is_url(item):
-                        image = self.image_processor.fetch_images(item)
-                        full_text += image_tokens(last_was_image)
-                        image_objects.append(image)
-                        last_was_image = True
-                    else:
-                        # we add end_of_utterance_token between each subsequent text prompts (but not at the last one!)
-                        if add_end_of_utterance_token and last_was_text:
-                            full_text += end_of_utterance_token
-                        full_text += item
-                        last_was_image = False
-                else:
-                    # must be an image obj
-                    full_text += image_tokens(last_was_image)
-                    image_objects.append(item)
-                    last_was_image = True
-
-            if add_eos_token:
-                full_text += self.tokenizer.eos_token
-
-            if debug is True:
-                print(f"{full_text=}")
-
-            image_objects = self.image_processor(image_objects, transform=transform)
-
-            all_prompts.append(full_text)
-            all_images.append(image_objects)
-
-        text_encoding = self.tokenizer(
-            text=all_prompts,
-            add_special_tokens=False,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
+        tokenized_text = self.tokenizer(
+            prompts, padding=padding, truncation=truncation, max_length=max_length, return_tensors=return_tensors
         )
-        all_texts = text_encoding["input_ids"]
-
-        max_seq_len = max(len(x) for x in all_texts)
-
-        # max_num_images has to be at least 1 even when there are no images
-        max_num_images = max(len(x) for x in all_images)
-        max_num_images = max(1, max_num_images)
-
-        output_input_ids = []
-        output_images = []
-        output_attention_masks = []
-        for text, images in zip(all_texts, all_images):
-            padded_input_ids = [self.tokenizer.pad_token_id] * max_seq_len
-            unpadded_seq_len = len(text)
-            start = max_seq_len - unpadded_seq_len
-            padded_input_ids[start:] = text[:max_seq_len]
-
-            attention_mask = torch.zeros((max_seq_len,), dtype=torch.long)
-            attention_mask[start:] = 1
-
-            image_count = padded_input_ids.count(self.image_token_id)
-            local_max_num_images = min(image_count, max_num_images)
-
-            current_images = images[:local_max_num_images]
-
-            if len(current_images) > 0:
-                padded_image_tensor = torch.zeros(max_num_images, *current_images.size()[1:])
-                padded_image_tensor[: current_images.size(0)] = current_images
-            else:
-                padded_image_tensor = torch.zeros(max_num_images, *self.default_image_dims)
-
-            output_images.append(padded_image_tensor)
-            output_input_ids.append(torch.tensor(padded_input_ids))
-
-            output_attention_masks.append(attention_mask)
-
-        output_input_ids = torch.stack(output_input_ids)
-        output_images = torch.stack(output_images)
-        output_attention_masks = torch.stack(output_attention_masks)
 
         return BatchFeature(
             data={
-                "input_ids": output_input_ids,
-                "attention_mask": output_attention_masks,
-                "pixel_values": output_images,
+                "input_ids": tokenized_text["input_ids"],
+                "attention_mask": tokenized_text["attention_mask"],
+                "pixel_values": pixel_values,
             }
         )
 
