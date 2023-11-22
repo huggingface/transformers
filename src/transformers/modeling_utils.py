@@ -1256,7 +1256,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         # Here we use config._attn_implementation to check whether the attention implementation was explicitely set by the user.
         # The property `PretrainedConfig.attn_implementation` is never `None`, for backward compatibility.
-        if hasattr(config, "_attn_implementation") or config._attn_implementation is not None:
+        if hasattr(config, "_attn_implementation") and config._attn_implementation is not None:
             if config.attn_implementation != "flash_attention_2" and use_flash_attention_2:
                 raise ValueError(
                     f'Both config.attn_implementation ("{config.attn_implementation}") and use_flash_attention_2=True are used, and are incompatible.'
