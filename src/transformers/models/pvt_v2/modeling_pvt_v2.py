@@ -390,6 +390,7 @@ class PvtV2Encoder(nn.Module):
     def __init__(self, config: PvtV2Config):
         super().__init__()
         self.config = config
+        self.gradient_checkpointing = False
 
         # encoder layers
         self.layers = nn.ModuleList([PvtV2EncoderLayer(config, i) for i in range(config.num_encoder_blocks)])
@@ -407,7 +408,14 @@ class PvtV2Encoder(nn.Module):
         batch_size = pixel_values.shape[0]
         hidden_states = pixel_values
         for idx, layer in enumerate(self.layers):
-            layer_output = layer(hidden_states, output_attentions)
+            if self.gradient_checkpointing and self.training:
+                layer_output = self._gradient_checkpointing_func(
+                    layer.__call__,
+                    hidden_states,
+                    output_attentions
+                )
+            else:
+                layer_output = layer(hidden_states, output_attentions)
             outputs, height, width = layer_output
             hidden_states = outputs[0]
             if output_attentions:
@@ -437,6 +445,7 @@ class PvtV2PreTrainedModel(PreTrainedModel):
     config_class = PvtV2Config
     base_model_prefix = "pvt_v2"
     main_input_name = "pixel_values"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
