@@ -90,8 +90,8 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
             Whether or not a learnable bias should be added to the queries, keys and values.
         num_labels ('int', *optional*, defaults to 1000):
             The number of classes.
-        attn_reduce (`str`, *optional*, defaults to `"SR"`):
-            Pass 'SR' for spatial reduction, 'AP' for average pooling.
+        attn_reduce (`str`, *optional*, defaults to `"spatialreduction"`):
+            Attention complexity reduction type. Choice of 'spatialreduction' or 'averagepooling' .
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
@@ -137,7 +137,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         layer_norm_eps: float = 1e-6,
         qkv_bias: bool = True,
         num_labels: int = 1000,
-        attn_reduce: str = "SR",  # Set to "SR" for spatial reduction (Conv2d), "AP" for average pooling
+        attn_reduce: str = "spatialreduction",
         out_features=None,
         out_indices=None,
         **kwargs,
