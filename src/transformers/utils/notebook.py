@@ -328,6 +328,7 @@ class NotebookProgressCallback(TrainerCallback):
             values = {"Training Loss": logs["loss"]}
             # First column is necessarily Step sine we're not in epoch eval strategy
             values["Step"] = state.global_step
+            values["Learning Rate"] = f"{logs['learning_rate']:0.2e}"
             self.training_tracker.write_line(values)
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
