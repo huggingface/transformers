@@ -24,7 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..cache_utils import DynamicCache, Cache
+from ..cache_utils import Cache, DynamicCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -3227,7 +3227,7 @@ class GenerationMixin:
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
-                if not isinstance(past_key_values, Cache):
+                if not isinstance(model_kwargs["past_key_values"], Cache):
                     model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
 
             if return_dict_in_generate and output_scores:
@@ -3564,7 +3564,7 @@ class GenerationMixin:
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
-                if not isinstance(past_key_values, Cache):
+                if not isinstance(model_kwargs["past_key_values"], Cache):
                     model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
 
             if return_dict_in_generate and output_scores:
@@ -3953,7 +3953,7 @@ class GenerationMixin:
                 model_kwargs["past_key_values"] = self._reorder_cache(
                     model_kwargs["past_key_values"], reordering_indices
                 )
-                if not isinstance(past_key_values, Cache):
+                if not isinstance(model_kwargs["past_key_values"], Cache):
                     model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
 
             # increase cur_len
@@ -4295,7 +4295,7 @@ class GenerationMixin:
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
-                if not isinstance(past_key_values, Cache):
+                if not isinstance(model_kwargs["past_key_values"], Cache):
                     model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
 
             if return_dict_in_generate and output_scores:

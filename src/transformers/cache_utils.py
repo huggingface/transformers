@@ -4,6 +4,18 @@ import torch
 
 
 class Cache:
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cos: Optional[torch.Tensor] = None,
+        sin: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        raise NotImplementedError("Make sure to implement `update` in a subclass.")
+
+
+class DynamicCache(Cache):
     def __init__(self) -> None:
         self.key_cache: List[Tuple[torch.Tensor]] = []
         self.value_cache: List[Tuple[torch.Tensor]] = []
@@ -43,7 +55,14 @@ class Cache:
         cos: Optional[torch.Tensor] = None,
         sin: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        raise NotImplementedError("Make sure to implement `update` in a subclass.")
+        if len(self.key_cache) <= layer_idx:
+            self.key_cache.append(key_states)
+            self.value_cache.append(value_states)
+        else:
+            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         if len(self.key_cache) <= layer_idx:
@@ -66,25 +85,6 @@ class Cache:
         return cache
 
 
-class DynamicCache(Cache):
-    def update(
-        self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        layer_idx: int,
-        cos: Optional[torch.Tensor] = None,
-        sin: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        if len(self.key_cache) <= layer_idx:
-            self.key_cache.append(key_states)
-            self.value_cache.append(value_states)
-        else:
-            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
-
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -104,7 +104,8 @@ def apply_rotary_pos_emb_single(
 
 class SinkCache(Cache):
     def __init__(self, window_length: int, num_sink_tokens: int) -> None:
-        super().__init__()
+        self.key_cache: List[Tuple[torch.Tensor]] = []
+        self.value_cache: List[Tuple[torch.Tensor]] = []
         self.window_length = window_length
         self.num_sink_tokens = num_sink_tokens
         self.cos_sin_cache = {}
@@ -133,7 +134,10 @@ class SinkCache(Cache):
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         # Workaround to make 'key_states.shape[-2] + past_key_value.get_seq_length(self.layer_idx)' <= window_length
-        return min(super().get_seq_length(layer_idx), self.window_length - 1)
+        if len(self.key_cache) <= layer_idx:
+            cache_length = 0
+        cache_length = self.key_cache[layer_idx].shape[-2]
+        return min(cache_length, self.window_length - 1)
 
     def update(
         self,
