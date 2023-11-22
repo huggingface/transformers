@@ -1537,6 +1537,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         )
         self.max_initial_timestamp_index = getattr(generate_config, "max_initial_timestamp_index", None)
 
+    def set_begin_index(self, begin_index):
+        self.begin_index = begin_index
+
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         # suppress <|notimestamps|> which is handled by without_timestamps

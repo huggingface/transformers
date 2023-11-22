@@ -15,6 +15,7 @@
 """ PyTorch Whisper model."""
 
 import math
+from pickle import decode_long
 import warnings
 from typing import Optional, Tuple, Union
 
@@ -1741,6 +1742,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         task=None,
         language=None,
         is_multilingual=None,
+        condition_on_previous_tokens: Optional[bool] = None,
         prompt_ids: Optional[torch.Tensor] = None,
         num_segment_frames: Optional[int] = None,
         return_token_timestamps: Optional[bool] = None,
@@ -2143,6 +2145,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             return outputs
 
+        condition_on_previous_tokens = condition_on_previous_tokens or getattr(self.generation_config, "condition_on_previous_tokens", False)
+        self.generation_config.condition_on_previous_tokens = condition_on_previous_tokens
+
         # 6. Else we're in longform mode which is more complex. We need to chunk the audio input depending on when the model generated
         # timestamp tokens
         # 6.1 Set running parameters for while loop
@@ -2214,6 +2219,17 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             segment_input = torch.cat(segment_input, dim=0)
 
+            decoder_input_ids = None
+            if condition_on_previous_tokens and len(current_segments[0]) > 0:
+                # according to https://github.com/openai/whisper/blob/e58f28804528831904c3b6f2c0e473f346223433/whisper/decoding.py#L609
+                cut_off_length = self.config.max_target_positions // 2 - 1
+                active_segments = [current_segments[i] for i in new_cur_to_prev_index_map]
+                decoder_input_ids = self._pad_to_max_length(active_segments, self.generation_config.pad_token_id, padding="left")
+                decoder_input_ids = torch.cat([decoder_input_ids[:, -cut_off_length:], torch.ones((cur_bsz, 1), device=decoder_input_ids.device, dtype=torch.long) * self.config.decoder_start_token_id], dim=-1)
+
+                timestamp_processor = [proc for proc in logits_processor if isinstance(proc, WhisperTimeStampLogitsProcessor)][0]
+                timestamp_processor.set_begin_index(decoder_input_ids.shape[-1])
+
             # 6.6 Batch generate current chunk
             seek_outputs = super().generate(
                 segment_input,
@@ -2223,6 +2239,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 prefix_allowed_tokens_fn,
                 synced_gpus,
                 return_dict_in_generate=return_dict_in_generate,
+                decoder_input_ids=decoder_input_ids,
                 **kwargs,
             )
 
@@ -2240,6 +2257,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 ]
             else:
                 seek_sequences = seek_outputs
+
+            if decoder_input_ids is not None:
+                seek_sequences = seek_sequences[:, decoder_input_ids.shape[-1]:]
 
             # 6.7 Loop over each decoded audio individually as each decoding can be of a different length
             for i, seek_sequence in enumerate(seek_sequences):
@@ -2273,24 +2293,33 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
-        sequences = []
-        max_total_length = 0
-        for current_segment_list in current_segments:
-            sequences.append(torch.cat([d["tokens"] for d in current_segment_list], dim=-1))
-            max_total_length = max(max_total_length, len(sequences[-1]))
-
-        for i in range(batch_size):
-            sequences[i] = F.pad(
-                sequences[i], pad=(0, max_total_length - len(sequences[i])), value=self.generation_config.pad_token_id
-            )
-
-        sequences = torch.stack(sequences, dim=0)
+        sequences = self._pad_to_max_length(current_segments, self.generation_config.pad_token_id, padding="right")
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
         if return_segments:
             return {"sequences": sequences, "segments": current_segments}
 
         return sequences
+
+    @staticmethod
+    def _pad_to_max_length(current_segments, pad_token_id, padding="right"):
+        max_total_length = 0
+        sequences = []
+        if padding not in ["right", "left"]:
+            raise ValueError(f"`padding` must be either 'right' or 'left', not {padding}")
+
+        for current_segment_list in current_segments:
+            sequences.append(torch.cat([d["tokens"] for d in current_segment_list], dim=-1))
+            max_total_length = max(max_total_length, len(sequences[-1]))
+
+        for i in range(len(current_segments)):
+            pad_length = max_total_length - len(sequences[i])
+            pad = (0, pad_length) if padding == "right" else (pad_length, 0)
+            sequences[i] = F.pad(sequences[i], pad=pad, value=pad_token_id)
+
+        sequences = torch.stack(sequences, dim=0)
+        return sequences
+
 
     @staticmethod
     def _retrieve_segment(
