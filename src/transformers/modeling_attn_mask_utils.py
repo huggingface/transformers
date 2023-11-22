@@ -201,8 +201,8 @@ class AttentionMaskConverter:
 
         For example, if `attention_mask` is
         ```
-        [[0, 0, 1]
-         [1, 1, 1]
+        [[0, 0, 1],
+         [1, 1, 1],
          [0, 1, 1]]
         ```
         and `expanded_mask` is (e.g. here left-padding case)
