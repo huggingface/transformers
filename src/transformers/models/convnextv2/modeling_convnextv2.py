@@ -557,6 +557,7 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
 
         hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
+        feature_maps = ()
         for stage in self.out_features:
             idx = self.stage_names.index(stage)
             if idx == 0:

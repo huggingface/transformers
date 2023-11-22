@@ -207,14 +207,14 @@ class BackboneTesterMixin:
         batch_size = inputs_dict["pixel_values"].shape[0]
 
         for backbone_class in self.all_model_classes:
-            config.out_indices = [-1, -1]
+            config.out_indices = [-2, -1]
             backbone = backbone_class(config)
             backbone.to(torch_device)
             backbone.eval()
 
             outputs = backbone(**inputs_dict)
 
-            # Test same index repeated returns two feature maps
+            # Test number of feature maps returned
             self.assertIsInstance(outputs.feature_maps, tuple)
             self.assertTrue(len(outputs.feature_maps) == 2)
 
@@ -224,22 +224,10 @@ class BackboneTesterMixin:
             backbone.to(torch_device)
             backbone.eval()
 
-            outputs = backbone(**inputs_dict)
-            self.assertIsInstance(outputs.feature_maps, tuple)
-
-            if len(set(backbone.out_feature_channels.values())) == 1:
-                # Output shape of feature map is the same for all stages so we cannot verify the
-                # order of the feature maps
-                continue
-
-            # Channels from iterating over stage_names should not be the same as iterating over
-            # out_features.
-            # Stage names are in order and have no repitions, wheras backbone.channels follows out_featurs
+            # Order of channels returned is same as order of channels iterating over stage names
             channels_from_stage_names = [
                 backbone.out_feature_channels[name] for name in backbone.stage_names if name in backbone.out_features
             ]
-            self.assertNotEqual(backbone.channels, channels_from_stage_names)
+            self.assertEqual(backbone.channels, channels_from_stage_names)
             for feature_map, n_channels in zip(outputs.feature_maps, backbone.channels):
                 self.assertTrue(feature_map.shape[:2], (batch_size, n_channels))
-            self.assertIsNone(outputs.hidden_states)
-            self.assertIsNone(outputs.attentions)
