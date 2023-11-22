@@ -758,7 +758,10 @@ class RTDetrTransformer(nn.Module):
 
         # decoder embedding
         if self.learnt_init_query:
-            self.tgt_embed = nn.Embedding(self.num_queries, self.hidden_dim)
+            weight_embedding = torch.empty(1, self.num_queries, self.hidden_dim)
+            nn.init.normal_(weight_embedding)
+            self.weight_embedding = nn.Parameter(weight_embedding, requires_grad=True)
+
         self.query_pos_head = RTDetrMLP(4, 2 * self.hidden_dim, self.hidden_dim, num_layers=2)
 
         # encoder head
@@ -878,7 +881,7 @@ class RTDetrTransformer(nn.Module):
 
         # extract region features
         if self.learnt_init_query:
-            target = self.tgt_embed.weight.unsqueeze(0).tile([batch_size, 1, 1])
+            target = self.weight_embedding.tile([batch_size, 1, 1])
         else:
             target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
 
@@ -1289,9 +1292,9 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
         config: RTDetrConfig
     """
 
-    def __init__(self, config: RTDetrConfig):
+    def __init__(self, config: RTDetrConfig, in_channels: List[int]):
         super().__init__(config)
-        self.in_channels = config.in_channels
+        self.in_channels = in_channels
         self.feat_strides = config.feat_strides
         self.hidden_dim = config.hidden_dim
         self.use_encoder_idx = config.use_encoder_idx
@@ -1516,7 +1519,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         self.backbone = AutoBackbone.from_config(config.backbone_config)
         # enconder
-        self.encoder = RTDetrHybridEncoder(config)
+        self.encoder = RTDetrHybridEncoder(config, in_channels=self.backbone.channels)
         # decoder
         self.decoder = RTDetrTransformer(config)
 

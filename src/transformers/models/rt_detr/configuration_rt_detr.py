@@ -46,8 +46,6 @@ class RTDetrConfig(PretrainedConfig):
             The epsilon used by the batch normalization layers.
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone in a dictionary or the config object of the backbone.
-        in_channels (`List[int]`, *optional*, defaults to `[512, 1024, 2048]`):
-            List of channel sizes output by the backbone and used by the encoder's convolutional layers.
         feat_strides (`List[int]`, *optional*, defaults to `[8, 16, 32]`):
             Strides used in each feature map.
         hidden_dim (`int`, *optional*, defaults to 256):
@@ -153,7 +151,6 @@ class RTDetrConfig(PretrainedConfig):
         # backbone
         backbone_config=None,
         # encoder HybridEncoder
-        in_channels=[512, 1024, 2048],
         feat_strides=[8, 16, 32],
         hidden_dim=256,
         num_attention_heads=8,
@@ -218,7 +215,6 @@ class RTDetrConfig(PretrainedConfig):
             )
 
         # encoder
-        self.in_channels = in_channels
         self.feat_strides = feat_strides
         self.hidden_dim = hidden_dim
         self.num_attention_heads = num_attention_heads

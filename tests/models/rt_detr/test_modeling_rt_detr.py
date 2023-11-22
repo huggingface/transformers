@@ -51,7 +51,6 @@ class RTDetrConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "initializer_range"))
         self.parent.assertTrue(hasattr(config, "layer_norm_eps"))
         self.parent.assertTrue(hasattr(config, "backbone_config"))
-        self.parent.assertTrue(hasattr(config, "in_channels"))
         self.parent.assertTrue(hasattr(config, "feat_strides"))
         self.parent.assertTrue(hasattr(config, "hidden_dim"))
         self.parent.assertTrue(hasattr(config, "num_attention_heads"))
@@ -100,7 +99,6 @@ class RTDetrModelTester:
         is_training=True,
         initializer_range=0.02,
         backbone_config=None,
-        in_channels=[512, 1024, 2048],
         feat_strides=[8, 16, 32],
         hidden_dim=256,
         num_head=8,
@@ -147,7 +145,6 @@ class RTDetrModelTester:
         self.parent = parent
         self.initializer_range = initializer_range
         self.backbone_config = backbone_config
-        self.in_channels = in_channels
         self.feat_strides = feat_strides
         self.hidden_dim = hidden_dim
         self.num_head = num_head
@@ -209,7 +206,6 @@ class RTDetrModelTester:
         return RTDetrConfig(
             initializer_range=self.initializer_range,
             backbone_config=self.backbone_config,
-            in_channels=self.in_channels,
             feat_strides=self.feat_strides,
             hidden_dim=self.hidden_dim,
             num_head=self.num_head,
