@@ -21,10 +21,14 @@ from typing import Callable, List, Optional, Union
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...utils import TensorType, is_torch_available
 
+
+if is_torch_available():
+    import torch
 
 IMAGE_TOKEN = "<image>"
+IMAGE_TOKEN_ID = -200
 
 
 class LlavaProcessor(ProcessorMixin):
@@ -54,6 +58,27 @@ class LlavaProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
+
+    def tokenize_and_fill_token(self, prompt, image_token_index, return_tensors=None):
+        prompt_chunks = [self.tokenizer(chunk).input_ids for chunk in prompt.split("<image>")]
+
+        def insert_separator(X, sep):
+            return [ele for sublist in zip(X, [sep] * len(X)) for ele in sublist][:-1]
+
+        input_ids = []
+        offset = 0
+        if len(prompt_chunks) > 0 and len(prompt_chunks[0]) > 0 and prompt_chunks[0][0] == self.tokenizer.bos_token_id:
+            offset = 1
+            input_ids.append(prompt_chunks[0][0])
+
+        for x in insert_separator(prompt_chunks, [image_token_index] * (offset + 1)):
+            input_ids.extend(x[offset:])
+
+        if return_tensors is not None:
+            if return_tensors == "pt":
+                return torch.tensor(input_ids, dtype=torch.long)
+            raise ValueError(f"Unsupported tensor type: {return_tensors}")
+        return input_ids
 
     def __call__(
         self,
@@ -121,14 +146,14 @@ class LlavaProcessor(ProcessorMixin):
         else:
             pixel_values = None
 
-        tokenized_text = self.tokenizer(
-            prompts, padding=padding, truncation=truncation, max_length=max_length, return_tensors=return_tensors
-        )
+        # TODO: what about attention masks?
+        input_ids = self.tokenize_and_fill_token(
+            prompts, image_token_index=IMAGE_TOKEN_ID, return_tensors=return_tensors
+        ).unsqueeze(0)
 
         return BatchFeature(
             data={
-                "input_ids": tokenized_text["input_ids"],
-                "attention_mask": tokenized_text["attention_mask"],
+                "input_ids": input_ids,
                 "pixel_values": pixel_values,
             }
         )
