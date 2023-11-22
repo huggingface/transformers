@@ -465,10 +465,6 @@ class PvtV2PreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
 
-    # def _set_gradient_checkpointing(self, module: PvtV2Encoder, value: bool = False):
-    #     if isinstance(module, PvtV2Encoder):
-    #         module.gradient_checkpointing = value
-
 
 PVT_V2_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
