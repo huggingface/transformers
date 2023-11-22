@@ -399,7 +399,7 @@ class RTDetrTransformerEncoderLayer(nn.Module):
         self.norm2 = nn.LayerNorm(config.hidden_dim, config.layer_norm_eps)
         self.dropout1 = nn.Dropout(config.dropout)
         self.dropout2 = nn.Dropout(config.dropout)
-        self.activation = ACT2CLS[config.hidden_act_encoder]()
+        self.activation = nn.GELU()
 
     @staticmethod
     def with_pos_embed(tensor, pos_embed):
@@ -444,8 +444,8 @@ class RTDetrRepVggBlock(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
 
-        channels_in = int(config.hidden_dim * config.expansion)
-        channels_out = int(config.hidden_dim * config.expansion)
+        channels_in = int(config.hidden_dim)
+        channels_out = int(config.hidden_dim)
         activation = config.act_encoder
         self.conv1 = RTDetrConvNormLayer(config, channels_in, channels_out, 3, 1, padding=1)
         self.conv2 = RTDetrConvNormLayer(config, channels_in, channels_out, 1, 1, padding=0)
@@ -462,10 +462,10 @@ class RTDetrCSPRepLayer(nn.Module):
 
         in_channels = config.hidden_dim * 2
         out_channels = config.hidden_dim
-        num_blocks = round(3 * config.depth_mult)
+        num_blocks = 3
         activation = config.act_encoder
 
-        hidden_channels = int(out_channels * config.expansion)
+        hidden_channels = int(out_channels)
         self.conv1 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, bias=None, activation=activation)
         self.conv2 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, bias=None, activation=activation)
         self.bottlenecks = nn.Sequential(*[RTDetrRepVggBlock(config) for _ in range(num_blocks)])
@@ -561,7 +561,7 @@ class RTDetrTransformerDecoderLayer(nn.Module):
         self.norm2 = nn.LayerNorm(config.hidden_dim, config.layer_norm_eps)
         # ffn
         self.linear1 = nn.Linear(config.hidden_dim, config.dim_feedforward)
-        self.activation = ACT2CLS[config.act_decoder]()
+        self.activation = nn.ReLU()
         self.dropout3 = nn.Dropout(config.dropout)
         self.linear2 = nn.Linear(config.dim_feedforward, config.hidden_dim)
         self.dropout4 = nn.Dropout(config.dropout)
@@ -700,13 +700,10 @@ class RTDetrTransformer(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
 
-        position_embed_type = config.position_embed_type
         feat_channels = config.feat_channels
         feat_strides = config.feat_strides[:]
         num_levels = config.num_levels
 
-        if position_embed_type not in ["sine", "learned"]:
-            raise ValueError(f"position_embed_type not supported {position_embed_type}")
         if len(feat_channels) > num_levels:
             raise ValueError("len(feat_channels) must be less than or equal to num_levels")
         if len(feat_strides) != len(feat_channels):

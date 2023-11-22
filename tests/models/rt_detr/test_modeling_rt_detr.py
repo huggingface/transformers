@@ -57,23 +57,18 @@ class RTDetrConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "num_attention_heads"))
         self.parent.assertTrue(hasattr(config, "dim_feedforward"))
         self.parent.assertTrue(hasattr(config, "dropout"))
-        self.parent.assertTrue(hasattr(config, "hidden_act_encoder"))
         self.parent.assertTrue(hasattr(config, "use_encoder_idx"))
         self.parent.assertTrue(hasattr(config, "num_encoder_layers"))
         self.parent.assertTrue(hasattr(config, "pe_temperature"))
-        self.parent.assertTrue(hasattr(config, "expansion"))
-        self.parent.assertTrue(hasattr(config, "depth_mult"))
         self.parent.assertTrue(hasattr(config, "act_encoder"))
         self.parent.assertTrue(hasattr(config, "eval_size"))
         self.parent.assertTrue(hasattr(config, "normalize_before"))
         self.parent.assertTrue(hasattr(config, "num_classes"))
         self.parent.assertTrue(hasattr(config, "num_queries"))
-        self.parent.assertTrue(hasattr(config, "position_embed_type"))
         self.parent.assertTrue(hasattr(config, "feat_channels"))
         self.parent.assertTrue(hasattr(config, "num_levels"))
         self.parent.assertTrue(hasattr(config, "num_decoder_points"))
         self.parent.assertTrue(hasattr(config, "num_decoder_layers"))
-        self.parent.assertTrue(hasattr(config, "act_decoder"))
         self.parent.assertTrue(hasattr(config, "num_denoising"))
         self.parent.assertTrue(hasattr(config, "label_noise_ratio"))
         self.parent.assertTrue(hasattr(config, "box_noise_scale"))
@@ -116,17 +111,14 @@ class RTDetrModelTester:
         num_encoder_layers=1,
         pe_temperature=10000,
         expansion=1.0,
-        depth_mult=1.0,
         act_encoder="silu",
         eval_size=None,
         num_classes=80,
         num_queries=300,
-        position_embed_type="sine",
         feat_channels=[256, 256, 256],
         num_levels=3,
         num_decoder_points=4,
         num_decoder_layers=6,
-        act_decoder="relu",
         num_denoising=100,
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
@@ -166,17 +158,14 @@ class RTDetrModelTester:
         self.num_encoder_layers = num_encoder_layers
         self.pe_temperature = pe_temperature
         self.expansion = expansion
-        self.depth_mult = depth_mult
         self.act_encoder = act_encoder
         self.eval_size = eval_size
         self.num_classes = num_classes
         self.num_queries = num_queries
-        self.position_embed_type = position_embed_type
         self.feat_channels = feat_channels
         self.num_levels = num_levels
         self.num_decoder_points = num_decoder_points
         self.num_decoder_layers = num_decoder_layers
-        self.act_decoder = act_decoder
         self.num_denoising = num_denoising
         self.label_noise_ratio = label_noise_ratio
         self.box_noise_scale = box_noise_scale
@@ -231,17 +220,14 @@ class RTDetrModelTester:
             num_encoder_layers=self.num_encoder_layers,
             pe_temperature=self.pe_temperature,
             expansion=self.expansion,
-            depth_mult=self.depth_mult,
             act_encoder=self.act_encoder,
             eval_size=self.eval_size,
             num_classes=self.num_classes,
             num_queries=self.num_queries,
-            position_embed_type=self.position_embed_type,
             feat_channels=self.feat_channels,
             num_levels=self.num_levels,
             num_decoder_points=self.num_decoder_points,
             num_decoder_layers=self.num_decoder_layers,
-            act_decoder=self.act_decoder,
             num_denoising=self.num_denoising,
             label_noise_ratio=self.label_noise_ratio,
             box_noise_scale=self.box_noise_scale,

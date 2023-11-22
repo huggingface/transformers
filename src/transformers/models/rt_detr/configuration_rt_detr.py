@@ -58,18 +58,12 @@ class RTDetrConfig(PretrainedConfig):
             Dimension for feedforward network layer in transformer encoder and decoder.
         dropout (`float`, *optional*, defaults to 0.0):
             The ratio for all dropout layers.
-        hidden_act_encoder (`str`, *optional*, defaults to `"gelu"`):
-            Activation function of the encoder used in the `TransformerEncoderLayer`.
         use_encoder_idx (`List[int]`, *optional*, defaults to `[2]`):
             Indexes of the projected layers to be used in the encoder.
         num_encoder_layers (`int`, *optional*, defaults to 1):
             Total of layers to be used by the encoder.
         pe_temperature (`int`, *optional*, defaults to 10000):
             The temperature parameter used to create the positional encodings.
-        expansion (`float`, *optional*, defaults to 1.0):
-            Expansion factor used by the `CSPRepLayer` module.
-        depth_mult (`float`, *optional*, defaults to 1.0):
-            Depth multiplicator factor used to create the `CSPRepLayer` module.
         act_encoder (`str`, *optional*, defaults to `"silu"`):
             Activation function of the encoder used in the top-down Feature Pyramid Network and the bottom-up Path
             Aggregation Network.
@@ -83,8 +77,6 @@ class RTDetrConfig(PretrainedConfig):
             Number of target classes or labels used by the detector.
         num_queries (`int`, *optional*, defaults to 300):
             Number of object queries.
-        position_embed_type (`str`, *optional*, defaults to `"sine"`):
-            A string indicating the type of positional embedding to use. Supported values ["sine", "learned"]
         feat_channels (`List[int]`, *optional*, defaults to `[256, 256, 256]`):
             A list of integers representing the number of feature channels at various layers or stages of the network
         num_levels (`int`, *optional*, defaults to 3):
@@ -93,8 +85,6 @@ class RTDetrConfig(PretrainedConfig):
             Number of points used by the `TransformerDecoderLayer`.
         num_decoder_layers (`int`, *optional*, defaults to 6):
             Number of layers of the decoder.
-        act_decoder (`str`, *optional*, defaults to `"relu"`):
-            Activation function used by the decoder.
         num_denoising (`int`, *optional*, defaults to 100):
             The total number of denoising tasks or queries to be used for contrastive denoising.
         label_noise_ratio (`float`, *optional*, defaults to 0.5):
@@ -169,24 +159,19 @@ class RTDetrConfig(PretrainedConfig):
         num_attention_heads=8,
         dim_feedforward=1024,
         dropout=0.0,
-        hidden_act_encoder="gelu",
         use_encoder_idx=[2],
         num_encoder_layers=1,
         pe_temperature=10000,
-        expansion=1.0,
-        depth_mult=1.0,
         act_encoder="silu",
         eval_size=None,
         normalize_before=False,
         # decoder RTDetrTransformer
         num_classes=80,
         num_queries=300,
-        position_embed_type="sine",
         feat_channels=[256, 256, 256],
         num_levels=3,
         num_decoder_points=4,
         num_decoder_layers=6,
-        act_decoder="relu",
         num_denoising=100,
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
@@ -239,24 +224,19 @@ class RTDetrConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.dim_feedforward = dim_feedforward
         self.dropout = dropout
-        self.hidden_act_encoder = hidden_act_encoder
         self.use_encoder_idx = use_encoder_idx
         self.num_encoder_layers = num_encoder_layers
         self.pe_temperature = pe_temperature
-        self.expansion = expansion
-        self.depth_mult = depth_mult
         self.act_encoder = act_encoder
         self.eval_size = eval_size
         self.normalize_before = normalize_before
         # decoder
         self.num_classes = num_classes
         self.num_queries = num_queries
-        self.position_embed_type = position_embed_type
         self.feat_channels = feat_channels
         self.num_levels = num_levels
         self.num_decoder_points = num_decoder_points
         self.num_decoder_layers = num_decoder_layers
-        self.act_decoder = act_decoder
         self.num_denoising = num_denoising
         self.label_noise_ratio = label_noise_ratio
         self.box_noise_scale = box_noise_scale
