@@ -726,6 +726,21 @@ class LlavaVisionTransformer(nn.Module):
         )
 
 
+class LlavaMultiModalProjector(nn.Module):
+    def __init__(self, config: LlavaConfig):
+        super().__init__()
+
+        self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.hidden_size, bias=True)
+        self.act = ACT2FN[config.projector_hidden_act]
+        self.linear_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
+
+    def forward(self, image_features):
+        hidden_states = self.linear_1(image_features)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
 LLAMA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -901,11 +916,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
 
         self.vision_tower = LlavaVisionModel(config.vision_config)
 
-        self.multi_modal_projector = nn.Sequential(
-            nn.Linear(config.vision_config.hidden_size, config.hidden_size, bias=True),
-            ACT2FN[config.projector_hidden_act],
-            nn.Linear(config.hidden_size, config.hidden_size, bias=True)
-        )
+        self.multi_modal_projector = LlavaMultiModalProjector(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -981,21 +992,36 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is None:
-            (
-                input_ids,
-                position_ids,
-                attention_mask,
-                past_key_values,
-                inputs_embeds,
-                labels
-            ) = self.prepare_inputs_labels_for_multimodal(
-                input_ids,
-                position_ids,
-                attention_mask,
-                past_key_values,
-                labels,
-                pixel_values
-            )
+            if pixel_values is None or input_ids.shape[1] == 1:
+                # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of 
+                # generation without image information
+                if past_key_values is not None and self.vision_tower is not None and pixel_values is not None and input_ids.shape[1] == 1:
+                    target_seqlen = past_key_values[-1][-1].shape[-2] + 1
+
+                    extended_attention_mask = torch.ones(
+                        (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
+                        dtype=attention_mask.dtype,
+                        device=attention_mask.device
+                    )
+
+                    attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
+                    position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+            else:
+                (
+                    input_ids,
+                    position_ids,
+                    attention_mask,
+                    past_key_values,
+                    inputs_embeds,
+                    labels
+                ) = self.prepare_inputs_labels_for_multimodal(
+                    input_ids,
+                    position_ids,
+                    attention_mask,
+                    past_key_values,
+                    labels,
+                    pixel_values
+                )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.language_model(
@@ -1041,19 +1067,6 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
     def prepare_inputs_labels_for_multimodal(
         self, input_ids, position_ids, attention_mask, past_key_values, labels, pixel_values
     ):
-        if pixel_values is None or input_ids.shape[1] == 1:
-            # In case input_ids.shape[1] == 1 the information about image has been already propgated
-            # into the hidden states, therefore we will let the LM continue its prediction using the latest token.
-            if past_key_values is not None and self.vision_tower is not None and pixel_values is not None and input_ids.shape[1] == 1:
-                target_shape = past_key_values[-1][-1].shape[-2] + 1
-                attention_mask = torch.cat((attention_mask, torch.ones(
-                    (attention_mask.shape[0], target_shape - attention_mask.shape[1]),
-                    dtype=attention_mask.dtype,
-                    device=attention_mask.device
-                )), dim=1)
-                position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
-            return input_ids, position_ids, attention_mask, past_key_values, None, labels
-
         image_features = self.vision_tower(pixel_values).last_hidden_state
         image_features = self.multi_modal_projector(image_features)
 
@@ -1174,4 +1187,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         return None, position_ids, attention_mask, past_key_values, new_input_embeds, new_labels
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
-        return self.language_model.prepare_inputs_for_generation(input_ids, past_key_values, inputs_embeds=inputs_embeds, **kwargs)
+        pixel_values = kwargs.pop("pixel_values", None)
+        model_input = self.language_model.prepare_inputs_for_generation(input_ids, past_key_values, inputs_embeds=inputs_embeds, **kwargs)
+        model_input.update({"pixel_values": pixel_values})
+        return model_input

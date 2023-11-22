@@ -35,8 +35,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import IdeficsProcessor, LlavaForVisionText2Text, LlavaModel
-    from transformers.models.llava.configuration_llava import LlavaPerceiverConfig, LlavaVisionConfig
+    from transformers import LlavaForVisionText2Text, LlavaVisionModel
+    from transformers.models.llava.configuration_llava import LlavaVisionConfig
     from transformers.models.llava.modeling_llava import LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
@@ -46,7 +46,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class LlavaModelTester:
+class LlavaVisionModelTester:
     def __init__(
         self,
         parent,
@@ -252,7 +252,7 @@ class LlavaModelTester:
         image_attention_mask,
         interpolate_pos_encoding,
     ):
-        model = LlavaModel(config=config)
+        model = LlavaVisionModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -312,8 +312,8 @@ class LlavaModelTester:
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
-class LlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (LlavaModel, LlavaForVisionText2Text) if is_torch_available() else ()
+class LlavaVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (LlavaVisionModel, LlavaForVisionText2Text) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -333,14 +333,14 @@ class LlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_outputs_equivalence(self):
         try:
             orig = self.all_model_classes
-            # LlavaModel.forward doesn't have labels input arg - only LlavaForVisionText2Text does
+            # LlavaVisionModel.forward doesn't have labels input arg - only LlavaForVisionText2Text does
             self.all_model_classes = (LlavaForVisionText2Text,) if is_torch_available() else ()
             super().test_model_outputs_equivalence()
         finally:
             self.all_model_classes = orig
 
     def setUp(self):
-        self.model_tester = LlavaModelTester(self)
+        self.model_tester = LlavaVisionModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LlavaConfig, hidden_size=37)
 
     def test_config(self):
@@ -393,7 +393,7 @@ class LlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_cross_attention_gates(self):
         config, inputs_w_same_img, inputs_w_0_img_attn = self.model_tester.prepare_config_and_inputs_gate_tests()
 
-        model = LlavaModel(config=config).to(torch_device)
+        model = LlavaVisionModel(config=config).to(torch_device)
         model.eval()
         test_1_results = []
         for inputs in inputs_w_same_img:
@@ -415,9 +415,9 @@ class LlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             return
 
         for model_class in self.all_model_classes:
-            # LlavaModel does not support training, users should use
+            # LlavaVisionModel does not support training, users should use
             # LlavaForVisionText2Text for this purpose
-            if model_class == LlavaModel:
+            if model_class == LlavaVisionModel:
                 return
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -435,9 +435,9 @@ class LlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             return
 
         for model_class in self.all_model_classes:
-            # LlavaModel does not support training, users should use
+            # LlavaVisionModel does not support training, users should use
             # LlavaForVisionText2Text for this purpose
-            if model_class == LlavaModel:
+            if model_class == LlavaVisionModel:
                 return
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -553,17 +553,17 @@ class LlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = LlavaModel.from_pretrained(model_name)
+            model = LlavaVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
-class LlavaForVisionText2TextTest(LlavaModelTest, unittest.TestCase):
+class LlavaForVisionText2TextTest(LlavaVisionModelTest, unittest.TestCase):
     all_model_classes = (LlavaForVisionText2Text,) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = LlavaModelTester(
+        self.model_tester = LlavaVisionModelTester(
             self,
             modality_type_vocab_size=3,
         )
@@ -597,7 +597,7 @@ class LlavaForVisionText2TextTest(LlavaModelTest, unittest.TestCase):
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
 @require_vision
-class LlavaModelIntegrationTest(TestCasePlus):
+class LlavaVisionModelIntegrationTest(TestCasePlus):
     @cached_property
     def default_processor(self):
         return (

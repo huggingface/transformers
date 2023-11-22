@@ -37,9 +37,9 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] LlavaConfig
 
-## LlavaModel
+## LlavaVisionModel
 
-[[autodoc]] LlavaModel
+[[autodoc]] LlavaVisionModel
     - forward
 
 ## LlavaForVisionText2Text
