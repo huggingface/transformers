@@ -17,7 +17,7 @@
 """ Pvt model configuration"""
 
 import warnings
-from typing import Callable, List, Mapping, Union, Tuple
+from typing import Callable, List, Mapping, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -177,5 +177,3 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
-
-
