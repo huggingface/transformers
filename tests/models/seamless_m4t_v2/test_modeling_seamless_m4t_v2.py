@@ -16,7 +16,6 @@
 
 
 import copy
-import inspect
 import tempfile
 import unittest
 
@@ -495,10 +494,6 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(reason="The speech encoder doesn't support head masking")
-    def test_generate_with_head_masking(self):
-        pass
-
     @unittest.skip(reason="SeamlessM4Tv2Model can takes input_ids or input_features")
     def test_forward_signature(self):
         pass
@@ -714,43 +709,6 @@ class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixi
     )
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
-
-    def test_generate_with_head_masking(self):
-        """Test designed for encoder-decoder models to ensure the attention head masking is used."""
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-
-            model = model_class(config).to(torch_device).eval()
-
-            head_masking = {
-                "head_mask": torch.zeros(config.encoder_layers, config.encoder_attention_heads, device=torch_device),
-                "decoder_head_mask": torch.zeros(
-                    config.decoder_layers, config.decoder_attention_heads, device=torch_device
-                ),
-                "cross_attn_head_mask": torch.zeros(
-                    config.decoder_layers, config.decoder_attention_heads, device=torch_device
-                ),
-            }
-
-            signature = inspect.signature(model.forward)
-            # We want to test only models where encoder/decoder head masking is implemented
-            if not set(head_masking.keys()) < {*signature.parameters.keys()}:
-                continue
-
-            for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-                out = model.generate(
-                    input_ids,
-                    attention_mask=attention_mask,
-                    num_beams=1,
-                    output_attentions=True,
-                    return_dict_in_generate=True,
-                    remove_invalid_values=True,
-                    **{name: mask},
-                )
-                # We check the state of decoder_attentions and cross_attentions just from the last step
-                attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-                self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
     @unittest.skip(reason="SeamlessM4Tv2Model can take input_ids or input_features")
     def test_forward_signature(self):
