@@ -3227,7 +3227,7 @@ class GenerationMixin:
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
-                if not model_kwargs.get("use_legacy_cache"):
+                if not model_kwargs.get("use_legacy_cache", True):
                     model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
 
             if return_dict_in_generate and output_scores:
@@ -3564,7 +3564,7 @@ class GenerationMixin:
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
-                if not model_kwargs.get("use_legacy_cache"):
+                if not model_kwargs.get("use_legacy_cache", True):
                     model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
 
             if return_dict_in_generate and output_scores:
@@ -3953,7 +3953,7 @@ class GenerationMixin:
                 model_kwargs["past_key_values"] = self._reorder_cache(
                     model_kwargs["past_key_values"], reordering_indices
                 )
-                if not model_kwargs.get("use_legacy_cache"):
+                if not model_kwargs.get("use_legacy_cache", True):
                     model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
 
             # increase cur_len
@@ -4295,7 +4295,7 @@ class GenerationMixin:
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
-                if not model_kwargs.get("use_legacy_cache"):
+                if not model_kwargs.get("use_legacy_cache", True):
                     model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
 
             if return_dict_in_generate and output_scores:
