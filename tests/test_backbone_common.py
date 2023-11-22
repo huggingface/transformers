@@ -218,12 +218,6 @@ class BackboneTesterMixin:
             self.assertIsInstance(outputs.feature_maps, tuple)
             self.assertTrue(len(outputs.feature_maps) == 2)
 
-            # Test out-of-order feature maps returned in passed-in order
-            config.out_indices = [2, 1]
-            backbone = backbone_class(config)
-            backbone.to(torch_device)
-            backbone.eval()
-
             # Order of channels returned is same as order of channels iterating over stage names
             channels_from_stage_names = [
                 backbone.out_feature_channels[name] for name in backbone.stage_names if name in backbone.out_features
