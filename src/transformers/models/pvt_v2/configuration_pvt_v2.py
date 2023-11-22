@@ -17,13 +17,9 @@
 """ Pvt model configuration"""
 
 import warnings
-from collections import OrderedDict
-from typing import Callable, Dict, List, Mapping, Sequence, Union
-
-from packaging import version
+from typing import Callable, List, Mapping, Union, Tuple
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
@@ -52,8 +48,8 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        image_size (`int`, *optional*, defaults to `{'height': 224, 'width': 224}`):
-            The input image size
+        image_size (`Union[int, Tuple[int, int]]`, *optional*, defaults to `224`):
+            The input image size. Pass int value for square image, or tuple of (height, width).
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_encoder_blocks (`[int]`, *optional*, defaults to 4):
@@ -119,7 +115,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
 
     def __init__(
         self,
-        image_size: Union[int, Sequence[int], Dict[str, int]] = {"height": 224, "width": 224},
+        image_size: Union[int, Tuple[int, int]] = 224,
         num_channels: int = 3,
         num_encoder_blocks: int = 4,
         depths: List[int] = [2, 2, 2, 2],
@@ -155,13 +151,8 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
             out_indices = kwargs["_out_indices"]
             out_features = None
 
-        if isinstance(image_size, int):
-            image_size = (image_size, image_size)
-        if isinstance(image_size, dict):
-            req_keys = ("height", "width")
-            assert all(k in req_keys for k in image_size.keys()), f"Image size dict must have keys: {req_keys}"
-        elif isinstance(image_size, Sequence):
-            image_size = {"height": image_size[0], "width": image_size[1]}
+        image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
+
         self.image_size = image_size
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
