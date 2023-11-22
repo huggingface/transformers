@@ -849,7 +849,7 @@ class TrainingArguments:
                 "When checkpointing, whether to only save the model, or also the optimizer, scheduler & rng state."
                 "Note that when this is true, you won't be able to resume training from checkpoint."
                 "This enables you to save storage by not storing the optimizer, scheduler & rng state."
-                "You can only load the model using `from_pretrained` with this option set to `True`."
+                "You can only load the model using from_pretrained with this option set to True."
             )
         },
     )
