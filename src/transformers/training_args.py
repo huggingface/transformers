@@ -423,8 +423,8 @@ class TrainingArguments:
 
             - `"full_shard"`: Shard parameters, gradients and optimizer states.
             - `"shard_grad_op"`: Shard optimizer states and gradients.
-            - `"hybrid_shard"`: Apply ``FULL_SHARD`` within a node, and replicate parameters across nodes.
-            - `"hybrid_shard_zero2"`: Apply ``SHARD_GRAD_OP`` within a node, and replicate parameters across nodes.
+            - `"hybrid_shard"`: Apply `FULL_SHARD` within a node, and replicate parameters across nodes.
+            - `"hybrid_shard_zero2"`: Apply `SHARD_GRAD_OP` within a node, and replicate parameters across nodes.
             - `"offload"`: Offload parameters and gradients to CPUs (only compatible with `"full_shard"` and
               `"shard_grad_op"`).
             - `"auto_wrap"`: Automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`.
