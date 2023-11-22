@@ -494,7 +494,7 @@ class BartFlashAttention2(BartAttention):
         )
 
 
-class BartSDPAAttention(BartAttention):
+class BartSdpaAttention(BartAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -509,7 +509,7 @@ class BartSDPAAttention(BartAttention):
         if output_attentions or layer_head_mask is not None:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "BartModel is using BartSDPAAttention, but torch.nn.functional.scaled_dot_product_attention does not support output_attentions=True or layer_head_mask not None. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards."
+                "BartModel is using BartSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards."
             )
             return super().forward(
                 hidden_states,
@@ -599,7 +599,7 @@ class BartSDPAAttention(BartAttention):
 
 BART_ATTENTION_CLASSES = {
     "eager": BartAttention,
-    "sdpa": BartSDPAAttention,
+    "sdpa": BartSdpaAttention,
     "flash_attention_2": BartFlashAttention2,
 }
 

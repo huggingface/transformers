@@ -629,7 +629,7 @@ class LlamaFlashAttention2(LlamaAttention):
         )
 
 
-class LlamaSDPAAttention(LlamaAttention):
+class LlamaSdpaAttention(LlamaAttention):
     """
     Llama attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
     `LlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
@@ -649,7 +649,7 @@ class LlamaSDPAAttention(LlamaAttention):
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "LlamaModel is using LlamaSDPAAttention, but torch.nn.functional.scaled_dot_product_attention does not support output_attentions=True. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards."
+                "LlamaModel is using LlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards."
             )
             return super().forward(
                 hidden_states=hidden_states,
@@ -710,17 +710,19 @@ class LlamaSDPAAttention(LlamaAttention):
         return attn_output, None, past_key_value
 
 
+LLAMA_ATTENTION_CLASSES = {
+    "eager": LlamaAttention,
+    "flash_attention_2": LlamaFlashAttention2,
+    "sdpa": LlamaSdpaAttention,
+}
+
+
 class LlamaDecoderLayer(nn.Module):
     def __init__(self, config: LlamaConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        if config.attn_implementation == "flash_attention_2":
-            self.self_attn = LlamaFlashAttention2(config=config)
-        elif config.attn_implementation == "sdpa":
-            self.self_attn = LlamaSDPAAttention(config=config)
-        else:
-            self.self_attn = LlamaAttention(config=config)
+        self.self_attn = LLAMA_ATTENTION_CLASSES[config.attn_implementation](config=config)
 
         self.mlp = LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

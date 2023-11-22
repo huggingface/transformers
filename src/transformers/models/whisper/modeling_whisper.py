@@ -672,8 +672,8 @@ class WhisperFlashAttention2(WhisperAttention):
         )
 
 
-class WhisperSDPAAttention(WhisperAttention):
-    # Copied from transformers.models.bart.modeling_bart.BartSDPAAttention.forward with BART->whisper, Bart->Whisper
+class WhisperSdpaAttention(WhisperAttention):
+    # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with BART->whisper, Bart->Whisper
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -688,7 +688,7 @@ class WhisperSDPAAttention(WhisperAttention):
         if output_attentions or layer_head_mask is not None:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "WhisperModel is using WhisperSDPAAttention, but torch.nn.functional.scaled_dot_product_attention does not support output_attentions=True or layer_head_mask not None. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards."
+                "WhisperModel is using WhisperSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards."
             )
             return super().forward(
                 hidden_states,
@@ -779,7 +779,7 @@ class WhisperSDPAAttention(WhisperAttention):
 WHISPER_ATTENTION_CLASSES = {
     "eager": WhisperAttention,
     "flash_attention_2": WhisperFlashAttention2,
-    "sdpa": WhisperSDPAAttention,
+    "sdpa": WhisperSdpaAttention,
 }
 
 

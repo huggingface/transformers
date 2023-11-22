@@ -495,7 +495,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
         )
 
 
-class GPTBigCodeSDPAAttention(GPTBigCodeAttention):
+class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         if head_mask is not None:
             # The super dispatch is done in the forward.
@@ -606,7 +606,7 @@ class GPTBigCodeSDPAAttention(GPTBigCodeAttention):
         else:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "GPTBigCodeModel is using GPTBigCodeSDPAAttention, but torch.nn.functional.scaled_dot_product_attention does not support output_attentions=True and head_mask not None. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards."
+                "GPTBigCodeModel is using GPTBigCodeSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` and `head_mask` not None. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards."
             )
             attn_output, attn_weights = super()._attn(query, key.transpose(-1, -2), value, attention_mask, head_mask)
 
@@ -646,7 +646,7 @@ class GPTBigCodeMLP(nn.Module):
 GPTBIGCODE_ATTENTION_CLASSES = {
     "eager": GPTBigCodeAttention,
     "flash_attention_2": GPTBigCodeFlashAttention2,
-    "sdpa": GPTBigCodeSDPAAttention,
+    "sdpa": GPTBigCodeSdpaAttention,
 }
 
 
