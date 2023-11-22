@@ -269,6 +269,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [UMT5](model_doc/umt5)                          |       ✅        |         ❌         |      ❌      |
 |                     [UniSpeech](model_doc/unispeech)                     |       ✅        |         ❌         |      ❌      |
 |                 [UniSpeechSat](model_doc/unispeech-sat)                  |       ✅        |         ❌         |      ❌      |
+|                       [UnivNet](model_doc/univnet)                       |       ✅        |         ❌         |      ❌      |
 |                       [UPerNet](model_doc/upernet)                       |       ✅        |         ❌         |      ❌      |
 |                           [VAN](model_doc/van)                           |       ✅        |         ❌         |      ❌      |
 |                      [VideoMAE](model_doc/videomae)                      |       ✅        |         ❌         |      ❌      |
