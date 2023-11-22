@@ -16,16 +16,12 @@
 
 import unittest
 
-from transformers import BitsAndBytesConfig, LlavaConfig, is_torch_available, is_vision_available
+from transformers import LlavaConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
-    TestCasePlus,
-    require_bitsandbytes,
     require_torch,
-    require_vision,
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -43,7 +39,7 @@ else:
     is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class LlavaVisionModelTester:
@@ -135,14 +131,6 @@ class LlavaVisionModelTester:
         self.perceiver_resampler_head_dim = perceiver_resampler_head_dim
         self.perceiver_resampler_n_heads = perceiver_resampler_n_heads
         self.perceiver_resampler_n_latents = perceiver_resampler_n_latents
-
-        self.perceiver_config = LlavaPerceiverConfig(
-            qk_layer_norms_perceiver=self.perceiver_qk_layer_norms_perceiver,
-            resampler_depth=self.perceiver_resampler_depth,
-            resampler_head_dim=self.perceiver_resampler_head_dim,
-            resampler_n_heads=self.perceiver_resampler_n_heads,
-            resampler_n_latents=self.perceiver_resampler_n_latents,
-        )
 
         # we set the expected sequence length (which is used in several tests)
         # this is equal to the seq length of the text tokens + number of image patches + 1 for the CLS token
@@ -592,63 +580,3 @@ class LlavaForVisionText2TextTest(LlavaVisionModelTest, unittest.TestCase):
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-
-@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
-@require_torch
-@require_vision
-class LlavaVisionModelIntegrationTest(TestCasePlus):
-    @cached_property
-    def default_processor(self):
-        return (
-            IdeficsProcessor.from_pretrained("HuggingFaceM4/llava-9b", revision="refs/pr/11")
-            if is_vision_available()
-            else None
-        )
-
-    @require_bitsandbytes
-    @slow
-    def test_inference_natural_language_visual_reasoning(self):
-        cat_image_path = self.tests_dir / "fixtures/tests_samples/COCO/000000039769.png"
-        cats_image_obj = Image.open(cat_image_path)  # 2 cats
-        dogs_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_nlvr2/raw/main/image1.jpeg"
-
-        prompts = [
-            [
-                "User:",
-                dogs_image_url,
-                "Describe this image.\nAssistant: An image of two dogs.\n",
-                "User:",
-                cats_image_obj,
-                "Describe this image.\nAssistant:",
-            ],
-            [
-                "User:",
-                cats_image_obj,
-                "Describe this image.\nAssistant: An image of two kittens.\n",
-                "User:",
-                dogs_image_url,
-                "Describe this image.\nAssistant:",
-            ],
-        ]
-
-        # the CI gpu is small so using quantization to fit
-        quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype="float16",
-        )
-        model = LlavaForVisionText2Text.from_pretrained(
-            "HuggingFaceM4/llava-9b", quantization_config=quantization_config, device_map="auto"
-        )
-        processor = self.default_processor
-        inputs = processor(prompts, return_tensors="pt").to(torch_device)
-        generated_ids = model.generate(**inputs, max_length=100)
-        generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
-
-        # keep for debugging
-        for i, t in enumerate(generated_text):
-            t = bytes(t, "utf-8").decode("unicode_escape")
-            print(f"{i}:\n{t}\n")
-
-        self.assertIn("image of two cats", generated_text[0])
-        self.assertIn("image of two dogs", generated_text[1])
