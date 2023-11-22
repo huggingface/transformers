@@ -57,7 +57,7 @@ class PvtV2ModelTester:
         self,
         parent,
         batch_size=13,
-        image_size=64,
+        image_size=None,
         num_channels=3,
         num_encoder_blocks=4,
         depths=[2, 2, 2, 2],
@@ -77,7 +77,7 @@ class PvtV2ModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.image_size = image_size
+        self.image_size = {"height": 64, "width": 64} if image_size is None else image_size
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
         self.sr_ratios = sr_ratios
@@ -359,7 +359,7 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
         """
         model = PvtV2ForImageClassification.from_pretrained("FoamoftheSea/pvt_v2_b0", torch_dtype=torch.float16)
         model.to(torch_device)
-        image_processor = PvtV2ImageProcessor(size=224)
+        image_processor = PvtV2ImageProcessor(size={"height": 224, "width": 224})
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
