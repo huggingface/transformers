@@ -21,8 +21,11 @@ from collections import OrderedDict
 
 import requests
 import torch
+from PIL import Image
+from torchvision import transforms
 
 from transformers import CLIPImageProcessor, TextNetBackbone, TextNetConfig
+from transformers.image_utils import PILImageResampling
 from transformers.utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
@@ -137,6 +140,7 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_du
     model = TextNetBackbone(config)
     textnet_image_processor = CLIPImageProcessor(
         size={"shortest_edge": size},
+        resample=PILImageResampling.BILINEAR,
         do_center_crop=False,
         use_square_size=True,
         image_mean=IMAGENET_DEFAULT_MEAN,
@@ -162,6 +166,26 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_du
             new_key = re.sub(pattern, adjust_stage, new_key)
             state_dict_changed[new_key] = val
     model.load_state_dict(state_dict_changed)
+
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+
+    # preprocess image
+    transformations = transforms.Compose(
+        [
+            transforms.Resize((size, size), interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=IMAGENET_DEFAULT_MEAN,  # these are RGB mean+std values
+                std=IMAGENET_DEFAULT_STD,  # across a large photo dataset.
+            ),
+        ]
+    )
+
+    original_pixel_values = transformations(image).unsqueeze(0)  # insert batch dimension
+    pixel_values = textnet_image_processor(image, return_tensors="pt").pixel_values
+
+    assert torch.allclose(original_pixel_values, pixel_values)
 
     model.save_pretrained(pytorch_dump_folder_path)
     textnet_image_processor.save_pretrained(pytorch_dump_folder_path)
