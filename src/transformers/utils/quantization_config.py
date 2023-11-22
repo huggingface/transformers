@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
-from ..utils import is_torch_available, logging
+from ..utils import is_auto_awq_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -574,7 +574,7 @@ class AwqConfig(QuantizationConfigMixin):
 
         self.modules_to_fuse = modules_to_fuse
         if do_fuse is None:
-            self.do_fuse = modules_to_fuse is not None and len(modules_to_fuse > 0)
+            self.do_fuse = modules_to_fuse is not None and len(modules_to_fuse) > 0
         else:
             self.do_fuse = do_fuse
         self.fuse_max_seq_len = fuse_max_seq_len
@@ -609,6 +609,23 @@ class AwqConfig(QuantizationConfigMixin):
             raise ValueError(
                 "You cannot enable fused modules without specifying a `fuse_max_seq_len`, make sure to pass a valid `fuse_max_seq_len` for your usecase"
             )
+
+        if self.do_fuse:
+            awq_version_supports_fusing = False
+            MIN_AWQ_VERSION = "0.1.7"
+            if is_auto_awq_available():
+                # For some reason `version.parse(importlib.metadata.version("awq"))` always returns
+                # `<Version('0.1.0')>` which makes that logic unusable. Therefore we need to import
+                # awq and get `awq.__version__`
+                import awq
+
+                awq_version = awq.__version__
+                awq_version_supports_fusing = version.parse(awq_version) >= version.parse(MIN_AWQ_VERSION)
+
+            if not awq_version_supports_fusing:
+                raise ValueError(
+                    "You current version of `autoawq` does not support module fusing, please upgrade `autoawq` package."
+                )
 
         if self.do_fuse and self.modules_to_fuse is not None:
             required_keys = [
