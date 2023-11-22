@@ -960,6 +960,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         # important: this ported version of Idefics isn't meant for training from scratch - only
