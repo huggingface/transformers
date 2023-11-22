@@ -225,3 +225,117 @@ class AwqTest(unittest.TestCase):
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
 
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+
+@slow
+@require_torch_gpu
+@require_auto_awq
+@require_accelerate
+class AwqFusedTest(unittest.TestCase):
+    model_name = "TheBloke/Mistral-7B-OpenOrca-AWQ"
+    model_revision = "7048b2af77d0dd1c81b000b19d73f9cc8950b510"
+
+    custom_mapping_model_id = "TheBloke/Yi-34B-AWQ"
+    custom_model_revision = "f1b2cd1b7459ceecfdc1fac5bb8725f13707c589"
+
+    prompt = (
+        "You're standing on the surface of the Earth. "
+        "You walk one mile south, one mile west and one mile north. "
+        "You end up exactly where you started. Where are you?"
+    )
+
+    EXPECTED_GENERATION = prompt + "\n\nThis is a classic puzzle that has been around for"
+    EXPECTED_GENERATION_CUSTOM_MODEL = "HelloWorld.java:11)\r\n\tat org"
+
+    def test_raise_save_pretrained(self):
+        """
+        Test that `save_pretrained` is effectively blocked for fused models
+        """
+        quantization_config = AwqConfig(bits=4, fuse_max_seq_len=128, do_fuse=True)
+
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            quantization_config=quantization_config,
+            low_cpu_mem_usage=True,
+            revision=self.model_revision,
+        ).to(torch_device)
+
+        with self.assertRaises(ValueError), tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+
+    def test_generation_fused(self):
+        """
+        Test generation quality for fused models - single batch case
+        """
+        quantization_config = AwqConfig(bits=4, fuse_max_seq_len=128, do_fuse=True)
+
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            quantization_config=quantization_config,
+            low_cpu_mem_usage=True,
+            revision=self.model_revision,
+        ).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name, revision=self.model_revision)
+
+        inputs = tokenizer(self.prompt, return_tensors="pt").to(torch_device)
+
+        outputs = model.generate(**inputs, max_new_tokens=12)
+
+        self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION)
+
+    def test_generation_fused_batched(self):
+        """
+        Test generation quality for fused models - multi batch case
+        """
+        quantization_config = AwqConfig(bits=4, fuse_max_seq_len=128, do_fuse=True)
+
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            quantization_config=quantization_config,
+            low_cpu_mem_usage=True,
+            revision=self.model_revision,
+        ).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name, revision=self.model_revision)
+
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        inputs = tokenizer([self.prompt, self.prompt], return_tensors="pt", padding=True).to(torch_device)
+
+        outputs = model.generate(**inputs, max_new_tokens=12)
+
+        self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION)
+
+    @require_torch_multi_gpu
+    def test_generation_custom_model(self):
+        """
+        Test generation quality for fused models using custom fused map.
+        """
+        quantization_config = AwqConfig(
+            bits=4,
+            fuse_max_seq_len=512,
+            modules_to_fuse={
+                "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
+                "layernorm": ["ln1", "ln2", "norm"],
+                "mlp": ["gate_proj", "up_proj", "down_proj"],
+                "use_alibi": False,
+                "num_attention_heads": 56,
+                "num_key_value_heads": 8,
+                "hidden_size": 7168,
+            },
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(
+            self.custom_mapping_model_id,
+            quantization_config=quantization_config,
+            trust_remote_code=True,
+            device_map="auto",
+            revision=self.custom_model_revision,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.custom_mapping_model_id, revision=self.custom_model_revision, trust_remote_code=True
+        )
+
+        prompt = "Hello"
+        inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
+
+        outputs = model.generate(**inputs, max_new_tokens=12)
+        self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_CUSTOM_MODEL)

@@ -2049,11 +2049,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "You are calling `save_pretrained` on a 4-bit converted model. This is currently not supported"
             )
 
-        if (
-            getattr(self.config, "quantization_config", None) is not None
-            and self.config.quantization_config.quant_method == QuantizationMethod.AWQ
-            and self.config.quantization_config.has_fused_modules
-        ):
+        if getattr(self, "_awq_is_fused", False):
             raise ValueError("You cannot save an AWQ model that uses fused modules!")
 
         if "save_config" in kwargs:
@@ -3559,6 +3555,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             and quantization_config.has_fused_modules
         ):
             model = fuse_awq_modules(model, quantization_config)
+            model._awq_is_fused = True
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
