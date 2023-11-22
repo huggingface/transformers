@@ -333,11 +333,11 @@ class NotebookProgressCallback(TrainerCallback):
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
         if self.training_tracker is not None:
-            values = {"Training Loss": "No log", "Validation Loss": "No log"}
+            values = {"Training Loss": "No log", "Validation Loss": "No log", "Learning Rate": "No log"}
             for log in reversed(state.log_history):
                 if "loss" in log:
                     values["Training Loss"] = log["loss"]
-                    break
+                    values["Learning Rate"] = f"{log['learning_rate']:0.2e}"
 
             if self.first_column == "Epoch":
                 values["Epoch"] = int(state.epoch)
