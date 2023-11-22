@@ -989,9 +989,7 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
     def input_text(self):
         # corresponds to "C'est un test." with seamlessM4T_medium checkpoint
 
-        # fmt: off
-        input_ids = torch.tensor([[256026, 109, 247729, 171, 128, 6816, 247676, 3]])
-        # fmt: on
+        input_ids = torch.tensor([[256026, 109, 247729, 171, 128, 6816, 247676, 3]])  # fmt: skip
 
         input_ids = input_ids.to(torch_device)
 
@@ -1037,9 +1035,7 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
 
         # test text - tgt lang: eng
 
-        # fmt: off
-        expected_text_tokens = [3, 256022, 3080, 1, 247669, 10, 6816, 247676, 3]
-        # fmt: on
+        expected_text_tokens = [3, 256022, 3080, 1, 247669, 10, 6816, 247676, 3]  # fmt: skip
 
         # fmt: off
         expected_unit_tokens = [
@@ -1049,9 +1045,7 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         ]
         # fmt: on
 
-        # fmt: off
-        expected_wav_slice = [9.23e-04, 7.54e-04, 4.98e-04, 5.41e-04, 5.73e-04, 5.35e-04, 8.07e-04, 9.10e-04, 9.09e-04, 8.08e-04]
-        # fmt: on
+        expected_wav_slice = [9.23e-04, 7.54e-04, 4.98e-04, 5.41e-04, 5.73e-04, 5.35e-04, 8.07e-04, 9.10e-04, 9.09e-04, 8.08e-04]  # fmt: skip
 
         set_seed(0)
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="eng", return_intermediate_token_ids=True)
@@ -1072,9 +1066,7 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
 
         # test text - tgt lang: swh
 
-        # fmt: off
-        expected_text_tokens = [3, 256084, 109, 247729, 171, 10, 6816, 247676, 3]
-        # fmt: on
+        expected_text_tokens = [3, 256084, 109, 247729, 171, 10, 6816, 247676, 3]  # fmt: skip
 
         # fmt: off
         expected_unit_tokens = [
@@ -1085,9 +1077,7 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         ]
         # fmt: on
 
-        # fmt: off
-        expected_wav_slice = [4.60e-04, 3.92e-04, 3.66e-04, 3.76e-04, 4.10e-04, 3.90e-04, 4.13e-04, 4.05e-04, 4.18e-04, 4.08e-04]
-        # fmt: on
+        expected_wav_slice = [4.60e-04, 3.92e-04, 3.66e-04, 3.76e-04, 4.10e-04, 3.90e-04, 4.13e-04, 4.05e-04, 4.18e-04, 4.08e-04]  # fmt: skip
 
         set_seed(0)
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="swh", return_intermediate_token_ids=True)
@@ -1108,9 +1098,7 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
 
         # test audio - tgt lang: rus
 
-        # fmt: off
-        expected_text_tokens = [3, 256074, 107, 248213, 404, 247792, 247789, 3]
-        # fmt: on
+        expected_text_tokens = [3, 256074, 107, 248213, 404, 247792, 247789, 3]  # fmt: skip
 
         # fmt: off
         expected_unit_tokens = [
@@ -1120,9 +1108,7 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         ]
         # fmt: on
 
-        # fmt: off
-        expected_wav_slice = [8.68e-4, 8.12e-4, 7.66e-4, 7.37e-4, 7.61e-4, 7.26e-4, 7.62e-4, 7.59e-4, 8.28e-4, 8.17e-4]
-        # fmt: on
+        expected_wav_slice = [8.68e-4, 8.12e-4, 7.66e-4, 7.37e-4, 7.61e-4, 7.26e-4, 7.62e-4, 7.59e-4, 8.28e-4, 8.17e-4]  # fmt: skip
 
         set_seed(0)
         output = model.generate(**self.input_audio, num_beams=1, tgt_lang="rus", return_intermediate_token_ids=True)
