@@ -723,6 +723,8 @@
         title: TrOCR
       - local: model_doc/tvlt
         title: TVLT
+      - local: model_doc/tvp
+        title: TVP
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vision-encoder-decoder

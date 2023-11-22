@@ -72,6 +72,7 @@ class RetriBertConfig(PretrainedConfig):
         projection_dim (`int`, *optional*, defaults to 128):
             Final dimension of the query and document representation after projection
     """
+
     model_type = "retribert"
 
     def __init__(

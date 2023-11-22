@@ -168,6 +168,7 @@ class Data2VecAudioConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "data2vec-audio"
 
     def __init__(

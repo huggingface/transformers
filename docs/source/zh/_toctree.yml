@@ -70,5 +70,9 @@
   - sections:
     - local: main_classes/model
       title: 模型
+    - local: main_classes/trainer
+      title: Trainer
+    - local: main_classes/deepspeed
+      title: DeepSpeed集成
     title: 主要类
   title: 应用程序接口 (API) 
