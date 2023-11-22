@@ -119,7 +119,7 @@ class PvtV2OverlapPatchEmbeddings(nn.Module):
             stride=stride,
             padding=(patch_size[0] // 2, patch_size[1] // 2),
         )
-        self.layer_norm = nn.LayerNorm(hidden_size)
+        self.layer_norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, pixel_values):
         embeddings = self.proj(pixel_values)
@@ -172,8 +172,8 @@ class PvtV2SelfAttention(nn.Module):
         self.sr_ratio = sr_ratio
         if self.attn_reduce == "averagepooling":
             self.pool = nn.AdaptiveAvgPool2d(7)
-            self.sr = nn.Conv2d(hidden_size, hidden_size, kernel_size=1, stride=1)
-            self.layer_norm = nn.LayerNorm(hidden_size)
+            self.sr = nn.Conv2d(self.hidden_size, self.hidden_size, kernel_size=1, stride=1)
+            self.layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
             self.act = nn.GELU()
         elif sr_ratio > 1:
             self.sr = nn.Conv2d(self.hidden_size, self.hidden_size, kernel_size=sr_ratio, stride=sr_ratio)
@@ -372,7 +372,7 @@ class PvtV2Encoder(nn.Module):
 
         # Layer norms
         self.layer_norms = nn.ModuleList(
-            [nn.LayerNorm(config.hidden_sizes[i]) for i in range(config.num_encoder_blocks)]
+            [nn.LayerNorm(config.hidden_sizes[i], eps=config.layer_norm_eps) for i in range(config.num_encoder_blocks)]
         )
 
     def forward(
