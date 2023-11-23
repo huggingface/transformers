@@ -18,12 +18,14 @@ Processor class for Grounding DINO.
 
 from typing import List, Optional, Tuple, Union
 
-import torch
-
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...utils import TensorType, is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 def get_phrases_from_posmap(posmaps: torch.BoolTensor, input_ids: torch.LongTensor):
