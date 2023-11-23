@@ -19,6 +19,7 @@ import logging
 import re
 from collections import OrderedDict
 
+import numpy as np
 import requests
 import torch
 from PIL import Image
@@ -144,7 +145,6 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
         size={"shortest_edge": size},
         resample=PILImageResampling.BILINEAR,
         do_center_crop=False,
-        use_square_size=True,
         image_mean=IMAGENET_DEFAULT_MEAN,
         image_std=IMAGENET_DEFAULT_STD,
     )
@@ -172,10 +172,22 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-    # preprocess image
+    # originpreprocess image
+
+    img = np.array(image)
+    short_size = size
+    h, w = img.shape[0:2]
+    scale = short_size * 1.0 / min(h, w)
+    h = int(h * scale + 0.5)
+    w = int(w * scale + 0.5)
+    # if h % 32 != 0:
+    #     h = h + (32 - h % 32)
+    # if w % 32 != 0:
+    #     w = w + (32 - w % 32)
+
     transformations = transforms.Compose(
         [
-            transforms.Resize((size, size), interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.Resize((h, w), interpolation=transforms.InterpolationMode.BILINEAR),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=IMAGENET_DEFAULT_MEAN,  # these are RGB mean+std values
