@@ -484,7 +484,7 @@ class IncrementalGrammarConstraint(GrammarConstraint):
 
     def accept_token_id(self, token_id: int, stacks: List[List[int]]):
         if token_id == self.eos_token_id:
-            if stacks and any(len(stack) != 0 for stack in stacks):
+            if stacks and all(len(stack) != 0 for stack in stacks):
                 raise Exception(f"At least one of the stack should be empty when EOS is reached. However, "
                                 f"the stacks are {stacks}")
             return []
