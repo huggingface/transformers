@@ -107,6 +107,7 @@ class LagLlamaConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "lagllama"
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -159,9 +160,9 @@ class LagLlamaConfig(PretrainedConfig):
         self.pretraining_tp = pretraining_tp
         self.rope_scaling = rope_scaling
         self._rope_scaling_validation()
-        self.attention_bias = attention_bias    
+        self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        
+
         super().__init__(**kwargs)
 
     @property
