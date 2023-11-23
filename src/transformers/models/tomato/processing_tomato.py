@@ -596,7 +596,7 @@ class TomatoProcessor(ProcessorMixin):
         for i in range(input_ids.shape[0]):
             seq = image_patches_indices[i]
             # indices = mark_continuous_neg_ones(seq)[:input_ids.shape[1]]
-            indices = (seq != special_token_id).nonzero(as_tuple=True)[0]
+            indices = (seq == special_token_id).nonzero(as_tuple=True)[0]
             labels[i, indices] = input_ids[i, indices]
         return labels
             
