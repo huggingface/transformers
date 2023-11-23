@@ -42,7 +42,8 @@ class SwiftFormerConfig(PretrainedConfig):
 
 
     Args:
-        image_size (`<fill_type>`, *optional*, defaults to 224): <fill_docstring>
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels
         depths (`List[int]`, *optional*, defaults to `[3, 3, 6, 4]`):
