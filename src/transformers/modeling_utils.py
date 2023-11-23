@@ -3055,8 +3055,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         if resolved_archive_file is not None:
                             is_sharded = True
                         elif use_safetensors:
-                            resolved_archive_file, revision = auto_conversion(
-                                pretrained_model_name_or_path, filename, **cached_file_kwargs
+                            resolved_archive_file, revision, is_sharded = auto_conversion(
+                                pretrained_model_name_or_path, **cached_file_kwargs
                             )
                             cached_file_kwargs["revision"] = revision
                             if resolved_archive_file is None:
