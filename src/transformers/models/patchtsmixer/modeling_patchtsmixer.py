@@ -108,7 +108,7 @@ class PatchTSMixerBatchNorm(nn.Module):
     """
     Parameters:
     Compute batch normalization
-        d_model (`int`): model dimension
+        num_features (`int`): model dimension
     """
 
     def __init__(self, config: PatchTSMixerConfig):
@@ -132,6 +132,7 @@ class PatchTSMixerPositionalEncoding(nn.Module):
     """
     Class for positional encoding
     """
+
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
         # positional encoding: [num_patches x num_features]
@@ -144,11 +145,11 @@ class PatchTSMixerPositionalEncoding(nn.Module):
     def _init_pe(config: PatchTSMixerConfig) -> nn.Parameter:
         # Positional encoding
         if config.positional_encoding_type == "random":
-            position_enc = nn.Parameter(torch.randn(config.num_patches, config.d_model), requires_grad=True)
+            position_enc = nn.Parameter(torch.randn(config.num_patches, config.num_features), requires_grad=True)
         elif config.positional_encoding_type == "sincos":
             position_enc = torch.zeros(config.num_patches, config.num_features)
             position = torch.arange(0, config.num_patches).unsqueeze(1)
-            div_term = torch.exp(torch.arange(0, config.d_model, 2) * -(math.log(10000.0) / config.d_model))
+            div_term = torch.exp(torch.arange(0, config.num_features, 2) * -(math.log(10000.0) / config.num_features))
             position_enc[:, 0::2] = torch.sin(position * div_term)
             position_enc[:, 1::2] = torch.cos(position * div_term)
             position_enc = position_enc - position_enc.mean()
@@ -893,7 +894,8 @@ def forecast_masking(
     seed_number: Optional[int] = None,
 ):
     """Forecast masking that masks the last K patches where K is from the num_forecast_mask_patches.
-    If num_forecast_mask_patches is a list, samples in the batch will be randomly masked by numbers defined in the list.
+    If num_forecast_mask_patches is a list, samples in the batch will be randomly masked by numbers defined in the
+    list.
 
     Parameters:
         inputs (`torch.Tensor`):
@@ -954,7 +956,6 @@ def forecast_masking(
 
     inputs_mask = inputs.masked_fill(mask.bool(), mask_value)
     return inputs_mask, mask[..., 0]
-
 
 
 # Copied from transformers.models.patchtst.modeling_patchtst.PatchTSTPatchify with PatchTST->PatchTSMixer
@@ -1027,7 +1028,7 @@ class PatchTSMixerMasking(nn.Module):
         self.random_mask_ratio = config.random_mask_ratio
         self.channel_consistent_masking = config.channel_consistent_masking
         self.mask_type = config.mask_type
-        self.forecast_mask_patches = config.forecast_mask_patches
+        self.num_forecast_mask_patches = config.num_forecast_mask_patches
         self.forecast_mask_ratios = config.forecast_mask_ratios
         self.unmasked_channel_indices = config.unmasked_channel_indices
         self.mask_value = config.mask_value
@@ -1262,9 +1263,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.use_return_dict
 
         # flatten [bs x num_patch x num_features]. common_channel/mix_channel: [bs x n_vars x num_patch x num_features]
-        patches = self.patcher(
-            past_values
-        )
+        patches = self.patcher(past_values)
 
         # add positional encoder
         patches = self.positional_encoder(patches)

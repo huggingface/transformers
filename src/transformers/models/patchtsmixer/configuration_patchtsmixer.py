@@ -78,8 +78,8 @@ class PatchTSMixerConfig(PretrainedConfig):
             Enable the use of positional embedding for the tiny self-attention layers. Works only when `self_attn` is
             set to `True`.
         positional_encoding_type (`str`, *optional*, defaults to `"sincos"`):
-            Positional encodings. Options `"random"` and `"sincos"` are supported.
-            Works only when `use_positional_encoding` is set to `True`
+            Positional encodings. Options `"random"` and `"sincos"` are supported. Works only when
+            `use_positional_encoding` is set to `True`
         learn_positional_encoding (`bool`, *optional*, defaults to `False`):
             Whether to learn the positional encoding. Works only when `use_positional_encoding` is set to `True`
         scaling (`string` or `bool`, *optional*, defaults to `"std"`):
@@ -104,10 +104,9 @@ class PatchTSMixerConfig(PretrainedConfig):
         random_mask_ratio (`float`, *optional*, defaults to 0.5):
             Masking ratio to use when `mask_type` is `random`. Higher value indicates more masking.
         num_forecast_mask_patches (`int` or `list`, *optional*, defaults to `[2]`):
-            Number of patches to be masked at the end of each batch sample. If it is an integer,
-            all the samples in the batch will have the same number of masked patches. If it is a list,
-            samples in the batch will be randomly masked by numbers defined in the list. This argument is only used
-            for forecast pretraining.
+            Number of patches to be masked at the end of each batch sample. If it is an integer, all the samples in the
+            batch will have the same number of masked patches. If it is a list, samples in the batch will be randomly
+            masked by numbers defined in the list. This argument is only used for forecast pretraining.
         mask_value (`float`, *optional*, defaults to `0.0`):
             Mask value to use.
         masked_loss (`bool`, *optional*, defaults to `True`):
@@ -154,7 +153,8 @@ class PatchTSMixerConfig(PretrainedConfig):
         "hidden_size": "num_features",
         "num_hidden_layers": "num_layers",
     }
-def __init__(
+
+    def __init__(
         self,
         # Time series specific configuration
         context_length: int = 32,
@@ -200,46 +200,44 @@ def __init__(
         output_range: list = None,
         head_aggregation: str = "max_pool",
         **kwargs,
-):
-    super().__init__(**kwargs)
-    self.num_input_channels = num_input_channels
-    self.context_length = context_length
-    self.patch_length = patch_len
-    self.patch_stride = patch_stride
-    self.num_features = num_features
-    self.expansion_factor = expansion_factor
-    self.num_layers = num_layers
-    self.dropout = dropout
-    self.mode = mode
-    self.gated_attn = gated_attn
-    self.norm_mlp = norm_mlp
-    self.scaling = scaling
-    self.head_dropout = head_dropout
-    self.num_patches = (max(context_length, patch_len) - patch_len) // patch_stride + 1
-    self.mask_type = mask_type
-    self.random_mask_ratio = random_mask_ratio
-    self.num_forecast_mask_patches = num_forecast_mask_patches
-    self.mask_value = mask_value
-    self.channel_consistent_masking = channel_consistent_masking
-    self.masked_loss = masked_loss
-    self.patch_last = True
-    self.use_positional_encoding = use_positional_encoding
-    self.positional_encoding_type = positional_encoding_type
-    self.learn_positional_encoding = learn_positional_encoding
-    self.prediction_length = prediction_length
-    self.prediction_channel_indices = prediction_channel_indices
-    self.num_targets = num_targets
-    self.output_range = output_range
-    self.head_aggregation = head_aggregation
-    self.self_attn = self_attn
-    self.self_attn_heads = self_attn_heads
-    self.init_std = init_std
-    self.seed_number = seed_number
-    self.post_init = post_init
-    self.distribution_output = distribution_output
-    self.loss = loss
-    self.num_parallel_samples = num_parallel_samples
-    self.unmasked_channel_indices = unmasked_channel_indices
-    self.norm_eps = norm_eps
-
-    super().__init__(**kwargs)
+    ):
+        self.num_input_channels = num_input_channels
+        self.context_length = context_length
+        self.patch_length = patch_len
+        self.patch_stride = patch_stride
+        self.num_features = num_features
+        self.expansion_factor = expansion_factor
+        self.num_layers = num_layers
+        self.dropout = dropout
+        self.mode = mode
+        self.gated_attn = gated_attn
+        self.norm_mlp = norm_mlp
+        self.scaling = scaling
+        self.head_dropout = head_dropout
+        self.num_patches = (max(context_length, patch_len) - patch_len) // patch_stride + 1
+        self.mask_type = mask_type
+        self.random_mask_ratio = random_mask_ratio
+        self.num_forecast_mask_patches = num_forecast_mask_patches
+        self.mask_value = mask_value
+        self.channel_consistent_masking = channel_consistent_masking
+        self.masked_loss = masked_loss
+        self.patch_last = True
+        self.use_positional_encoding = use_positional_encoding
+        self.positional_encoding_type = positional_encoding_type
+        self.learn_positional_encoding = learn_positional_encoding
+        self.prediction_length = prediction_length
+        self.prediction_channel_indices = prediction_channel_indices
+        self.num_targets = num_targets
+        self.output_range = output_range
+        self.head_aggregation = head_aggregation
+        self.self_attn = self_attn
+        self.self_attn_heads = self_attn_heads
+        self.init_std = init_std
+        self.seed_number = seed_number
+        self.post_init = post_init
+        self.distribution_output = distribution_output
+        self.loss = loss
+        self.num_parallel_samples = num_parallel_samples
+        self.unmasked_channel_indices = unmasked_channel_indices
+        self.norm_eps = norm_eps
+        super().__init__(**kwargs)
