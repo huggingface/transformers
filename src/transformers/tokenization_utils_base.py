@@ -2247,14 +2247,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # end legacy
 
         # Passing AddedTokens and not strings to the class to prevent it from casting the string to a different AddedToken
+        # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
+        init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
         for key in cls.SPECIAL_TOKENS_ATTRIBUTES & init_kwargs.keys():
             if added_tokens_map != {} and init_kwargs[key] is not None:
                 if key != "additional_special_tokens":
-                    init_kwargs[key] = added_tokens_map.get(key, init_kwargs[key])
+                    init_kwargs[key] = added_tokens_map.get(str(init_kwargs[key]), init_kwargs[key])
 
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
-        # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
-        init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
         # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
