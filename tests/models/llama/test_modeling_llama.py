@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch LLaMA model. """
 
 
-import copy
 import unittest
 
 import pytest
@@ -428,12 +427,9 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         """
         Overwritting the common test as the test is flaky on tiny models
         """
-        import torch
-
         max_new_tokens = 30
 
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-        config = LlamaConfig.from_pretrained("meta-llama/Llama-2-7b-hf")
 
         model_sdpa = LlamaForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf",
@@ -441,19 +437,28 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             low_cpu_mem_usage=True,
         ).to(torch_device)
 
-        # Force using the eager implementation.
-        cfg = copy.deepcopy(config)
-        cfg.attn_implementation = "eager"
+        self.assertTrue(model_sdpa.config.attn_implementation == "sdpa")
+
         model_eager = LlamaForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf",
-            config=cfg,
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
+            attn_implementation="eager",
         ).to(torch_device)
 
+        self.assertTrue(model_eager.config.attn_implementation == "eager")
+
         for name, submodule in model_eager.named_modules():
-            if "SDPA" in submodule.__class__.__name__:
+            if "SdpaAttention" in submodule.__class__.__name__:
                 raise ValueError("The eager model should not have SDPA attention layers")
+
+        has_sdpa = False
+        for name, submodule in model_sdpa.named_modules():
+            if "SdpaAttention" in submodule.__class__.__name__:
+                has_sdpa = True
+                break
+        if not has_sdpa:
+            raise ValueError("The SDPA model should have SDPA attention layers")
 
         texts = ["hi", "Hello this is a very long sentence my friend", "Today I am in Paris and"]
 

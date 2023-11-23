@@ -3148,22 +3148,27 @@ class ModelTesterMixin:
                 model_sdpa = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.bfloat16,
-                )
-                model_sdpa.to(torch_device)
+                ).to(torch_device)
+                self.assertTrue(model_sdpa.config.attn_implementation == "sdpa")
 
-                # Force using the eager implementation.
-                cfg = copy.deepcopy(config)
-                cfg.attn_implementation = "eager"
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
-                    config=cfg,
                     torch_dtype=torch.bfloat16,
-                )
-                model_eager.to(torch_device)
+                    attn_implementation="eager",
+                ).to(torch_device)
+                self.assertTrue(model_eager.config.attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
-                    if "SDPA" in submodule.__class__.__name__:
+                    if "SdpaAttention" in submodule.__class__.__name__:
                         raise ValueError("The eager model should not have SDPA attention layers")
+
+                has_sdpa = False
+                for name, submodule in model_sdpa.named_modules():
+                    if "SdpaAttention" in submodule.__class__.__name__:
+                        has_sdpa = True
+                        break
+                if not has_sdpa and model_sdpa.config.model_type != "falcon":
+                    raise ValueError("The SDPA model should have SDPA attention layers")
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
                 if dummy_input.dtype in [torch.float32, torch.float16]:
@@ -3278,19 +3283,28 @@ class ModelTesterMixin:
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 
-                # Force using the eager implementation.
-                cfg = copy.deepcopy(config)
-                cfg.attn_implementation = "eager"
+                self.assertTrue(model_sdpa.attn_implementation == "sdpa")
+
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
-                    config=cfg,
                     torch_dtype=torch.float16,
                     low_cpu_mem_usage=True,
+                    attn_implementation="eager",
                 ).to(torch_device)
 
+                self.assertTrue(model_eager.attn_implementation == "eager")
+
                 for name, submodule in model_eager.named_modules():
-                    if "SDPA" in submodule.__class__.__name__:
+                    if "SdpaAttention" in submodule.__class__.__name__:
                         raise ValueError("The eager model should not have SDPA attention layers")
+
+                has_sdpa = False
+                for name, submodule in model_sdpa.named_modules():
+                    if "SdpaAttention" in submodule.__class__.__name__:
+                        has_sdpa = True
+                        break
+                if not has_sdpa:
+                    raise ValueError("The SDPA model should have SDPA attention layers")
 
                 # Just test that a large cache works as expected
                 res_eager = model_eager.generate(
