@@ -1147,7 +1147,7 @@ def add_code_sample_docstrings(
                     f"The provided revision '{revision}' is incorrect. It should point to"
                     " a pull request reference on the hub like 'refs/pr/6'"
                 )
-            code_sample.replace(
+            code_sample = code_sample.replace(
                 f'from_pretrained("{checkpoint}")', f'from_pretrained("{checkpoint}", revision="{revision}")'
             )
         func_doc = (fn.__doc__ or "") + "".join(docstr)
