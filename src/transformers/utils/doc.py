@@ -1149,7 +1149,7 @@ def add_code_sample_docstrings(
                     " a pull request reference on the hub like 'refs/pr/6'"
                 )
             code_sample.replace(
-                f'from_pretrained("{checkpoint}")', 'from_pretrained("{checkpoint}", revision="{revision}")'
+                f'from_pretrained("{checkpoint}")', f'from_pretrained("{checkpoint}", revision="{revision}")'
             )
         func_doc = (fn.__doc__ or "") + "".join(docstr)
         output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
