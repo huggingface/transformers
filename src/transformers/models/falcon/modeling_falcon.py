@@ -738,6 +738,7 @@ class FalconMLP(nn.Module):
 
 FALCON_ATTENTION_CLASSES = {
     "eager": FalconAttention,
+    "sdpa": FalconAttention,  # FalconAttention originally implemented both a forward with & without SDPA
     "flash_attention_2": FalconFlashAttention2,
 }
 
