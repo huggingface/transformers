@@ -1060,6 +1060,7 @@ class T5Stack(T5PreTrainedModel):
         self.device_map = None
         self.gradient_checkpointing = False
         self.add_t5_relative_position_embedding = config.add_t5_relative_position_embedding
+        self.add_rotary_position_embedding = config.add_rotary_position_embedding
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
@@ -1163,6 +1164,8 @@ class T5Stack(T5PreTrainedModel):
         position_ids_info_list_for_relative_embeddings = []
         if self.add_t5_relative_position_embedding:
             position_ids_info_list_for_relative_embeddings.append( (None, POSITION_EMBEDDING_T5_RELATIVE))
+        if self.add_rotary_position_embedding:
+            position_ids_info_list_for_relative_embeddings.append( (None, POSITION_EMBEDDING_ROTARY))
         for position_ids, position_embedding_names  in position_ids_dict.values(): #orig
             position_embedding_name = position_embedding_names[0]  # till collate if fixed, we move a list of identical embedding names of batch_size
             if position_ids is None:
