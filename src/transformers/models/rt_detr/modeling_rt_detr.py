@@ -1029,21 +1029,21 @@ class RTDetrLoss(nn.Module):
         idx = self._get_source_permutation_idx(indices)
 
         src_boxes = outputs["pred_boxes"][idx]
-        target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
+        target_boxes = torch.cat([_target["boxes"][i] for _target, (_, i) in zip(targets, indices)], dim=0)
         ious, _ = box_iou(center_to_corners_format(src_boxes), center_to_corners_format(target_boxes))
         ious = torch.diag(ious).detach()
 
         src_logits = outputs["logits"]
-        target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
+        target_classes_original = torch.cat([_target["class_labels"][i] for _target, (_, i) in zip(targets, indices)])
         target_classes = torch.full(
             src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
         )
-        target_classes[idx] = target_classes_o
+        target_classes[idx] = target_classes_original
         target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
 
-        target_score_o = torch.zeros_like(target_classes, dtype=src_logits.dtype)
-        target_score_o[idx] = ious.to(target_score_o.dtype)
-        target_score = target_score_o.unsqueeze(-1) * target
+        target_score_original = torch.zeros_like(target_classes, dtype=src_logits.dtype)
+        target_score_original[idx] = ious.to(target_score_original.dtype)
+        target_score = target_score_original.unsqueeze(-1) * target
 
         pred_score = F.sigmoid(src_logits).detach()
         weight = self.alpha * pred_score.pow(self.gamma) * (1 - target) + target_score
@@ -1062,11 +1062,11 @@ class RTDetrLoss(nn.Module):
         src_logits = outputs["logits"]
 
         idx = self._get_source_permutation_idx(indices)
-        target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
+        target_classes_original = torch.cat([_target["class_labels"][i] for _target, (_, i) in zip(targets, indices)])
         target_classes = torch.full(
             src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
         )
-        target_classes[idx] = target_classes_o
+        target_classes[idx] = target_classes_original
 
         loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.class_weight)
         losses = {"loss_ce": loss_ce}
@@ -1144,11 +1144,11 @@ class RTDetrLoss(nn.Module):
     def loss_labels_bce(self, outputs, targets, indices, num_boxes, log=True):
         src_logits = outputs["logits"]
         idx = self._get_source_permutation_idx(indices)
-        target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
+        target_classes_original = torch.cat([_target["labels"][i] for _target, (_, i) in zip(targets, indices)])
         target_classes = torch.full(
             src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
         )
-        target_classes[idx] = target_classes_o
+        target_classes[idx] = target_classes_original
 
         target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
         loss = F.binary_cross_entropy_with_logits(src_logits, target * 1.0, reduction="none")
@@ -1174,11 +1174,11 @@ class RTDetrLoss(nn.Module):
         src_logits = outputs["logits"]
 
         idx = self._get_source_permutation_idx(indices)
-        target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
+        target_classes_original = torch.cat([_target["labels"][i] for _target, (_, i) in zip(targets, indices)])
         target_classes = torch.full(
             src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
         )
-        target_classes[idx] = target_classes_o
+        target_classes[idx] = target_classes_original
 
         target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
         loss = sigmoid_focal_loss(src_logits, target, self.alpha, self.gamma, reduction="none")
@@ -1241,7 +1241,8 @@ class RTDetrLoss(nn.Module):
 
         # In case of cdn auxiliary losses. For rtdetr
         if "dn_aux_outputs" in outputs:
-            assert "dn_meta" in outputs, ""
+            if "dn_meta" not in outputs:
+                raise ValueError("The output must have the 'dn_meta` key. Please, ensure that 'outputs' includes a 'dn_meta' entry.")
             indices = self.get_cdn_matched_indices(outputs["dn_meta"], targets)
             num_boxes = num_boxes * outputs["dn_meta"]["dn_num_group"]
 
@@ -1252,10 +1253,6 @@ class RTDetrLoss(nn.Module):
                         # Intermediate masks losses are too costly to compute, we ignore them.
                         continue
                     kwargs = {}
-                    if loss == "labels":
-                        # Logging is enabled only for the last layer
-                        kwargs = {"log": False}
-
                     l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_boxes, **kwargs)
                     l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
                     l_dict = {k + f"_dn_{i}": v for k, v in l_dict.items()}
