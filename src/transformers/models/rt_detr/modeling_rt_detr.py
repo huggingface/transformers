@@ -1499,7 +1499,7 @@ class RTDetrHungarianMatcher(nn.Module):
         cost_giou = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(tgt_bbox))
         # Compute the final cost matrix
         final_cost = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
-        final_cost = final_cost.view(bs, num_queries, -1).cpu()
+        final_cost = final_cost.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(final_cost.split(sizes, -1))]
