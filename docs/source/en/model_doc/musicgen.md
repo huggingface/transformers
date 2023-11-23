@@ -46,6 +46,14 @@ This model was contributed by [sanchit-gandhi](https://huggingface.co/sanchit-ga
 [here](https://github.com/facebookresearch/audiocraft). The pre-trained checkpoints can be found on the
 [Hugging Face Hub](https://huggingface.co/models?sort=downloads&search=facebook%2Fmusicgen-).
 
+Note: Models exported via [this](https://github.com/facebookresearch/audiocraft/blob/main/docs/MUSICGEN.md#importing--exporting-models) 
+need to be converted to transformers before being run. This can be done with the script located at
+`src/transformers/models/musicgen/convert_musicgen_transformers.py`, like so:
+```
+python src/transformers/models/musicgen/convert_musicgen_transformers.py \
+    --checkpoint small --pytorch_dump_folder /output/path --safe_serialization --push_to_hub user/repo
+```
+
 ## Generation
 
 MusicGen is compatible with two generation modes: greedy and sampling. In practice, sampling leads to significantly
