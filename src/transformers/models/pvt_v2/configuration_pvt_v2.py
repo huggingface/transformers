@@ -17,13 +17,9 @@
 """ Pvt model configuration"""
 
 import warnings
-from collections import OrderedDict
-from typing import Callable, Dict, List, Mapping, Sequence, Union
-
-from packaging import version
+from typing import Callable, List, Mapping, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
@@ -52,8 +48,8 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        image_size (`int`, *optional*, defaults to `{'height': 224, 'width': 224}`):
-            The input image size
+        image_size (`Union[int, Tuple[int, int]]`, *optional*, defaults to 224):
+            The input image size. Pass int value for square image, or tuple of (height, width).
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_encoder_blocks (`[int]`, *optional*, defaults to 4):
@@ -90,8 +86,8 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
             Whether or not a learnable bias should be added to the queries, keys and values.
         num_labels ('int', *optional*, defaults to 1000):
             The number of classes.
-        attn_reduce (`str`, *optional*, defaults to `"SR"`):
-            Pass 'SR' for spatial reduction, 'AP' for average pooling.
+        attn_reduce (`str`, *optional*, defaults to `"spatialreduction"`):
+            Attention complexity reduction type. Choice of 'spatialreduction' or 'averagepooling' .
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
@@ -119,7 +115,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
 
     def __init__(
         self,
-        image_size: Union[int, Sequence[int], Dict[str, int]] = {"height": 224, "width": 224},
+        image_size: Union[int, Tuple[int, int]] = 224,
         num_channels: int = 3,
         num_encoder_blocks: int = 4,
         depths: List[int] = [2, 2, 2, 2],
@@ -137,7 +133,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         layer_norm_eps: float = 1e-6,
         qkv_bias: bool = True,
         num_labels: int = 1000,
-        attn_reduce: str = "SR",  # Set to "SR" for spatial reduction (Conv2d), "AP" for average pooling
+        attn_reduce: str = "spatialreduction",
         out_features=None,
         out_indices=None,
         **kwargs,
@@ -155,13 +151,8 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
             out_indices = kwargs["_out_indices"]
             out_features = None
 
-        if isinstance(image_size, int):
-            image_size = (image_size, image_size)
-        if isinstance(image_size, dict):
-            req_keys = ("height", "width")
-            assert all(k in req_keys for k in image_size.keys()), f"Image size dict must have keys: {req_keys}"
-        elif isinstance(image_size, Sequence):
-            image_size = {"height": image_size[0], "width": image_size[1]}
+        image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
+
         self.image_size = image_size
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
@@ -186,5 +177,3 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
-
-

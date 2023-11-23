@@ -37,75 +37,105 @@ def create_rename_keys(config):
     rename_keys = []
     for i in range(config.num_encoder_blocks):
         # Remane embedings' paramters
-        rename_keys.append((f"patch_embed{i + 1}.proj.weight", f"pvt_v2.encoder.patch_embeddings.{i}.proj.weight"))
-        rename_keys.append((f"patch_embed{i + 1}.proj.bias", f"pvt_v2.encoder.patch_embeddings.{i}.proj.bias"))
         rename_keys.append(
-            (f"patch_embed{i + 1}.norm.weight", f"pvt_v2.encoder.patch_embeddings.{i}.layer_norm.weight")
+            (f"patch_embed{i + 1}.proj.weight", f"pvt_v2.encoder.layers.{i}.patch_embedding.proj.weight")
         )
-        rename_keys.append((f"patch_embed{i + 1}.norm.bias", f"pvt_v2.encoder.patch_embeddings.{i}.layer_norm.bias"))
-        rename_keys.append((f"norm{i + 1}.weight", f"pvt_v2.encoder.layer_norms.{i}.weight"))
-        rename_keys.append((f"norm{i + 1}.bias", f"pvt_v2.encoder.layer_norms.{i}.bias"))
+        rename_keys.append((f"patch_embed{i + 1}.proj.bias", f"pvt_v2.encoder.layers.{i}.patch_embedding.proj.bias"))
+        rename_keys.append(
+            (f"patch_embed{i + 1}.norm.weight", f"pvt_v2.encoder.layers.{i}.patch_embedding.layer_norm.weight")
+        )
+        rename_keys.append(
+            (f"patch_embed{i + 1}.norm.bias", f"pvt_v2.encoder.layers.{i}.patch_embedding.layer_norm.bias")
+        )
+        rename_keys.append((f"norm{i + 1}.weight", f"pvt_v2.encoder.layers.{i}.layer_norm.weight"))
+        rename_keys.append((f"norm{i + 1}.bias", f"pvt_v2.encoder.layers.{i}.layer_norm.bias"))
 
         for j in range(config.depths[i]):
             # Rename blocks' parameters
             rename_keys.append(
-                (f"block{i + 1}.{j}.attn.q.weight", f"pvt_v2.encoder.block.{i}.{j}.attention.query.weight")
+                (f"block{i + 1}.{j}.attn.q.weight", f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.query.weight")
             )
-            rename_keys.append((f"block{i + 1}.{j}.attn.q.bias", f"pvt_v2.encoder.block.{i}.{j}.attention.query.bias"))
             rename_keys.append(
-                (f"block{i + 1}.{j}.attn.kv.weight", f"pvt_v2.encoder.block.{i}.{j}.attention.kv.weight")
+                (f"block{i + 1}.{j}.attn.q.bias", f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.query.bias")
             )
-            rename_keys.append((f"block{i + 1}.{j}.attn.kv.bias", f"pvt_v2.encoder.block.{i}.{j}.attention.kv.bias"))
+            rename_keys.append(
+                (f"block{i + 1}.{j}.attn.kv.weight", f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.kv.weight")
+            )
+            rename_keys.append(
+                (f"block{i + 1}.{j}.attn.kv.bias", f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.kv.bias")
+            )
 
-            if config.attn_reduce == "AP" or config.sr_ratios[i] > 1:
+            if config.attn_reduce == "averagepooling" or config.sr_ratios[i] > 1:
                 rename_keys.append(
                     (
                         f"block{i + 1}.{j}.attn.norm.weight",
-                        f"pvt_v2.encoder.block.{i}.{j}.attention.layer_norm.weight",
+                        f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.layer_norm.weight",
                     )
                 )
                 rename_keys.append(
-                    (f"block{i + 1}.{j}.attn.norm.bias", f"pvt_v2.encoder.block.{i}.{j}.attention.layer_norm.bias")
+                    (
+                        f"block{i + 1}.{j}.attn.norm.bias",
+                        f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.layer_norm.bias",
+                    )
                 )
                 rename_keys.append(
                     (
                         f"block{i + 1}.{j}.attn.sr.weight",
-                        f"pvt_v2.encoder.block.{i}.{j}.attention.sr.weight",
+                        f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.sr.weight",
                     )
                 )
                 rename_keys.append(
                     (
                         f"block{i + 1}.{j}.attn.sr.bias",
-                        f"pvt_v2.encoder.block.{i}.{j}.attention.sr.bias",
+                        f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.sr.bias",
                     )
                 )
 
             rename_keys.append(
-                (f"block{i + 1}.{j}.attn.proj.weight", f"pvt_v2.encoder.block.{i}.{j}.attention.proj.weight")
+                (f"block{i + 1}.{j}.attn.proj.weight", f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.proj.weight")
             )
             rename_keys.append(
-                (f"block{i + 1}.{j}.attn.proj.bias", f"pvt_v2.encoder.block.{i}.{j}.attention.proj.bias")
+                (f"block{i + 1}.{j}.attn.proj.bias", f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.proj.bias")
             )
 
-            rename_keys.append((f"block{i + 1}.{j}.norm1.weight", f"pvt_v2.encoder.block.{i}.{j}.layer_norm_1.weight"))
-            rename_keys.append((f"block{i + 1}.{j}.norm1.bias", f"pvt_v2.encoder.block.{i}.{j}.layer_norm_1.bias"))
+            rename_keys.append(
+                (f"block{i + 1}.{j}.norm1.weight", f"pvt_v2.encoder.layers.{i}.blocks.{j}.layer_norm_1.weight")
+            )
+            rename_keys.append(
+                (f"block{i + 1}.{j}.norm1.bias", f"pvt_v2.encoder.layers.{i}.blocks.{j}.layer_norm_1.bias")
+            )
 
-            rename_keys.append((f"block{i + 1}.{j}.norm2.weight", f"pvt_v2.encoder.block.{i}.{j}.layer_norm_2.weight"))
-            rename_keys.append((f"block{i + 1}.{j}.norm2.bias", f"pvt_v2.encoder.block.{i}.{j}.layer_norm_2.bias"))
+            rename_keys.append(
+                (f"block{i + 1}.{j}.norm2.weight", f"pvt_v2.encoder.layers.{i}.blocks.{j}.layer_norm_2.weight")
+            )
+            rename_keys.append(
+                (f"block{i + 1}.{j}.norm2.bias", f"pvt_v2.encoder.layers.{i}.blocks.{j}.layer_norm_2.bias")
+            )
 
-            rename_keys.append((f"block{i + 1}.{j}.mlp.fc1.weight", f"pvt_v2.encoder.block.{i}.{j}.mlp.dense1.weight"))
-            rename_keys.append((f"block{i + 1}.{j}.mlp.fc1.bias", f"pvt_v2.encoder.block.{i}.{j}.mlp.dense1.bias"))
+            rename_keys.append(
+                (f"block{i + 1}.{j}.mlp.fc1.weight", f"pvt_v2.encoder.layers.{i}.blocks.{j}.mlp.dense1.weight")
+            )
+            rename_keys.append(
+                (f"block{i + 1}.{j}.mlp.fc1.bias", f"pvt_v2.encoder.layers.{i}.blocks.{j}.mlp.dense1.bias")
+            )
             rename_keys.append(
                 (
                     f"block{i + 1}.{j}.mlp.dwconv.dwconv.weight",
-                    f"pvt_v2.encoder.block.{i}.{j}.mlp.dwconv.dwconv.weight",
+                    f"pvt_v2.encoder.layers.{i}.blocks.{j}.mlp.dwconv.dwconv.weight",
                 )
             )
             rename_keys.append(
-                (f"block{i + 1}.{j}.mlp.dwconv.dwconv.bias", f"pvt_v2.encoder.block.{i}.{j}.mlp.dwconv.dwconv.bias")
+                (
+                    f"block{i + 1}.{j}.mlp.dwconv.dwconv.bias",
+                    f"pvt_v2.encoder.layers.{i}.blocks.{j}.mlp.dwconv.dwconv.bias",
+                )
             )
-            rename_keys.append((f"block{i + 1}.{j}.mlp.fc2.weight", f"pvt_v2.encoder.block.{i}.{j}.mlp.dense2.weight"))
-            rename_keys.append((f"block{i + 1}.{j}.mlp.fc2.bias", f"pvt_v2.encoder.block.{i}.{j}.mlp.dense2.bias"))
+            rename_keys.append(
+                (f"block{i + 1}.{j}.mlp.fc2.weight", f"pvt_v2.encoder.layers.{i}.blocks.{j}.mlp.dense2.weight")
+            )
+            rename_keys.append(
+                (f"block{i + 1}.{j}.mlp.fc2.bias", f"pvt_v2.encoder.layers.{i}.blocks.{j}.mlp.dense2.bias")
+            )
 
     rename_keys.extend(
         [
@@ -123,14 +153,20 @@ def read_in_k_v(state_dict, config):
     for i in range(config.num_encoder_blocks):
         for j in range(config.depths[i]):
             # read in weights + bias of keys and values (which is a single matrix in the original implementation)
-            kv_weight = state_dict.pop(f"pvt_v2.encoder.block.{i}.{j}.attention.kv.weight")
-            kv_bias = state_dict.pop(f"pvt_v2.encoder.block.{i}.{j}.attention.kv.bias")
+            kv_weight = state_dict.pop(f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.kv.weight")
+            kv_bias = state_dict.pop(f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.kv.bias")
             # next, add keys and values (in that order) to the state dict
-            state_dict[f"pvt_v2.encoder.block.{i}.{j}.attention.key.weight"] = kv_weight[: config.hidden_sizes[i], :]
-            state_dict[f"pvt_v2.encoder.block.{i}.{j}.attention.key.bias"] = kv_bias[: config.hidden_sizes[i]]
+            state_dict[f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.key.weight"] = kv_weight[
+                : config.hidden_sizes[i], :
+            ]
+            state_dict[f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.key.bias"] = kv_bias[: config.hidden_sizes[i]]
 
-            state_dict[f"pvt_v2.encoder.block.{i}.{j}.attention.value.weight"] = kv_weight[config.hidden_sizes[i] :, :]
-            state_dict[f"pvt_v2.encoder.block.{i}.{j}.attention.value.bias"] = kv_bias[config.hidden_sizes[i] :]
+            state_dict[f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.value.weight"] = kv_weight[
+                config.hidden_sizes[i] :, :
+            ]
+            state_dict[f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.value.bias"] = kv_bias[
+                config.hidden_sizes[i] :
+            ]
 
 
 def rename_key(dct, old, new):
@@ -184,7 +220,7 @@ def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folde
     model = PvtV2ForImageClassification(config).eval()
     model.load_state_dict(state_dict)
 
-    # Check outputs on an image, prepared by PVTFeatureExtractor
+    # Check outputs on an image, prepared by PvtV2ImageProcessor
     image_processor = PvtV2ImageProcessor(size=config.image_size)
     encoding = image_processor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
@@ -227,13 +263,13 @@ if __name__ == "__main__":
         "--pvt_v2_size",
         default="b0",
         type=str,
-        help="Size of the PVT v2 pretrained model you'd like to convert.",
+        help="Size of the PVTv2 pretrained model you'd like to convert.",
     )
     parser.add_argument(
         "--pvt_v2_checkpoint",
         default="pvt_v2_b0.pth",
         type=str,
-        help="Checkpoint of the PVT pretrained model you'd like to convert.",
+        help="Checkpoint of the PVTv2 pretrained model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
