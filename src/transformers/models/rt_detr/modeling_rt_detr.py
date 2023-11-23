@@ -444,8 +444,8 @@ class RTDetrRepVggBlock(nn.Module):
         channels_in = int(config.hidden_dim)
         channels_out = int(config.hidden_dim)
         activation = config.act_encoder
-        self.conv1 = RTDetrConvNormLayer(config, channels_in, channels_out, 3, 1, padding=1)
-        self.conv2 = RTDetrConvNormLayer(config, channels_in, channels_out, 1, 1, padding=0)
+        self.conv1 = RTDetrConvNormLayer(config, in_channels, out_channels, 3, 1, padding=1)
+        self.conv2 = RTDetrConvNormLayer(config, in_channels, out_channels, 1, 1, padding=0)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, x):
