@@ -494,7 +494,6 @@ _import_structure = {
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
     ],
-    "models.patchtst": ["PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP", "PatchTSTConfig"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
@@ -599,6 +598,11 @@ _import_structure = {
         "TvltFeatureExtractor",
         "TvltProcessor",
     ],
+    "models.tvp": [
+        "TVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TvpConfig",
+        "TvpProcessor",
+    ],
     "models.umt5": ["UMT5Config"],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -607,6 +611,11 @@ _import_structure = {
     "models.unispeech_sat": [
         "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechSatConfig",
+    ],
+    "models.univnet": [
+        "UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "UnivNetConfig",
+        "UnivNetFeatureExtractor",
     ],
     "models.upernet": ["UperNetConfig"],
     "models.videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
@@ -1012,6 +1021,7 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
+    _import_structure["models.tvp"].append("TvpImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
@@ -1169,8 +1179,6 @@ else:
             "MODEL_FOR_TEXT_ENCODING_MAPPING",
             "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING",
             "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING",
-            "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
-            "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING",
             "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
@@ -2493,17 +2501,6 @@ else:
             "OwlViTVisionModel",
         ]
     )
-    _import_structure["models.patchtst"].extend(
-        [
-            "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "PatchTSTForClassification",
-            "PatchTSTForPrediction",
-            "PatchTSTForPretraining",
-            "PatchTSTForRegression",
-            "PatchTSTModel",
-            "PatchTSTPreTrainedModel",
-        ]
-    )
     _import_structure["models.pegasus"].extend(
         ["PegasusForCausalLM", "PegasusForConditionalGeneration", "PegasusModel", "PegasusPreTrainedModel"]
     )
@@ -2950,6 +2947,14 @@ else:
             "TvltPreTrainedModel",
         ]
     )
+    _import_structure["models.tvp"].extend(
+        [
+            "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TvpForVideoGrounding",
+            "TvpModel",
+            "TvpPreTrainedModel",
+        ]
+    )
     _import_structure["models.umt5"].extend(
         [
             "UMT5EncoderModel",
@@ -2980,6 +2985,12 @@ else:
             "UniSpeechSatForXVector",
             "UniSpeechSatModel",
             "UniSpeechSatPreTrainedModel",
+        ]
+    )
+    _import_structure["models.univnet"].extend(
+        [
+            "UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "UnivNetModel",
         ]
     )
     _import_structure["models.upernet"].extend(
@@ -4717,7 +4728,6 @@ if TYPE_CHECKING:
         OwlViTTextConfig,
         OwlViTVisionConfig,
     )
-    from .models.patchtst import PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP, PatchTSTConfig
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
@@ -4816,9 +4826,19 @@ if TYPE_CHECKING:
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltFeatureExtractor, TvltProcessor
+    from .models.tvp import (
+        TVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TvpConfig,
+        TvpProcessor,
+    )
     from .models.umt5 import UMT5Config
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
+    from .models.univnet import (
+        UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        UnivNetConfig,
+        UnivNetFeatureExtractor,
+    )
     from .models.upernet import UperNetConfig
     from .models.videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
     from .models.vilt import (
@@ -5186,6 +5206,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
+        from .models.tvp import TvpImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
@@ -5324,8 +5345,6 @@ if TYPE_CHECKING:
             MODEL_FOR_TEXT_ENCODING_MAPPING,
             MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING,
             MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
-            MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING,
-            MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING,
             MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
@@ -6416,15 +6435,6 @@ if TYPE_CHECKING:
             OwlViTTextModel,
             OwlViTVisionModel,
         )
-        from .models.patchtst import (
-            PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PatchTSTForClassification,
-            PatchTSTForPrediction,
-            PatchTSTForPretraining,
-            PatchTSTForRegression,
-            PatchTSTModel,
-            PatchTSTPreTrainedModel,
-        )
         from .models.pegasus import (
             PegasusForCausalLM,
             PegasusForConditionalGeneration,
@@ -6793,6 +6803,12 @@ if TYPE_CHECKING:
             TvltModel,
             TvltPreTrainedModel,
         )
+        from .models.tvp import (
+            TVP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TvpForVideoGrounding,
+            TvpModel,
+            TvpPreTrainedModel,
+        )
         from .models.umt5 import (
             UMT5EncoderModel,
             UMT5ForConditionalGeneration,
@@ -6819,6 +6835,7 @@ if TYPE_CHECKING:
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )
+        from .models.univnet import UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST, UnivNetModel
         from .models.upernet import UperNetForSemanticSegmentation, UperNetPreTrainedModel
         from .models.videomae import (
             VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,

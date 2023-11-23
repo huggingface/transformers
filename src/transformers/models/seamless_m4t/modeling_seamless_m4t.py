@@ -2785,6 +2785,12 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
         self.text_decoder.embed_tokens = value
         self.shared = value
 
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.text_encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.lm_head, self.shared)
+
     @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -3076,6 +3082,11 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.text_decoder.embed_tokens = value
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.lm_head, self.shared)
 
     @add_start_docstrings_to_model_forward(M4T_SPEECH_INPUTS_DOCSTRING)
     def forward(
@@ -3383,6 +3394,12 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         self.text_encoder.embed_tokens = value
         self.text_decoder.embed_tokens = value
         self.shared = value
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.text_encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.lm_head, self.shared)
 
     @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
     def forward(
@@ -3739,6 +3756,11 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.text_decoder.embed_tokens = value
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.lm_head, self.shared)
 
     @add_start_docstrings_to_model_forward(M4T_SPEECH_INPUTS_DOCSTRING)
     def forward(
@@ -4135,6 +4157,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         if self.config.tie_word_embeddings:
             self._tie_or_clone_weights(self.text_encoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.lm_head, self.shared)
 
     @add_start_docstrings_to_model_forward(M4T_MODEL_INPUTS_DOCSTRING)
     def forward(

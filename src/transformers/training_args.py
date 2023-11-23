@@ -234,8 +234,8 @@ class TrainingArguments:
             the last epoch before stopping training).
         max_steps (`int`, *optional*, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
-            In case of using a finite iterable dataset the training may stop before reaching the set number of steps
-            when all data is exhausted
+            For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
+            `max_steps` is reached.
         lr_scheduler_type (`str` or [`SchedulerType`], *optional*, defaults to `"linear"`):
             The scheduler type to use. See the documentation of [`SchedulerType`] for all possible values.
         lr_scheduler_kwargs ('dict', *optional*, defaults to {}):
@@ -637,6 +637,12 @@ class TrainingArguments:
             This will iterate over the entire training dataloader once beforehand,
 
             and will slow down the entire process.
+
+        include_num_input_tokens_seen (`bool`, *optional*):
+            Whether or not to track the number of input tokens seen throughout training.
+
+            May be slower in distributed training as gather operations must be called.
+
         neftune_noise_alpha (`Optional[float]`):
             If not `None`, this will activate NEFTune noise embeddings. This can drastically improve model performance
             for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
@@ -1144,7 +1150,7 @@ class TrainingArguments:
             "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
         },
     )
-    gradient_checkpointing_kwargs: dict = field(
+    gradient_checkpointing_kwargs: Optional[dict] = field(
         default=None,
         metadata={
             "help": "Gradient checkpointing key word arguments such as `use_reentrant`. Will be passed to `torch.utils.checkpoint.checkpoint` through `model.gradient_checkpointing_enable`."
@@ -1256,6 +1262,13 @@ class TrainingArguments:
     include_tokens_per_second: Optional[bool] = field(
         default=False,
         metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
+    )
+
+    include_num_input_tokens_seen: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "If set to `True`, will track the number of input tokens seen throughout training. (May be slower in distributed training)"
+        },
     )
 
     neftune_noise_alpha: float = field(
@@ -2168,9 +2181,9 @@ class TrainingArguments:
                 Total number of training epochs to perform (if not an integer, will perform the decimal part percents
                 of the last epoch before stopping training).
             max_steps (`int`, *optional*, defaults to -1):
-                If set to a positive number, the total number of training steps to perform. Overrides
-                `num_train_epochs`. In case of using a finite iterable dataset the training may stop before reaching
-                the set number of steps when all data is exhausted.
+                If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
+                For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
+                `max_steps` is reached.
             gradient_accumulation_steps (`int`, *optional*, defaults to 1):
                 Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
@@ -2575,9 +2588,9 @@ class TrainingArguments:
                 Total number of training epochs to perform (if not an integer, will perform the decimal part percents
                 of the last epoch before stopping training).
             max_steps (`int`, *optional*, defaults to -1):
-                If set to a positive number, the total number of training steps to perform. Overrides
-                `num_train_epochs`. In case of using a finite iterable dataset the training may stop before reaching
-                the set number of steps when all data is exhausted.
+                If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
+                For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
+                `max_steps` is reached.
             warmup_ratio (`float`, *optional*, defaults to 0.0):
                 Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
             warmup_steps (`int`, *optional*, defaults to 0):

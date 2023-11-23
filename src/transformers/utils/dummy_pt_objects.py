@@ -627,12 +627,6 @@ MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING = None
 MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING = None
 
 
-MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING = None
-
-
-MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING = None
-
-
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
@@ -6053,51 +6047,6 @@ class OwlViTVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class PatchTSTForClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PatchTSTForPrediction(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PatchTSTForPretraining(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PatchTSTForRegression(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PatchTSTModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PatchTSTPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class PegasusForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7908,6 +7857,30 @@ class TvltPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+TVP_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TvpForVideoGrounding(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TvpModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TvpPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class UMT5EncoderModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -8034,6 +8007,16 @@ class UniSpeechSatModel(metaclass=DummyObject):
 
 
 class UniSpeechSatPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class UnivNetModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -11,17 +11,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from typing import TYPE_CHECKING
 
-# rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_torch_available,
+)
 
 
 _import_structure = {
-    "configuration_patchtst": [
-        "PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "PatchTSTConfig",
+    "configuration_univnet": [
+        "UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "UnivNetConfig",
     ],
+    "feature_extraction_univnet": ["UnivNetFeatureExtractor"],
 }
 
 try:
@@ -30,19 +35,18 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_patchtst"] = [
-        "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "PatchTSTModel",
-        "PatchTSTPreTrainedModel",
-        "PatchTSTForPrediction",
-        "PatchTSTForPretraining",
-        "PatchTSTForRegression",
-        "PatchTSTForClassification",
+    _import_structure["modeling_univnet"] = [
+        "UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "UnivNetModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_patchtst import PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP, PatchTSTConfig
+    from .configuration_univnet import (
+        UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        UnivNetConfig,
+    )
+    from .feature_extraction_univnet import UnivNetFeatureExtractor
 
     try:
         if not is_torch_available():
@@ -50,14 +54,9 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_patchtst import (
-            PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PatchTSTForClassification,
-            PatchTSTForPrediction,
-            PatchTSTForPretraining,
-            PatchTSTForRegression,
-            PatchTSTModel,
-            PatchTSTPreTrainedModel,
+        from .modeling_univnet import (
+            UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            UnivNetModel,
         )
 
 else:

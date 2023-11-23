@@ -628,6 +628,8 @@
         title: UniSpeech
       - local: model_doc/unispeech-sat
         title: UniSpeech-SAT
+      - local: model_doc/univnet
+        title: UnivNet
       - local: model_doc/vits
         title: VITS
       - local: model_doc/wav2vec2
@@ -723,6 +725,8 @@
         title: TrOCR
       - local: model_doc/tvlt
         title: TVLT
+      - local: model_doc/tvp
+        title: TVP
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vision-encoder-decoder
@@ -747,8 +751,6 @@
         title: Autoformer
       - local: model_doc/informer
         title: Informer
-      - local: model_doc/patchtst
-        title: PatchTST
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
       title: Time series models
