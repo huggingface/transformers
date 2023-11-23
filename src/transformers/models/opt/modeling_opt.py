@@ -475,15 +475,18 @@ class OptFlashAttention2(OPTAttention):
         )
 
 
+OPT_ATTENTION_CLASSES = {
+    "eager": OPTAttention,
+    "flash_attention_2": OptFlashAttention2,
+}
+
+
 class OPTDecoderLayer(nn.Module):
     def __init__(self, config: OPTConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
 
-        if not getattr(config, "_flash_attn_2_enabled", False):
-            self.self_attn = OPTAttention(config=config, is_decoder=True)
-        else:
-            self.self_attn = OptFlashAttention2(config=config, is_decoder=True)
+        self.self_attn = OPT_ATTENTION_CLASSES[config.attn_implementation](config=config, is_decoder=True)
 
         self.do_layer_norm_before = config.do_layer_norm_before
         self.dropout = config.dropout

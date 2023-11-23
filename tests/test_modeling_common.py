@@ -3486,7 +3486,7 @@ class ModelTesterMixin:
 
                 model_from_pretrained = AutoModelForCausalLM.from_pretrained(tmpdirname)
 
-                self.assertFalse(getattr(model_from_pretrained.config, "_flash_attn_2_enabled", False))
+                self.assertTrue(model_from_pretrained.config._attn_implementation != "flash_attention_2")
 
                 fa2_correctly_converted = False
 

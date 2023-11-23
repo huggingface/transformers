@@ -839,12 +839,7 @@ class MistralModel(MistralPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if (
-            attention_mask is not None
-            and hasattr(self.config, "_flash_attn_2_enabled")
-            and self.config._flash_attn_2_enabled
-            and use_cache
-        ):
+        if attention_mask is not None and self._use_flash_attention_2 and use_cache:
             is_padding_right = attention_mask[:, -1].sum().item() != batch_size
             if is_padding_right:
                 raise ValueError(
