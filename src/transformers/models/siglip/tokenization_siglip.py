@@ -288,7 +288,6 @@ class SiglipTokenizer(PreTrainedTokenizer):
             If provided, then this exact string kept. For example providing '{}' will keep any occurrences of '{}'
             (but will still remove '{' and '}' that appear separately).
         """
-        print("Text before canonicalize_text:", text)
         if keep_punctuation_exact_string:
             text = keep_punctuation_exact_string.join(
                 part.translate(str.maketrans("", "", string.punctuation))
@@ -301,8 +300,6 @@ class SiglipTokenizer(PreTrainedTokenizer):
         text = re.sub(r"\s+", " ", text)
         text = text.strip()
 
-        print("Text after canonicalize_text:", text)
-
         return text
 
     def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
@@ -313,13 +310,13 @@ class SiglipTokenizer(PreTrainedTokenizer):
 
         # Replace special tokens with placeholders
         for idx, special_token in enumerate(special_tokens):
-            text = text.replace(special_token, f"{idx}placeholder")
-
+            text = text.replace(special_token, f"place{idx}holder")
+        
         text = self.canonicalize_text(text, keep_punctuation_exact_string="{}")
 
         # Add the special tokens back
         for idx, special_token in enumerate(special_tokens):
-            text = text.replace(f"{idx}placeholder", special_token)
+            text = text.replace(f"place{idx}holder", special_token)
 
         if len(text) == 0:
             return super().tokenize(text, **kwargs)
