@@ -797,8 +797,8 @@ class RTDetrTransformer(nn.Module):
                 torch.arange(end=height, dtype=dtype), torch.arange(end=width, dtype=dtype), indexing="ij"
             )
             grid_xy = torch.stack([grid_x, grid_y], -1)
-            valid_WH = torch.tensor([width, height]).to(dtype)
-            grid_xy = (grid_xy.unsqueeze(0) + 0.5) / valid_WH
+            valid_wh = torch.tensor([width, height]).to(dtype)
+            grid_xy = (grid_xy.unsqueeze(0) + 0.5) / valid_wh
             wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
             anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
 
