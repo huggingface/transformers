@@ -26,21 +26,21 @@ from ...utils import TensorType
 
 class CogVLMProcessor(ProcessorMixin):
     r"""
-    Constructs a CogVLM processor which wraps a BLIP image processor and an OPT/T5 tokenizer into a single processor.
+    Constructs a CogVLM processor which wraps a CLIP image processor and a LLaMa tokenizer into a single processor.
 
-    [`BlipProcessor`] offers all the functionalities of [`CogVLMImageProcessor`] and [`AutoTokenizer`]. See the docstring
-    of [`~BlipProcessor.__call__`] and [`~BlipProcessor.decode`] for more information.
+    [`CogVLMProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizer`]. See the docstring
+    of [`~CogVLMProcessor.__call__`] and [`~CogVLMProcessor.decode`] for more information.
 
     Args:
-        image_processor (`CogVLMImageProcessor`):
-            An instance of [`CogVLMImageProcessor`]. The image processor is a required input.
+        image_processor (`CLIPImageProcessor`):
+            An instance of [`CLIPImageProcessor`]. The image processor is a required input.
         tokenizer (`AutoTokenizer`):
-            An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
+            An instance of ['LlamaTokenizer`]. The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "CogVLMImageProcessor"
-    tokenizer_class = "AutoTokenizer"
+    image_processor_class = "CLIPImageProcessor"
+    tokenizer_class = "LlamaTokenizer"
 
     def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
@@ -68,7 +68,7 @@ class CogVLMProcessor(ProcessorMixin):
         **kwargs,
     ) -> BatchEncoding:
         """
-        This method uses [`CogVLMImageProcessor.__call__`] method to prepare image(s) for the model, and
+        This method uses [`CLIPImageProcessor.__call__`] method to prepare image(s) for the model, and
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.

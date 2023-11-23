@@ -24,9 +24,7 @@ from PIL import Image
 
 from transformers import (
     AutoModelForCausalLM,
-    CogVLMConfig,
-    CogVLMForCausalLM,
-    CogVLMImageProcessor,
+    CLIPImageProcessor,
     CogVLMProcessor,
     LlamaTokenizer,
 )
@@ -49,10 +47,6 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     )
     original_model.to("cuda:0")
 
-    # load HF model
-    config = CogVLMConfig()
-    model = CogVLMForCausalLM(config)
-
     # verify chat example
     query = "Describe this image"
     image = Image.open(
@@ -60,7 +54,9 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     ).convert("RGB")
 
     tokenizer = LlamaTokenizer.from_pretrained("lmsys/vicuna-7b-v1.5")
-    inputs = model.build_conversation_input_ids(tokenizer, query=query, history=[], images=[image])  # chat mode
+    inputs = original_model.build_conversation_input_ids(
+        tokenizer, query=query, history=[], images=[image]
+    )  # chat mode
     inputs = {
         "input_ids": inputs["input_ids"].unsqueeze(0).to("cuda"),
         "token_type_ids": inputs["token_type_ids"].unsqueeze(0).to("cuda"),
@@ -70,14 +66,21 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     gen_kwargs = {"max_length": 2048, "do_sample": False}
 
     with torch.no_grad():
-        outputs = model.generate(**inputs, **gen_kwargs)
+        outputs = original_model.generate(**inputs, **gen_kwargs)
         outputs = outputs[:, inputs["input_ids"].shape[1] :]
         print(tokenizer.decode(outputs[0]))
 
+    # load HF model
+    # config = CogVLMConfig()
+    # model = CogVLMForCausalLM(config)
+
     # create processor
     image_size = 224
-    image_processor = CogVLMImageProcessor(
-        size={"height": image_size, "width": image_size}, image_mean=OPENAI_CLIP_MEAN, image_std=OPENAI_CLIP_STD
+    image_processor = CLIPImageProcessor(
+        size={"height": image_size, "width": image_size},
+        do_center_crop=False,
+        image_mean=OPENAI_CLIP_MEAN,
+        image_std=OPENAI_CLIP_STD,
     )
     processor = CogVLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
     pixel_values = processor(images=image, return_tensors="pt").pixel_values.to("cuda")
@@ -108,20 +111,20 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
 
     if pytorch_dump_folder_path is not None:
         processor.save_pretrained(pytorch_dump_folder_path)
-        model.save_pretrained(pytorch_dump_folder_path)
+        # model.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         processor.push_to_hub(f"nielsr/{model_name}")
-        model.push_to_hub(f"nielsr/{model_name}")
+        # model.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_name",
-        default="blip2-opt-2.7b",
+        default="THUDM/cogvlm-chat-hf",
         type=str,
-        help="Path to hf config.json of model to convert",
+        help="Name of the model to convert",
     )
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument(

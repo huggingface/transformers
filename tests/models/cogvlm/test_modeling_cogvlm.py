@@ -19,10 +19,9 @@ import inspect
 import tempfile
 import unittest
 
-import numpy as np
 import requests
 
-from transformers import CogVLMConfig, CogVLMQFormerConfig, CogVLMVisionConfig
+from transformers import CogVLMConfig, CogVLMVisionConfig
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -36,8 +35,6 @@ from ...test_modeling_common import (
     ModelTesterMixin,
     _config_zero_init,
     floats_tensor,
-    ids_tensor,
-    random_attention_mask,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -220,90 +217,11 @@ class CogVLMVisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-class CogVLMQFormerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        projection_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        bos_token_id=0,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.bos_token_id = bos_token_id
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        if input_mask is not None:
-            batch_size, seq_length = input_mask.shape
-            rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
-            for batch_idx, start_index in enumerate(rnd_start_indices):
-                input_mask[batch_idx, :start_index] = 1
-                input_mask[batch_idx, start_index:] = 0
-
-        config = self.get_config()
-
-        return config, input_ids, input_mask
-
-    def get_config(self):
-        return CogVLMQFormerConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            projection_dim=self.projection_dim,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            dropout=self.dropout,
-            attention_dropout=self.attention_dropout,
-            max_position_embeddings=self.max_position_embeddings,
-            initializer_range=self.initializer_range,
-            bos_token_id=self.bos_token_id,
-        )
-
-
 # this model tester uses an encoder-decoder language model (T5)
 class CogVLMModelTester:
-    def __init__(
-        self, parent, vision_kwargs=None, qformer_kwargs=None, text_kwargs=None, is_training=True, num_query_tokens=10
-    ):
+    def __init__(self, parent, vision_kwargs=None, text_kwargs=None, is_training=True, num_query_tokens=10):
         if vision_kwargs is None:
             vision_kwargs = {}
-        if qformer_kwargs is None:
-            qformer_kwargs = {}
         if text_kwargs is None:
             text_kwargs = {}
 
@@ -328,9 +246,8 @@ class CogVLMModelTester:
         return config, input_ids, attention_mask, pixel_values, decoder_input_ids, decoder_attention_mask, lm_labels
 
     def get_config(self):
-        return CogVLMConfig.from_vision_qformer_text_configs(
+        return CogVLMConfig.from_vision_text_configs(
             vision_config=self.vision_model_tester.get_config(),
-            qformer_config=self.qformer_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
             num_query_tokens=self.num_query_tokens,
         )
@@ -430,7 +347,7 @@ class CogVLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_load_vision_qformer_text_config(self):
+    def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         # Save CogVLMConfig and check if we can load CogVLMVisionConfig from it
@@ -438,12 +355,6 @@ class CogVLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             vision_config = CogVLMVisionConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
-
-        # Save CogVLMConfig and check if we can load CogVLMQFormerConfig from it
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            config.save_pretrained(tmp_dir_name)
-            qformer_config = CogVLMQFormerConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
 
     @slow
     def test_model_from_pretrained(self):
@@ -485,28 +396,12 @@ class CogVLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             ),
         )
 
-    def test_get_qformer_features(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        keys_to_pop = ["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask", "labels"]
-
-        for key in keys_to_pop:
-            inputs_dict.pop(key)
-
-        model = CogVLMModel(config).to(torch_device)
-        model.eval()
-        qformer_features = model.get_qformer_features(**inputs_dict)
-        self.assertEqual(
-            qformer_features[0].shape,
-            (self.model_tester.vision_model_tester.batch_size, 10, config.vision_config.hidden_size),
-        )
-
-    # override from common to deal with nested configurations (`vision_config`, `text_config` and `qformer_config`)
+    # override from common to deal with nested configurations (`vision_config` and `text_config`)
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
-        for key in ["vision_config", "qformer_config", "text_config"]:
+        for key in ["vision_config", "text_config"]:
             setattr(configs_no_init, key, _config_zero_init(getattr(configs_no_init, key)))
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)

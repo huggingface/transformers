@@ -40,6 +40,12 @@ LANGUAGE_TOKEN_TYPE = 0
 VISION_TOKEN_TYPE = 1
 
 
+COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "THUDM/cogvlm-chat-hf",
+    # See all CogVLM models at https://huggingface.co/models?filter=cogvlm
+]
+
+
 class CogVLMPatchEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -729,23 +735,6 @@ class CogVLMModel(CogVLMPreTrainedModel):
             )
 
         return combined_attention_mask
-
-
-def _history_to_prompt(signal_type, history, query):
-    if signal_type == "base":
-        return query
-    elif signal_type == "vqa":
-        answer_format = "Short answer:"
-    elif signal_type == "chat":
-        answer_format = "Answer:"
-    else:
-        assert False, f"Unknown signal type {signal_type}"
-
-    prompt = ""
-    for i, (old_query, response) in enumerate(history):
-        prompt += "Question: " + old_query + " {} ".format(answer_format) + response + "\n"
-    prompt += "Question: {} {}".format(query, answer_format)
-    return prompt
 
 
 class CogVLMForCausalLM(CogVLMPreTrainedModel):
