@@ -517,6 +517,7 @@ class TomatoProcessor(ProcessorMixin):
             raise ValueError("You have to specify either text or images. Both cannot be None.")
         if text is not None and images is None:
             logger.warning("You are processing a text with no associated image. Make sure it is intended.")
+            max_length = self.max_position_embeddings if max_length is None else max_length
             self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(
                 text=text,
