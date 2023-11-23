@@ -362,8 +362,10 @@ def deformable_attention_core_func(value, value_spatial_shapes, sampling_locatio
     value_list = value.split(split_shape, dim=1)
     sampling_grids = 2 * sampling_locations - 1
     sampling_value_list = []
-    for level, (h, w) in enumerate(value_spatial_shapes):
-        new_value_list = value_list[level].flatten(2).permute(0, 2, 1).reshape(batch_size * num_head, head_dim, h, w)
+    for level, (height, width) in enumerate(value_spatial_shapes):
+        new_value_list = (
+            value_list[level].flatten(2).permute(0, 2, 1).reshape(batch_size * num_head, head_dim, height, width)
+        )
         new_sampling_grid = sampling_grids[:, :, :, level].permute(0, 2, 1, 3, 4).flatten(0, 1)
         new_sampling_value = F.grid_sample(
             new_value_list, new_sampling_grid, mode="bilinear", padding_mode="zeros", align_corners=False
@@ -628,16 +630,16 @@ class RTDetrTransformerDecoder(nn.Module):
         Forward pass for the RTDetrTransformerDecoder.
 
         Args:
-            target: the input tensor for the target sequences.
-            ref_points_unact: unactivated reference points for positional encoding.
-            memory: the output of the transformer encoder, representing encoded features from the input.
-            memory_spatial_shapes: the spatial shape of each feature level in the memory.
-            memory_level_start_index: the starting index of each level in the flattened memory.
-            bbox_head: a list of bounding box prediction heads for each decoder layer.
-            score_head: a list of scoring heads (for class scores) for each decoder layer.
-            query_pos_head: MLP (RTDetrMLP) to generate query positional embeddings from reference points.
-            attn_mask (optional): attention mask for the target sequences.
-            memory_mask (optional): mask for the memory sequences.
+            target (`torch.FloatTensor`): the input tensor for the target sequences.
+            ref_points_unact (`torch.FloatTensor`): unactivated reference points for positional encoding.
+            memory (`torch.FloatTensor`): the output of the transformer encoder, representing encoded features from the input.
+            memory_spatial_shapes (`List[Tuple[int,int]]`): the spatial shape of each feature level in the memory.
+            memory_level_start_index (`List[int]`): the starting index of each level in the flattened memory.
+            bbox_head (`List[RTDetrMLP]`): a list of bounding box prediction heads for each decoder layer.
+            score_head (`List[nn.Linear]`): a list of scoring heads (for class scores) for each decoder layer.
+            query_pos_head (`RTDetrMLP`): MLP (RTDetrMLP) to generate query positional embeddings from reference points.
+            attn_mask (`torch.FloatTensor` of shape [batch_size*num_heads, sequence length, source sequence legth], *optional*): attention mask for the target sequences.
+            memory_mask (`torch.FloatTensor`, *optional*): mask for the memory sequences.
 
         Returns:
             tuple containing bounding boxes and logits representing class scores
@@ -792,13 +794,13 @@ class RTDetrTransformer(nn.Module):
         anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
             grid_y, grid_x = torch.meshgrid(
-                torch.arange(end=h, dtype=dtype), torch.arange(end=w, dtype=dtype), indexing="ij"
+                torch.arange(end=height, dtype=dtype), torch.arange(end=width, dtype=dtype), indexing="ij"
             )
             grid_xy = torch.stack([grid_x, grid_y], -1)
-            valid_WH = torch.tensor([w, h]).to(dtype)
+            valid_WH = torch.tensor([width, height]).to(dtype)
             grid_xy = (grid_xy.unsqueeze(0) + 0.5) / valid_WH
-            wh = torch.ones_like(grid_xy) * grid_size * (2.0**lvl)
-            anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, h * w, 4))
+            wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
+            anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
 
         anchors = torch.concat(anchors, 1).to(device)
         valid_mask = ((anchors > EPS) * (anchors < 1 - EPS)).all(-1, keepdim=True)
