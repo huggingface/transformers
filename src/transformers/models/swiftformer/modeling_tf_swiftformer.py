@@ -618,7 +618,7 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
         self.swiftformer = TFSwiftFormerMainLayer(config, name="swiftformer")
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(TFSWIFTFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(TFSWIFTFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithNoAttention,
@@ -649,7 +649,9 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         use_cache (`bool`, *optional*, defaults to `True`):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`). Set to `False` during training, `True` during generation
+            `past_key_values`). Set to `False` during training, `True` during generation.
+        training (`bool`, *optional*, defaults to `False`):
+            Whether or not to run the model in training mode.
         """
         outputs = self.swiftformer(
             pixel_values=pixel_values,
@@ -756,11 +758,17 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
             # FIXME: multilabel or multiclass?
             elif self.config.problem_type == "single_label_classification":
                 # FIXME: from_logits? Initially I had False from somewhere
-                loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+                loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(
+                    from_logits=True,
+                    reduction=tf.keras.losses.Reduction.NONE
+                )
                 loss = loss_fct(labels, logits)
             elif self.config.problem_type == "multi_label_classification":
                 # FIXME: from_logits? Initially I had False from somewhere
-                loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+                loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(
+                    from_logits=True,
+                    reduction=tf.keras.losses.Reduction.NONE,
+                )
                 loss = loss_fct(labels, logits)
 
         if not return_dict:
