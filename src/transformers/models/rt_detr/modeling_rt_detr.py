@@ -208,7 +208,7 @@ def get_contrastive_denoising_training_group(
     num_classes,
     num_queries,
     class_embed,
-    num_denoising=100,
+    num_denoising_queries=100,
     label_noise_ratio=0.5,
     box_noise_scale=1.0,
 ):
@@ -220,18 +220,17 @@ def get_contrastive_denoising_training_group(
         num_classes (`int`): Total number of classes in the dataset.
         num_queries (`int`): Number of query slots in the transformer.
         class_embed (`callable`): A function or a model layer to embed class labels.
-        num_denoising (`int`, *optional*, defaults to 100): Number of denoising queries.
+        num_denoising_queries (`int`, *optional*, defaults to 100): Number of denoising queries.
         label_noise_ratio (`float`, *optional*, defaults to 0.5): Ratio of noise applied to labels.
         box_noise_scale (`float`, *optional*, defaults to 1.0): Scale of noise applied to bounding boxes.
     Returns:
-        A tuple containing:
-            input_query_class (`torch.FloatTensor`): Class queries with applied label noise. input_query_bbox
+        A tuple containing: input_query_class (`torch.FloatTensor`): Class queries with applied label noise. input_query_bbox
             (`torch.FloatTensor`): Bounding box queries with applied box noise. attn_mask (`torch.FloatTensor`):
             Attention mask for separating denoising and reconstruction queries. dn_meta (`dict`): Metadata including
             denoising positive indices, number of groups, and split sizes.
     """
 
-    if num_denoising <= 0:
+    if num_denoising_queries <= 0:
         return None, None, None, None
 
     num_ground_truths = [len(t["labels"]) for t in targets]
@@ -241,8 +240,8 @@ def get_contrastive_denoising_training_group(
     if max_gt_num == 0:
         return None, None, None, None
 
-    num_group = num_denoising // max_gt_num
-    num_group = 1 if num_group == 0 else num_group
+    num_groups_denoising_queries = num_denoising_queries // max_gt_num
+    num_groups_denoising_queries = 1 if num_groups_denoising_queries == 0 else num_groups_denoising_queries
     # pad gt to max_num of a batch
     batch_size = len(num_ground_truths)
 
@@ -257,20 +256,22 @@ def get_contrastive_denoising_training_group(
             input_query_bbox[i, :num_gt] = targets[i]["boxes"]
             pad_gt_mask[i, :num_gt] = 1
     # each group has positive and negative queries.
-    input_query_class = input_query_class.tile([1, 2 * num_group])
-    input_query_bbox = input_query_bbox.tile([1, 2 * num_group, 1])
-    pad_gt_mask = pad_gt_mask.tile([1, 2 * num_group])
+    input_query_class = input_query_class.tile([1, 2 * num_groups_denoising_queries])
+    input_query_bbox = input_query_bbox.tile([1, 2 * num_groups_denoising_queries, 1])
+    pad_gt_mask = pad_gt_mask.tile([1, 2 * num_groups_denoising_queries])
     # positive and negative mask
     negative_gt_mask = torch.zeros([batch_size, max_gt_num * 2, 1], device=device)
     negative_gt_mask[:, max_gt_num:] = 1
-    negative_gt_mask = negative_gt_mask.tile([1, num_group, 1])
+    negative_gt_mask = negative_gt_mask.tile([1, num_groups_denoising_queries, 1])
     positive_gt_mask = 1 - negative_gt_mask
     # contrastive denoising training positive index
     positive_gt_mask = positive_gt_mask.squeeze(-1) * pad_gt_mask
-    dn_positive_idx = torch.nonzero(positive_gt_mask)[:, 1]
-    dn_positive_idx = torch.split(dn_positive_idx, [n * num_group for n in num_ground_truths])
+    denoise_positive_idx = torch.nonzero(positive_gt_mask)[:, 1]
+    denoise_positive_idx = torch.split(
+        denoise_positive_idx, [n * num_groups_denoising_queries for n in num_ground_truths]
+    )
     # total denoising queries
-    num_denoising = int(max_gt_num * 2 * num_group)
+    num_denoising_queries = int(max_gt_num * 2 * num_groups_denoising_queries)
 
     if label_noise_ratio > 0:
         mask = torch.rand_like(input_query_class, dtype=torch.float) < (label_noise_ratio * 0.5)
@@ -292,27 +293,27 @@ def get_contrastive_denoising_training_group(
 
     input_query_class = class_embed(input_query_class)
 
-    tgt_size = num_denoising + num_queries
+    tgt_size = num_denoising_queries + num_queries
     attn_mask = torch.full([tgt_size, tgt_size], False, dtype=torch.bool, device=device)
     # match query cannot see the reconstruction
-    attn_mask[num_denoising:, :num_denoising] = True
+    attn_mask[num_denoising_queries:, :num_denoising_queries] = True
 
     # reconstruct cannot see each other
-    for i in range(num_group):
+    for i in range(num_groups_denoising_queries):
         idx_block_start = max_gt_num * 2 * i
         idx_block_end = max_gt_num * 2 * (i + 1)
         if i == 0:
-            attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising] = True
-        if i == num_group - 1:
+            attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = True
+        if i == num_groups_denoising_queries - 1:
             attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
         else:
-            attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising] = True
+            attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = True
             attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
 
     dn_meta = {
-        "dn_positive_idx": dn_positive_idx,
-        "dn_num_group": num_group,
-        "dn_num_split": [num_denoising, num_queries],
+        "dn_positive_idx": denoise_positive_idx,
+        "dn_num_group": num_groups_denoising_queries,
+        "dn_num_split": [num_denoising_queries, num_queries],
     }
 
     return input_query_class, input_query_bbox, attn_mask, dn_meta
@@ -446,8 +447,7 @@ class RTDetrTransformerEncoder(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
 
-        num_layers = config.num_encoder_layers
-        self.layers = nn.ModuleList([RTDetrTransformerEncoderLayer(config) for _ in range(num_layers)])
+        self.layers = nn.ModuleList([RTDetrTransformerEncoderLayer(config) for _ in range(config.num_encoder_layers)])
 
     def forward(self, src, src_mask=None, pos_embed=None) -> torch.Tensor:
         output = src
@@ -1312,7 +1312,6 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
         self.feat_strides = config.feat_strides
         self.hidden_dim = config.hidden_dim
         self.encode_proj_layers = config.encode_proj_layers
-        self.num_encoder_layers = config.num_encoder_layers
         self.pe_temperature = config.pe_temperature
         self.eval_size = config.eval_size
         self.out_channels = [self.hidden_dim for _ in self.in_channels]
@@ -1371,37 +1370,35 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
         # encoder
         for i, enc_ind in enumerate(self.encode_proj_layers):
             height, width = proj_feats[enc_ind].shape[2:]
-            # flatten [batch, channel, height, width] to [batch, heightxwidth, channel]
+            # flatten [batch, channel, height, width] to [batch, height*width, channel]
             src_flatten = proj_feats[enc_ind].flatten(2).permute(0, 2, 1)
             if self.training or self.eval_size is None:
                 pos_embed = self.build_2d_sincos_position_embedding(
                     width, height, self.hidden_dim, self.pe_temperature
                 ).to(src_flatten.device)
             else:
-                pos_embed = getattr(self, f"pos_embed{enc_ind}", None).to(src_flatten.device)
+                pos_embed = None
 
             memory = self.encoder[i](src_flatten, pos_embed=pos_embed)
             proj_feats[enc_ind] = memory.permute(0, 2, 1).reshape(-1, self.hidden_dim, height, width).contiguous()
 
         # broadcasting and fusion
-        inner_outs = [proj_feats[-1]]
+        fpn_feature_maps = [proj_feats[-1]]
         for idx in range(len(self.in_channels) - 1, 0, -1):
-            feat_heigh = inner_outs[0]
+            feat_high = fpn_feature_maps[0]
             feat_low = proj_feats[idx - 1]
-            feat_heigh = self.lateral_convs[len(self.in_channels) - 1 - idx](feat_heigh)
-            inner_outs[0] = feat_heigh
-            upsample_feat = F.interpolate(feat_heigh, scale_factor=2.0, mode="nearest")
-            inner_out = self.fpn_blocks[len(self.in_channels) - 1 - idx](
-                torch.concat([upsample_feat, feat_low], dim=1)
-            )
-            inner_outs.insert(0, inner_out)
+            feat_high = self.lateral_convs[len(self.in_channels) - 1 - idx](feat_high)
+            fpn_feature_maps[0] = feat_high
+            upsample_feat = F.interpolate(feat_high, scale_factor=2.0, mode="nearest")
+            fps_map = self.fpn_blocks[len(self.in_channels) - 1 - idx](torch.concat([upsample_feat, feat_low], dim=1))
+            fpn_feature_maps.insert(0, fps_map)
 
-        outs = [inner_outs[0]]
+        outs = [fpn_feature_maps[0]]
         for idx in range(len(self.in_channels) - 1):
             feat_low = outs[-1]
-            feat_height = inner_outs[idx + 1]
+            feat_high = fpn_feature_maps[idx + 1]
             downsample_feat = self.downsample_convs[idx](feat_low)
-            out = self.pan_blocks[idx](torch.concat([downsample_feat, feat_height], dim=1))
+            out = self.pan_blocks[idx](torch.concat([downsample_feat, feat_high], dim=1))
             outs.append(out)
 
         return outs
@@ -1428,6 +1425,13 @@ RT_DETR_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`RTDetrImageProcessor.__call__`] for details.
+        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
