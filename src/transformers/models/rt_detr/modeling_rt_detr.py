@@ -224,7 +224,8 @@ def get_contrastive_denoising_training_group(
         label_noise_ratio (`float`, *optional*, defaults to 0.5): Ratio of noise applied to labels.
         box_noise_scale (`float`, *optional*, defaults to 1.0): Scale of noise applied to bounding boxes.
     Returns:
-        A tuple containing: input_query_class (`torch.FloatTensor`): Class queries with applied label noise. input_query_bbox
+        A tuple containing: input_query_class (`torch.FloatTensor`): Class queries with applied label noise.
+        input_query_bbox
             (`torch.FloatTensor`): Bounding box queries with applied box noise. attn_mask (`torch.FloatTensor`):
             Attention mask for separating denoising and reconstruction queries. dn_meta (`dict`): Metadata including
             denoising positive indices, number of groups, and split sizes.
@@ -293,12 +294,12 @@ def get_contrastive_denoising_training_group(
 
     input_query_class = class_embed(input_query_class)
 
-    tgt_size = num_denoising_queries + num_queries
-    attn_mask = torch.full([tgt_size, tgt_size], False, dtype=torch.bool, device=device)
+    target_size = num_denoising_queries + num_queries
+    attn_mask = torch.full([target_size, target_size], False, dtype=torch.bool, device=device)
     # match query cannot see the reconstruction
     attn_mask[num_denoising_queries:, :num_denoising_queries] = True
 
-    # reconstruct cannot see each other
+    # reconstructions cannot see each other
     for i in range(num_groups_denoising_queries):
         idx_block_start = max_gt_num * 2 * i
         idx_block_end = max_gt_num * 2 * (i + 1)
@@ -457,6 +458,10 @@ class RTDetrTransformerEncoder(nn.Module):
 
 
 class RTDetrRepVggBlock(nn.Module):
+    """
+    RepVGG architecture block introduced by the work "RepVGG: Making VGG-style ConvNets Great Again".
+    """
+
     def __init__(self, config: RTDetrConfig):
         super().__init__()
 
@@ -473,6 +478,10 @@ class RTDetrRepVggBlock(nn.Module):
 
 
 class RTDetrCSPRepLayer(nn.Module):
+    """
+    Cross Stage Partial (CSP) network layer with RepVGG blocks.
+    """
+
     def __init__(self, config: RTDetrConfig):
         super().__init__()
 
@@ -853,11 +862,11 @@ class RTDetrTransformer(nn.Module):
         # prepare denoising training
         if self.training and self.num_denoising > 0 and targets is not None:
             denoising_class, denoising_bbox_unact, attn_mask, dn_meta = get_contrastive_denoising_training_group(
-                targets,
-                self.num_classes,
-                self.num_queries,
-                self.denoising_class_embed,
-                num_denoising=self.num_denoising,
+                targets=targets,
+                num_classes=self.num_classes,
+                num_queries=self.num_queries,
+                class_embed=self.denoising_class_embed,
+                num_denoising_queries=self.num_denoising,
                 label_noise_ratio=self.label_noise_ratio,
                 box_noise_scale=self.box_noise_scale,
             )
@@ -873,6 +882,7 @@ class RTDetrTransformer(nn.Module):
         else:
             anchors, valid_mask = self.anchors.to(device), self.valid_mask.to(device)
 
+        # use the valid_mask to selectively retain values in the feature map where the mask is `True`
         memory = valid_mask.to(feat_flatten.dtype) * feat_flatten
 
         output_memory = self.enc_output(memory)
