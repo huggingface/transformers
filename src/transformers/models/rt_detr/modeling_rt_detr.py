@@ -1473,7 +1473,7 @@ class RTDetrHungarianMatcher(nn.Module):
             For each batch element, it holds:
                 len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
-        bs, num_queries = outputs["logits"].shape[:2]
+        batch_size, num_queries = outputs["logits"].shape[:2]
 
         # We flatten to compute the cost matrices in a batch
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
