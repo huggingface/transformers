@@ -53,8 +53,6 @@ RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all RTDETR models at https://huggingface.co/models?filter=rt_detr
 ]
 
-# A small positive value used to define the valid range for anchor coordinates.
-EPS = 1e-2
 
 
 @dataclass
@@ -237,24 +235,24 @@ def get_contrastive_denoising_training_group(
     if num_denoising <= 0:
         return None, None, None, None
 
-    num_gts = [len(t["labels"]) for t in targets]
+    num_ground_truths = [len(t["labels"]) for t in targets]
     device = targets[0]["labels"].device
 
-    max_gt_num = max(num_gts)
+    max_gt_num = max(num_ground_truths)
     if max_gt_num == 0:
         return None, None, None, None
 
     num_group = num_denoising // max_gt_num
     num_group = 1 if num_group == 0 else num_group
     # pad gt to max_num of a batch
-    batch_size = len(num_gts)
+    batch_size = len(num_ground_truths)
 
     input_query_class = torch.full([batch_size, max_gt_num], num_classes, dtype=torch.int32, device=device)
     input_query_bbox = torch.zeros([batch_size, max_gt_num, 4], device=device)
     pad_gt_mask = torch.zeros([batch_size, max_gt_num], dtype=torch.bool, device=device)
 
     for i in range(batch_size):
-        num_gt = num_gts[i]
+        num_gt = num_ground_truths[i]
         if num_gt > 0:
             input_query_class[i, :num_gt] = targets[i]["labels"]
             input_query_bbox[i, :num_gt] = targets[i]["boxes"]
@@ -271,7 +269,7 @@ def get_contrastive_denoising_training_group(
     # contrastive denoising training positive index
     positive_gt_mask = positive_gt_mask.squeeze(-1) * pad_gt_mask
     dn_positive_idx = torch.nonzero(positive_gt_mask)[:, 1]
-    dn_positive_idx = torch.split(dn_positive_idx, [n * num_group for n in num_gts])
+    dn_positive_idx = torch.split(dn_positive_idx, [n * num_group for n in num_ground_truths])
     # total denoising queries
     num_denoising = int(max_gt_num * 2 * num_group)
 
@@ -802,8 +800,10 @@ class RTDetrTransformer(nn.Module):
             wh = torch.ones_like(grid_xy) * grid_size * (2.0**level)
             anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, height * width, 4))
 
+        # define the valid range for anchor coordinates
+        eps = 1e-2
         anchors = torch.concat(anchors, 1).to(device)
-        valid_mask = ((anchors > EPS) * (anchors < 1 - EPS)).all(-1, keepdim=True)
+        valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
         anchors = torch.where(valid_mask, anchors, torch.inf)
 
