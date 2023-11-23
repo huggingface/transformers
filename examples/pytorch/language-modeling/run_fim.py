@@ -521,13 +521,14 @@ def main():
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
 
-        # Since we are training from scratch, resize model's vocab embeddings to accomodate the new FIM tokens
+        # Add the new FIM tokens to the tokenizer and resize model's vocab embeddings
         special_tokens = [data_args.fim_prefix_token, data_args.fim_middle_token, data_args.fim_suffix_token]
         if data_args.truncate_or_pad:
             special_tokens.append(data_args.fim_pad_token)
 
         tokenizer.add_tokens(special_tokens)
         model.resize_token_embeddings(len(tokenizer))
+
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
@@ -649,7 +650,7 @@ def main():
 
         return transformed_example
 
-    # This function works in batched mode (faster than unbatched variant of the function)
+    # Below function is the one you are supposed to call in the .map() function
     def apply_fim(examples):
         """
         Apply FIM transformation to a batch of examples
@@ -657,7 +658,10 @@ def main():
         fim_transform_ids = [fim_transform(ids) for ids in examples['input_ids']]
         examples['input_ids'] = fim_transform_ids
         examples['labels'] = fim_transform_ids
-        
+        # If your application requires custom attention mask, please adjust this function's below line
+        # since FIM transformation increases the number of tokens in input_ids and labels 
+        # but leaves the number of tokens unchanged in attention_masks which would cause problems
+        examples['attention_mask'] = [[1]*len(mask) for mask in examples['input_ids']]
         return examples
 
     # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a remainder
@@ -667,30 +671,31 @@ def main():
     # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
     # https://huggingface.co/docs/datasets/process#map
 
-    # FIM transformation is only supposed to be applied after group_texts processing
+    # FIM transformation is only supposed to be applied before group_texts processing otherwise some sentences will
+    # have 3-4 more tokens than others due to probabilistic addition of FIM-specific tokens which will raise errors
     with training_args.main_process_first(desc="processing texts together"):
         if not data_args.streaming:
-            grouped_datasets = tokenized_datasets.map(
-                group_texts,
-                batched=True,
-                num_proc=data_args.preprocessing_num_workers,
-                load_from_cache_file=not data_args.overwrite_cache,
-                desc=f"Grouping texts in chunks of {block_size}",
-            )
-            lm_datasets = grouped_datasets.map(
+            fim_datasets = tokenized_datasets.map(
                 apply_fim,
                 batched=True,
                 num_proc=data_args.preprocessing_num_workers,
                 load_from_cache_file=not data_args.overwrite_cache,
                 desc=f"Performing FIM transformation",
             )
-        else:
-            grouped_datasets = tokenized_datasets.map(
+            lm_datasets = fim_datasets.map(
                 group_texts,
                 batched=True,
+                num_proc=data_args.preprocessing_num_workers,
+                load_from_cache_file=not data_args.overwrite_cache,
+                desc=f"Grouping texts in chunks of {block_size}",
             )
-            lm_datasets = grouped_datasets.map(
+        else:
+            fim_datasets = tokenized_datasets.map(
                 apply_fim,
+                batched=True,
+            )
+            lm_datasets = fim_datasets.map(
+                group_texts,
                 batched=True,
             )
 
