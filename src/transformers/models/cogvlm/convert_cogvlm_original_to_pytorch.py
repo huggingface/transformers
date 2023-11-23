@@ -20,12 +20,16 @@ import argparse
 
 import requests
 import torch
+from PIL import Image
 
-import torch
-import requests
-from PIL import Image
-from transformers import AutoModelForCausalLM, CogVLMForCausalLM, LlamaTokenizer, CogVLMConfig, CogVLMImageProcessor, CogVLMProcessor
-from PIL import Image
+from transformers import (
+    AutoModelForCausalLM,
+    CogVLMConfig,
+    CogVLMForCausalLM,
+    CogVLMImageProcessor,
+    CogVLMProcessor,
+    LlamaTokenizer,
+)
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
@@ -35,9 +39,8 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     Copy/paste/tweak model's weights to Transformers design.
     """
     # load original model
-    tokenizer = LlamaTokenizer.from_pretrained('lmsys/vicuna-7b-v1.5')
     original_model = AutoModelForCausalLM.from_pretrained(
-        'THUDM/cogvlm-chat-hf',
+        "THUDM/cogvlm-chat-hf",
         torch_dtype=torch.bfloat16,
         low_cpu_mem_usage=True,
         trust_remote_code=True,
@@ -51,20 +54,24 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     model = CogVLMForCausalLM(config)
 
     # verify chat example
-    query = 'Describe this image'
-    image = Image.open(requests.get('http://images.cocodataset.org/val2017/000000039769.jpg', stream=True).raw).convert('RGB')
+    query = "Describe this image"
+    image = Image.open(
+        requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+    ).convert("RGB")
+
+    tokenizer = LlamaTokenizer.from_pretrained("lmsys/vicuna-7b-v1.5")
     inputs = model.build_conversation_input_ids(tokenizer, query=query, history=[], images=[image])  # chat mode
     inputs = {
-        'input_ids': inputs['input_ids'].unsqueeze(0).to('cuda'),
-        'token_type_ids': inputs['token_type_ids'].unsqueeze(0).to('cuda'),
-        'attention_mask': inputs['attention_mask'].unsqueeze(0).to('cuda'),
-        'images': [[inputs['images'][0].to('cuda').to(torch.bfloat16)]],
+        "input_ids": inputs["input_ids"].unsqueeze(0).to("cuda"),
+        "token_type_ids": inputs["token_type_ids"].unsqueeze(0).to("cuda"),
+        "attention_mask": inputs["attention_mask"].unsqueeze(0).to("cuda"),
+        "images": [[inputs["images"][0].to("cuda").to(torch.bfloat16)]],
     }
     gen_kwargs = {"max_length": 2048, "do_sample": False}
 
     with torch.no_grad():
         outputs = model.generate(**inputs, **gen_kwargs)
-        outputs = outputs[:, inputs['input_ids'].shape[1]:]
+        outputs = outputs[:, inputs["input_ids"].shape[1] :]
         print(tokenizer.decode(outputs[0]))
 
     # create processor
@@ -73,7 +80,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         size={"height": image_size, "width": image_size}, image_mean=OPENAI_CLIP_MEAN, image_std=OPENAI_CLIP_STD
     )
     processor = CogVLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
-    pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(model_device)
+    pixel_values = processor(images=image, return_tensors="pt").pixel_values.to("cuda")
 
     # make sure processor creates exact same pixel values
     # assert torch.allclose(pixel_values, original_pixel_values.to(pixel_values.device))

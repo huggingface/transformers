@@ -22,10 +22,9 @@ import unittest
 import numpy as np
 import requests
 
-from transformers import CONFIG_MAPPING, CogVLMConfig, CogVLMQFormerConfig, CogVLMVisionConfig
+from transformers import CogVLMConfig, CogVLMQFormerConfig, CogVLMVisionConfig
 from transformers.testing_utils import (
     require_torch,
-    require_torch_multi_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -47,7 +46,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import CogVLMForConditionalGeneration, CogVLMModel, CogVLMVisionModel
+    from transformers import CogVLMForCausalLM, CogVLMModel
     from transformers.models.cogvlm.modeling_cogvlm import COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -296,310 +295,6 @@ class CogVLMQFormerModelTester:
         )
 
 
-# this class is based on `OPTModelTester` found in tests/models/opt/test_modeling_opt.py
-class CogVLMTextModelDecoderOnlyTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=7,
-        is_training=True,
-        use_labels=False,
-        vocab_size=99,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=4,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
-        eos_token_id=2,
-        pad_token_id=1,
-        bos_token_id=0,
-        embed_dim=16,
-        num_labels=3,
-        word_embed_proj_dim=16,
-        type_sequence_label_size=2,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.embed_dim = embed_dim
-        self.num_labels = num_labels
-        self.type_sequence_label_size = type_sequence_label_size
-        self.word_embed_proj_dim = word_embed_proj_dim
-        self.is_encoder_decoder = False
-
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3)
-        input_ids[:, -1] = self.eos_token_id  # Eos Token
-
-        attention_mask = input_ids.ne(self.pad_token_id)
-
-        return config, input_ids, attention_mask
-
-    def get_config(self):
-        return CONFIG_MAPPING["opt"](
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            ffn_dim=self.intermediate_size,
-            dropout=self.hidden_dropout_prob,
-            attention_dropout=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.bos_token_id,
-            pad_token_id=self.pad_token_id,
-            embed_dim=self.embed_dim,
-            is_encoder_decoder=False,
-            word_embed_proj_dim=self.word_embed_proj_dim,
-        )
-
-
-# this model tester uses a decoder-only language model (OPT)
-class CogVLMForConditionalGenerationDecoderOnlyModelTester:
-    def __init__(
-        self, parent, vision_kwargs=None, qformer_kwargs=None, text_kwargs=None, is_training=True, num_query_tokens=10
-    ):
-        if vision_kwargs is None:
-            vision_kwargs = {}
-        if qformer_kwargs is None:
-            qformer_kwargs = {}
-        if text_kwargs is None:
-            text_kwargs = {}
-
-        self.parent = parent
-        self.vision_model_tester = CogVLMVisionModelTester(parent, **vision_kwargs)
-        self.qformer_model_tester = CogVLMQFormerModelTester(parent, **qformer_kwargs)
-        self.text_model_tester = CogVLMTextModelDecoderOnlyTester(parent, **text_kwargs)
-        self.is_training = is_training
-        self.num_query_tokens = num_query_tokens
-
-    def prepare_config_and_inputs(self):
-        _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
-        _, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-
-        config = self.get_config()
-
-        return config, input_ids, attention_mask, pixel_values
-
-    def get_config(self):
-        return CogVLMConfig.from_vision_qformer_text_configs(
-            vision_config=self.vision_model_tester.get_config(),
-            qformer_config=self.qformer_model_tester.get_config(),
-            text_config=self.text_model_tester.get_config(),
-            num_query_tokens=self.num_query_tokens,
-        )
-
-    def create_and_check_for_conditional_generation(self, config, input_ids, attention_mask, pixel_values):
-        model = CogVLMForConditionalGeneration(config).to(torch_device).eval()
-        with torch.no_grad():
-            result = model(pixel_values, input_ids, attention_mask)
-
-        expected_seq_length = self.num_query_tokens + self.text_model_tester.seq_length
-        self.parent.assertEqual(
-            result.logits.shape,
-            (self.vision_model_tester.batch_size, expected_seq_length, self.text_model_tester.vocab_size),
-        )
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, pixel_values = config_and_inputs
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "labels": input_ids,
-        }
-        return config, inputs_dict
-
-
-@require_torch
-class CogVLMForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (CogVLMForConditionalGeneration,) if is_torch_available() else ()
-    fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
-    test_resize_embeddings = False
-    test_attention_outputs = False
-    test_torchscript = False
-
-    def setUp(self):
-        self.model_tester = CogVLMForConditionalGenerationDecoderOnlyModelTester(self)
-
-    def test_for_conditional_generation(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
-
-    @unittest.skip(reason="Hidden_states is tested in individual model tests")
-    def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="Retain_grad is tested in individual model tests")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="CogVLMModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="There's no base CogVLMModel")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="There's no base CogVLMModel")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_load_vision_qformer_text_config(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Save CogVLMConfig and check if we can load CogVLMVisionConfig from it
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            config.save_pretrained(tmp_dir_name)
-            vision_config = CogVLMVisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
-
-        # Save CogVLMConfig and check if we can load CogVLMQFormerConfig from it
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            config.save_pretrained(tmp_dir_name)
-            qformer_config = CogVLMQFormerConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = CogVLMForConditionalGeneration.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-
-
-# this class is based on `T5ModelTester` found in tests/models/t5/test_modeling_t5.py
-class CogVLMTextModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=12,
-        encoder_seq_length=7,
-        decoder_seq_length=9,
-        # For common tests
-        is_training=True,
-        use_attention_mask=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        eos_token_id=1,
-        pad_token_id=0,
-        decoder_start_token_id=0,
-        scope=None,
-        decoder_layers=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        self.decoder_seq_length = decoder_seq_length
-        # For common tests
-        self.seq_length = self.decoder_seq_length
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.scope = None
-        self.decoder_layers = decoder_layers
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
-        decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
-
-        attention_mask = None
-        decoder_attention_mask = None
-        if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-            decoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
-
-        lm_labels = None
-        if self.use_labels:
-            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
-
-        config = self.get_config()
-
-        return (
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
-        )
-
-    def get_config(self):
-        return CONFIG_MAPPING["t5"](
-            vocab_size=self.vocab_size,
-            d_model=self.hidden_size,
-            d_ff=self.d_ff,
-            d_kv=self.hidden_size // self.num_attention_heads,
-            num_layers=self.num_hidden_layers,
-            num_decoder_layers=self.decoder_layers,
-            num_heads=self.num_attention_heads,
-            relative_attention_num_buckets=self.relative_attention_num_buckets,
-            dropout_rate=self.dropout_rate,
-            initializer_factor=self.initializer_factor,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.pad_token_id,
-            pad_token_id=self.pad_token_id,
-            decoder_start_token_id=self.decoder_start_token_id,
-        )
-
-
 # this model tester uses an encoder-decoder language model (T5)
 class CogVLMModelTester:
     def __init__(
@@ -613,9 +308,7 @@ class CogVLMModelTester:
             text_kwargs = {}
 
         self.parent = parent
-        self.vision_model_tester = CogVLMVisionModelTester(parent, **vision_kwargs)
-        self.qformer_model_tester = CogVLMQFormerModelTester(parent, **qformer_kwargs)
-        self.text_model_tester = CogVLMTextModelTester(parent, **text_kwargs)
+        self.model_ster = CogVLMModelTester(parent, **vision_kwargs)
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
 
@@ -642,10 +335,10 @@ class CogVLMModelTester:
             num_query_tokens=self.num_query_tokens,
         )
 
-    def create_and_check_for_conditional_generation(
+    def create_and_check_for_causal_lm(
         self, config, input_ids, attention_mask, pixel_values, decoder_input_ids, decoder_attention_mask, labels
     ):
-        model = CogVLMForConditionalGeneration(config).to(torch_device).eval()
+        model = CogVLMForCausalLM(config).to(torch_device).eval()
         with torch.no_grad():
             result = model(pixel_values, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask)
 
@@ -682,7 +375,7 @@ class CogVLMModelTester:
 
 @require_torch
 class CogVLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (CogVLMForConditionalGeneration, CogVLMModel) if is_torch_available() else ()
+    all_model_classes = (CogVLMForCausalLM, CogVLMModel) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -755,7 +448,7 @@ class CogVLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = CogVLMForConditionalGeneration.from_pretrained(model_name)
+            model = CogVLMForCausalLM.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_get_text_features(self):
@@ -839,9 +532,7 @@ def prepare_img():
 class CogVLMModelIntegrationTest(unittest.TestCase):
     def test_inference_opt(self):
         processor = CogVLMProcessor.from_pretrained("THUDM/cogvlm-chat-hf")
-        model = CogVLMForConditionalGeneration.from_pretrained("THUDM/cogvlm-chat-hf", torch_dtype=torch.float16).to(
-            torch_device
-        )
+        model = CogVLMForCausalLM.from_pretrained("THUDM/cogvlm-chat-hf", torch_dtype=torch.float16).to(torch_device)
 
         # prepare image
         image = prepare_img()
@@ -867,138 +558,3 @@ class CogVLMModelIntegrationTest(unittest.TestCase):
             [2, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118],
         )
         self.assertEqual(generated_text, "it's not a city, it's a beach")
-
-    def test_inference_opt_batched_beam_search(self):
-        processor = CogVLMProcessor.from_pretrained("THUDM/cogvlm-chat-hf")
-        model = CogVLMForConditionalGeneration.from_pretrained("THUDM/cogvlm-chat-hf", torch_dtype=torch.float16).to(
-            torch_device
-        )
-
-        # prepare image
-        image = prepare_img()
-        inputs = processor(images=[image, image], return_tensors="pt").to(torch_device, dtype=torch.float16)
-
-        predictions = model.generate(**inputs, num_beams=2)
-
-        # Test output (in this case, slightly different from greedy search)
-        self.assertEqual(predictions[0].tolist(), [2, 102, 693, 2828, 15, 5, 4105, 19, 69, 2335, 50118])
-        self.assertEqual(predictions[1].tolist(), [2, 102, 693, 2828, 15, 5, 4105, 19, 69, 2335, 50118])
-
-    def test_inference_t5(self):
-        processor = CogVLMProcessor.from_pretrained("Salesforce/blip2-flan-t5-xl")
-        model = CogVLMForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-flan-t5-xl", torch_dtype=torch.float16
-        ).to(torch_device)
-
-        # prepare image
-        image = prepare_img()
-        inputs = processor(images=image, return_tensors="pt").to(torch_device, dtype=torch.float16)
-
-        predictions = model.generate(**inputs)
-        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
-
-        # Test output
-        self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
-        self.assertEqual("woman playing with dog on the beach", generated_text)
-
-        # image and context
-        prompt = "Question: which city is this? Answer:"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
-
-        predictions = model.generate(**inputs)
-        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
-
-        # Test output
-        self.assertEqual(
-            predictions[0].tolist(),
-            [0, 3, 7, 152, 67, 839, 1],
-        )
-        self.assertEqual(generated_text, "san diego")
-
-    def test_inference_t5_batched_beam_search(self):
-        processor = CogVLMProcessor.from_pretrained("Salesforce/blip2-flan-t5-xl")
-        model = CogVLMForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-flan-t5-xl", torch_dtype=torch.float16
-        ).to(torch_device)
-
-        # prepare image
-        image = prepare_img()
-        inputs = processor(images=[image, image], return_tensors="pt").to(torch_device, dtype=torch.float16)
-
-        predictions = model.generate(**inputs, num_beams=2)
-
-        # Test output (in this case, slightly different from greedy search)
-        self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
-        self.assertEqual(predictions[1].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
-
-    @require_torch_multi_accelerator
-    def test_inference_opt_multi_accelerator(self):
-        processor = CogVLMProcessor.from_pretrained("THUDM/cogvlm-chat-hf")
-        model = CogVLMForConditionalGeneration.from_pretrained(
-            "THUDM/cogvlm-chat-hf", torch_dtype=torch.float16, device_map="balanced"
-        )
-
-        # prepare image
-        image = prepare_img()
-        inputs = processor(images=image, return_tensors="pt").to(0, dtype=torch.float16)
-
-        predictions = model.generate(**inputs)
-        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
-
-        # Test output
-        self.assertEqual(predictions[0].tolist(), [2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118])
-        self.assertEqual("a woman sitting on the beach with a dog", generated_text)
-
-        # image and context
-        prompt = "Question: which city is this? Answer:"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(0, dtype=torch.float16)
-
-        predictions = model.generate(**inputs)
-        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
-
-        # Test output
-        self.assertEqual(
-            predictions[0].tolist(),
-            [2, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118],
-        )
-        self.assertEqual(generated_text, "it's not a city, it's a beach")
-
-    @require_torch_multi_accelerator
-    def test_inference_t5_multi_accelerator(self):
-        processor = CogVLMProcessor.from_pretrained("Salesforce/blip2-flan-t5-xl")
-        device_map = device_map = {
-            "query_tokens": 0,
-            "vision_model": 0,
-            "language_model": 1,
-            "language_projection": 0,
-            "qformer": 0,
-        }
-
-        model = CogVLMForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-flan-t5-xl", torch_dtype=torch.float16, device_map=device_map
-        )
-
-        # prepare image
-        image = prepare_img()
-        inputs = processor(images=image, return_tensors="pt").to(0, dtype=torch.float16)
-
-        predictions = model.generate(**inputs)
-        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
-
-        # Test output
-        self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
-        self.assertEqual("woman playing with dog on the beach", generated_text)
-
-        # image and context
-        prompt = "Question: which city is this? Answer:"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(0, dtype=torch.float16)
-
-        predictions = model.generate(**inputs)
-        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
-
-        # Test output
-        self.assertEqual(
-            predictions[0].tolist(),
-            [0, 3, 7, 152, 67, 839, 1],
-        )
-        self.assertEqual(generated_text, "san diego")

@@ -42,10 +42,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] CogVLMVisionConfig
 
-## CogVLMQFormerConfig
-
-[[autodoc]] CogVLMQFormerConfig
-
 ## CogVLMProcessor
 
 [[autodoc]] CogVLMProcessor
@@ -53,11 +49,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## CogVLMVisionModel
 
 [[autodoc]] CogVLMVisionModel
-    - forward
-
-## CogVLMQFormerModel
-
-[[autodoc]] CogVLMQFormerModel
     - forward
 
 ## CogVLMModel
@@ -68,8 +59,8 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
     - get_image_features
     - get_qformer_features
 
-## CogVLMForConditionalGeneration
+## CogVLMForCausalLM
 
-[[autodoc]] CogVLMForConditionalGeneration
+[[autodoc]] CogVLMForCausalLM
     - forward
     - generate
