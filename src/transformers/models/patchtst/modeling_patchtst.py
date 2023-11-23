@@ -25,7 +25,6 @@ from ...activations import ACT2CLS
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
-from ...trainer_utils import set_seed
 from ...utils import ModelOutput, add_start_docstrings, logging
 from .configuration_patchtst import PatchTSTConfig
 
@@ -231,7 +230,7 @@ def random_masking(
     unmasked_channel_indices: list = None,
     channel_consistent_masking: bool = False,
     mask_value: int = 0,
-    seed_number: Optional[int] = None,
+    seed: Optional[int] = None,
 ):
     """random_masking: Mask the input considering the control variables.
 
@@ -247,8 +246,8 @@ def random_masking(
             across channels.
         mask_value (int, *optional*, defaults to 0):
             Define the value of masked patches for pretraining.
-        seed_number (int, *optional*):
-            Value to set for the random seed.
+        seed: Optional[int] = None,
+            Torch generator for the random noise.
 
     Returns:
         `tuple(torch.Tensor)`: inputs_mask, masked input, same shape as input Tensor and mask tensor of shape [bs x c x
@@ -256,8 +255,11 @@ def random_masking(
     """
     if mask_ratio < 0 or mask_ratio >= 1:
         raise ValueError(f"Mask ratio {mask_ratio} has to be between 0 and 1.")
-    if seed_number:
-        set_seed(seed_number)
+
+    if seed is not None:
+        generator = torch.manual_seed(seed)
+    else:
+        generator = None
 
     batch_size, num_channels, sequence_length, num_features = inputs.shape
     device = inputs.device
@@ -265,11 +267,13 @@ def random_masking(
     len_keep = int(sequence_length * (1 - mask_ratio))
 
     if channel_consistent_masking:
-        noise = torch.rand(batch_size, 1, sequence_length, device=device)  # noise in [0, 1], bs x 1 x  L
+        noise = torch.rand(
+            batch_size, 1, sequence_length, device=device, generator=generator
+        )  # noise in [0, 1], bs x 1 x  L
         noise = noise.repeat(1, num_channels, 1)  # bs x num_channels x time
     else:
         # noise in [0, 1], bs x num_channels x L
-        noise = torch.rand(batch_size, num_channels, sequence_length, device=device)
+        noise = torch.rand(batch_size, num_channels, sequence_length, device=device, generator=generator)
 
     # mask: [bs x num_channels x num_patch]
     mask = torch.ones(batch_size, num_channels, sequence_length, device=device)
@@ -293,7 +297,7 @@ def forecast_masking(
     num_forecast_mask_patches: Union[list, int],
     unmasked_channel_indices: list = None,
     mask_value: int = 0,
-    seed_number: Optional[int] = None,
+    seed: Optional[int] = None,
 ):
     """Forecast masking that masks the last K patches where K is from the num_forecast_mask_patches.
     If num_forecast_mask_patches is a list, samples in the batch will be randomly masked by numbers defined in the list.
@@ -307,15 +311,17 @@ def forecast_masking(
             Indices of channels that are not masked.
         mask_value (`int`, *optional*, defaults to 0):
             Values in the masked patches will be filled by `mask_value`.
-        seed_number (`int`, *optional*):
-            Set the random seed number.
+        seed (`int`, *optional*):
+            Seed for the random mask permutations.
 
     Returns:
         `tuple(torch.Tensor)`: inputs_mask, masked input, same shape as inputs Tensor and Mask tensor of shape `(bs,
         num_channels , num_patch)` or `(bs, tsg1, tsg2, num_channels, num_patch)`
     """
-    if seed_number:
-        set_seed(seed_number)
+    if seed is not None:
+        generator = torch.manual_seed(seed)
+    else:
+        generator = None
 
     if isinstance(num_forecast_mask_patches, int):
         num_forecast_mask_patches = [num_forecast_mask_patches]
@@ -348,7 +354,7 @@ def forecast_masking(
         mask[batch1:batch2, :, -patch_len:] = 1
         batch1 = batch2
 
-    perm = torch.randperm(mask.shape[0])
+    perm = torch.randperm(mask.shape[0], generator=generator)
     mask = mask[perm]
 
     mask = mask.unsqueeze(-1).repeat(1, 1, 1, num_features)  # mask: [bs x num_channels x num_patch x patch_len]
@@ -430,7 +436,7 @@ class PatchTSTMasking(nn.Module):
         self.mask_value = config.mask_value
         if self.unmasked_channel_indices is not None:
             self.unmasked_channel_indices.sort()
-        self.seed_number = config.seed_number
+        self.seed = config.seed
 
     def forward(self, patch_input: torch.Tensor):
         """
@@ -452,7 +458,7 @@ class PatchTSTMasking(nn.Module):
                 unmasked_channel_indices=self.unmasked_channel_indices,
                 channel_consistent_masking=self.channel_consistent_masking,
                 mask_value=self.mask_value,
-                seed_number=self.seed_number,
+                seed=self.seed,
             )
         elif self.mask_type == "forecast":
             masked_input, mask = forecast_masking(
@@ -460,7 +466,7 @@ class PatchTSTMasking(nn.Module):
                 num_forecast_mask_patches=self.num_forecast_mask_patches,
                 unmasked_channel_indices=self.unmasked_channel_indices,
                 mask_value=self.mask_value,
-                seed_number=self.seed_number,
+                seed=self.seed,
             )
         else:
             raise ValueError(f"Invalid mask type {self.mask_type}.")

@@ -95,7 +95,7 @@ class PatchTSTConfig(PretrainedConfig):
             The standard deviation of the truncated normal weight initialization distribution.
         share_projection (`bool`, *optional*, defaults to `True`):
             Sharing the projection layer across different channels in the forecast head.
-        seed_number (`Optional`, *optional*):
+        seed (`Optional`, *optional*):
             Seed number used for random masking. If unset, no seed is set.
         scaling (`Union`, *optional*, defaults to `"std"`):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
@@ -125,13 +125,13 @@ class PatchTSTConfig(PretrainedConfig):
         prediction_length (`int`, *optional*, defaults to 24):
             The prediction horizon that the model will output.
         num_targets (`int`, *optional*, defaults to 1):
-            Number of targets for regression and classificastion tasks. For classification, it is the number of
+            Number of targets for regression and classification tasks. For classification, it is the number of
             classes.
         output_range (`list`, *optional*):
             Output range for regression task. The range of output values can be set to enforce the model to produce
             values within a range.
         num_parallel_samples (`int`, *optional*, defaults to 100):
-            The number of samples is generated in parallel for probablistic prediction.
+            The number of samples is generated in parallel for probabilistic prediction.
 
 
     ```python
@@ -185,7 +185,7 @@ class PatchTSTConfig(PretrainedConfig):
         use_cls_token: bool = False,
         init_std: float = 0.02,
         share_projection: bool = True,
-        seed_number: Optional[int] = None,
+        seed: Optional[int] = None,
         scaling: Optional[Union[str, bool]] = "std",
         # mask pretraining
         mask_input: Optional[bool] = None,
@@ -239,7 +239,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.patch_stride = patch_stride
 
         # Mask pretraining
-        self.seed_number = seed_number
+        self.seed = seed
         self.mask_input = mask_input
         self.mask_type = mask_type
         self.random_mask_ratio = random_mask_ratio  # for random masking

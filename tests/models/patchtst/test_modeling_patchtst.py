@@ -68,7 +68,7 @@ class PatchTSTModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         distil=False,
-        seed_number=42,
+        seed=42,
         num_targets=2,
     ):
         self.parent = parent
@@ -88,7 +88,7 @@ class PatchTSTModelTester:
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
-        self.seed_number = seed_number
+        self.seed = seed
         self.num_targets = num_targets
         self.distil = distil
         self.num_patches = (max(self.context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
@@ -107,7 +107,7 @@ class PatchTSTModelTester:
             attention_dropout=self.attention_probs_dropout_prob,
             context_length=self.context_length,
             activation_function=self.hidden_act,
-            seed_number=self.seed_number,
+            seed=self.seed,
             num_targets=self.num_targets,
         )
 
@@ -186,12 +186,12 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             inputs_dict.pop("future_values")
         # else if classification model:
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
-            rng = random.Random(self.model_tester.seed_number)
+            rng = random.Random(self.model_tester.seed)
             labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_targets, rng=rng)
             inputs_dict["target_values"] = labels
             inputs_dict.pop("future_values")
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
-            rng = random.Random(self.model_tester.seed_number)
+            rng = random.Random(self.model_tester.seed)
             target_values = floats_tensor([self.model_tester.batch_size, self.model_tester.num_targets], rng=rng)
             inputs_dict["target_values"] = target_values
             inputs_dict.pop("future_values")
