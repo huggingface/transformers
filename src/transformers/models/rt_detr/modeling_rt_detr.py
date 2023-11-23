@@ -1636,13 +1636,11 @@ class RTDetrModel(RTDetrPreTrainedModel):
                 "loss_giou": self.config.weight_loss_giou,
             }
             weight_loss_scaled = {k: v * loss_dict[k] for k, v in weight_dict.items()}
-            reduced_loss_unscaled = {f"{k}_unscaled": v for k, v in loss_dict.items()}
 
-            loss = sum(loss_dict.values())
+            loss = sum(weight_loss_scaled.values())
             loss_dict = {
                 "loss_dict": loss_dict,
                 "weight_loss_scaled": weight_loss_scaled,
-                "reduced_loss_unscaled": reduced_loss_unscaled,
             }
 
         encoder_states = encoder_outputs if output_hidden_states else ()
