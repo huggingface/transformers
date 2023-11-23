@@ -2250,7 +2250,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         for key in cls.SPECIAL_TOKENS_ATTRIBUTES & init_kwargs.keys():
             if added_tokens_map != {} and init_kwargs[key] is not None:
                 if key != "additional_special_tokens":
-                    init_kwargs[key] = added_tokens_map.get(init_kwargs[key], init_kwargs[key])
+                    init_kwargs[key] = added_tokens_map.get(key, init_kwargs[key])
 
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
         # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
