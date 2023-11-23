@@ -20,7 +20,6 @@ import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
-    get_resize_output_image_size,
     resize,
     to_channel_dimension_format,
 )
@@ -89,48 +88,54 @@ class RTDetrImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[ChannelDimension] = None,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
-        Resize the image to the given size. Size can be `min_size` (scalar) or `(height, width)` tuple. If size is an
-        int, smaller edge of the image will be matched to this number.
+        Resize an image to `(size["height"], size["width"])`.
 
         Args:
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Dictionary containing the size to resize to. Can contain the keys `shortest_edge` and `longest_edge` or
-                `height` and `width`.
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-                Resampling filter to use if resizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
+            data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used.
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
             input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+
+        Returns:
+            `np.ndarray`: The resized image.
         """
-        if "shortest_edge" in size and "longest_edge" in size:
-            size = get_resize_output_image_size(
-                image, size["shortest_edge"], size["longest_edge"], input_data_format=input_data_format
-            )
-        elif "height" in size and "width" in size:
-            size = (size["height"], size["width"])
-        else:
-            raise ValueError(
-                "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
-                f" {size.keys()}."
-            )
-        image = resize(
-            image, size=size, resample=resample, data_format=data_format, input_data_format=input_data_format, **kwargs
+        size = get_size_dict(size)
+        if "height" not in size or "width" not in size:
+            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
+        output_size = (size["height"], size["width"])
+        return resize(
+            image,
+            size=output_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
         )
-        return image
 
     def preprocess(
         self,

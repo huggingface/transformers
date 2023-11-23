@@ -54,7 +54,6 @@ RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 @dataclass
 class RTDetrModelOutput(ModelOutput):
     """
@@ -320,9 +319,7 @@ def get_contrastive_denoising_training_group(
 
 
 class RTDetrConvNormLayer(nn.Module):
-    def __init__(
-        self, config, channels_in, channels_out, kernel_size, stride, padding=None, activation=None
-    ):
+    def __init__(self, config, channels_in, channels_out, kernel_size, stride, padding=None, activation=None):
         super().__init__()
         self.conv = nn.Conv2d(
             channels_in,
@@ -470,9 +467,7 @@ class RTDetrCSPRepLayer(nn.Module):
         self.conv2 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
         self.bottlenecks = nn.Sequential(*[RTDetrRepVggBlock(config) for _ in range(num_blocks)])
         if hidden_channels != out_channels:
-            self.conv3 = RTDetrConvNormLayer(
-                config, hidden_channels, out_channels, 1, 1, activation=activation
-            )
+            self.conv3 = RTDetrConvNormLayer(config, hidden_channels, out_channels, 1, 1, activation=activation)
         else:
             self.conv3 = nn.Identity()
 
