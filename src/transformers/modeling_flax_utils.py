@@ -1274,7 +1274,7 @@ def append_call_sample_docstring(model_class, checkpoint, output_type, config_cl
         output_type=output_type,
         config_class=config_class,
         model_cls=model_class.__name__,
-        revison=revison
+        revison=revison,
     )(model_class.__call__)
 
 

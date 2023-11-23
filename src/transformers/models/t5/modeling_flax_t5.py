@@ -1368,7 +1368,9 @@ class FlaxT5Model(FlaxT5PreTrainedModel):
     module_class = FlaxT5Module
 
 
-append_call_sample_docstring(FlaxT5Model, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC, revison="refs/pr/11")
+append_call_sample_docstring(
+    FlaxT5Model, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC, revison="refs/pr/11"
+)
 
 FLAX_T5_MODEL_DOCSTRING = """
     Returns:
