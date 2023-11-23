@@ -102,6 +102,7 @@ class T5Config(PretrainedConfig):
         eos_token_id=1,
         classifier_dropout=0.0,
         position_embedding_definitions=None,
+        memory_efficient_attention:bool=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -138,6 +139,7 @@ class T5Config(PretrainedConfig):
             self.dense_act_fn = "gelu_new"
         
         self.position_embedding_definitions = position_embedding_definitions or dict()
+        self.memory_efficient_attention = memory_efficient_attention
 
         super().__init__(
             pad_token_id=pad_token_id,

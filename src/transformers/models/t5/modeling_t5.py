@@ -391,6 +391,7 @@ class T5Attention(nn.Module):
                     self.relative_attention_bias_dict[position_embedding_name] = nn.Embedding(relative_attention_num_buckets, self.n_heads)
         self.pruned_heads = set()
         self.gradient_checkpointing = False
+        self.memory_efficient_attention = config.memory_efficient_attention if hasattr(config, "memory_efficient_attention") else False
 
     def prune_heads(self, heads):
         if len(heads) == 0:
@@ -599,9 +600,8 @@ class T5Attention(nn.Module):
             return ans
 
         B,H,M,K = query_states.shape
-        
 
-        if True:            
+        if not self.memory_efficient_attention: #attention as it was originally implemented in the transformers repo           
             # compute scores
             scores = torch.matmul(
                 query_states, key_states.transpose(3, 2)
@@ -653,7 +653,9 @@ class T5Attention(nn.Module):
 
             attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
         
-        if True:
+        
+        
+        if self.memory_efficient_attention: #memory efficient attention
             if (mask.shape[1]==1) and (mask.shape[2]==1): #non-causal case
                 original_max_seq_len = mask.shape[-1] ##it is also found in real_seq_length, possibly switch to it
                 actual_lengths = mask[:,0,0,:].argmin(1).tolist() #creates a cpu-gpu sync... we can probably get this information in the forward instead of reverse engineering it ...
