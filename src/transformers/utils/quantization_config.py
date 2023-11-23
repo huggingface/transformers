@@ -614,13 +614,9 @@ class AwqConfig(QuantizationConfigMixin):
             awq_version_supports_fusing = False
             MIN_AWQ_VERSION = "0.1.7"
             if is_auto_awq_available():
-                # For some reason `version.parse(importlib.metadata.version("awq"))` always returns
-                # `<Version('0.1.0')>` which makes that logic unusable. Therefore we need to import
-                # awq and get `awq.__version__`
-                import awq
-
-                awq_version = awq.__version__
-                awq_version_supports_fusing = version.parse(awq_version) >= version.parse(MIN_AWQ_VERSION)
+                awq_version_supports_fusing = version.parse(importlib.metadata.version("autoawq")) >= version.parse(
+                    MIN_AWQ_VERSION
+                )
 
             if not awq_version_supports_fusing:
                 raise ValueError(
