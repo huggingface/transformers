@@ -58,6 +58,7 @@ _CHECKPOINT_FOR_DOC = "t5-small"
 
 POSITION_EMBEDDING_SINUSOIDAL = "abs_sinusoidal"
 POSITION_EMBEDDING_T5_RELATIVE = "t5_relative"
+POSITION_EMBEDDING_ROTARY = 'RoPE' #Rotary Positional Encoding: https://nn.labml.ai/transformers/rope/index.html     https://facebookresearch.github.io/xformers/_modules/xformers/components/positional_embedding/rotary.html#RotaryEmbedding
 
 class SinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, dim, max_num_tokens=10000):
@@ -1058,6 +1059,7 @@ class T5Stack(T5PreTrainedModel):
         self.model_parallel = False
         self.device_map = None
         self.gradient_checkpointing = False
+        self.add_t5_relative_position_embedding = config.add_t5_relative_position_embedding
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
@@ -1123,8 +1125,7 @@ class T5Stack(T5PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        position_ids_dict=None,
-        add_t5_relative_position_embedding=True,
+        position_ids_dict=None,        
     ):
         # Model parallel
         if self.model_parallel:
@@ -1160,7 +1161,7 @@ class T5Stack(T5PreTrainedModel):
             position_ids_dict = {}
 
         position_ids_info_list_for_relative_embeddings = []
-        if add_t5_relative_position_embedding:
+        if self.add_t5_relative_position_embedding:
             position_ids_info_list_for_relative_embeddings.append( (None, POSITION_EMBEDDING_T5_RELATIVE))
         for position_ids, position_embedding_names  in position_ids_dict.values(): #orig
             position_embedding_name = position_embedding_names[0]  # till collate if fixed, we move a list of identical embedding names of batch_size
@@ -1761,7 +1762,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         # Model parallel
         self.model_parallel = False
         self.device_map = None
-        self.supports_new_embedding = True
+        self.supports_new_embedding = True        
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
@@ -1840,7 +1841,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         return_dict: Optional[bool] = None,
         encoder_position_ids_dict: Optional[Dict[str, Tuple[torch.LongTensor,str]]] = None,  # shape of each LongTensor (num_batches, n_input_tokens)
         decoder_position_ids_dict: Optional[Dict[str, Tuple[torch.LongTensor,str]]] = None, # shape of each LongTensor (num_batches, n_input_tokens)
-        add_t5_relative_position_embedding=True,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1879,10 +1879,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         
         if decoder_position_ids_dict is None:
             decoder_position_ids_dict = {}
-        
-        if add_t5_relative_position_embedding is None:
-            add_t5_relative_position_embedding = True
-
+                
         for _, position_embedding_types in encoder_position_ids_dict.values():  # each entry in values is a tupple of (tensor of position ods, list of position_embedding_names ) # consider using collate to transform the list to a single item
             assert position_embedding_types[0] in self.position_embedding_is_relative_dict
         
@@ -1910,7 +1907,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 position_ids_dict=encoder_position_ids_dict,
-                add_t5_relative_position_embedding=add_t5_relative_position_embedding,
             )
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
@@ -1954,7 +1950,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             position_ids_dict=decoder_position_ids_dict,
-            add_t5_relative_position_embedding=add_t5_relative_position_embedding,
         )
 
         sequence_output = decoder_outputs[0]
