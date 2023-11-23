@@ -1217,9 +1217,10 @@ class GenerationMixin:
         ...     outputs.sequences, outputs.scores, outputs.beam_indices, normalize_logits=False
         ... )
         >>> # If you sum the generated tokens' scores and apply the length penalty, you'll get the sequence scores.
-        >>> # Tip: recomputing the scores is only guaranteed to match with `normalize_logits=False`. Depending on the
+        >>> # Tip 1: recomputing the scores is only guaranteed to match with `normalize_logits=False`. Depending on the
         >>> # use case, you might want to recompute it with `normalize_logits=True`.
-        >>> output_length = input_length + np.sum(transition_scores.numpy() < 0, axis=1)
+        >>> # Tip 2: the output length does NOT include the input length
+        >>> output_length = np.sum(transition_scores.numpy() < 0, axis=1)
         >>> length_penalty = model.generation_config.length_penalty
         >>> reconstructed_scores = transition_scores.sum(axis=1) / (output_length**length_penalty)
         >>> print(np.allclose(outputs.sequences_scores, reconstructed_scores))
