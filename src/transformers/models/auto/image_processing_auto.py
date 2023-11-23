@@ -47,6 +47,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("chinese_clip", "ChineseCLIPImageProcessor"),
         ("clip", "CLIPImageProcessor"),
         ("clipseg", "ViTImageProcessor"),
+        ("cogvlm", "BlipImageProcessor"),
         ("conditional_detr", "ConditionalDetrImageProcessor"),
         ("convnext", "ConvNextImageProcessor"),
         ("convnextv2", "ConvNextImageProcessor"),

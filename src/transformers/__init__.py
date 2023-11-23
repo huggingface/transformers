@@ -286,20 +286,15 @@ _import_structure = {
         "ClvpTokenizer",
     ],
     "models.code_llama": [],
-    "models.codegen": [
-        "CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "CodeGenConfig",
-        "CodeGenTokenizer",
+    "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
+    "models.cogvlm": [
+        "COGVLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CogVLMConfig",
+        "CogVLMProcessor",
+        "CogVLMVisionConfig",
     ],
-    "models.conditional_detr": [
-        "CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ConditionalDetrConfig",
-    ],
-    "models.convbert": [
-        "CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ConvBertConfig",
-        "ConvBertTokenizer",
-    ],
+    "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
+    "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.convnextv2": [
         "CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1756,6 +1751,14 @@ else:
             "CodeGenForCausalLM",
             "CodeGenModel",
             "CodeGenPreTrainedModel",
+        ]
+    )
+    _import_structure["models.cogvlm"].extend(
+        [
+            "COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CogVLMForCausalLM",
+            "CogVLMModel",
+            "CogVLMPreTrainedModel",
         ]
     )
     _import_structure["models.conditional_detr"].extend(
@@ -4922,20 +4925,15 @@ if TYPE_CHECKING:
         ClvpProcessor,
         ClvpTokenizer,
     )
-    from .models.codegen import (
-        CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        CodeGenConfig,
-        CodeGenTokenizer,
+    from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
+    from .models.cogvlm import (
+        COGVLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CogVLMConfig,
+        CogVLMProcessor,
+        CogVLMVisionConfig,
     )
-    from .models.conditional_detr import (
-        CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        ConditionalDetrConfig,
-    )
-    from .models.convbert import (
-        CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        ConvBertConfig,
-        ConvBertTokenizer,
-    )
+    from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
+    from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.convnextv2 import (
         CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6319,6 +6317,12 @@ if TYPE_CHECKING:
             CodeGenForCausalLM,
             CodeGenModel,
             CodeGenPreTrainedModel,
+        )
+        from .models.cogvlm import (
+            COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CogVLMForCausalLM,
+            CogVLMModel,
+            CogVLMPreTrainedModel,
         )
         from .models.conditional_detr import (
             CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
