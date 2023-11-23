@@ -108,7 +108,7 @@ class RTDetrConfig(PretrainedConfig):
         use_focal_loss (`bool`, *optional*, defaults to `True`):
             Parameter informing if focal focal should be used.
         aux_loss (`bool`, *optional*, defaults to `True`):
-            Parameter informing if auxiliar focal should be used.
+            Parameter informing if auxiliary focal loss should be used.
         focal_loss_alpha (`float`, *optional*, defaults to 0.75):
             Parameter alpha used to compute the focal loss.
         focal_loss_gamma (`float`, *optional*, defaults to 2.0):
