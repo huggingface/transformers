@@ -50,6 +50,7 @@ from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_t5 import T5Config
 from xformers import ops as xops
 from xformers.ops.fmha import attn_bias as xattn
+from xformers.components.positional_embedding.rotary import RotaryEmbedding
 
 logger = logging.get_logger(__name__)
 
@@ -71,6 +72,100 @@ class SinusoidalPositionalEmbedding(nn.Module):
 
     def forward(self, position_ids: torch.Tensor):
         return self.embed(position_ids.long())
+
+#### rotary positional embedding
+
+from typing import Tuple
+
+import torch
+
+
+def rotate_half(x):
+    x1, x2 = x.chunk(2, dim=-1)
+    return torch.cat((-x2, x1), dim=-1)
+
+
+@torch.jit.script
+def apply_rotary_pos_emb(x, cos, sin):
+    # NOTE: This could probably be moved to Triton
+
+    # Handle a possible sequence length mismatch in between q and k
+    cos = cos[:, :, : x.shape[-2], :]
+    sin = sin[:, :, : x.shape[-2], :]
+
+    return (x * cos) + (rotate_half(x) * sin)
+
+#from xformers, modified to allow custom position indices
+class RotaryEmbedding(torch.nn.Module):
+    """
+    The rotary position embeddings from RoFormer_ (Su et. al).
+    A crucial insight from the method is that the query and keys are
+    transformed by rotation matrices which depend on the relative positions.
+
+    Other implementations are available in the Rotary Transformer repo_ and in
+    GPT-NeoX_, GPT-NeoX was an inspiration
+
+    .. _RoFormer: https://arxiv.org/abs/2104.09864
+    .. _repo: https://github.com/ZhuiyiTechnology/roformer
+    .. _GPT-NeoX: https://github.com/EleutherAI/gpt-neox
+
+
+    .. warning: Please note that this embedding is not registered on purpose, as it is transformative
+        (it does not create the embedding dimension) and will likely be picked up (imported) on a ad-hoc basis
+    """
+
+    def __init__(self, dim_model: int): #, indices:torch.Tensor = None):
+        super().__init__()
+        # Generate and save the inverse frequency buffer (non trainable)
+        
+        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim_model, 2).float() / dim_model))
+        self.register_buffer("inv_freq", inv_freq)
+
+        self._seq_len_cached = None
+        self._cos_cached = None
+        self._sin_cached = None
+
+    def _update_cos_sin_tables(self, x, seq_dimension=1, custom_indices:torch.Tensor = None):
+        seq_len = x.shape[seq_dimension]
+
+        # Reset the tables if the sequence length has changed,
+        # or if we're on a new device (possibly due to tracing for instance)
+        if (
+            seq_len != self._seq_len_cached
+            or self._cos_cached.device != x.device
+            or self._cos_cached.dtype != x.dtype
+            or custom_indices is not None #TODO: this invalidates cache on every forward if custom_indices are provided, is there another way? is it critical?
+        ):
+            self._seq_len_cached = seq_len
+            if custom_indices is None:
+                t = torch.arange(
+                    x.shape[seq_dimension], device=x.device, dtype=torch.float32
+                )
+            else:
+                t = custom_indices.float().to(x.device) 
+
+            freqs = torch.einsum("i,j->ij", t, self.inv_freq.to(x.dtype))
+            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
+
+            self._cos_cached = emb.cos()[None, None, :, :].to(x.dtype)
+            self._sin_cached = emb.sin()[None, None, :, :].to(x.dtype)
+
+        return self._cos_cached, self._sin_cached
+
+    def forward(
+        self, q: torch.Tensor, k: torch.Tensor, custom_indices:torch.Tensor = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        
+        self._cos_cached, self._sin_cached = self._update_cos_sin_tables(
+            k, seq_dimension=-2,
+            custom_indices=custom_indices,
+        )
+
+        return (
+            apply_rotary_pos_emb(q, self._cos_cached, self._sin_cached),
+            apply_rotary_pos_emb(k, self._cos_cached, self._sin_cached),
+        )
+
 
 ####################################################
 # This dict contains ids and associated url
@@ -393,6 +488,11 @@ class T5Attention(nn.Module):
         self.pruned_heads = set()
         self.gradient_checkpointing = False
         self.memory_efficient_attention = config.memory_efficient_attention if hasattr(config, "memory_efficient_attention") else False
+        
+        self.add_rotary_position_embedding = config.add_rotary_position_embedding and (relative_position_embedding_definitions is not None)
+
+        if self.add_rotary_position_embedding:
+            self.rotary_op = RotaryEmbedding(self.d_model)
 
     def prune_heads(self, heads):
         if len(heads) == 0:
@@ -621,12 +721,26 @@ class T5Attention(nn.Module):
                         curr_position_bias = self.compute_bias_for_position_embedding_name(position_embedding_name=position_embedding_name, position_ids=position_ids, query_length=real_seq_length, key_length=key_length, device=query_states.device)
                         if curr_position_bias is not None:
                             position_bias = curr_position_bias if position_bias is None else (position_bias+curr_position_bias)  # michal: shape don't match
+
+                        if position_embedding_name == POSITION_EMBEDDING_ROTARY:
+                            #TODO: make it consider the actual provided positions, and not just the default indices
+                            query_states, key_states = self.rotary_op(
+                                query_states.permute(0,2,1,3).reshape(B,M,H*K), 
+                                key_states.permute(0,2,1,3).reshape(B,M,H*K))
+                            query_states = query_states.reshape(B,M,H,K).permute(0,2,1,3)
+                            key_states = key_states.reshape(B,M,H,K).permute(0,2,1,3)
                 # if key and values are already calculated
                 # we want only the last query position bias
                 if past_key_value is not None:
                     position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
                 if mask is not None:
+                    if position_bias is None:
+                        position_bias = torch.zeros(
+                            (1, self.n_heads, real_seq_length, key_length), device=query_states.device, dtype=query_states.dtype
+                        )
+                        if self.gradient_checkpointing and self.training:
+                            position_bias.requires_grad = True
                     position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
             if self.pruned_heads:
