@@ -16,19 +16,19 @@ limitations under the License.
 
 # Installation
 
-Installez 🤗 Transformers pour la librairie d'apprentissage profond avec laquelle vous travaillez, configurer votre cache et configurer 🤗 Transformers pour un usage hors ligne (facultatif). 
+Installez 🤗 Transformers pour la librairie d'apprentissage profond avec laquelle vous travaillez, configurer votre cache et configurer 🤗 Transformers pour un usage hors ligne (facultatif).
 
 🤗 Transformers est testé avec Python 3.6+, PyTorch 1.1.0+, TensorFlow 2.0+ et Flax.
 Consulter les instructions d'installation ci-dessous pour la librairie d'apprentissage profond que vous utilisez:
 
-* Instructions d'installation pour [PyTorch](https://pytorch.org/get-started/locally/).
-* Instructions d'installation pour [TensorFlow 2.0](https://www.tensorflow.org/install/pip).
-* Instructions d'installation pour [Flax](https://flax.readthedocs.io/en/latest/).
+  * Instructions d'installation pour [PyTorch](https://pytorch.org/get-started/locally/).
+  * Instructions d'installation pour [TensorFlow 2.0](https://www.tensorflow.org/install/pip).
+  * Instructions d'installation pour [Flax](https://flax.readthedocs.io/en/latest/).
 
 ## Installation avec pip
 
 Vous devriez installer 🤗 Transformers dans un [environnement virtuel](https://docs.python.org/3/library/venv.html).
-Si vous n'êtes pas à l'aise avec les environnement virtuels, consultez ce [guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
+Si vous n'êtes pas à l'aise avec les environnements virtuels, consultez ce [guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 Utiliser un environnement virtuel permet de facilement gérer différent projets et d'éviter des erreurs de compatibilité entre les différentes dépendances.
 
 Commencez par créer un environnement virtuel dans l'espace de travail de votre projet :
@@ -42,19 +42,20 @@ Activez l'environnement virtuel. Sur Linux ou MacOs :
 ```bash
 source .env/bin/activate
 ```
+
 Activez l'environnement virtuel sur Windows :
 
 ```bash
 .env/Scripts/activate
 ```
 
-Maintenant, 🤗 Transformers peut être installé avec la commande suivante:
+Maintenant, 🤗 Transformers peut être installé avec la commande suivante :
 
 ```bash
 pip install transformers
 ```
 
-Pour une utilisation avec CPU seulement, 🤗 Transformers et la librairie d'apprentissage profond de votre choix peuvent être installés en seule ligne.
+Pour une utilisation avec CPU seulement, 🤗 Transformers et la librairie d'apprentissage profond de votre choix peuvent être installés en une seule ligne.
 Par exemple, installez 🤗 Transformers et PyTorch avec la commande suivante :
 
 ```bash
@@ -71,7 +72,7 @@ pip install 'transformers[tf-cpu]'
 
 Utilisateurs avec M1 / ARM
 
-Vous devez installer les outils suivant avant d'installer TensorFLow 2.0 
+Vous devez installer les outils suivants avant d'installer TensorFLow 2.0
 
 ```
 brew install cmake
@@ -107,11 +108,11 @@ pip install git+https://github.com/huggingface/transformers
 ```
 
 Cette commande installe la version depuis la branche `main` au lieu de la dernière version stable.
-La version de la branche `main` est utilie pour avoir les derniers développements. 
+La version de la branche `main` est utile pour avoir les derniers développements.
 Par exemple, si un bug a été résolu depuis la dernière version stable mais n'a pas encore été publié officiellement.
 Cependant, cela veut aussi dire que la version de la branche `main` n'est pas toujours stable.
 Nous nous efforçons de maintenir la version de la branche `main` opérationnelle, et la plupart des problèmes sont généralement résolus en l'espace de quelques heures ou d'un jour.
-Si vous recontrez un problème, n'hésitez pas à créer une [Issue](https://github.com/huggingface/transformers/issues) pour que l'on puisse trouver une solution au plus vite ! 
+Si vous recontrez un problème, n'hésitez pas à créer une [Issue](https://github.com/huggingface/transformers/issues) pour que l'on puisse trouver une solution au plus vite !
 
 Vérifiez si 🤗 Transformers a bien été installé avec la commande suivante :
 
@@ -123,8 +124,8 @@ python -c "from transformers import pipeline; print(pipeline('sentiment-analysis
 
 Vous aurez besoin d'une installation modifiable si vous le souhaitez :
 
-* Utiliser la version de la branche `main` du code source.
-* Contribuer à 🤗 Transformers et vouler tester vos modifications du code source.
+  * Utiliser la version de la branche `main` du code source.
+  * Contribuer à 🤗 Transformers et vouler tester vos modifications du code source.
 
 Clonez le projet et installez 🤗 Transformers avec les commandes suivantes :
 
@@ -177,7 +178,7 @@ Les modèles pré-entraînés sont téléchargés et cachés localement dans le 
 
 ## Mode hors ligne
 
-🤗 Transformers  peut fonctionner dans un environnement cloisonné ou hors ligne en n'utilisant que des fichiers locaux. Définissez la variable d'environnement `TRANSFORMERS_OFFLINE=1` pour activer ce mode.
+🤗 Transformers peut fonctionner dans un environnement cloisonné ou hors ligne en n'utilisant que des fichiers locaux. Définissez la variable d'environnement `TRANSFORMERS_OFFLINE=1` pour activer ce mode.
 
 <Tip>
 
@@ -204,11 +205,11 @@ Le script devrait maintenant s'exécuter sans rester en attente ou attendre une 
 
 Une autre option pour utiliser 🤗 Transformers hors ligne est de télécharger les fichiers à l'avance, puis d'utiliser vers leur chemin local lorsque vous en avez besoin en mode hors ligne. Il existe trois façons de faire cela :
 
-* Téléchargez un fichier via l'interface utilisateur sur le [Model Hub](https://huggingface.co/models) en cliquant sur l'icône ↓.
+  * Téléchargez un fichier via l'interface utilisateur sur le [Model Hub](https://huggingface.co/models) en cliquant sur l'icône ↓.
 
     ![download-icon](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/download-icon.png)
 
-* Utilisez les fonctions [`PreTrainedModel.from_pretrained`] et [`PreTrainedModel.save_pretrained`] :
+  * Utilisez les fonctions [`PreTrainedModel.from_pretrained`] et [`PreTrainedModel.save_pretrained`] :
 
     1. Téléchargez vos fichiers à l'avance avec [`PreTrainedModel.from_pretrained`]:
 
@@ -233,7 +234,7 @@ Une autre option pour utiliser 🤗 Transformers hors ligne est de télécharger
     >>> model = AutoModel.from_pretrained("./your/path/bigscience_t0")
     ```
 
-* Téléchargez des fichiers de manière automatique avec la librairie [huggingface_hub](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub) :
+  * Téléchargez des fichiers de manière automatique avec la librairie [huggingface_hub](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub) :
 
     1. Installez la librairie `huggingface_hub`  dans votre environnement virtuel :
 
