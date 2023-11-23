@@ -59,7 +59,7 @@ print((last_hidden_states - traced_outputs[0]).abs().max())
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DPT.
 
-- Demo notebooks for DINOv2 can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DINOv2).
+- Demo notebooks for DINOv2 can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DINOv2). 🌎
 
 <PipelineTag pipeline="image-classification"/>
 
