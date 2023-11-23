@@ -15,9 +15,12 @@
 """ Tokenization class for SigLIP model."""
 
 
+import json
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
+
+from tokenizers import normalizers
 
 from ...tokenization_utils_base import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -79,6 +82,8 @@ class SiglipTokenizerFast(PreTrainedTokenizerFast):
             The token used for padding, for example when batching sequences of different lengths.
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer.
+        do_lower_case (`bool`, *optional*, defaults to `True`):
+            Whether or not to lowercase the input when tokenizing.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -97,6 +102,7 @@ class SiglipTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         additional_special_tokens=None,
+        do_lower_case=True,
         **kwargs,
     ):
         pad_token = AddedToken(pad_token, rstrip=True, lstrip=True) if isinstance(pad_token, str) else pad_token
@@ -110,9 +116,18 @@ class SiglipTokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             pad_token=pad_token,
             additional_special_tokens=additional_special_tokens,
+            do_lower_case=do_lower_case,
             **kwargs,
         )
 
+        # TODO is this how it should be done?
+        normalizer_state = json.loads(self.backend_tokenizer.normalizer.__getstate__())
+        if normalizer_state.get("lowercase", do_lower_case) != do_lower_case:
+            normalizer_class = getattr(normalizers, normalizer_state.pop("type"))
+            normalizer_state["lowercase"] = do_lower_case
+            self.backend_tokenizer.normalizer = normalizer_class(**normalizer_state)
+
+        self.do_lower_case = do_lower_case
         self.vocab_file = vocab_file
 
     @property

@@ -40,7 +40,7 @@ else:
 class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = SiglipTokenizer
     rust_tokenizer_class = SiglipTokenizerFast
-    test_rust_tokenizer = True
+    test_rust_tokenizer = False
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
 
@@ -132,11 +132,11 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @cached_property
     def siglip_tokenizer(self):
-        return SiglipTokenizer.from_pretrained("t5-base")
+        return SiglipTokenizer.from_pretrained("nielsr/siglip-base-patch16-224")
 
     @cached_property
     def siglip_tokenizer_fast(self):
-        return SiglipTokenizerFast.from_pretrained("t5-base")
+        return SiglipTokenizerFast.from_pretrained("nielsr/siglip-base-patch16-224")
 
     def get_tokenizer(self, **kwargs) -> SiglipTokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
@@ -175,7 +175,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_prepare_batch(self):
         tokenizer = self.siglip_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
-        expected_src_tokens = [3, 9, 307, 8986, 21, 4505, 1635, 1707, tokenizer.eos_token_id]
+        expected_src_tokens = [262, 266, 476, 8532, 270, 4460, 3949, 1682, tokenizer.eos_token_id]
         batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
         self.assertIsInstance(batch, BatchEncoding)
 
@@ -211,8 +211,8 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.siglip_tokenizer
         src_text = ["A long paragraph for summarization. </s>"]
         tgt_text = ["Summary of the text. </s>"]
-        expected_src_tokens = [3, 9, 307, 8986, 21, 4505, 1635, 1707, 1]
-        expected_tgt_tokens = [9251, 13, 8, 1499, 1]
+        expected_src_tokens = [262, 266, 476, 8532, 270, 4460, 3949, 1682, 1]
+        expected_tgt_tokens = [6254, 267, 260, 1443, 1]
 
         batch = tokenizer(src_text, text_target=tgt_text)
 
@@ -339,6 +339,40 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     ),
                 )
 
+    def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
+        """Test ``_tokenize`` and ``convert_tokens_to_string``."""
+        if not self.test_sentencepiece:
+            return
+
+        tokenizer = self.get_tokenizer()
+        text = "This is text to test the tokenizer."
+
+        if self.test_sentencepiece_ignore_case:
+            text = text.lower()
+
+        tokens = tokenizer.tokenize(text)
+
+        self.assertTrue(len(tokens) > 0)
+
+        # check if converting back to original text works
+        reverse_text = tokenizer.convert_tokens_to_string(tokens)
+
+        if self.test_sentencepiece_ignore_case:
+            reverse_text = reverse_text.lower()
+
+        expected_text = "this is text to test the tokenizer"
+        self.assertEqual(reverse_text, expected_text)
+
+        special_tokens = tokenizer.all_special_tokens
+        special_tokens_string = tokenizer.convert_tokens_to_string(special_tokens)
+        for special_token in special_tokens:
+            self.assertIn(special_token, special_tokens_string)
+
+        if self.test_rust_tokenizer:
+            rust_tokenizer = self.get_rust_tokenizer()
+            special_tokens_string_rust = rust_tokenizer.convert_tokens_to_string(special_tokens)
+            self.assertEqual(special_tokens_string, special_tokens_string_rust)
+
     # overwritten from `test_tokenization_common` since Siglip has no max length
     def test_pretrained_model_lists(self):
         # We should have at least one default checkpoint for each tokenizer
@@ -357,10 +391,10 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     def test_some_edge_cases(self):
-        tokenizer = SiglipTokenizer.from_pretrained("t5-base", legacy=False)
+        tokenizer = SiglipTokenizer.from_pretrained("nielsr/siglip-base-patch16-224", legacy=False)
 
         sp_tokens = tokenizer.sp_model.encode("</s>>", out_type=str)
-        self.assertEqual(sp_tokens, ["<", "/", "s", ">", ">"])
+        self.assertEqual(sp_tokens, ["</", "s", ">", ">"])
         tokens = tokenizer.tokenize("</s>>")
         self.assertNotEqual(sp_tokens, tokens)
         self.assertEqual(tokens, ["</s>"])

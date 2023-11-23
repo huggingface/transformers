@@ -279,14 +279,14 @@ class SiglipTokenizer(PreTrainedTokenizer):
 
     # source: https://github.com/google-research/big_vision/blob/3b8e5ab6ad4f96e32b32826f9e1b8fd277914f9c/big_vision/evaluators/proj/image_text/prompt_engineering.py#L94
     def canonicalize_text(self, text, *, keep_punctuation_exact_string=None):
-        """Returns canonicalized `text` (lowercase and puncuation removed).
+        """Returns canonicalized `text` (puncuation removed).
 
         Args:
-        text (`str`):
-            String to be canonicalized.
-        keep_punctuation_exact_string (`str`, *optional*):
-            If provided, then this exact string kept. For example providing '{}' will keep any occurrences of '{}'
-            (but will still remove '{' and '}' that appear separately).
+            text (`str`):
+                String to be canonicalized.
+            keep_punctuation_exact_string (`str`, *optional*):
+                If provided, then this exact string kept. For example providing '{}' will keep any occurrences of '{}'
+                (but will still remove '{' and '}' that appear separately).
         """
         if keep_punctuation_exact_string:
             text = keep_punctuation_exact_string.join(
@@ -295,8 +295,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
             )
         else:
             text = text.translate(str.maketrans("", "", string.punctuation))
-        if self.do_lower_case:
-            text = text.lower()
+
         text = re.sub(r"\s+", " ", text)
         text = text.strip()
 
@@ -311,7 +310,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
         # Replace special tokens with placeholders
         for idx, special_token in enumerate(special_tokens):
             text = text.replace(special_token, f"place{idx}holder")
-        
+
         text = self.canonicalize_text(text, keep_punctuation_exact_string="{}")
 
         # Add the special tokens back
