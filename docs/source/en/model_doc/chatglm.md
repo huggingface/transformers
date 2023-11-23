@@ -18,8 +18,6 @@ The initial idea of ChatGLM model was proposed in [GLM: General Language Model P
 
 It has been iterating for 3 versions, from ChatGLM and ChatGLM2 to the most recent ChatGLM3.
 
-<INSERT TIPS ABOUT MODEL HERE>
-
 This model was contributed by [THUDM](<https://huggingface.co/THUDM). The most recent code can be found [here](https://github.com/thudm/chatglm3).
 
 ## ChatGLMConfig
