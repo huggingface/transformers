@@ -463,7 +463,9 @@ class T5Attention(nn.Module):
         if position_embedding_name == POSITION_EMBEDDING_T5_RELATIVE:
             relative_attention_bias = self.relative_attention_bias
             num_buckets=self.relative_attention_num_buckets
-            max_distance=self.relative_attention_max_distance                
+            max_distance=self.relative_attention_max_distance      
+        elif position_embedding_name == POSITION_EMBEDDING_ROTARY:
+            return None
         else:
             relative_attention_bias = self.relative_attention_bias_dict[position_embedding_name]
             num_buckets =self.relative_position_embedding_definitions[position_embedding_name].get("num_buckets", self.relative_attention_num_buckets)
@@ -602,44 +604,53 @@ class T5Attention(nn.Module):
 
         B,H,M,K = query_states.shape
 
-        if not self.memory_efficient_attention: #attention as it was originally implemented in the transformers repo           
+        add_to_scores = None
+
+        pos_embedding_found_in_add_bias = False
+
+        if position_ids_info_list:
+            if position_bias is None:
+                if not self.has_relative_attention_bias:
+                    position_bias = torch.zeros(
+                        (1, self.n_heads, real_seq_length, key_length), device=query_states.device, dtype=query_states.dtype
+                    )
+                    if self.gradient_checkpointing and self.training:
+                        position_bias.requires_grad = True
+                else:
+                    for position_ids, position_embedding_name in position_ids_info_list:
+                        curr_position_bias = self.compute_bias_for_position_embedding_name(position_embedding_name=position_embedding_name, position_ids=position_ids, query_length=real_seq_length, key_length=key_length, device=query_states.device)
+                        if curr_position_bias is not None:
+                            position_bias = curr_position_bias if position_bias is None else (position_bias+curr_position_bias)  # michal: shape don't match
+                # if key and values are already calculated
+                # we want only the last query position bias
+                if past_key_value is not None:
+                    position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
+
+                if mask is not None:
+                    position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
+
+            if self.pruned_heads:
+                mask = torch.ones(position_bias.shape[1])
+                mask[list(self.pruned_heads)] = 0
+                position_bias_masked = position_bias[:, mask.bool()]
+            else:
+                position_bias_masked = position_bias
+
+            add_to_scores = position_bias_masked
+            pos_embedding_found_in_add_bias = True
+        else:
+            if mask is not None:  
+                # MICHAL see above that mask is added to position_bias. Also in length-generalization.
+                add_to_scores = mask  # (batch_size, n_heads, seq_length, key_length)  
+
+        if not self.memory_efficient_attention: #attention as it was originally implemented in the transformers repo                                   
             # compute scores
             scores = torch.matmul(
                 query_states, key_states.transpose(3, 2)
             )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
 
-            if position_ids_info_list:
-                if position_bias is None:
-                    if not self.has_relative_attention_bias:
-                        position_bias = torch.zeros(
-                            (1, self.n_heads, real_seq_length, key_length), device=query_states.device, dtype=query_states.dtype
-                        )
-                        if self.gradient_checkpointing and self.training:
-                            position_bias.requires_grad = True
-                    else:
-                        for position_ids, position_embedding_name in position_ids_info_list:
-                            curr_position_bias = self.compute_bias_for_position_embedding_name(position_embedding_name=position_embedding_name, position_ids=position_ids, query_length=real_seq_length, key_length=key_length, device=query_states.device)
-                            position_bias = curr_position_bias if position_bias is None else (position_bias+curr_position_bias)  # michal: shape don't match
-                    # if key and values are already calculated
-                    # we want only the last query position bias
-                    if past_key_value is not None:
-                        position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
-
-                    if mask is not None:
-                        position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
-
-                if self.pruned_heads:
-                    mask = torch.ones(position_bias.shape[1])
-                    mask[list(self.pruned_heads)] = 0
-                    position_bias_masked = position_bias[:, mask.bool()]
-                else:
-                    position_bias_masked = position_bias
-
-                scores += position_bias_masked
-            else:
-                if mask is not None:  
-                    # MICHAL see above that mask is added to position_bias. Also in length-generalization.
-                    scores += mask  # (batch_size, n_heads, seq_length, key_length)  
+            if add_to_scores is not None:
+                scores += add_to_scores
 
             attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
                 scores
@@ -656,17 +667,22 @@ class T5Attention(nn.Module):
         
         
         
-        if self.memory_efficient_attention: #memory efficient attention
-            if position_ids_info_list and self.memory_efficient_attention:
-                raise Exception("We don't currently support combination of memory_efficient_attention and standard relative attention. See: https://github.com/facebookresearch/xformers/issues/925   Note: we can reconsider this and still allow usage of a custom add_bias tensor case, which is not as optimized as FLASHv2 version, but still may be useful.")
+        if self.memory_efficient_attention: #memory efficient attention            
+            # if position_ids_info_list and self.memory_efficient_attention:
+            #     raise Exception("We don't currently support combination of memory_efficient_attention and standard relative attention. See: https://github.com/facebookresearch/xformers/issues/925   Note: we can reconsider this and still allow usage of a custom add_bias tensor case, which is not as optimized as FLASHv2 version, but still may be useful.")
                 
             if (mask.shape[1]==1) and (mask.shape[2]==1): #non-causal case
                 original_max_seq_len = mask.shape[-1] ##it is also found in real_seq_length, possibly switch to it
                 actual_lengths = mask[:,0,0,:].argmin(1).tolist() #creates a cpu-gpu sync... we can probably get this information in the forward instead of reverse engineering it ...
-                attn_bias = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=actual_lengths)
-                query_states = _compress_to_single_unpadded_sample(query_states, actual_lengths)
-                key_states = _compress_to_single_unpadded_sample(key_states, actual_lengths)
-                value_states = _compress_to_single_unpadded_sample(value_states, actual_lengths)
+                if not pos_embedding_found_in_add_bias: #we can express the the attention bias as xformers AttentionBias class, which would enabled Flash V2 (assuming additional conditions are met as well)
+                    attn_bias = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=actual_lengths)
+                    query_states = _compress_to_single_unpadded_sample(query_states, actual_lengths)
+                    key_states = _compress_to_single_unpadded_sample(key_states, actual_lengths)
+                    value_states = _compress_to_single_unpadded_sample(value_states, actual_lengths)
+                else:
+                    #TODO: also warn about half precision and "too old" GPU 
+                    warnings.warn("Since the default T5 relative positional encoding was requested, Flash V2 will NOT be used. You can use a different positional encoding method if you want to use Flash V2, for example, RoPE.")                    
+                    attn_bias = add_to_scores.contiguous().to(query_states.dtype) #TODO: is contiguous necessary here?                
             else:
                 raise Exception("not supporting causal attention yet")
 
@@ -681,7 +697,8 @@ class T5Attention(nn.Module):
                 scale = 1.0,
             )
 
-            attn_output = _convert_to_single_padded_tensor(attn_output, sizes=actual_lengths, pad_to_size=original_max_seq_len)            
+            if not pos_embedding_found_in_add_bias:
+                attn_output = _convert_to_single_padded_tensor(attn_output, sizes=actual_lengths, pad_to_size=original_max_seq_len)            
             attn_output = attn_output.reshape(B, M, H*K)     
 
         attn_output = self.o(attn_output)
