@@ -23,7 +23,8 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import HfFolder, delete_repo
+import requests
+from huggingface_hub import HfApi, HfFolder, delete_repo
 from huggingface_hub.file_download import http_get
 from pytest import mark
 from requests.exceptions import HTTPError
@@ -1169,6 +1170,147 @@ class ModelUtilsTest(TestCasePlus):
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
+
+
+@require_torch
+class ModelOnTheFlyConversionTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.user = "huggingface-hub-ci"
+        cls.repo_name = f"{cls.user}/test-model-on-the-fly"
+        cls._token = TOKEN
+        HfFolder.save_token(TOKEN)
+        cls.api = HfApi(token=TOKEN)
+
+        if cls.api.repo_exists(cls.repo_name):
+            cls.api.delete_repo(cls.repo_name)
+
+    def tearDown(self) -> None:
+        self.api.delete_repo(self.repo_name)
+
+    def test_safetensors_on_the_fly_conversion(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self._token, safe_serialization=False)
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, "SFconvertbot")
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_conversion_private(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self._token, safe_serialization=False, private=True)
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self._token)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_conversion_gated(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self._token, safe_serialization=False)
+        headers = {"Authorization": f"Bearer {self._token}"}
+        requests.put(
+            f"https://huggingface.co/api/models/{self.repo_name}/settings", json={"gated": "auto"}, headers=headers
+        )
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self._token)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, "SFconvertbot")
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_sharded_conversion(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self._token, safe_serialization=False, max_shard_size="200kb")
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, "SFconvertbot")
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_sharded_conversion_private(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(
+            self.repo_name, token=self._token, safe_serialization=False, max_shard_size="200kb", private=True
+        )
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self._token)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_sharded_conversion_gated(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self._token, max_shard_size="200kb", safe_serialization=False)
+        headers = {"Authorization": f"Bearer {self._token}"}
+        requests.put(
+            f"https://huggingface.co/api/models/{self.repo_name}/settings", json={"gated": "auto"}, headers=headers
+        )
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self._token)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, "SFconvertbot")
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
 
 @require_torch
