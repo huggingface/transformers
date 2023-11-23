@@ -110,6 +110,32 @@ def apply_rotary_pos_emb(q, k, v, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed, v_embed
 
 
+def pad_extra_bos_eos_tokens(input_ids, attention_mask=None, pad_token_id=0, bos_token_id=255, eos_token_id=0, add_bos_token=True, add_eos_token=True):
+    """
+    This method adds extra bos and eos tokens to input_ids and accordingly modifies the attention_mask.
+    """
+
+    # add the bos token at the beginning
+    if add_bos_token:
+        input_ids = torch.nn.functional.pad(input_ids, (1, 0), value=bos_token_id)
+        attention_mask = torch.nn.functional.pad(attention_mask, (1, 0), value=1) if attention_mask is not None else attention_mask
+
+    modified_input_ids = input_ids
+    if add_eos_token:
+        modified_input_ids = torch.zeros((input_ids.shape[0], input_ids.shape[1] + 1), dtype=input_ids.dtype, device=input_ids.device)
+        for i, each_input_id in enumerate(input_ids):
+            # locate where the valid tokens end and then add the eos token
+            if torch.isin(each_input_id, pad_token_id).sum():
+                pos = torch.where(each_input_id==pad_token_id)[0].min()
+                modified_input_ids[i] = torch.concatenate([each_input_id[:pos], torch.tensor([eos_token_id], device=input_ids.device), each_input_id[pos:]])
+            else:
+                # if there are no pad tokens present, then add eos to the end
+                modified_input_ids[i] = torch.nn.functional.pad(each_input_id, (0, 1), value=eos_token_id)
+        attention_mask = torch.nn.functional.pad(attention_mask, (1, 0), value=1) if attention_mask is not None else attention_mask
+
+    return modified_input_ids, attention_mask
+
+
 @dataclass
 class ClvpEncoderOutput(ModelOutput):
     """
@@ -604,16 +630,7 @@ class ClvpConditioningEncoder(nn.Module):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            # We add bos and eos input_ids in the modeling file instead of the tokenizer file to keep the logic simple
-            # This logic is specific to ClvpConditioningEncoder and not used by other modules.
-            input_ids = torch.nn.functional.pad(input_ids, (1, 0), value=self.text_config.bos_token_id)
-            input_ids = torch.nn.functional.pad(input_ids, (0, 1), value=self.text_config.eos_token_id)
             batch_size, seq_length = input_ids.size()
-            inputs_embeds = self.text_token_embedding(input_ids)
-            # check if we need to update attention mask, if yes then pad it too
-            if attention_mask is not None and attention_mask.shape[1] != seq_length:
-                attention_mask = torch.nn.functional.pad(attention_mask, (1, 0), value=1)
-                attention_mask = torch.nn.functional.pad(attention_mask, (0, 1), value=1)
         elif inputs_embeds is not None:
             batch_size, seq_length = inputs_embeds.size()[:-1]
         else:
@@ -621,8 +638,17 @@ class ClvpConditioningEncoder(nn.Module):
 
         # construct attention mask if not given
         if attention_mask is None:
-            attention_mask = torch.ones([batch_size, seq_length], dtype=torch.long, device=inputs_embeds.device)
+            attention_mask = torch.ones([batch_size, seq_length], dtype=torch.long, device=input_ids.device)
 
+        # We add bos and eos input_ids in the modeling file instead of the tokenizer file to keep the logic simple
+        # This logic is specific to ClvpConditioningEncoder and not used by other modules.
+        input_ids, attention_mask = pad_extra_bos_eos_tokens(input_ids,
+                                                             attention_mask,
+                                                             bos_token_id=self.text_config.bos_token_id,
+                                                             eos_token_id=self.text_config.eos_token_id,
+                                                             )
+
+        inputs_embeds = self.text_token_embedding(input_ids)
         position_ids = attention_mask.cumsum(-1) - 1
         position_embeds = self.text_position_embedding(position_ids)
         text_embeds = inputs_embeds + position_embeds
@@ -1396,6 +1422,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1515,6 +1542,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
                 This refers to the output of the decoder model.
         """
         decoder_fixing_codes = self.config.decoder_config.decoder_fixing_codes
+        speech_ids = speech_ids[:, 1:]
 
         stop_token_indices = torch.where(speech_ids == self.speech_decoder_model.config.eos_token_id, 1, 0)
         speech_ids = torch.masked_fill(speech_ids, mask=stop_token_indices.bool(), value=decoder_fixing_codes[0])
@@ -1866,6 +1894,14 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             `ClvpOutput` or tuple: A `ClvpOutput` (if `return_dict_in_generate=True` or when
             `config.return_dict_in_generate=True`) or a tuple.
         """
+
+        # If the input sequences are larger than (vocab_size - 3) then raise error, because we add 1 bos tokens and
+        # 2 eos tokens to the input_ids in ClvpConditioningEncoder.
+        sequence_length = input_ids.shape[-1]
+        if sequence_length > (self.config.text_config.vocab_size - 3):
+            raise ValueError(f"Maximum sequence length reached! Found input_ids of length {sequence_length}."
+                             f"Please make sure that the maximum length of input_ids is {self.config.text_config.vocab_size - 3}")
+
         if generation_config is None:
             generation_config = self.generation_config
 
@@ -1876,10 +1912,12 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
         # pad input_ids as specified in the original repo
         # link: https://github.com/neonbjb/tortoise-tts/blob/80f89987a5abda5e2b082618cd74f9c7411141dc/tortoise/api.py#L380
-        input_ids = torch.nn.functional.pad(input_ids, (0, 1))
-        attention_mask = (
-            torch.nn.functional.pad(attention_mask, pad=(0, 1), value=1) if attention_mask is not None else None
-        )
+        input_ids, attention_mask = pad_extra_bos_eos_tokens(input_ids,
+                                                             attention_mask,
+                                                             add_bos_token=False,
+                                                             bos_token_id=self.config.text_config.bos_token_id,
+                                                             eos_token_id=self.config.text_config.eos_token_id,
+                                                             )
 
         conditioning_embeds = self.conditioning_encoder(
             input_features=input_features,
@@ -1896,10 +1934,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         if isinstance(decoder_outputs, ModelOutput):
             speech_ids = decoder_outputs.sequences
 
-        # Because we don't use the bos token.
-        speech_ids = speech_ids[:, 1:]
-
-        # pad to pad_to_max_mel_tokens if given this to to replicate the original repo logic
+        # pad to pad_to_max_mel_tokens if given, to replicate the original repo logic
         # link: https://github.com/neonbjb/tortoise-tts/blob/80f89987a5abda5e2b082618cd74f9c7411141dc/tortoise/api.py#L430
         if pad_to_max_mel_tokens is not None:
             padding_needed = pad_to_max_mel_tokens - speech_ids.shape[-1]
