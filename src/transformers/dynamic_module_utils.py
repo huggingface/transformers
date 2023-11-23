@@ -157,14 +157,15 @@ def get_imports(filename: Union[str, os.PathLike]) -> List[str]:
     return list(set(imports))
 
 
-def check_imports(filename: Union[str, os.PathLike]) -> List[str]:
+def check_imports(filename: Union[str, os.PathLike], skip_error: bool = False) -> List[str]:
     """
     Check if the current Python environment contains all the libraries that are imported in a file. Will raise if a
     library is missing.
 
     Args:
         filename (`str` or `os.PathLike`): The module file to check.
-
+        skip_error (bool): Skip any errors when checking.
+        It's hard for python to check all the scenes of python grammar.
     Returns:
         `List[str]`: The list of relative imports in the file.
     """
@@ -176,7 +177,7 @@ def check_imports(filename: Union[str, os.PathLike]) -> List[str]:
         except ImportError:
             missing_packages.append(imp)
 
-    if len(missing_packages) > 0:
+    if len(missing_packages) > 0 and not skip_error:
         raise ImportError(
             "This modeling file requires the following packages that were not found in your environment: "
             f"{', '.join(missing_packages)}. Run `pip install {' '.join(missing_packages)}`"
@@ -312,7 +313,7 @@ def get_cached_module_file(
         raise
 
     # Check we have all the requirements in our environment
-    modules_needed = check_imports(resolved_module_file)
+    modules_needed = check_imports(resolved_module_file, os.getenv("SKIP_CHECK_IMPORTS_ERROR", "0") == "1")
 
     # Now we move the module inside our cached dynamic modules.
     full_submodule = TRANSFORMERS_DYNAMIC_MODULE_NAME + os.path.sep + submodule
