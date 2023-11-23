@@ -1103,7 +1103,6 @@ def add_code_sample_docstrings(
             "real_checkpoint": real_checkpoint,
             "fake_checkpoint": checkpoint,
             "true": "{true}",  # For <Tip warning={true}> syntax that conflicts with formatting.
-            "revision": revision,
         }
 
         if ("SequenceClassification" in model_class or "AudioClassification" in model_class) and modality == "audio":
