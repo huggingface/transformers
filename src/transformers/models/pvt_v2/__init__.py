@@ -47,6 +47,7 @@ else:
         "PvtV2ForImageClassification",
         "PvtV2Model",
         "PvtV2PreTrainedModel",
+        "PvtV2Backbone",
     ]
 
 
