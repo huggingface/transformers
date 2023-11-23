@@ -50,6 +50,19 @@ class TextGenerationPipeline(Pipeline):
     The models that this pipeline can use are models that have been trained with an autoregressive language modeling
     objective, which includes the uni-directional models in the library (e.g. gpt2). See the list of available models
     on [huggingface.co/models](https://huggingface.co/models?filter=text-generation).
+
+    <Tip>
+     This pipeline supports tokenizer_kwargs. This is especially useful for prompts that exceed the model's sequence length:
+     ```python
+     >>> from transformers import pipeline
+     >>> generator = pipeline("text-generation", model="bert-base-cased")
+     >>> tokenizer_kwargs = {"truncation": True, "max-length": 512}
+     >>> generator(
+     ...     "This is a long generation prompt." * 100,
+     ...     tokenizer_kwargs=tokenizer_kwargs,
+     ... )
+     ```
+     </Tip>
     """
 
     # Prefix text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
