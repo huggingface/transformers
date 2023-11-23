@@ -722,7 +722,7 @@ class RTDetrTransformer(nn.Module):
         self.num_queries = config.num_queries
         self.num_decoder_layers = config.num_decoder_layers
         self.eval_spatial_size = config.eval_spatial_size
-        self.aux_loss = config.aux_loss
+        self.use_aux_loss = config.use_aux_loss
         self.learnt_init_query = config.learnt_init_query
         self.num_denoising = config.num_denoising
         self.label_noise_ratio = config.label_noise_ratio
@@ -911,7 +911,7 @@ class RTDetrTransformer(nn.Module):
 
         out = {"logits": out_logits[-1], "pred_boxes": out_bboxes[-1]}
 
-        if self.training and self.aux_loss:
+        if self.training and self.use_aux_loss:
             out["aux_outputs"] = self._set_aux_loss(out_logits[:-1], out_bboxes[:-1])
             out["aux_outputs"].extend(self._set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
 

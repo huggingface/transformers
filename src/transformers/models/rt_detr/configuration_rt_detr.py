@@ -182,7 +182,7 @@ class RTDetrConfig(PretrainedConfig):
         matcher_bbox_cost=5.0,
         matcher_giou_cost=2.0,
         use_focal_loss=True,
-        aux_loss=True,
+        use_aux_loss=True,
         focal_loss_alpha=0.75,
         focal_loss_gamma=2.0,
         weight_loss_vfl=1.0,
@@ -239,7 +239,7 @@ class RTDetrConfig(PretrainedConfig):
         self.learnt_init_query = learnt_init_query
         self.eval_spatial_size = eval_spatial_size
         self.eval_idx = eval_idx
-        self.aux_loss = aux_loss
+        self.use_aux_loss = use_aux_loss
         # Loss
         self.matcher_alpha = matcher_alpha
         self.matcher_gamma = matcher_gamma

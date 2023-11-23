@@ -80,7 +80,7 @@ class RTDetrConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "matcher_bbox_cost"))
         self.parent.assertTrue(hasattr(config, "matcher_giou_cost"))
         self.parent.assertTrue(hasattr(config, "use_focal_loss"))
-        self.parent.assertTrue(hasattr(config, "aux_loss"))
+        self.parent.assertTrue(hasattr(config, "use_aux_loss"))
         self.parent.assertTrue(hasattr(config, "focal_loss_alpha"))
         self.parent.assertTrue(hasattr(config, "focal_loss_gamma"))
         self.parent.assertTrue(hasattr(config, "weight_loss_vfl"))
@@ -130,7 +130,7 @@ class RTDetrModelTester:
         matcher_bbox_cost=5.0,
         matcher_giou_cost=2.0,
         use_focal_loss=True,
-        aux_loss=True,
+        use_aux_loss=True,
         focal_loss_alpha=0.75,
         focal_loss_gamma=2.0,
         weight_loss_vfl=1.0,
@@ -176,7 +176,7 @@ class RTDetrModelTester:
         self.matcher_bbox_cost = matcher_bbox_cost
         self.matcher_giou_cost = matcher_giou_cost
         self.use_focal_loss = use_focal_loss
-        self.aux_loss = aux_loss
+        self.use_aux_loss = use_aux_loss
         self.focal_loss_alpha = focal_loss_alpha
         self.focal_loss_gamma = focal_loss_gamma
         self.weight_loss_vfl = weight_loss_vfl
@@ -237,7 +237,7 @@ class RTDetrModelTester:
             matcher_bbox_cost=self.matcher_bbox_cost,
             matcher_giou_cost=self.matcher_giou_cost,
             use_focal_loss=self.use_focal_loss,
-            aux_loss=self.aux_loss,
+            use_aux_loss=self.use_aux_loss,
             focal_loss_alpha=self.focal_loss_alpha,
             focal_loss_gamma=self.focal_loss_gamma,
             weight_loss_vfl=self.weight_loss_vfl,
