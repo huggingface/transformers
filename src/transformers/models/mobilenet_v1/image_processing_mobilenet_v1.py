@@ -79,6 +79,10 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        use_square_size (`bool`, *optional*, defaults to `False`):
+            The value to be passed to `get_size_dict` as `default_to_square` when computing the image size. If the
+            `size` argument in `get_size_dict` is an `int`, it determines whether to default to a square image or not.
+            Note that this attribute is not used in computing `crop_size` via calling `get_size_dict`.
     """
 
     model_input_names = ["pixel_values"]
@@ -95,11 +99,12 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        use_square_size: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 256}
-        size = get_size_dict(size, default_to_square=False)
+        size = get_size_dict(size, default_to_square=use_square_size)
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
         crop_size = get_size_dict(crop_size)
         self.do_resize = do_resize
@@ -112,6 +117,7 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.use_square_size = use_square_size
 
     # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize
     def resize(
@@ -139,11 +145,14 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        size = get_size_dict(size, default_to_square=False)
+        size = get_size_dict(size, default_to_square=self.use_square_size)
         if "shortest_edge" not in size:
             raise ValueError(f"The `size` parameter must contain the key `shortest_edge`. Got {size.keys()}")
         output_size = get_resize_output_image_size(
-            image, size=size["shortest_edge"], default_to_square=False, input_data_format=input_data_format
+            image,
+            size=size["shortest_edge"],
+            default_to_square=self.use_square_size,
+            input_data_format=input_data_format,
         )
         return resize(
             image,
@@ -222,7 +231,7 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
-        size = get_size_dict(size, default_to_square=False)
+        size = get_size_dict(size, default_to_square=self.use_square_size)
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size

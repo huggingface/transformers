@@ -25,8 +25,6 @@ rendered properly in your Markdown viewer.
 </a>
 </div>
 
-**DISCLAIMER:** This model is still a work in progress, if you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title).
-
 ## Overview
 
 The Reformer model was proposed in the paper [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451.pdf) by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
@@ -44,7 +42,7 @@ while being much more memory-efficient and much faster on long sequences.*
 This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The Authors' code can be
 found [here](https://github.com/google/trax/tree/master/trax/models/reformer).
 
-Tips:
+## Usage tips
 
 - Reformer does **not** work with *torch.nn.DataParallel* due to a bug in PyTorch, see [issue #36035](https://github.com/pytorch/pytorch/issues/36035).
 - Use Axial position encoding (see below for more details). It’s a mechanism to avoid having a huge positional encoding matrix (when the sequence length is very big) by factorizing it into smaller matrices.
@@ -52,7 +50,7 @@ Tips:
 - Avoid storing the intermediate results of each layer by using reversible transformer layers to obtain them during the backward pass (subtracting the residuals from the input of the next layer gives them back) or recomputing them for results inside a given layer (less efficient than storing them but saves memory).
 - Compute the feedforward operations by chunks and not on the whole batch.
 
-## Axial Positional Encodings
+### Axial Positional Encodings
 
 Axial Positional Encodings were first implemented in Google's [trax library](https://github.com/google/trax/blob/4d99ad4965bab1deba227539758d59f0df0fef48/trax/layers/research/position_encodings.py#L29)
 and developed by the authors of this model's paper. In models that are treating very long input sequences, the
@@ -96,7 +94,7 @@ product has to be equal to `config.max_embedding_size`, which during training ha
 length* of the `input_ids`.
 
 
-## LSH Self Attention
+### LSH Self Attention
 
 In Locality sensitive hashing (LSH) self attention the key and query projection weights are tied. Therefore, the key
 query embedding vectors are also tied. LSH self attention uses the locality sensitive hashing mechanism proposed in
@@ -129,7 +127,7 @@ Using LSH self attention, the memory and time complexity of the query-key matmul
 and time bottleneck in a transformer model, with \\(n_s\\) being the sequence length.
 
 
-## Local Self Attention
+### Local Self Attention
 
 Local self attention is essentially a "normal" self attention layer with key, query and value projections, but is
 chunked so that in each chunk of length `config.local_chunk_length` the query embedding vectors only attends to
@@ -141,7 +139,7 @@ Using Local self attention, the memory and time complexity of the query-key matm
 and time bottleneck in a transformer model, with \\(n_s\\) being the sequence length.
 
 
-## Training
+### Training
 
 During training, we must ensure that the sequence length is set to a value that can be divided by the least common
 multiple of `config.lsh_chunk_length` and `config.local_chunk_length` and that the parameters of the Axial
@@ -155,7 +153,7 @@ input_ids = tokenizer.encode("This is a sentence from the training data", return
 loss = model(input_ids, labels=input_ids)[0]
 ```
 
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Question answering task guide](../tasks/question_answering)

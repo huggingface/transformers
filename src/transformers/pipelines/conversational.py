@@ -54,6 +54,7 @@ class Conversation:
 
         # This block deals with the legacy args - new code should just totally
         # avoid past_user_inputs and generated_responses
+        self._num_processed_user_inputs = 0
         generated_responses = deprecated_kwargs.pop("generated_responses", None)
         past_user_inputs = deprecated_kwargs.pop("past_user_inputs", None)
         if generated_responses is not None and past_user_inputs is None:
@@ -114,10 +115,11 @@ class Conversation:
 
     def mark_processed(self):
         """
-        This is a legacy method that no longer has any effect, as the Conversation no longer distinguishes between
-        processed and unprocessed user input.
+        This is a legacy method, as the Conversation no longer distinguishes between processed and unprocessed user
+        input. We set a counter here to keep behaviour mostly backward-compatible, but in general you should just read
+        the messages directly when writing new code.
         """
-        pass
+        self._num_processed_user_inputs = len(self._user_messages)
 
     def __iter__(self):
         for message in self.messages:
@@ -163,7 +165,17 @@ class Conversation:
     @property
     def past_user_inputs(self):
         # This is a legacy property for backwards compatibility. It is recommended to just directly access
-        # conversation.messages instead.
+        # conversation.messages instead. The modern class does not care about which messages are "processed"
+        # or not.
+        if not self._user_messages:
+            return []
+        # In the past, the most recent user message had to be mark_processed() before being included
+        # in past_user_messages. The class essentially had a single-message buffer, representing messages that
+        # had not yet been replied to. This is no longer the case, but we mimic the behaviour in this property
+        # for backward compatibility.
+        if self.messages[-1]["role"] != "user" or self._num_processed_user_inputs == len(self._user_messages):
+            return self._user_messages
+
         return self._user_messages[:-1]
 
     @property
@@ -196,17 +208,19 @@ class ConversationalPipeline(Pipeline):
 
     ```python
     >>> from transformers import pipeline, Conversation
+    # Any model with a chat template can be used in a ConversationalPipeline.
 
-    >>> chatbot = pipeline(model="microsoft/DialoGPT-medium")
-    >>> conversation = Conversation("Going to the movies tonight - any suggestions?")
+    >>> chatbot = pipeline(model="facebook/blenderbot-400M-distill")
+    >>> # Conversation objects initialized with a string will treat it as a user message
+    >>> conversation = Conversation("I'm looking for a movie - what's your favourite one?")
     >>> conversation = chatbot(conversation)
-    >>> conversation.generated_responses[-1]
-    'The Big Lebowski'
+    >>> conversation.messages[-1]["content"]
+    ' I don't really have a favorite movie, but I do like action movies. What about you?'
 
-    >>> conversation.add_user_input("Is it an action movie?")
+    >>> conversation.add_message({"role": "user", "content": "That's interesting, why do you like action movies?"})
     >>> conversation = chatbot(conversation)
-    >>> conversation.generated_responses[-1]
-    "It's a comedy."
+    >>> conversation.messages[-1]["content"]
+    ' I think it's just because they're so fast-paced and action-fantastic.'
     ```
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
@@ -214,10 +228,8 @@ class ConversationalPipeline(Pipeline):
     This conversational pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"conversational"`.
 
-    The models that this pipeline can use are models that have been fine-tuned on a multi-turn conversational task,
-    currently: *'microsoft/DialoGPT-small'*, *'microsoft/DialoGPT-medium'*, *'microsoft/DialoGPT-large'*. See the
-    up-to-date list of available models on
-    [huggingface.co/models](https://huggingface.co/models?filter=conversational).
+    This pipeline can be used with any model that has a [chat
+    template](https://huggingface.co/docs/transformers/chat_templating) set.
     """
 
     def __init__(self, *args, **kwargs):
@@ -247,13 +259,15 @@ class ConversationalPipeline(Pipeline):
             forward_params.update(generate_kwargs)
         return preprocess_params, forward_params, postprocess_params
 
-    def __call__(self, conversations: Union[Conversation, List[Conversation]], num_workers=0, **kwargs):
+    def __call__(self, conversations: Union[List[Dict], Conversation, List[Conversation]], num_workers=0, **kwargs):
         r"""
         Generate responses for the conversation(s) given as inputs.
 
         Args:
             conversations (a [`Conversation`] or a list of [`Conversation`]):
-                Conversations to generate responses for.
+                Conversation to generate responses for. Inputs can also be passed as a list of dictionaries with `role`
+                and `content` keys - in this case, they will be converted to `Conversation` objects automatically.
+                Multiple conversations in either format may be passed as a list.
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
@@ -268,6 +282,10 @@ class ConversationalPipeline(Pipeline):
         # Otherwise the threads will require a Conversation copy.
         # This will definitely hinder performance on GPU, but has to be opted
         # in because of this BC change.
+        if isinstance(conversations, list) and isinstance(conversations[0], dict):
+            conversations = Conversation(conversations)
+        elif isinstance(conversations, list) and isinstance(conversations[0], list):
+            conversations = [Conversation(conv) for conv in conversations]
         outputs = super().__call__(conversations, num_workers=num_workers, **kwargs)
         if isinstance(outputs, list) and len(outputs) == 1:
             return outputs[0]
@@ -283,19 +301,10 @@ class ConversationalPipeline(Pipeline):
         return {"input_ids": input_ids, "conversation": conversation}
 
     def _forward(self, model_inputs, minimum_tokens=10, **generate_kwargs):
-        max_length = generate_kwargs.get("max_length", self.model.config.max_length)
-
         n = model_inputs["input_ids"].shape[1]
-        if max_length - minimum_tokens < n:
-            logger.warning(
-                f"Conversation input is too long ({n}), trimming it to {max_length - minimum_tokens} tokens. Consider increasing `max_length` to avoid truncation."
-            )
-            trim = max_length - minimum_tokens
-            model_inputs["input_ids"] = model_inputs["input_ids"][:, -trim:]
-            if "attention_mask" in model_inputs:
-                model_inputs["attention_mask"] = model_inputs["attention_mask"][:, -trim:]
         conversation = model_inputs.pop("conversation")
-        generate_kwargs["max_length"] = max_length
+        if "max_length" not in generate_kwargs and "max_new_tokens" not in generate_kwargs:
+            generate_kwargs["max_new_tokens"] = 256
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         if self.model.config.is_encoder_decoder:
             start_position = 1

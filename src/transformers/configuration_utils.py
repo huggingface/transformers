@@ -246,6 +246,7 @@ class PretrainedConfig(PushToHubMixin):
             not be XLA-compatible. This option is here for backward compatibility and will be removed in Transformers
             v5.
     """
+
     model_type: str = ""
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
@@ -484,7 +485,8 @@ class PretrainedConfig(PushToHubMixin):
 
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(
@@ -854,6 +856,9 @@ class PretrainedConfig(PushToHubMixin):
                 else self.quantization_config
             )
 
+            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            _ = serializable_config_dict.pop("_pre_quantization_dtype", None)
+
         self.dict_torch_dtype_to_str(serializable_config_dict)
 
         if "_flash_attn_2_enabled" in serializable_config_dict:
@@ -895,6 +900,9 @@ class PretrainedConfig(PushToHubMixin):
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
+
+            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            _ = output.pop("_pre_quantization_dtype", None)
 
         self.dict_torch_dtype_to_str(output)
 

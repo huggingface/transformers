@@ -340,24 +340,6 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_cache_conversions(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = input_dict["input_ids"]
-        model = FalconForCausalLM(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, use_cache=True)
-        batch_size = input_ids.shape[0]
-        rw_cache = model._convert_to_rw_cache(result.past_key_values)
-        standard_cache = model._convert_cache_to_standard_format(rw_cache, batch_size)
-        for layer in range(len(rw_cache)):
-            for tensor_idx in range(2):
-                self.assertTrue(rw_cache[layer][tensor_idx].ndim == 3)
-                self.assertTrue(result.past_key_values[layer][tensor_idx].ndim == 4)
-                self.assertTrue(
-                    torch.all(result.past_key_values[layer][tensor_idx] == standard_cache[layer][tensor_idx])
-                )
-
     def test_falcon_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -521,13 +503,11 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         test_text = "A sequence: 1, 2"  # should generate the rest of the sequence
 
         unpadded_inputs = tokenizer([test_text], return_tensors="pt").to("cuda:0")
-        unpadded_inputs.pop("token_type_ids")
         unpadded_gen_out = model.generate(**unpadded_inputs, max_new_tokens=20)
         unpadded_gen_text = tokenizer.batch_decode(unpadded_gen_out, skip_special_tokens=True)
 
         dummy_text = "This is a longer text " * 2  # forces left-padding on `test_text`
         padded_inputs = tokenizer([test_text, dummy_text], return_tensors="pt", padding=True).to("cuda:0")
-        padded_inputs.pop("token_type_ids")
         padded_gen_out = model.generate(**padded_inputs, max_new_tokens=20)
         padded_gen_text = tokenizer.batch_decode(padded_gen_out, skip_special_tokens=True)
 

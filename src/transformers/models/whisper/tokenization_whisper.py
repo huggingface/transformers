@@ -191,6 +191,7 @@ LANGUAGES = {
     "ba": "bashkir",
     "jw": "javanese",
     "su": "sundanese",
+    "yue": "cantonese",
 }
 
 # language code lookup by name, with a few language aliases
@@ -207,6 +208,7 @@ TO_LANGUAGE_CODE = {
     "moldovan": "ro",
     "sinhalese": "si",
     "castilian": "es",
+    "mandarin": "zh",
 }
 
 TASK_IDS = ["translate", "transcribe"]
@@ -795,6 +797,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """
         A simple chat template that ignores role information and just concatenates messages with EOS tokens.
         """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
@@ -1200,7 +1208,7 @@ def _combine_tokens_into_words(
     if language is None:
         language = "english"
 
-    if language in {"chinese", "japanese", "thai", "lao", "myanmar"}:
+    if language in {"chinese", "japanese", "thai", "lao", "myanmar", "cantonese"}:
         # These languages don't typically use spaces.
         words, word_tokens, token_indices = _split_tokens_on_unicode(tokenizer, tokens)
     else:

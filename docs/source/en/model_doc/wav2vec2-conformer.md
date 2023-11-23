@@ -24,7 +24,10 @@ The official results of the model can be found in Table 3 and Table 4 of the pap
 
 The Wav2Vec2-Conformer weights were released by the Meta AI team within the [Fairseq library](https://github.com/pytorch/fairseq/blob/main/examples/wav2vec/README.md#pre-trained-models).
 
-Tips:
+This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
+The original code can be found [here](https://github.com/pytorch/fairseq/tree/main/examples/wav2vec).
+
+## Usage tips
 
 - Wav2Vec2-Conformer follows the same architecture as Wav2Vec2, but replaces the *Attention*-block with a *Conformer*-block
   as introduced in [Conformer: Convolution-augmented Transformer for Speech Recognition](https://arxiv.org/abs/2005.08100).
@@ -34,10 +37,7 @@ an improved word error rate.
 - Wav2Vec2-Conformer can use either no relative position embeddings, Transformer-XL-like position embeddings, or
   rotary position embeddings by setting the correct `config.position_embeddings_type`.
 
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
-The original code can be found [here](https://github.com/pytorch/fairseq/tree/main/examples/wav2vec).
-
-## Documentation resources
+## Resources
 
 - [Audio classification task guide](../tasks/audio_classification)
 - [Automatic speech recognition task guide](../tasks/asr)
