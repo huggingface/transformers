@@ -1913,13 +1913,13 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             `config.return_dict_in_generate=True`) or a tuple.
         """
 
-        # If the input sequences are larger than (vocab_size - 3) then raise error, because we add 1 bos tokens and
+        # If the input sequences are larger than (self.config.decoder_config.max_text_tokens - 3) then raise error, because we add 1 bos tokens and
         # 2 eos tokens to the input_ids in ClvpConditioningEncoder.
         sequence_length = input_ids.shape[-1]
-        if sequence_length > (self.config.text_config.vocab_size - 3):
+        if sequence_length > (self.config.decoder_config.max_text_tokens - 3):
             raise ValueError(
                 f"Maximum sequence length reached! Found input_ids of length {sequence_length}."
-                f"Please make sure that the maximum length of input_ids is {self.config.text_config.vocab_size - 3}"
+                f"Please make sure that the maximum length of input_ids is {self.config.decoder_config.max_text_tokens - 3}"
             )
 
         if generation_config is None:
