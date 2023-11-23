@@ -656,6 +656,9 @@ class T5Attention(nn.Module):
         
         
         if self.memory_efficient_attention: #memory efficient attention
+            if position_ids_info_list and self.memory_efficient_attention:
+                raise Exception("We don't currently support combination of memory_efficient_attention and standard relative attention. See: https://github.com/facebookresearch/xformers/issues/925   Note: we can reconsider this and still allow usage of a custom add_bias tensor case, which is not as optimized as FLASHv2 version, but still may be useful.")
+                
             if (mask.shape[1]==1) and (mask.shape[2]==1): #non-causal case
                 original_max_seq_len = mask.shape[-1] ##it is also found in real_seq_length, possibly switch to it
                 actual_lengths = mask[:,0,0,:].argmin(1).tolist() #creates a cpu-gpu sync... we can probably get this information in the forward instead of reverse engineering it ...
@@ -664,7 +667,7 @@ class T5Attention(nn.Module):
                 key_states = _compress_to_single_unpadded_sample(key_states, actual_lengths)
                 value_states = _compress_to_single_unpadded_sample(value_states, actual_lengths)
             else:
-                raise Exception("not supporting causal yet")
+                raise Exception("not supporting causal attention yet")
 
 
             attn_output = xops.memory_efficient_attention(
