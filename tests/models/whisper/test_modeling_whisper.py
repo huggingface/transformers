@@ -2336,13 +2336,20 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             with torch.no_grad():
                 outputs = model(**inputs)[0]
 
-            input_ids = inputs["input_features"]
-            del inputs["input_features"]
-
             encoder = model.encoder
 
+            encoder_inputs = {"input_features": inputs["input_features"]}
+            del inputs["input_features"]
+
+            if "head_mask" in inputs:
+                encoder_inputs["head_mask"] = inputs["head_mask"]
+            if "attention_mask" in inputs:
+                encoder_inputs["attention_mask"] = inputs["attention_mask"]
+            if "output_attentions" in inputs:
+                encoder_inputs["output_attentions"] = inputs["output_attentions"]
+
             with torch.no_grad():
-                inputs["encoder_outputs"] = encoder(input_ids)
+                inputs["encoder_outputs"] = encoder(**encoder_inputs)
                 outputs_embeds = model(**inputs)[0]
 
             self.assertTrue((outputs_embeds == outputs).all())
