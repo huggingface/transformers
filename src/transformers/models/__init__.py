@@ -211,6 +211,7 @@ from . import (
     umt5,
     unispeech,
     unispeech_sat,
+    univnet,
     upernet,
     videomae,
     vilt,
