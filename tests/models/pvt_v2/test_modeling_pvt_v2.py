@@ -52,7 +52,7 @@ class PvtV2ConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "num_encoder_blocks"))
 
 
-class PvtV2ModelTester:
+class PvtV2ModelTester(ModelTesterMixin):
     def __init__(
         self,
         parent,
@@ -77,7 +77,7 @@ class PvtV2ModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.image_size = {"height": 64, "width": 64} if image_size is None else image_size
+        self.image_size = 64 if image_size is None else image_size
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
         self.sr_ratios = sr_ratios
@@ -107,7 +107,7 @@ class PvtV2ModelTester:
 
     def get_config(self):
         return PvtV2Config(
-            image_size={"height": self.image_size, "width": self.image_size},
+            image_size=self.image_size,
             num_channels=self.num_channels,
             num_encoder_blocks=self.num_encoder_blocks,
             depths=self.depths,
@@ -221,6 +221,43 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip("Pvt-V2 does not have get_input_embeddings method and get_output_embeddings methods")
     def test_model_common_attributes(self):
         pass
+
+    def test_training_gradient_checkpointing(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.model_tester.is_training:
+            return
+
+        config.use_cache = False
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            # we don't test BeitForMaskedImageModeling
+            if (
+                model_class in [*get_values(MODEL_MAPPING), PvtV2ForImageClassification]
+                or not model_class.supports_gradient_checkpointing
+            ):
+                continue
+
+            model = model_class(config)
+            model.gradient_checkpointing_enable()
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+    # @unittest.skip(
+    #     reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    # )
+    # def test_training_gradient_checkpointing_use_reentrant_false(self):
+    #     pass
+    #
+    # @unittest.skip(
+    #     reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    # )
+    # def test_training_gradient_checkpointing_use_reentrant(self):
+    #     pass
+
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
