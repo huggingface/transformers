@@ -227,6 +227,7 @@ _import_structure = {
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
+    "models.chatglm": ["CHATGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "ChatGLMConfig"],
     "models.chinese_clip": [
         "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ChineseCLIPConfig",
@@ -821,6 +822,7 @@ else:
     _import_structure["models.bert_generation"].append("BertGenerationTokenizer")
     _import_structure["models.big_bird"].append("BigBirdTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
+    _import_structure["models.chatglm"].append("ChatGLMTokenizer")
     _import_structure["models.code_llama"].append("CodeLlamaTokenizer")
     _import_structure["models.cpm"].append("CpmTokenizer")
     _import_structure["models.deberta_v2"].append("DebertaV2Tokenizer")
@@ -1121,6 +1123,7 @@ else:
             "load_tf_weights_in_albert",
         ]
     )
+
     _import_structure["models.align"].extend(
         [
             "ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1435,6 +1438,15 @@ else:
             "CanineModel",
             "CaninePreTrainedModel",
             "load_tf_weights_in_canine",
+        ]
+    )
+    _import_structure["models.chatglm"].extend(
+        [
+            "CHATGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ChatGLMForConditionalGeneration",
+            "ChatGLMForSequenceClassification",
+            "ChatGLMModel",
+            "ChatGLMPreTrainedModel",
         ]
     )
     _import_structure["models.chinese_clip"].extend(
@@ -4473,6 +4485,7 @@ if TYPE_CHECKING:
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
+    from .models.chatglm import CHATGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, ChatGLMConfig
     from .models.chinese_clip import (
         CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ChineseCLIPConfig,
@@ -5033,6 +5046,7 @@ if TYPE_CHECKING:
         from .models.bert_generation import BertGenerationTokenizer
         from .models.big_bird import BigBirdTokenizer
         from .models.camembert import CamembertTokenizer
+        from .models.chatglm import ChatGLMTokenizer
         from .models.code_llama import CodeLlamaTokenizer
         from .models.cpm import CpmTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
@@ -5558,6 +5572,15 @@ if TYPE_CHECKING:
             CanineModel,
             CaninePreTrainedModel,
             load_tf_weights_in_canine,
+        )
+
+        # PyTorch model imports
+        from .models.chatglm import (
+            CHATGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ChatGLMForConditionalGeneration,
+            ChatGLMForSequenceClassification,
+            ChatGLMModel,
+            ChatGLMPreTrainedModel,
         )
         from .models.chinese_clip import (
             CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -13,15 +13,11 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
-from ...utils import is_torch_available
-
-
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
     "configuration_chatglm": ["CHATGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "ChatGLMConfig"],
-    "tokenization_chatglm": ["ChatGLMTokenizer"],
 }
 
 try:
@@ -30,7 +26,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_chatglm_fast"] = ["ChatGLMTokenizerFast"]
+    _import_structure["tokenization_chatglm"] = ["ChatGLMTokenizer"]
 
 try:
     if not is_torch_available():
@@ -40,24 +36,15 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_chatglm"] = [
         "CHATGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ChatGLMForMaskedLM",
-        "ChatGLMForCausalLM",
-        "ChatGLMForMultipleChoice",
-        "ChatGLMForQuestionAnswering",
+        "ChatGLMForConditionalGeneration",
         "ChatGLMForSequenceClassification",
-        "ChatGLMForTokenClassification",
-        "ChatGLMLayer",
         "ChatGLMModel",
         "ChatGLMPreTrainedModel",
-        "load_tf_weights_in_chatglm",
     ]
-
-
 
 
 if TYPE_CHECKING:
     from .configuration_chatglm import CHATGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, ChatGLMConfig
-    from .tokenization_chatglm import ChatGLMTokenizer
 
     try:
         if not is_tokenizers_available():
@@ -65,7 +52,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_chatglm_fast import ChatGLMTokenizerFast
+        from .tokenization_chatglm import ChatGLMTokenizer
 
     try:
         if not is_torch_available():
@@ -75,18 +62,11 @@ if TYPE_CHECKING:
     else:
         from .modeling_chatglm import (
             CHATGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ChatGLMForMaskedLM,
-            ChatGLMForCausalLM,
-            ChatGLMForMultipleChoice,
-            ChatGLMForQuestionAnswering,
+            ChatGLMForConditionalGeneration,
             ChatGLMForSequenceClassification,
-            ChatGLMForTokenClassification,
-            ChatGLMLayer,
             ChatGLMModel,
             ChatGLMPreTrainedModel,
-            load_tf_weights_in_chatglm,
         )
-
 
 
 else:

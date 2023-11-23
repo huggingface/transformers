@@ -14,17 +14,13 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The ChatGLM model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>)  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The initial idea of ChatGLM model was proposed in [GLM: General Language Model Pretraining with Autoregressive Blank Infilling](https://arxiv.org/abs/2103.10360) by Zhengxiao Du, Yujie Qian, Xiao Liu, Ming Ding, Jiezhong Qiu, Zhilin Yang, Jie Tang, and paper [GLM-130B: An Open Bilingual Pre-trained Model](https://arxiv.org/abs/2210.02414) by Aohan Zeng, Xiao Liu, Zhengxiao Du, Zihan Wang, Hanyu Lai, Ming Ding, Zhuoyi Yang, Yifan Xu, Wendi Zheng, Xiao Xia, Weng Lam Tam, Zixuan Ma, Yufei Xue, Jidong Zhai, Wenguang Chen, Peng Zhang, Yuxiao Dong, Jie Tang.
 
-The abstract from the paper is the following:
-
-*<INSERT PAPER ABSTRACT HERE>*
-
-Tips:
+It has been iterating for 3 versions, from ChatGLM and ChatGLM2 to the most recent ChatGLM3.
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [THUDM](<https://huggingface.co/THUDM). The most recent code can be found [here](https://github.com/thudm/chatglm3).
 
 ## ChatGLMConfig
 
@@ -40,47 +36,25 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
     - save_vocabulary
 
 
-## ChatGLMTokenizerFast
+## ChatGLMForSequenceClassification
 
-[[autodoc]] ChatGLMTokenizerFast
+[[autodoc]] transformers.ChatGLMForSequenceClassification
+    - all
+
+
+## ChatGLMForConditionalGeneration
+
+[[autodoc]] transformers.ChatGLMForConditionalGeneration
+    - all
 
 
 ## ChatGLMModel
 
-[[autodoc]] ChatGLMModel
-    - forward
+[[autodoc]] transformers.ChatGLMModel
+    - all
 
 
-## ChatGLMForCausalLM
+## ChatGLMPreTrainedModel
 
-[[autodoc]] ChatGLMForCausalLM
-    - forward
-
-
-## ChatGLMForMaskedLM
-
-[[autodoc]] ChatGLMForMaskedLM
-    - forward
-
-
-## ChatGLMForSequenceClassification
-
-[[autodoc]] transformers.ChatGLMForSequenceClassification
-    - forward
-
-## ChatGLMForMultipleChoice
-
-[[autodoc]] transformers.ChatGLMForMultipleChoice
-    - forward
-
-
-## ChatGLMForTokenClassification
-
-[[autodoc]] transformers.ChatGLMForTokenClassification
-    - forward
-
-
-## ChatGLMForQuestionAnswering
-
-[[autodoc]] ChatGLMForQuestionAnswering
-    - forward
+[[autodoc]] transformers.ChatGLMPreTrainedModel
+    - all

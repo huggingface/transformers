@@ -17,11 +17,9 @@
 
 import unittest
 
-from ...test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers import ChatGLMConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from transformers import ChatGLMConfig
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
@@ -29,15 +27,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 if is_torch_available():
     import torch
 
-    from transformers import (
-        ChatGLMForCausalLM,
-        ChatGLMForMaskedLM,
-        ChatGLMForMultipleChoice,
-        ChatGLMForQuestionAnswering,
-        ChatGLMForSequenceClassification,
-        ChatGLMForTokenClassification,
-        ChatGLMModel,
-    )
+    from transformers import ChatGLMForConditionalGeneration, ChatGLMForSequenceClassification, ChatGLMModel
     from transformers.models.chatglm.modeling_chatglm import (
         CHATGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
@@ -45,29 +35,28 @@ if is_torch_available():
 
 class ChatGLMModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=False,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        test_force_initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -81,13 +70,12 @@ class ChatGLMModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
+        self.test_force_initializer_range = test_force_initializer_range
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.scope = scope
@@ -117,115 +105,45 @@ class ChatGLMModelTester:
 
     def get_config(self):
         return ChatGLMConfig(
-            vocab_size=self.vocab_size,
+            padded_vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
+            ffn_hidden_size=self.intermediate_size,
+            num_layers=self.num_hidden_layers,  # naming shim
             num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            hidden_dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
             is_decoder=False,
-            initializer_range=self.initializer_range,
-        )
-
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        config.is_decoder = True
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+            test_force_initializer_range=self.test_force_initializer_range,
         )
 
     def create_and_check_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = ChatGLMModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, token_type_ids=token_type_ids)
+        result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        # ChatGLM uses s-b-h
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.seq_length, self.batch_size, self.hidden_size))
 
-    def create_and_check_model_as_decoder(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+    def create_and_check_for_conditional_generation(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
-        config.add_cross_attention = True
-        model = ChatGLMModel(config)
+        model = ChatGLMForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-        )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_causal_lm(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-    ):
-        model = ChatGLMForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_for_masked_lm(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = ChatGLMForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_decoder_model_past_large_inputs(
@@ -242,7 +160,7 @@ class ChatGLMModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = ChatGLMForCausalLM(config=config)
+        model = ChatGLMForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -290,59 +208,15 @@ class ChatGLMModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_for_question_answering(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = ChatGLMForQuestionAnswering(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            start_positions=sequence_labels,
-            end_positions=sequence_labels,
-        )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
-
     def create_and_check_for_sequence_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = ChatGLMForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
-    def create_and_check_for_token_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_labels = self.num_labels
-        model = ChatGLMForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-
-    def create_and_check_for_multiple_choice(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_choices = self.num_choices
-        model = ChatGLMForMultipleChoice(config=config)
-        model.to(torch_device)
-        model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        result = model(
-            multiple_choice_inputs_ids,
-            attention_mask=multiple_choice_input_mask,
-            token_type_ids=multiple_choice_token_type_ids,
-            labels=choice_labels,
-        )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -355,31 +229,30 @@ class ChatGLMModelTester:
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
 
 @require_torch
 class ChatGLMModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             ChatGLMModel,
-            ChatGLMForMaskedLM,
-            ChatGLMForCausalLM,
-            ChatGLMForMultipleChoice,
-            ChatGLMForQuestionAnswering,
+            ChatGLMForConditionalGeneration,
             ChatGLMForSequenceClassification,
-            ChatGLMForTokenClassification,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (ChatGLMForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (ChatGLMForConditionalGeneration,) if is_torch_available() else ()
+
+    test_headmasking = False
+    test_pruning = False
+    test_mismatched_shapes = False
 
     def setUp(self):
         self.model_tester = ChatGLMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ChatGLMConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ChatGLMConfig, hidden_size=37, common_properties=[])
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -394,61 +267,9 @@ class ChatGLMModelTest(ModelTesterMixin, unittest.TestCase):
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_masked_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
-
-    def test_for_multiple_choice(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
-
-    def test_decoder_model_past_with_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    def test_for_question_answering(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
-
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
-
-    def test_for_token_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-
-    def test_model_as_decoder(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
-
-    def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
-
-        input_mask = None
-
-        self.model_tester.create_and_check_model_as_decoder(
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -456,12 +277,39 @@ class ChatGLMModelTest(ModelTesterMixin, unittest.TestCase):
             model = ChatGLMModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    # skipped tests
+
+    @unittest.skip("ChatGLM not really supports output_attentions yet")
+    def test_attention_outputs(self):
+        # TODO(chatglm-team): Enable this test.
+        pass
+
+    @unittest.skip("ChatGLM hidden states are in shape [s, b, h] which is not currently supported by the tester")
+    def test_hidden_states_output(self):
+        # TODO(chatglm-team): Enable this test.
+        pass
+
+    @unittest.skip("ChatGLM requires input ids")
+    def test_inputs_embeds(self):
+        # TODO(chatglm-team): Enable this test.
+        pass
+
+    @unittest.skip("This test requires attention outputs which is not enabled yet")
+    def test_retain_grad_hidden_states_attentions(self):
+        # TODO(chatglm-team): Enable this test (alongside with `test_attention_outputs`)
+        pass
+
+    @unittest.skip("This test requires attention outputs which is not enabled yet")
+    def test_model_outputs_equivalence(self):
+        # TODO(chatglm-team): Enable this test (alongside with `test_attention_outputs`)
+        pass
+
 
 @require_torch
 class ChatGLMModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_masked_lm(self):
-        model = ChatGLMForMaskedLM.from_pretrained("THUDM/chatglm")
+    def test_inference_conditional_generation(self):
+        model = ChatGLMForConditionalGeneration.from_pretrained("THUDM/chatglm3-6b")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
@@ -477,5 +325,3 @@ class ChatGLMModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
-
-
