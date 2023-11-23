@@ -790,7 +790,7 @@ class RTDetrTransformer(nn.Module):
                 [int(self.eval_spatial_size[0] / s), int(self.eval_spatial_size[1] / s)] for s in self.feat_strides
             ]
         anchors = []
-        for lvl, (h, w) in enumerate(spatial_shapes):
+        for level, (height, width) in enumerate(spatial_shapes):
             grid_y, grid_x = torch.meshgrid(
                 torch.arange(end=h, dtype=dtype), torch.arange(end=w, dtype=dtype), indexing="ij"
             )
