@@ -1178,9 +1178,13 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
     def setUpClass(cls):
         cls.user = "huggingface-hub-ci"
         cls.repo_name = f"{cls.user}/test-model-on-the-fly"
-        cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
-        cls.api = HfApi(token=TOKEN)
+        cls._token = os.getenv("HUGGINGFACE_PRODUCTION_USER_TOKEN", None)
+
+        if cls._token is None:
+            raise ValueError("Cannot run tests as secret isn't setup.")
+
+        HfFolder.save_token(cls._token)
+        cls.api = HfApi(token=cls._token)
 
         if cls.api.repo_exists(cls.repo_name):
             cls.api.delete_repo(cls.repo_name)
