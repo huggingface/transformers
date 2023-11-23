@@ -534,10 +534,8 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
                 model.gradient_checkpointing_disable()
             model.to(torch_device)
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
-            # fmt: off
             # The dog is a man's best friend. It is a loyal companion, and it is a friend
-            expected_output_ids = [464, 3290, 318, 257, 582, 338, 1266, 1545, 13, 632, 318, 257, 9112, 15185, 11, 290, 340, 318, 257, 1545]
-            # fmt: on
+            expected_output_ids = [464, 3290, 318, 257, 582, 338, 1266, 1545, 13, 632, 318, 257, 9112, 15185, 11, 290, 340, 318, 257, 1545]  # fmt: skip
             output_ids = model.generate(input_ids, do_sample=False)
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 

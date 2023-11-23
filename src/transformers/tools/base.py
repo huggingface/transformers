@@ -226,7 +226,7 @@ class Tool:
         resolved_config_file = cached_file(
             repo_id,
             TOOL_CONFIG_FILE,
-            use_auth_token=token,
+            token=token,
             **hub_kwargs,
             _raise_exceptions_for_missing_entries=False,
             _raise_exceptions_for_connection_errors=False,
@@ -236,7 +236,7 @@ class Tool:
             resolved_config_file = cached_file(
                 repo_id,
                 CONFIG_NAME,
-                use_auth_token=token,
+                token=token,
                 **hub_kwargs,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
@@ -259,7 +259,7 @@ class Tool:
             custom_tool = config
 
         tool_class = custom_tool["tool_class"]
-        tool_class = get_class_from_dynamic_module(tool_class, repo_id, use_auth_token=token, **hub_kwargs)
+        tool_class = get_class_from_dynamic_module(tool_class, repo_id, token=token, **hub_kwargs)
 
         if len(tool_class.name) == 0:
             tool_class.name = custom_tool["name"]

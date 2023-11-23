@@ -84,6 +84,7 @@ class ResNetConfig(BackboneConfigMixin, PretrainedConfig):
     >>> configuration = model.config
     ```
     """
+
     model_type = "resnet"
     layer_types = ["basic", "bottleneck"]
 

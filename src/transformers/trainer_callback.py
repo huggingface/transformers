@@ -59,6 +59,8 @@ class TrainerState:
             Run an evaluation every X steps.
         save_steps (`int`, *optional*, defaults to 500):
             Save checkpoint every X updates steps.
+        num_input_tokens_seen (`int`, *optional*, defaults to 0):
+            The number of tokens seen during training (number of input tokens, not the number of prediction tokens).
         total_flos (`float`, *optional*, defaults to 0):
             The total number of floating operations done by the model since the beginning of training (stored as floats
             to avoid overflow).
@@ -87,6 +89,7 @@ class TrainerState:
     eval_steps: int = 500
     save_steps: int = 500
     num_train_epochs: int = 0
+    num_input_tokens_seen: int = 0
     total_flos: float = 0
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None

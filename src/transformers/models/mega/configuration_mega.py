@@ -145,6 +145,7 @@ class MegaConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mega"
 
     def __init__(
