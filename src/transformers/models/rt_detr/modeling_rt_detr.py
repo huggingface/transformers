@@ -1627,14 +1627,14 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         encoder_states = encoder_outputs if output_hidden_states else ()
 
-        if return_dict:
-            return RTDetrModelOutput(
-                loss=loss,
-                loss_dict=loss_dict,
-                logits=logits,
-                pred_boxes=pred_boxes,
-                encoder_hidden_states=encoder_states,
-            )
-
-        output = (logits, pred_boxes, encoder_states)
-        return ((loss, loss_dict) + output) if loss is not None else output
+        if not return_dict:
+            output = (logits, pred_boxes, encoder_states)
+            return ((loss, loss_dict) + output) if loss is not None else output
+ 
+        return RTDetrModelOutput(
+            loss=loss,
+            loss_dict=loss_dict,
+            logits=logits,
+            pred_boxes=pred_boxes,
+            encoder_hidden_states=encoder_states,
+        )
