@@ -22,13 +22,14 @@ from collections import OrderedDict
 import numpy as np
 import requests
 import torch
-from PIL import Image
 from huggingface_hub import hf_hub_download
+from PIL import Image
 from torchvision import transforms
 
 from transformers import CLIPImageProcessor, TextNetBackbone, TextNetConfig
 from transformers.image_utils import PILImageResampling
 from transformers.utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+
 
 tiny_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_tiny.config"
 small_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_small.config"
