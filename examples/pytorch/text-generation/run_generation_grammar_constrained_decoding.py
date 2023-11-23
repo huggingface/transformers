@@ -13,89 +13,44 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" The examples of running contrastive search on the auto-APIs;
-
-Running this example:
-TODO
-"""
 
 
-import argparse
-import logging
-
-from accelerate import PartialState
-from accelerate.utils import set_seed
+import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.generation.grammar_utils import IncrementalGrammarConstraint
+from transformers.generation.logits_process import GrammarConstrainedLogitsProcessor
 
 
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-    datefmt="%m/%d/%Y %H:%M:%S",
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
+if __name__ == "__main__":
+    torch.manual_seed(2)
 
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    tokenizer.pad_token = tokenizer.eos_token
+    model = AutoModelForCausalLM.from_pretrained("gpt2")
+    with open("examples/grammars/json.gbnf", "r") as file:
+        grammar_str = file.read()
+    grammar = IncrementalGrammarConstraint(grammar_str, "root", tokenizer)
 
-############
-# TODO
-############
+    prefix1 = "This is a valid json string for email:"
+    prefix2 = "This is a valid json string for shopping cart:"
+    input_ids = tokenizer([prefix1, prefix2], add_special_tokens=False, return_tensors="pt", padding=True)["input_ids"]
 
+    gcd_processor = GrammarConstrainedLogitsProcessor(grammar)
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model_name_or_path",
-        default=None,
-        type=str,
-        required=True,
+    output = model.generate(
+        input_ids,
+        do_sample=False,
+        max_length=30,
+        num_beams=2,
+        logits_processor=[gcd_processor],
+        num_return_sequences=2,
     )
-    parser.add_argument("--prompt", type=str, default="")
-    parser.add_argument("--length", type=int, default=20)
-    parser.add_argument("--stop_token", type=str, default=None, help="Token at which text generation is stopped")
-    parser.add_argument(
-        "--temperature",
-        type=float,
-        default=1.0,
-        help="temperature of 1.0 has no effect, lower tend toward greedy sampling",
-    )
-    parser.add_argument(
-        "--repetition_penalty", type=float, default=1.0, help="primarily useful for CTRL model; in that case, use 1.2"
-    )
-    parser.add_argument("--k", type=int, default=0)
-    parser.add_argument("--penalty_alpha", type=float, default=0.0)
-    parser.add_argument("--p", type=float, default=0.9)
+    # decode output
+    generations = tokenizer.batch_decode(output, skip_special_tokens=True)
+    print(generations)
 
-    parser.add_argument("--prefix", type=str, default="", help="Text added prior to input.")
-    parser.add_argument("--padding_text", type=str, default="", help="Deprecated, the use of `--prefix` is preferred.")
-    parser.add_argument("--xlm_language", type=str, default="", help="Optional language when used with the XLM model.")
-
-    parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
-    parser.add_argument(
-        "--use_cpu",
-        action="store_true",
-        help="Whether or not to use cpu. If set to False, " "we will use gpu/npu or mps device if available",
-    )
-    parser.add_argument(
-        "--fp16",
-        action="store_true",
-        help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit",
-    )
-    args = parser.parse_args()
-
-    # Initialize the distributed state.
-    distributed_state = PartialState(cpu=args.use_cpu)
-
-    logger.warning(f"device: {distributed_state.device}, 16-bits inference: {args.fp16}")
-
-    if args.seed is not None:
-        set_seed(args.seed)
-
-    # Initialize the model and tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
-    model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path)
-
-    # tokenizer = GPT2Tokenizer.from_pretrained(args.model_name_or_path)
-    # model = OPTForCausalLM.from_pretrained(args.model_name_or_path)
-    # Set the model to the right device
-    model.to(distributed_state.device)
+    """
+    'This is a valid json string for email:{ "title": "Theory", "text": "Theory", "type": "text", "text": "Theory", "type',
+    'This is a valid json string for shopping cart:{ "name": "MyCart", "price": "10", "price": "10", "price": "10", "price": "'
+    """

@@ -1075,6 +1075,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
 
         return scores + mask
 
+
 class GrammarConstrainedLogitsProcessor(LogitsProcessor):
     def __init__(self, grammar_constraint):
         self.last_size = None
@@ -1104,19 +1105,25 @@ class GrammarConstrainedLogitsProcessor(LogitsProcessor):
             self.batch_stacks = [self.grammar_constraint.init_stacks() for _ in range(len(input_ids))]
 
         # if self.last_size is not set (which would be the case when processing the first token).
-            # In this case, do nothing.
+        # In this case, do nothing.
         if self.last_size is None:
             prefix_to_parse = [
                 single_input_ids[parse_start_index:] if parse_start_index is not None else []
                 for single_input_ids in input_ids
             ]
             # self.grammar_acceptor.accept_token_ids(prefix_to_parse, self.stacks)
-            self.batch_stacks = [self.grammar_constraint.accept_token_ids(prefix, stack) for prefix, stack in zip(prefix_to_parse, self.batch_stacks)]
+            self.batch_stacks = [
+                self.grammar_constraint.accept_token_ids(prefix, stack)
+                for prefix, stack in zip(prefix_to_parse, self.batch_stacks)
+            ]
         #  if the length of the current input IDs (input_ids[0]) is exactly one more than self.last_size.
         #  This is expected in a scenario where inputs are processed incrementally, one token at a time.
         elif len(input_ids[0]) == self.last_size + 1:
             # self.stacks = self.grammar_acceptor.accept_token_id(input_ids[0][-1], self.stacks)
-            self.batch_stacks = [self.grammar_constraint.accept_token_id(single_input_ids[-1], stack) for single_input_ids, stack in zip(input_ids, self.batch_stacks)]
+            self.batch_stacks = [
+                self.grammar_constraint.accept_token_id(single_input_ids[-1], stack)
+                for single_input_ids, stack in zip(input_ids, self.batch_stacks)
+            ]
         #  ensure that the input size is consistent with the expected incremental processing
         #  (i.e., one token at a time).
         else:
@@ -1129,10 +1136,12 @@ class GrammarConstrainedLogitsProcessor(LogitsProcessor):
             # Maybe we should just trust the user to provide valid input_ids?
             # The conclusion is that, we assume the input_ids are valid, and our generation will be correct.
             # If the input_ids are not valid, then the generation result will be wrong and we don't take responsibility for that.
-            raise RuntimeError("Input ID's length is inconsistent with the current state of "
-                               "the GrammarConstrainedLogitsProcessor. If you want to process "
-                               "another input sequence, please instantiate a new "
-                                "GrammarConstrainedLogitsProcessor.")
+            raise RuntimeError(
+                "Input ID's length is inconsistent with the current state of "
+                "the GrammarConstrainedLogitsProcessor. If you want to process "
+                "another input sequence, please instantiate a new "
+                "GrammarConstrainedLogitsProcessor."
+            )
 
         self.filter_logits(scores, scores.device)
 
@@ -1142,6 +1151,7 @@ class GrammarConstrainedLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         return self.process_logits(input_ids, scores)
+
 
 class HammingDiversityLogitsProcessor(LogitsProcessor):
     r"""

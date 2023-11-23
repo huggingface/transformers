@@ -1,12 +1,13 @@
+import logging
 import re
 import sys
-import logging
 import time
 from abc import ABC
 from functools import lru_cache
 from typing import Dict, List
 
 import torch
+
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ LITERAL_MARKER = 2
 class ParseState:
     def __init__(self):
         self.symbol_ids = {}
-        self.grammar_encoding = [] # old name: out_grammar
+        self.grammar_encoding = []  # old name: out_grammar
 
 
 def get_symbol_id(state, src):
@@ -93,7 +94,6 @@ def parse_name(src):
 
 
 def parse_char(src):
-
     """
     parse the leading char from the input string
     :param src:
@@ -335,7 +335,6 @@ def print_grammar(file, state):
 ###################################
 
 
-
 class GrammarConstraint(ABC):
     def __init__(self, grammar_str, start_rule_name, tokenizer):
         self.tt = 0
@@ -485,8 +484,10 @@ class IncrementalGrammarConstraint(GrammarConstraint):
     def accept_token_id(self, token_id: int, stacks: List[List[int]]):
         if token_id == self.eos_token_id:
             if stacks and all(len(stack) != 0 for stack in stacks):
-                raise Exception(f"At least one of the stack should be empty when EOS is reached. However, "
-                                f"the stacks are {stacks}")
+                raise Exception(
+                    f"At least one of the stack should be empty when EOS is reached. However, "
+                    f"the stacks are {stacks}"
+                )
             return []
 
         for byte in self.token_trie.id2str(token_id):
@@ -521,9 +522,7 @@ class IncrementalGrammarConstraint(GrammarConstraint):
             logger.debug(f"sum of acceptance: {0}")
             return torch.zeros(vocab_size, dtype=torch.bool, device=device)
 
-        acceptance_matrix = torch.cat(
-            [self.token_acceptance_for_stack(tuple(stack), device) for stack in stacks]
-        )
+        acceptance_matrix = torch.cat([self.token_acceptance_for_stack(tuple(stack), device) for stack in stacks])
         # Merge stacks: any True => True
         acceptance = acceptance_matrix.reshape(len(stacks), -1).any(dim=0)
         logger.debug(f"sum of acceptance: {acceptance.sum()}")
@@ -596,13 +595,12 @@ class IncrementalGrammarConstraint(GrammarConstraint):
 
 
 class StaticGrammarConstraint(GrammarConstraint):
-
     def __init__(self, grammar_str, start_rule_name, tokenizer):
         super().__init__(grammar_str, start_rule_name, tokenizer)
 
-
     def accept_char(self):
         raise NotImplementedError
+
 
 #################
 # DATA STRUCTURES
@@ -644,9 +642,7 @@ class TokenTrie:
             def fmt_token(id):
                 if id in special:
                     return None
-                return bytes(
-                    tokenizer.decode([id], clean_up_tokenization_spaces=False), "utf-8"
-                )
+                return bytes(tokenizer.decode([id], clean_up_tokenization_spaces=False), "utf-8")
 
         elif "llama" in tokenizer.__class__.__name__.lower():
 
@@ -679,11 +675,7 @@ class TokenTrie:
         current[LEAF] = token_id
 
 
-
-
-
 if __name__ == "__main__":
-
     # set logging level
     logging.basicConfig(level=logging.DEBUG)
 

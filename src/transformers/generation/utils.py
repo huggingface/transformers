@@ -34,7 +34,6 @@ from ..models.auto import (
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
 from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, logging
-from .grammar_utils import GrammarConstraint
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .configuration_utils import GenerationConfig
@@ -56,7 +55,6 @@ from .logits_process import (
     NoBadWordsLogitsProcessor,
     NoRepeatNGramLogitsProcessor,
     PrefixConstrainedLogitsProcessor,
-    GrammarConstrainedLogitsProcessor,
     RepetitionPenaltyLogitsProcessor,
     SequenceBiasLogitsProcessor,
     SuppressTokensAtBeginLogitsProcessor,
@@ -983,7 +981,6 @@ class GenerationMixin:
         input_ids_seq_length: int,
         encoder_input_ids: torch.LongTensor,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
-        grammar: GrammarConstraint,
         logits_processor: Optional[LogitsProcessorList],
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
@@ -1070,12 +1067,6 @@ class GenerationMixin:
                     prefix_allowed_tokens_fn, generation_config.num_beams // generation_config.num_beam_groups
                 )
             )
-        if grammar is not None:
-            processors.append(
-                GrammarConstrainedLogitsProcessor(
-                    grammar_constraint=grammar
-            )
-        )
         if generation_config.forced_bos_token_id is not None:
             processors.append(ForcedBOSTokenLogitsProcessor(generation_config.forced_bos_token_id))
         if generation_config.forced_eos_token_id is not None:
@@ -1444,7 +1435,6 @@ class GenerationMixin:
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
-        grammar: Optional[GrammarConstraint] = None,
         synced_gpus: Optional[bool] = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         streamer: Optional["BaseStreamer"] = None,
@@ -1497,9 +1487,6 @@ class GenerationMixin:
                 on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
                 for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
                 Retrieval](https://arxiv.org/abs/2010.00904).
-            grammar (`Grammar_constraint`, *optional*):
-                The grammar constraint object that will be used to constrain the beam search to grammatical sentences
-                only. If not provided no constraint is applied. This feature is intended for advanced users.
             synced_gpus (`bool`, *optional*):
                 Whether to continue running the while loop until max_length. Unless overridden this flag will be set to
                 `True` under DeepSpeed ZeRO Stage 3 multiple GPUs environment to avoid hanging if one GPU finished
@@ -1697,7 +1684,6 @@ class GenerationMixin:
             input_ids_seq_length=input_ids_length,
             encoder_input_ids=inputs_tensor,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-            grammar=grammar,
             logits_processor=logits_processor,
             model_kwargs=model_kwargs,
             negative_prompt_ids=negative_prompt_ids,
