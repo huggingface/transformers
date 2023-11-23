@@ -1242,7 +1242,9 @@ class RTDetrLoss(nn.Module):
         # In case of cdn auxiliary losses. For rtdetr
         if "dn_aux_outputs" in outputs:
             if "dn_meta" not in outputs:
-                raise ValueError("The output must have the 'dn_meta` key. Please, ensure that 'outputs' includes a 'dn_meta' entry.")
+                raise ValueError(
+                    "The output must have the 'dn_meta` key. Please, ensure that 'outputs' includes a 'dn_meta' entry."
+                )
             indices = self.get_cdn_matched_indices(outputs["dn_meta"], targets)
             num_boxes = num_boxes * outputs["dn_meta"]["dn_num_group"]
 

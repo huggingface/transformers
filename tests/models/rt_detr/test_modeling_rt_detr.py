@@ -94,15 +94,17 @@ class RTDetrModelTester:
         self,
         parent,
         batch_size=2,
-        image_size=640,
+        image_size=160,
         num_channels=3,
         is_training=True,
         initializer_range=0.02,
         backbone_config=None,
-        feat_strides=[8, 16, 32],
-        hidden_dim=256,
-        num_head=8,
-        dim_feedforward=1024,
+        feat_strides=[1, 2, 4],
+        feat_channels=[4, 4, 4],
+        num_levels=3,
+        hidden_dim=4,
+        num_attention_heads=1,
+        dim_feedforward=16,
         dropout=0.0,
         enc_act="gelu",
         use_encoder_idx=[2],
@@ -111,17 +113,15 @@ class RTDetrModelTester:
         expansion=1.0,
         act_encoder="silu",
         eval_size=None,
-        num_classes=80,
-        num_queries=300,
-        feat_channels=[256, 256, 256],
-        num_levels=3,
-        num_decoder_points=4,
-        num_decoder_layers=6,
-        num_denoising=100,
+        num_classes=1,
+        num_queries=1,
+        num_decoder_points=1,
+        num_decoder_layers=1,
+        num_denoising=1,
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
         learnt_init_query=False,
-        eval_spatial_size=[640, 640],
+        eval_spatial_size=None,
         eval_idx=-1,
         eps=1e-2,
         matcher_alpha=0.25,
@@ -147,7 +147,7 @@ class RTDetrModelTester:
         self.backbone_config = backbone_config
         self.feat_strides = feat_strides
         self.hidden_dim = hidden_dim
-        self.num_head = num_head
+        self.num_attention_heads = num_attention_heads
         self.dim_feedforward = dim_feedforward
         self.dropout = dropout
         self.enc_act = enc_act
@@ -208,7 +208,7 @@ class RTDetrModelTester:
             backbone_config=self.backbone_config,
             feat_strides=self.feat_strides,
             hidden_dim=self.hidden_dim,
-            num_head=self.num_head,
+            num_attention_heads=self.num_attention_heads,
             dim_feedforward=self.dim_feedforward,
             dropout=self.dropout,
             enc_act=self.enc_act,
@@ -335,7 +335,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_model(self):
         pixel_values, labels = self.model_tester.prepare_random_inputs()
-        config = RTDetrConfig.from_pretrained(CHECKPOINT)
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_model(RTDetrModel, config, pixel_values, labels)
 
     def test_model_from_pretrained(self):
