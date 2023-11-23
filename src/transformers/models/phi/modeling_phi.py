@@ -212,6 +212,7 @@ class PhiMLP(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.persimmon.modeling_persimmon.PersimmonAttention with Persimmon->Phi,persimmon->phi
 class PhiAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
