@@ -107,7 +107,7 @@ class RTDetrConfig(PretrainedConfig):
             The relative weight of the giou loss of used by the Hungarian Matcher.
         use_focal_loss (`bool`, *optional*, defaults to `True`):
             Parameter informing if focal focal should be used.
-        aux_loss (`bool`, *optional*, defaults to `True`):
+        use_aux_loss (`bool`, *optional*, defaults to `True`):
             Parameter informing if auxiliary focal loss should be used.
         focal_loss_alpha (`float`, *optional*, defaults to 0.75):
             Parameter alpha used to compute the focal loss.
