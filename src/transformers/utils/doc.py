@@ -1143,7 +1143,7 @@ def add_code_sample_docstrings(
         if real_checkpoint is not None:
             code_sample = FAKE_MODEL_DISCLAIMER + code_sample
         if revision is not None:
-            if "refs/pr/" not in revision:
+            if re.match(r'^refs/pr/\d*', revision):
                 raise ValueError(
                     f"The provided revision '{revision}' is incorrect. It should point to"
                     " a pull request reference on the hub like 'refs/pr/6'"
