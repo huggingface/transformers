@@ -126,7 +126,6 @@ class GroundingDINOImageProcessingTester(unittest.TestCase):
         )
 
 
-@require_torch
 @require_vision
 # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTest with DeformableDetr->GroundingDINO
 class GroundingDINOImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
@@ -161,6 +160,7 @@ class GroundingDINOImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
         self.assertEqual(image_processor.do_pad, False)
 
     @slow
+    @require_torch
     def test_call_pytorch_with_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
