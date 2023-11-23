@@ -2645,8 +2645,20 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
-            # argmax
+            # Initialize next_tokens with argmax, and we need to replace the tokens where all scores are -inf with pad_token_id
             next_tokens = torch.argmax(next_tokens_scores, dim=-1)
+
+            # Check if all values in next_tokens_scores are -inf
+            all_neg_inf = torch.all(next_tokens_scores == -float("inf"), dim=-1)
+
+            if all_neg_inf.any():
+                if pad_token_id is None:
+                    raise ValueError(
+                        "The logits contain only -inf values, meaning that no new token "
+                        "can be sampled. `pad_token_id` should be defined but get `None`."
+                    )
+                # Replace entries in next_tokens with eos_token_id where all scores were -inf
+                next_tokens[all_neg_inf] = pad_token_id
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
@@ -2930,6 +2942,20 @@ class GenerationMixin:
 
             # sample
             probs = nn.functional.softmax(next_token_scores, dim=-1)
+
+            # Check if all original scores are -inf (which would make all probs NaN and raise an error
+            all_neg_inf = torch.all(next_token_scores == -float("inf"), dim=-1)
+
+            # Adjust probs for those cases where all scores are -inf
+            if all_neg_inf.any():
+                if pad_token_id is None:
+                    raise ValueError(
+                        "The logits contain only -inf values, meaning that no new token "
+                        "can be sampled. `pad_token_id` should be defined but get `None`."
+                    )
+                # Set all probabilities to 0 and probability of pad_token_id to 1 for these cases
+                probs[all_neg_inf] = torch.zeros_like(probs[all_neg_inf])
+                probs[all_neg_inf, pad_token_id] = 1
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
             # finished sentences should have their next token be a padding token
