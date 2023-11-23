@@ -223,9 +223,9 @@ def get_contrastive_denoising_training_group(
         num_classes (`int`): Total number of classes in the dataset.
         num_queries (`int`): Number of query slots in the transformer.
         class_embed (`callable`): A function or a model layer to embed class labels.
-        num_denoising (`int`, *optional*, defaults to `100`): Number of denoising queries.
-        label_noise_ratio (`float`, *optional*, defaults to `0.5`): Ratio of noise applied to labels.
-        box_noise_scale (`float`, *optional*, defaults to `1.0`): Scale of noise applied to bounding boxes.
+        num_denoising (`int`, *optional*, defaults to 100): Number of denoising queries.
+        label_noise_ratio (`float`, *optional*, defaults to 0.5): Ratio of noise applied to labels.
+        box_noise_scale (`float`, *optional*, defaults to 1.0): Scale of noise applied to bounding boxes.
     Returns:
         A tuple containing:
             input_query_class (`torch.FloatTensor`): Class queries with applied label noise. input_query_bbox
