@@ -716,7 +716,7 @@ class RTDetrTransformer(nn.Module):
         self.num_classes = config.num_classes
         self.num_queries = config.num_queries
         self.num_decoder_layers = config.num_decoder_layers
-        self.eval_spatial_size = config.eval_spatial_size
+        self.image_size = config.image_size
         self.use_aux_loss = config.use_aux_loss
         self.learnt_init_query = config.learnt_init_query
         self.num_denoising = config.num_denoising
@@ -776,14 +776,12 @@ class RTDetrTransformer(nn.Module):
         )
 
         # init encoder output anchors and valid_mask
-        if self.eval_spatial_size:
+        if self.image_size:
             self.anchors, self.valid_mask = self.generate_anchors()
 
     def generate_anchors(self, spatial_shapes=None, grid_size=0.05, dtype=torch.float32, device="cpu"):
         if spatial_shapes is None:
-            spatial_shapes = [
-                [int(self.eval_spatial_size[0] / s), int(self.eval_spatial_size[1] / s)] for s in self.feat_strides
-            ]
+            spatial_shapes = [[int(self.image_size[0] / s), int(self.image_size[1] / s)] for s in self.feat_strides]
         anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
             grid_y, grid_x = torch.meshgrid(
@@ -850,7 +848,7 @@ class RTDetrTransformer(nn.Module):
         device = feat_flatten.device
 
         # prepare input for decoder
-        if self.training or self.eval_spatial_size is None:
+        if self.training or self.image_size is None:
             anchors, valid_mask = self.generate_anchors(spatial_shapes, device=device)
         else:
             anchors, valid_mask = self.anchors.to(device), self.valid_mask.to(device)

@@ -72,7 +72,7 @@ class RTDetrConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "label_noise_ratio"))
         self.parent.assertTrue(hasattr(config, "box_noise_scale"))
         self.parent.assertTrue(hasattr(config, "learnt_init_query"))
-        self.parent.assertTrue(hasattr(config, "eval_spatial_size"))
+        self.parent.assertTrue(hasattr(config, "image_size"))
         self.parent.assertTrue(hasattr(config, "eval_idx"))
         self.parent.assertTrue(hasattr(config, "matcher_alpha"))
         self.parent.assertTrue(hasattr(config, "matcher_gamma"))
@@ -94,7 +94,7 @@ class RTDetrModelTester:
         self,
         parent,
         batch_size=2,
-        image_size=160,
+        input_image_size=160,
         num_channels=3,
         is_training=True,
         initializer_range=0.02,
@@ -121,7 +121,6 @@ class RTDetrModelTester:
         label_noise_ratio=0.5,
         box_noise_scale=1.0,
         learnt_init_query=False,
-        eval_spatial_size=None,
         eval_idx=-1,
         eps=1e-2,
         matcher_alpha=0.25,
@@ -139,7 +138,7 @@ class RTDetrModelTester:
         eos_coefficient=0.1,
     ):
         self.batch_size = batch_size
-        self.image_size = image_size
+        self.input_image_size = input_image_size
         self.num_channels = num_channels
         self.is_training = is_training
         self.parent = parent
@@ -167,7 +166,6 @@ class RTDetrModelTester:
         self.label_noise_ratio = label_noise_ratio
         self.box_noise_scale = box_noise_scale
         self.learnt_init_query = learnt_init_query
-        self.eval_spatial_size = eval_spatial_size
         self.eval_idx = eval_idx
         self.eps = eps
         self.matcher_alpha = matcher_alpha
@@ -183,9 +181,12 @@ class RTDetrModelTester:
         self.weight_loss_bbox = weight_loss_bbox
         self.weight_loss_giou = weight_loss_giou
         self.eos_coefficient = eos_coefficient
+        self.image_size = None  # As this is test runs in inference, let the model get from the input
 
     def prepare_random_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.input_image_size, self.input_image_size]
+        )
         # labels is a list of Dict (each Dict being the labels for a given example in the batch)
         labels = []
         # simulates number of samples per image
@@ -228,7 +229,7 @@ class RTDetrModelTester:
             label_noise_ratio=self.label_noise_ratio,
             box_noise_scale=self.box_noise_scale,
             learnt_init_query=self.learnt_init_query,
-            eval_spatial_size=self.eval_spatial_size,
+            image_size=self.image_size,
             eval_idx=self.eval_idx,
             eps=self.eps,
             matcher_alpha=self.matcher_alpha,
