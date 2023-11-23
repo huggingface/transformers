@@ -28,7 +28,7 @@ if is_torch_available():
     import torch
 
 
-def get_phrases_from_posmap(posmaps: torch.BoolTensor, input_ids: torch.LongTensor):
+def get_phrases_from_posmap(posmaps, input_ids):
     """Get token ids of phrases from posmaps and input_ids.
 
     Args:
