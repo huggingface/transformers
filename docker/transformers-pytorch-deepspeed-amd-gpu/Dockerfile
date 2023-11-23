@@ -1,0 +1,19 @@
+FROM rocm/deepspeed:rocm5.7_ubuntu20.04_py3.9_pytorch_2.0.1_DeepSpeed
+LABEL maintainer="Hugging Face"
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# ARG PYTORCH='2.0.1'
+# ARG ROCM='5.7'
+
+RUN python3 -m pip install --no-cache-dir --upgrade pip
+
+ARG REF=main
+RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
+RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
+
+# When installing in editable mode, `transformers` is not recognized as a package.
+# this line must be added in order for python to be aware of transformers.
+RUN cd transformers && python3 setup.py develop
+
+RUN python3 -c "from deepspeed.launcher.runner import main"
