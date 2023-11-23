@@ -22,12 +22,12 @@ from collections import OrderedDict
 import requests
 import torch
 from PIL import Image
+from huggingface_hub import hf_hub_download
 from torchvision import transforms
 
 from transformers import CLIPImageProcessor, TextNetBackbone, TextNetConfig
 from transformers.image_utils import PILImageResampling
 from transformers.utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
-
 
 tiny_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_tiny.config"
 small_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_small.config"
@@ -116,9 +116,11 @@ def prepare_config(size_config_url, size):
     return textnet_config
 
 
-def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_url, pytorch_dump_folder_path):
-    response = requests.get(checkpoint_config_url)
-    content = response.text
+def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_dump_folder_path):
+    filepath = hf_hub_download(repo_id="Raghavan/fast_model_config_files", filename=checkpoint_config_filename)
+
+    with open(filepath) as f:
+        content = f.read()
     namespace = {}
 
     exec(content, namespace)
@@ -202,8 +204,8 @@ if __name__ == "__main__":
         help="URL to the original PyTorch checkpoint (.pth file).",
     )
     parser.add_argument(
-        "--checkpoint_config_url",
-        default="https://raw.githubusercontent.com/czczup/FAST/main/config/fast/ic17mlt/fast_base_ic17mlt_640.py",
+        "--checkpoint_config_filename",
+        default="fast_base_ic17mlt_640.py",
         type=str,
         help="URL to the original PyTorch checkpoint (.pth file).",
     )
@@ -214,6 +216,6 @@ if __name__ == "__main__":
 
     convert_textnet_checkpoint(
         args.checkpoint_url,
-        args.checkpoint_config_url,
+        args.checkpoint_config_filename,
         args.pytorch_dump_folder_path,
     )
