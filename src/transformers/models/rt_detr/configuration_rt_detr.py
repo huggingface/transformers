@@ -56,7 +56,7 @@ class RTDetrConfig(PretrainedConfig):
             Dimension for feedforward network layer in transformer encoder and decoder.
         dropout (`float`, *optional*, defaults to 0.0):
             The ratio for all dropout layers.
-        use_encoder_idx (`List[int]`, *optional*, defaults to `[2]`):
+        encode_proj_layers (`List[int]`, *optional*, defaults to `[2]`):
             Indexes of the projected layers to be used in the encoder.
         num_encoder_layers (`int`, *optional*, defaults to 1):
             Total of layers to be used by the encoder.
@@ -156,7 +156,7 @@ class RTDetrConfig(PretrainedConfig):
         num_attention_heads=8,
         dim_feedforward=1024,
         dropout=0.0,
-        use_encoder_idx=[2],
+        encode_proj_layers=[2],
         num_encoder_layers=1,
         pe_temperature=10000,
         act_encoder="silu",
@@ -220,7 +220,7 @@ class RTDetrConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.dim_feedforward = dim_feedforward
         self.dropout = dropout
-        self.use_encoder_idx = use_encoder_idx
+        self.encode_proj_layers = encode_proj_layers
         self.num_encoder_layers = num_encoder_layers
         self.pe_temperature = pe_temperature
         self.act_encoder = act_encoder

@@ -1291,7 +1291,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
         self.in_channels = in_channels
         self.feat_strides = config.feat_strides
         self.hidden_dim = config.hidden_dim
-        self.use_encoder_idx = config.use_encoder_idx
+        self.encode_proj_layers = config.encode_proj_layers
         self.num_encoder_layers = config.num_encoder_layers
         self.pe_temperature = config.pe_temperature
         self.eval_size = config.eval_size
@@ -1309,7 +1309,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
             )
 
         # encoder transformer
-        self.encoder = nn.ModuleList([RTDetrTransformerEncoder(config) for _ in range(len(self.use_encoder_idx))])
+        self.encoder = nn.ModuleList([RTDetrTransformerEncoder(config) for _ in range(len(self.encode_proj_layers))])
         # top-down fpn
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
@@ -1349,7 +1349,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
             raise "Relation len(feats) != len(self.in_channels) must apply."
         proj_feats = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
         # encoder
-        for i, enc_ind in enumerate(self.use_encoder_idx):
+        for i, enc_ind in enumerate(self.encode_proj_layers):
             height, width = proj_feats[enc_ind].shape[2:]
             # flatten [batch, channel, height, width] to [batch, heightxwidth, channel]
             src_flatten = proj_feats[enc_ind].flatten(2).permute(0, 2, 1)
@@ -1630,7 +1630,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         if not return_dict:
             output = (logits, pred_boxes, encoder_states)
             return ((loss, loss_dict) + output) if loss is not None else output
- 
+
         return RTDetrModelOutput(
             loss=loss,
             loss_dict=loss_dict,

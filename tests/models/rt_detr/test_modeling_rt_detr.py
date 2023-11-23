@@ -56,7 +56,7 @@ class RTDetrConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "num_attention_heads"))
         self.parent.assertTrue(hasattr(config, "dim_feedforward"))
         self.parent.assertTrue(hasattr(config, "dropout"))
-        self.parent.assertTrue(hasattr(config, "use_encoder_idx"))
+        self.parent.assertTrue(hasattr(config, "encode_proj_layers"))
         self.parent.assertTrue(hasattr(config, "num_encoder_layers"))
         self.parent.assertTrue(hasattr(config, "pe_temperature"))
         self.parent.assertTrue(hasattr(config, "act_encoder"))
@@ -107,7 +107,7 @@ class RTDetrModelTester:
         dim_feedforward=16,
         dropout=0.0,
         enc_act="gelu",
-        use_encoder_idx=[2],
+        encode_proj_layers=[2],
         num_encoder_layers=1,
         pe_temperature=10000,
         expansion=1.0,
@@ -150,7 +150,7 @@ class RTDetrModelTester:
         self.dim_feedforward = dim_feedforward
         self.dropout = dropout
         self.enc_act = enc_act
-        self.use_encoder_idx = use_encoder_idx
+        self.encode_proj_layers = encode_proj_layers
         self.num_encoder_layers = num_encoder_layers
         self.pe_temperature = pe_temperature
         self.expansion = expansion
@@ -213,7 +213,7 @@ class RTDetrModelTester:
             dim_feedforward=self.dim_feedforward,
             dropout=self.dropout,
             enc_act=self.enc_act,
-            use_encoder_idx=self.use_encoder_idx,
+            encode_proj_layers=self.encode_proj_layers,
             num_encoder_layers=self.num_encoder_layers,
             pe_temperature=self.pe_temperature,
             expansion=self.expansion,
