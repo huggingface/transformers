@@ -807,10 +807,8 @@ class RTDetrTransformer(nn.Module):
         projected_features = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
         if self.num_levels > len(projected_features):
             len_srcs = len(projected_features)
-            for i in range(len_srcs, self.num_levels):
-                if i == len_srcs:
-                    projected_features.append(self.input_proj[i](feats[-1]))
-                else:
+            projected_features.append(self.input_proj[len_srcs](feats[-1]))
+            for i in range(len_srcs + 1, self.num_levels):
                     projected_features.append(self.input_proj[i](projected_features[-1]))
 
         # get encoder inputs
