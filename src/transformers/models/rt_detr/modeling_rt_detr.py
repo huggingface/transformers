@@ -350,6 +350,25 @@ def inverse_sigmoid(x: torch.Tensor, eps: float = 1e-5) -> torch.Tensor:
 
 
 def deformable_attention_core_func(value, value_spatial_shapes, sampling_locations, attention_weights):
+    """
+    Implements the core functionality of deformable attention mechanism.
+
+    This function applies deformable attention to the provided `value` tensor using the specified `sampling_locations`
+    and `attention_weights`. It handles multiple levels of features, each with a different spatial shape, and combines
+    these features using the deformable attention mechanism.
+
+    Args:
+        value (`torch.FloatTensor`): The value tensor with the features on which attention is to be applied.
+        value_spatial_shapes (`List[Tuple[int, int]]`): A list of tuples where each tuple represents the spatial shape
+                                               (height, width) of the feature map at each level.
+        sampling_locations (`torch.FloatTensor`): The sampling locations for applying attention.
+        attention_weights (`torch.FloatTensor`):
+            The attention weights with shape (batch_size, len_q, num_head, n_levels, n_points).
+
+    Returns:
+        The output tensor after applying deformable attention, with shape (batch_size, len_q, num_head * head_dim).
+    """
+
     batch_size, _, num_head, head_dim = value.shape
     _, len_q, _, n_levels, n_points, _ = sampling_locations.shape
 
@@ -441,8 +460,8 @@ class RTDetrRepVggBlock(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
 
-        channels_in = int(config.hidden_dim)
-        channels_out = int(config.hidden_dim)
+        in_channels = int(config.hidden_dim)
+        out_channels = int(config.hidden_dim)
         activation = config.act_encoder
         self.conv1 = RTDetrConvNormLayer(config, in_channels, out_channels, 3, 1, padding=1)
         self.conv2 = RTDetrConvNormLayer(config, in_channels, out_channels, 1, 1, padding=0)
@@ -625,13 +644,16 @@ class RTDetrTransformerDecoder(nn.Module):
         Args:
             target (`torch.FloatTensor`): the input tensor for the target sequences.
             ref_points_unact (`torch.FloatTensor`): unactivated reference points for positional encoding.
-            memory (`torch.FloatTensor`): the output of the transformer encoder, representing encoded features from the input.
+            memory (`torch.FloatTensor`):
+                the output of the transformer encoder, representing encoded features from the input.
             memory_spatial_shapes (`List[Tuple[int,int]]`): the spatial shape of each feature level in the memory.
             memory_level_start_index (`List[int]`): the starting index of each level in the flattened memory.
             bbox_head (`List[RTDetrMLP]`): a list of bounding box prediction heads for each decoder layer.
             score_head (`List[nn.Linear]`): a list of scoring heads (for class scores) for each decoder layer.
-            query_pos_head (`RTDetrMLP`): MLP (RTDetrMLP) to generate query positional embeddings from reference points.
-            attn_mask (`torch.FloatTensor` of shape [batch_size*num_heads, sequence length, source sequence legth], *optional*): attention mask for the target sequences.
+            query_pos_head (`RTDetrMLP`):
+                MLP (RTDetrMLP) to generate query positional embeddings from reference points.
+            attn_mask (`torch.FloatTensor` of shape [batch_size*num_heads, sequence length, source sequence legth], *optional*):
+                attention mask for the target sequences.
             memory_mask (`torch.FloatTensor`, *optional*): mask for the memory sequences.
 
         Returns:
@@ -809,7 +831,7 @@ class RTDetrTransformer(nn.Module):
             len_srcs = len(projected_features)
             projected_features.append(self.input_proj[len_srcs](feats[-1]))
             for i in range(len_srcs + 1, self.num_levels):
-                    projected_features.append(self.input_proj[i](projected_features[-1]))
+                projected_features.append(self.input_proj[i](projected_features[-1]))
 
         # get encoder inputs
         feat_flatten = []
