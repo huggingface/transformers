@@ -239,6 +239,7 @@ class SeamlessM4TConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "seamless_m4t"
 
     def __init__(

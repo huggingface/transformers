@@ -24,7 +24,9 @@ The abstract from the paper is the following:
 
 *Light-weight convolutional neural networks (CNNs) are the de-facto for mobile vision tasks. Their spatial inductive biases allow them to learn representations with fewer parameters across different vision tasks. However, these networks are spatially local. To learn global representations, self-attention-based vision trans-formers (ViTs) have been adopted. Unlike CNNs, ViTs are heavy-weight. In this paper, we ask the following question: is it possible to combine the strengths of CNNs and ViTs to build a light-weight and low latency network for mobile vision tasks? Towards this end, we introduce MobileViT, a light-weight and general-purpose vision transformer for mobile devices. MobileViT presents a different perspective for the global processing of information with transformers, i.e., transformers as convolutions. Our results show that MobileViT significantly outperforms CNN- and ViT-based networks across different tasks and datasets. On the ImageNet-1k dataset, MobileViT achieves top-1 accuracy of 78.4% with about 6 million parameters, which is 3.2% and 6.2% more accurate than MobileNetv3 (CNN-based) and DeIT (ViT-based) for a similar number of parameters. On the MS-COCO object detection task, MobileViT is 5.7% more accurate than MobileNetv3 for a similar number of parameters.*
 
-Tips:
+This model was contributed by [matthijs](https://huggingface.co/Matthijs). The TensorFlow version of the model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). The original code and weights can be found [here](https://github.com/apple/ml-cvnets).
+
+## Usage tips
 
 - MobileViT is more like a CNN than a Transformer model. It does not work on sequence data but on batches of images. Unlike ViT, there are no embeddings. The backbone model outputs a feature map. You can follow [this tutorial](https://keras.io/examples/vision/mobilevit) for a lightweight introduction.
 - One can use [`MobileViTImageProcessor`] to prepare images for the model. Note that if you do your own preprocessing, the pretrained checkpoints expect images to be in BGR pixel order (not RGB).
@@ -58,9 +60,6 @@ with open(tflite_filename, "wb") as f:
   The resulting model will be just **about an MB** making it a good fit for mobile applications where resources and network
   bandwidth can be constrained.
 
-
-This model was contributed by [matthijs](https://huggingface.co/Matthijs). The TensorFlow version of the model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). The original code and weights can be found [here](https://github.com/apple/ml-cvnets).
-
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with MobileViT.
@@ -91,6 +90,9 @@ If you're interested in submitting a resource to be included here, please feel f
     - preprocess
     - post_process_semantic_segmentation
 
+<frameworkcontent>
+<pt>
+
 ## MobileViTModel
 
 [[autodoc]] MobileViTModel
@@ -106,6 +108,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] MobileViTForSemanticSegmentation
     - forward
 
+</pt>
+<tf>
+
 ## TFMobileViTModel
 
 [[autodoc]] TFMobileViTModel
@@ -120,3 +125,6 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] TFMobileViTForSemanticSegmentation
     - call
+
+</tf>
+</frameworkcontent>

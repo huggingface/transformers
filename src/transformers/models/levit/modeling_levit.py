@@ -493,7 +493,6 @@ class LevitPreTrainedModel(PreTrainedModel):
     config_class = LevitConfig
     base_model_prefix = "levit"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -506,11 +505,6 @@ class LevitPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.BatchNorm1d, nn.BatchNorm2d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, LevitModel):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 LEVIT_START_DOCSTRING = r"""

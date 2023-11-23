@@ -27,8 +27,10 @@ from transformers.testing_utils import (
     require_accelerate,
     require_tf,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     require_torch_or_tf,
+    torch_device,
 )
 
 from .test_pipelines_common import ANY
@@ -319,16 +321,20 @@ class TextGenerationPipelineTests(unittest.TestCase):
         )
 
     @require_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_fp16(self):
         import torch
 
-        pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device=0, torch_dtype=torch.float16)
+        pipe = pipeline(
+            model="hf-internal-testing/tiny-random-bloom",
+            device=torch_device,
+            torch_dtype=torch.float16,
+        )
         pipe("This is a test")
 
     @require_torch
     @require_accelerate
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_pipeline_accelerate_top_p(self):
         import torch
 

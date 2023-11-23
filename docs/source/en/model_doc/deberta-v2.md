@@ -62,7 +62,7 @@ New in v2:
 This model was contributed by [DeBERTa](https://huggingface.co/DeBERTa). This model TF 2.0 implementation was
 contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/microsoft/DeBERTa).
 
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
@@ -87,6 +87,9 @@ contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code 
 [[autodoc]] DebertaV2TokenizerFast
     - build_inputs_with_special_tokens
     - create_token_type_ids_from_sequences
+
+<frameworkcontent>
+<pt>
 
 ## DebertaV2Model
 
@@ -123,6 +126,9 @@ contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code 
 [[autodoc]] DebertaV2ForMultipleChoice
     - forward
 
+</pt>
+<tf>
+
 ## TFDebertaV2Model
 
 [[autodoc]] TFDebertaV2Model
@@ -157,3 +163,6 @@ contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code 
 
 [[autodoc]] TFDebertaV2ForMultipleChoice
     - call
+
+</tf>
+</frameworkcontent>

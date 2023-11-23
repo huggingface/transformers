@@ -227,7 +227,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 对于音频任务，您需要[feature extractor](main_classes/feature_extractor)来准备您的数据集以供模型使用。`feature extractor`旨在从原始音频数据中提取特征，并将它们转换为张量。
 
-加载[MInDS-14](https://huggingface.co/datasets/PolyAI/minds14)数据集（有关如何加载数据集的更多详细信息，请参阅🤗 [Datasets教程](https://huggingface.co/docs/datasets/load_hub.html)）以了解如何在音频数据集中使用`feature extractor`：
+加载[MInDS-14](https://huggingface.co/datasets/PolyAI/minds14)数据集（有关如何加载数据集的更多详细信息，请参阅🤗 [Datasets教程](https://huggingface.co/docs/datasets/load_hub)）以了解如何在音频数据集中使用`feature extractor`：
 
 
 ```py
@@ -352,7 +352,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 </Tip>
 
-加载[food101](https://huggingface.co/datasets/food101)数据集（有关如何加载数据集的更多详细信息，请参阅🤗 [Datasets教程](https://huggingface.co/docs/datasets/load_hub.html)）以了解如何在计算机视觉数据集中使用图像处理器：
+加载[food101](https://huggingface.co/datasets/food101)数据集（有关如何加载数据集的更多详细信息，请参阅🤗 [Datasets教程](https://huggingface.co/docs/datasets/load_hub)）以了解如何在计算机视觉数据集中使用图像处理器：
 
 <Tip>
 
@@ -367,7 +367,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 >>> dataset = load_dataset("food101", split="train[:100]")
 ```
 
-接下来，使用🤗 Datasets的[`Image`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=image#datasets.Image)功能查看图像：
+接下来，使用🤗 Datasets的[`Image`](https://huggingface.co/docs/datasets/package_reference/main_classes?highlight=image#datasets.Image)功能查看图像：
 
 
 ```py
@@ -421,7 +421,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 </Tip>
 
-3. 然后使用🤗 Datasets的[`set_transform`](https://huggingface.co/docs/datasets/process.html#format-transform)在运行时应用这些变换：
+3. 然后使用🤗 Datasets的[`set_transform`](https://huggingface.co/docs/datasets/process#format-transform)在运行时应用这些变换：
 
 
 ```py
@@ -476,7 +476,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 对于涉及多模态输入的任务，您需要[processor](main_classes/processors)来为模型准备数据集。`processor`将两个处理对象-例如`tokenizer`和`feature extractor`-组合在一起。
 
-加载[LJ Speech](https://huggingface.co/datasets/lj_speech)数据集（有关如何加载数据集的更多详细信息，请参阅🤗 [Datasets 教程](https://huggingface.co/docs/datasets/load_hub.html)）以了解如何使用`processor`进行自动语音识别（ASR）：
+加载[LJ Speech](https://huggingface.co/datasets/lj_speech)数据集（有关如何加载数据集的更多详细信息，请参阅🤗 [Datasets 教程](https://huggingface.co/docs/datasets/load_hub)）以了解如何使用`processor`进行自动语音识别（ASR）：
 
 
 ```py

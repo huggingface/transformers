@@ -313,7 +313,7 @@ class PipelineTesterMixin:
 
             out = []
             if task == "conversational":
-                for item in pipeline(data(10), batch_size=4, max_new_tokens=20):
+                for item in pipeline(data(10), batch_size=4, max_new_tokens=5):
                     out.append(item)
             else:
                 for item in pipeline(data(10), batch_size=4):

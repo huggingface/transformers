@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 <Tip warning={true}>
 
-This model is in maintenance mode only, so we won't accept any new PRs changing its code.
+This model is in maintenance mode only, we do not accept any new PRs changing its code.
 
 If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0.
 You can do so by running the following command: `pip install -U transformers==4.30.0`.
@@ -43,13 +43,15 @@ hardware. It is also 7.9x faster on a CPU, as well as being better performing th
 architecture, and some of the non-compressed variants: it obtains performance improvements of between 0.3% and 31%,
 absolute, with respect to BERT-large, on multiple public natural language understanding (NLU) benchmarks.*
 
-Tips:
+This model was contributed by [stefan-it](https://huggingface.co/stefan-it). The original code can be found [here](https://github.com/alexa/bort/).
 
-- BORT's model architecture is based on BERT, so one can refer to [BERT's documentation page](bert) for the
-  model's API as well as usage examples.
-- BORT uses the RoBERTa tokenizer instead of the BERT tokenizer, so one can refer to [RoBERTa's documentation page](roberta) for the tokenizer's API as well as usage examples.
+## Usage tips
+
+- BORT's model architecture is based on BERT, refer to [BERT's documentation page](bert) for the
+  model's API reference as well as usage examples.
+- BORT uses the RoBERTa tokenizer instead of the BERT tokenizer, refer to [RoBERTa's documentation page](roberta) for the tokenizer's API reference as well as usage examples.
 - BORT requires a specific fine-tuning algorithm, called [Agora](https://adewynter.github.io/notes/bort_algorithms_and_applications.html#fine-tuning-with-algebraic-topology) ,
   that is sadly not open-sourced yet. It would be very useful for the community, if someone tries to implement the
   algorithm to make BORT fine-tuning work.
 
-This model was contributed by [stefan-it](https://huggingface.co/stefan-it). The original code can be found [here](https://github.com/alexa/bort/).
+
