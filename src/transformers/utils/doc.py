@@ -1141,18 +1141,18 @@ def add_code_sample_docstrings(
         )
         if real_checkpoint is not None:
             code_sample = FAKE_MODEL_DISCLAIMER + code_sample
+        func_doc = (fn.__doc__ or "") + "".join(docstr)
+        output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
+        built_doc = code_sample.format(**doc_kwargs)
         if revision is not None:
             if re.match(r"^refs/pr/\\d+", revision):
                 raise ValueError(
                     f"The provided revision '{revision}' is incorrect. It should point to"
                     " a pull request reference on the hub like 'refs/pr/6'"
                 )
-            code_sample = code_sample.replace(
+            built_doc = built_doc.replace(
                 f'from_pretrained("{checkpoint}")', f'from_pretrained("{checkpoint}", revision="{revision}")'
             )
-        func_doc = (fn.__doc__ or "") + "".join(docstr)
-        output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
-        built_doc = code_sample.format(**doc_kwargs)
         fn.__doc__ = func_doc + output_doc + built_doc
         return fn
 
