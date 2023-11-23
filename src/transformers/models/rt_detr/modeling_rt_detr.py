@@ -321,7 +321,7 @@ def get_contrastive_denoising_training_group(
 
 class RTDetrConvNormLayer(nn.Module):
     def __init__(
-        self, config, channels_in, channels_out, kernel_size, stride, padding=None, bias=False, activation=None
+        self, config, channels_in, channels_out, kernel_size, stride, padding=None, activation=None
     ):
         super().__init__()
         self.conv = nn.Conv2d(
@@ -330,7 +330,7 @@ class RTDetrConvNormLayer(nn.Module):
             kernel_size,
             stride,
             padding=(kernel_size - 1) // 2 if padding is None else padding,
-            bias=bias,
+            bias=False,
         )
         self.norm = nn.BatchNorm2d(channels_out, config.batch_norm_eps)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
@@ -466,12 +466,12 @@ class RTDetrCSPRepLayer(nn.Module):
         activation = config.act_encoder
 
         hidden_channels = int(out_channels)
-        self.conv1 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, bias=None, activation=activation)
-        self.conv2 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, bias=None, activation=activation)
+        self.conv1 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
+        self.conv2 = RTDetrConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
         self.bottlenecks = nn.Sequential(*[RTDetrRepVggBlock(config) for _ in range(num_blocks)])
         if hidden_channels != out_channels:
             self.conv3 = RTDetrConvNormLayer(
-                config, hidden_channels, out_channels, 1, 1, bias=None, activation=activation
+                config, hidden_channels, out_channels, 1, 1, activation=activation
             )
         else:
             self.conv3 = nn.Identity()
@@ -1336,9 +1336,9 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
             self.pan_blocks.append(RTDetrCSPRepLayer(config))
 
     @staticmethod
-    def build_2d_sincos_position_embedding(w, h, embed_dim=256, temperature=10000.0):
-        grid_w = torch.arange(int(w), dtype=torch.float32)
-        grid_h = torch.arange(int(h), dtype=torch.float32)
+    def build_2d_sincos_position_embedding(width, height, embed_dim=256, temperature=10000.0):
+        grid_w = torch.arange(int(width), dtype=torch.float32)
+        grid_h = torch.arange(int(height), dtype=torch.float32)
         grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
         if embed_dim % 4 != 0:
             raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
@@ -1356,20 +1356,19 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
             raise "Relation len(feats) != len(self.in_channels) must apply."
         proj_feats = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
         # encoder
-        if self.num_encoder_layers > 0:
-            for i, enc_ind in enumerate(self.use_encoder_idx):
-                height, width = proj_feats[enc_ind].shape[2:]
-                # flatten [batch, channel, height, width] to [batch, heightxwidth, channel]
-                src_flatten = proj_feats[enc_ind].flatten(2).permute(0, 2, 1)
-                if self.training or self.eval_size is None:
-                    pos_embed = self.build_2d_sincos_position_embedding(
-                        width, height, self.hidden_dim, self.pe_temperature
-                    ).to(src_flatten.device)
-                else:
-                    pos_embed = getattr(self, f"pos_embed{enc_ind}", None).to(src_flatten.device)
+        for i, enc_ind in enumerate(self.use_encoder_idx):
+            height, width = proj_feats[enc_ind].shape[2:]
+            # flatten [batch, channel, height, width] to [batch, heightxwidth, channel]
+            src_flatten = proj_feats[enc_ind].flatten(2).permute(0, 2, 1)
+            if self.training or self.eval_size is None:
+                pos_embed = self.build_2d_sincos_position_embedding(
+                    width, height, self.hidden_dim, self.pe_temperature
+                ).to(src_flatten.device)
+            else:
+                pos_embed = getattr(self, f"pos_embed{enc_ind}", None).to(src_flatten.device)
 
-                memory = self.encoder[i](src_flatten, pos_embed=pos_embed)
-                proj_feats[enc_ind] = memory.permute(0, 2, 1).reshape(-1, self.hidden_dim, height, width).contiguous()
+            memory = self.encoder[i](src_flatten, pos_embed=pos_embed)
+            proj_feats[enc_ind] = memory.permute(0, 2, 1).reshape(-1, self.hidden_dim, height, width).contiguous()
 
         # broadcasting and fusion
         inner_outs = [proj_feats[-1]]
@@ -1429,12 +1428,7 @@ class RTDetrHungarianMatcher(nn.Module):
     un-matched (and thus treated as non-objects).
 
     Args:
-    class_cost:
-        The relative weight of the classification error in the matching cost.
-    bbox_cost:
-        The relative weight of the L1 error of the bounding box coordinates in the matching cost.
-    giou_cost:
-        The relative weight of the giou loss of the bounding box in the matching cost.
+        config: RTDetrConfig
     """
 
     def __init__(self, config):
