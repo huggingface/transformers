@@ -93,9 +93,16 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
         ## -- test tokenizer_kwargs
         test_str = "testing tokenizer kwargs. using truncation must result in a different generation."
-        output_str, output_str_with_truncation = text_generator(test_str, do_sample=False, return_full_text=False)[0]['generated_text'], \
-            text_generator(test_str, do_sample=False, return_full_text=False, tokenizer_kwargs={'truncation': True, 'max_length': 3})[0]['generated_text']
-        assert output_str != output_str_with_truncation # results must be different because one hd truncation
+        output_str, output_str_with_truncation = (
+            text_generator(test_str, do_sample=False, return_full_text=False)[0]["generated_text"],
+            text_generator(
+                test_str,
+                do_sample=False,
+                return_full_text=False,
+                tokenizer_kwargs={"truncation": True, "max_length": 3},
+            )[0]["generated_text"],
+        )
+        assert output_str != output_str_with_truncation  # results must be different because one hd truncation
 
         # -- what is the point of this test? padding is hardcoded False in the pipeline anyway
         text_generator.tokenizer.pad_token_id = text_generator.model.config.eos_token_id
@@ -120,7 +127,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 ],
             ],
         )
-
 
     @require_tf
     def test_small_model_tf(self):
