@@ -1,11 +1,11 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.generation import IncrementalGrammarConstraint
+from transformers.generation.grammar_utils import IncrementalGrammarConstraint
 
 MODEL_IDS = [
     "hf-internal-testing/tiny-random-GPTJForCausalLM",
     "hf-internal-testing/tiny-random-BloomForCausalLM",
     "hf-internal-testing/tiny-random-PhiForCausalLM",
-    # "hf-internal-testing/tiny-random-gpt2",
+    "hf-internal-testing/tiny-random-gpt2",
     # "hf-internal-testing/tiny-random-BlenderbotForCausalLM",
 ]
 
@@ -31,10 +31,15 @@ def test_grammar_constrained_decoding_greedy_w_number_grammar():
         output = model.generate(
             input_ids,
             do_sample=False,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
             num_beams=1,
-            max_new_tokens=10,
+            max_new_tokens=40,
+            top_p=0.92,
+            top_k=5,
             grammar=grammar,
             repetition_penalty=100.,
+            early_stopping=True,
         )
 
         # generations = tokenizer.batch_decode(output, skip_special_tokens=True)
@@ -64,12 +69,16 @@ def test_grammar_constrained_decoding_greedy_w_balanced_parenthesis_grammar():
 
         output = model.generate(
             input_ids,
-            do_sample=True,
+            do_sample=False,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
             num_beams=1,
-            max_new_tokens=MAX_NEW_TOKENS,
+            max_new_tokens=40,
+            top_p=0.92,
+            top_k=5,
             grammar=grammar,
             repetition_penalty=100.,
-
+            early_stopping=True,
         )
 
         # generations = tokenizer.batch_decode(output, skip_special_tokens=True)
