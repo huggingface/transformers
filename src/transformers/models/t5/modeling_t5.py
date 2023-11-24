@@ -48,17 +48,24 @@ from ...utils import (
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_t5 import T5Config
-from xformers import ops as xops
-from xformers.ops.fmha import attn_bias as xattn
-from xformers.components.positional_embedding.rotary import RotaryEmbedding
+try:
+    from xformers import ops as xops
+    from xformers.ops.fmha import attn_bias as xattn
+    #from xformers.components.positional_embedding.rotary import RotaryEmbedding
+except ImportError:
+    print('Could not import xformers! please install it https://github.com/facebookresearch/xformers    one method tested to work was to install it with "pip3 install -U xformers --index-url https://download.pytorch.org/whl/cu118"')
+    raise
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
 _CHECKPOINT_FOR_DOC = "t5-small"
 
+from collections import defaultdict
+
 POSITION_EMBEDDING_SINUSOIDAL = "abs_sinusoidal"
-POSITION_EMBEDDING_T5_RELATIVE = "t5_relative"
+POSITION_EMBEDDING_LEARNED = "abs_learned"
+POSITION_EMBEDDING_T5_RELATIVE = "t5_default_relative"
 POSITION_EMBEDDING_ROTARY = 'RoPE' #Rotary Positional Encoding: https://nn.labml.ai/transformers/rope/index.html     https://facebookresearch.github.io/xformers/_modules/xformers/components/positional_embedding/rotary.html#RotaryEmbedding
 
 class SinusoidalPositionalEmbedding(nn.Module):
@@ -459,11 +466,11 @@ class T5LayerFF(nn.Module):
 
 
 class T5Attention(nn.Module):
-    def __init__(self, config: T5Config, relative_position_embedding_definitions=None):
+    def __init__(self, config: T5Config, positional_embedding_injected_in_attention=None):
         super().__init__()
         self.is_decoder = config.is_decoder
-        self.relative_position_embedding_definitions = relative_position_embedding_definitions
-        self.has_relative_attention_bias = self.relative_position_embedding_definitions is not None
+        self.positional_embedding_injected_in_attention = positional_embedding_injected_in_attention
+        
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.relative_attention_max_distance = config.relative_attention_max_distance
         self.d_model = config.d_model
@@ -478,21 +485,22 @@ class T5Attention(nn.Module):
         self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
 
-        if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)  
-            if self.relative_position_embedding_definitions: # regular weights of T5. to support pretrained weights
-                self.relative_attention_bias_dict = nn.ModuleDict()
-                for position_embedding_name, position_embedding_config in self.relative_position_embedding_definitions.items():
-                    relative_attention_num_buckets = position_embedding_config.get("num_buckets", self.relative_attention_num_buckets)
-                    self.relative_attention_bias_dict[position_embedding_name] = nn.Embedding(relative_attention_num_buckets, self.n_heads)
+        self.relative_attention_bias_dict = nn.ModuleDict()
+        if self.positional_embedding_injected_in_attention is not None:
+            for pos_emb_name, pos_emb_config in self.positional_embedding_injected_in_attention.items():
+                if pos_emb_name == POSITION_EMBEDDING_T5_RELATIVE:
+                    self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)                                          
+                    relative_attention_num_buckets = pos_emb_config.get("num_buckets", self.relative_attention_num_buckets)
+                    self.relative_attention_bias_dict[pos_emb_name] = nn.Embedding(relative_attention_num_buckets, self.n_heads)
+                elif pos_emb_name == POSITION_EMBEDDING_ROTARY:
+                    self.rotary_op = RotaryEmbedding(self.d_model)
+                else:
+                    raise Exception(f'unfamiliar positional attention type to be injected at attention level. Got "{pos_emb_name}". Supported options are {POSITION_EMBEDDING_T5_RELATIVE} and {POSITION_EMBEDDING_ROTARY}')
+
         self.pruned_heads = set()
         self.gradient_checkpointing = False
         self.memory_efficient_attention = config.memory_efficient_attention if hasattr(config, "memory_efficient_attention") else False
-        
-        self.add_rotary_position_embedding = config.add_rotary_position_embedding and (relative_position_embedding_definitions is not None)
-
-        if self.add_rotary_position_embedding:
-            self.rotary_op = RotaryEmbedding(self.d_model)
+                
 
     def prune_heads(self, heads):
         if len(heads) == 0:
@@ -826,9 +834,9 @@ class T5Attention(nn.Module):
 
 
 class T5LayerSelfAttention(nn.Module):
-    def __init__(self, config, relative_position_embedding_definitions=None):
+    def __init__(self, config, positional_embedding_injected_in_attention=None):
         super().__init__()
-        self.SelfAttention = T5Attention(config, relative_position_embedding_definitions=relative_position_embedding_definitions)
+        self.SelfAttention = T5Attention(config, positional_embedding_injected_in_attention=positional_embedding_injected_in_attention)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -898,11 +906,11 @@ class T5LayerCrossAttention(nn.Module):
 
 
 class T5Block(nn.Module):
-    def __init__(self, config, relative_position_embedding_definitions=None):
+    def __init__(self, config, positional_embedding_injected_in_attention=None):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.layer = nn.ModuleList()
-        self.layer.append(T5LayerSelfAttention(config, relative_position_embedding_definitions=relative_position_embedding_definitions))
+        self.layer.append(T5LayerSelfAttention(config, positional_embedding_injected_in_attention=positional_embedding_injected_in_attention))
         if self.is_decoder:
             self.layer.append(T5LayerCrossAttention(config))
 
@@ -1164,21 +1172,20 @@ class T5Stack(T5PreTrainedModel):
         self.is_decoder = config.is_decoder
         self.position_embedding_definitions = config.position_embedding_definitions if hasattr(config, "position_embedding_definitions") else {}
 
-        self.abs_position_embedding_dict = nn.ModuleDict()
-        relative_position_embedding_definitions = {}
-       
-        for position_embedding_name, embedding_config in self.position_embedding_definitions.items():
-            if embedding_config.is_relative:
-                relative_position_embedding_definitions[position_embedding_name] = {k:v for k,v in embedding_config.items() if k!= "is_relative"}
-            else:
+        self.attention_injected_in_t5_stack_level = nn.ModuleDict()
+        
+        if 'injected_in_stack' in self.position_embedding_definitions:                   
+            for position_embedding_name, embedding_config in self.position_embedding_definitions['injected_in_stack'].items():                
                 if position_embedding_name == POSITION_EMBEDDING_SINUSOIDAL:
                     self.abs_position_embedding_dict[POSITION_EMBEDDING_SINUSOIDAL] = SinusoidalPositionalEmbedding(config.d_model)
-                else:
+                elif position_embedding_name == POSITION_EMBEDDING_LEARNED:
                     self.abs_position_embedding_dict[position_embedding_name] =  nn.Embedding(embedding_config.num_embeddings, config.d_model)
-
+                else:
+                    raise Exception(f'unfamiliar positional embedding for injection in stack "{position_embedding_name}" supported options are {POSITION_EMBEDDING_SINUSOIDAL} and {POSITION_EMBEDDING_LEARNED}.')
+                
 
         self.block = nn.ModuleList(
-            [T5Block(config, relative_position_embedding_definitions=relative_position_embedding_definitions if i==0 else None) for i in range(config.num_layers)]
+            [T5Block(config, positional_embedding_injected_in_attention=self.position_embedding_definitions['injected_in_attention'] if i==0 else None) for i in range(config.num_layers)]
         )
         self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -1870,12 +1877,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self.model_dim = config.d_model
 
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
-
-        # collect info on declared position types, for input validity test during forward
-        position_embedding_definitions = config.position_embedding_definitions if hasattr(config, "position_embedding_definitions") else {}
-        self.position_embedding_is_relative_dict = {k: v.is_relative for k,v in position_embedding_definitions.items()}  
-        self.position_embedding_is_relative_dict[POSITION_EMBEDDING_SINUSOIDAL] = False
-
+                
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
@@ -2014,11 +2016,12 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         if decoder_position_ids_dict is None:
             decoder_position_ids_dict = {}
                 
-        for _, position_embedding_types in encoder_position_ids_dict.values():  # each entry in values is a tupple of (tensor of position ods, list of position_embedding_names ) # consider using collate to transform the list to a single item
-            assert position_embedding_types[0] in self.position_embedding_is_relative_dict
+        ### why do we test here only for relative ones?
+        # for _, position_embedding_types in encoder_position_ids_dict.values():  # each entry in values is a tuple of (tensor of position ids, list of position_embedding_names ) # consider using collate to transform the list to a single item
+        #     assert position_embedding_types[0] in self.position_embedding_is_relative_dict
         
-        for _, position_embedding_types in decoder_position_ids_dict.values():
-            assert position_embedding_types[0] in self.position_embedding_is_relative_dict
+        # for _, position_embedding_types in decoder_position_ids_dict.values():
+        #     assert position_embedding_types[0] in self.position_embedding_is_relative_dict
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

@@ -103,8 +103,6 @@ class T5Config(PretrainedConfig):
         classifier_dropout=0.0,
         position_embedding_definitions=None,
         memory_efficient_attention:bool=False,
-        add_t5_relative_position_embedding:bool=True,
-        add_rotary_position_embedding:bool=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -142,8 +140,6 @@ class T5Config(PretrainedConfig):
         
         self.position_embedding_definitions = position_embedding_definitions or dict()
         self.memory_efficient_attention = memory_efficient_attention
-        self.add_t5_relative_position_embedding = add_t5_relative_position_embedding
-        self.add_rotary_position_embedding = add_rotary_position_embedding
 
         super().__init__(
             pad_token_id=pad_token_id,
