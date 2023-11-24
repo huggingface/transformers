@@ -285,8 +285,6 @@ ONNX Runtime (ORT) is a model accelerator that supports accelerated inference on
 ORT is supported by 🤗 Optimum which can be used in 🤗 Transformers. You'll need to use an [`~optimum.onnxruntime.ORTModel`] for the task you're solving, and specify the `provider` parameter which can be set to either [`CUDAExecutionProvider`](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/gpu#cudaexecutionprovider), [`ROCMExecutionProvider`](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/amdgpu) or [`TensorrtExecutionProvider`](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/gpu#tensorrtexecutionprovider). If you want to load a model that was not yet exported to ONNX, you can set `export=True` to convert your model on-the-fly to the ONNX format:
 
 ```py
-
-https://github.com/ROCmSoftwarePlatform/flash-attention has been bumped to 2.0.4 recently, and we expect it to be bumped to 2.1 soon. Meanwhile, this PR adds suport for FA2 on RoCm devices. It can be simplified once FA2 RoCm version is bumped to 2.1.
 from optimum.onnxruntime import ORTModelForSequenceClassification
 
 ort_model = ORTModelForSequenceClassification.from_pretrained(
@@ -306,6 +304,7 @@ tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst
 
 pipeline = pipeline(task="text-classification", model=ort_model, tokenizer=tokenizer, device="cuda:0")
 result = pipeline("Both the music and visual were astounding, not to mention the actors performance.")
+```
 
 ## Combine optimizations
 

@@ -237,7 +237,7 @@ You can speedup the training throughput by using Flash Attention 2 integration i
 The most common optimizer used to train transformer models is Adam or AdamW (Adam with weight decay). Adam achieves 
 good convergence by storing the rolling average of the previous gradients; however, it adds an additional memory 
 footprint of the order of the number of model parameters. To remedy this, you can use an alternative optimizer. 
-For example if you have [NVIDIA/apex](https://github.com/NVIDIA/apex) installed (or similarly [ROCmSoftwarePlatform/apex](https://github.com/ROCmSoftwarePlatform/apex) on AMD GPUs), `adamw_apex_fused` will give you the
+For example if you have [NVIDIA/apex](https://github.com/NVIDIA/apex) installed for NVIDIA GPUs, or [ROCmSoftwarePlatform/apex](https://github.com/ROCmSoftwarePlatform/apex) for AMD GPUs, `adamw_apex_fused` will give you the
 fastest training experience among all supported AdamW optimizers.
 
 [`Trainer`] integrates a variety of optimizers that can be used out of box: `adamw_hf`, `adamw_torch`, `adamw_torch_fused`, 
