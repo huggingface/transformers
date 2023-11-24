@@ -132,8 +132,37 @@ class CogVLMConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+        vocab_size (`int`, *optional*, defaults to 32000):
+            Vocabulary size of the LLaMA model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`LlamaModel`]
+        hidden_size (`int`, *optional*, defaults to 4096):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 11008):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 32):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 32):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with. Llama 1 supports up to 2048 tokens,
+            Llama 2 up to 4096, CodeLlama up to 16384.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the rms normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 1):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            End of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -152,8 +181,34 @@ class CogVLMConfig(PretrainedConfig):
 
     model_type = "cogvlm"
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(
+        self,
+        vocab_size=32000,
+        hidden_size=4096,
+        intermediate_size=11008,
+        num_hidden_layers=32,
+        num_attention_heads=32,
+        hidden_act="silu",
+        max_position_embeddings=2048,
+        initializer_range=0.02,
+        rms_norm_eps=1e-6,
+        use_cache=True,
+        pad_token_id=None,
+        bos_token_id=1,
+        eos_token_id=2,
+        tie_word_embeddings=False,
+        **kwargs,
+    ):
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
 
         if vision_config is None:
             vision_config = {}

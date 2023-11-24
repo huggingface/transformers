@@ -57,6 +57,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     inputs = original_model.build_conversation_input_ids(
         tokenizer, query=query, history=[], images=[image]
     )  # chat mode
+    original_pixel_values = inputs["images"][0]
     inputs = {
         "input_ids": inputs["input_ids"].unsqueeze(0).to("cuda"),
         "token_type_ids": inputs["token_type_ids"].unsqueeze(0).to("cuda"),
@@ -75,7 +76,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     # model = CogVLMForCausalLM(config)
 
     # create processor
-    image_size = 224
+    image_size = original_model.config.vision_config["image_size"]
     image_processor = CLIPImageProcessor(
         size={"height": image_size, "width": image_size},
         do_center_crop=False,
@@ -84,6 +85,9 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     )
     processor = CogVLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
     pixel_values = processor(images=image, return_tensors="pt").pixel_values.to("cuda")
+
+    # verify pixel values
+    assert torch.allclose(pixel_values, original_pixel_values.to(pixel_values.device))
 
     # make sure processor creates exact same pixel values
     # assert torch.allclose(pixel_values, original_pixel_values.to(pixel_values.device))
