@@ -859,79 +859,74 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
                 if labels is None:
                     labels = torch.full_like(input_ids, self.config.ignore_index)
 
-                new_input_embeds = []
-                new_labels = []
-                cur_image_idx = 0
+                # We need to initiliaze these new arrays to process the inputs embed and labels
+                # to correctly deal with all case (e.g. single prompt & multi-image tokens)
+                processed_inputs_embeds = []
+                processed_labels = []
+
+                # We can have multiple images in a single batch, hence we use different
+                # indexes for image and text.
+                current_image_index = 0
+
+                # Since we might image tokens in different places of the input string, we need to
+                # process that one by one, batch element per batch element
                 for batch_idx, (current_input_ids, current_labels) in enumerate(zip(input_ids, labels)):
-                    num_pixel_values = (current_input_ids == self.config.image_token_index).sum()
-                    if num_pixel_values == 0:
-                        # TODO: check if this is correct
-                        cur_image_features = image_features[cur_image_idx]
-                        cur_input_embeds_1 = self.get_input_embeddings()(current_input_ids)
-                        cur_input_embeds = torch.cat([cur_input_embeds_1, cur_image_features[0:0]], dim=0)
-                        new_input_embeds.append(cur_input_embeds)
-                        new_labels.append(labels[batch_idx])
-                        cur_image_idx += 1
+                    # Get the number of the image tokens in the current prompt.
+                    num_image_tokens = (current_input_ids == self.config.image_token_index).sum()
+
+                    if num_image_tokens == 0:
+                        # If there is not image tokens, simply use the text tokens embeddings
+                        current_inputs_embed = self.get_input_embeddings()(current_input_ids)
+                        processed_inputs_embeds.append(current_inputs_embed)
+                        processed_labels.append(labels[batch_idx])
+                        current_image_index += 1
                         continue
 
-                    image_token_index = torch.where(current_input_ids == self.config.image_token_index)[0]
-                    if len(image_token_index) == 0:
-                        raise ValueError("You need to make sure the image token is correctly inside `input_ids`")
-
-                    image_token_index = image_token_index[0].item()
-                    tokens_before_image_token, tokens_after_image_token = (
-                        current_input_ids[:image_token_index],
-                        current_input_ids[image_token_index + 1 :],
+                    input_ids_without_image_token, labels_without_image_token = self._split_input_ids_and_labels(
+                        current_input_ids, current_labels, self.config.image_token_index
                     )
-                    input_ids_without_image_token = torch.cat([tokens_before_image_token, tokens_after_image_token])
 
-                    labels_before_image_token, labels_after_image_token = (
-                        current_labels[:image_token_index],
-                        current_labels[image_token_index + 1 :],
-                    )
-                    labels_without_image_token = [labels_before_image_token, labels_after_image_token]
+                    split_index = torch.where(current_input_ids == self.config.image_token_index)[0][0].item()
+                    split_sizes = [split_index, labels_without_image_token.shape[-1] - split_index]
 
-                    # TODO: what is that?
-                    split_sizes = [labels_before_image_token.shape[0], labels_after_image_token.shape[0]]
+                    inputs_embed_without_image = self.get_input_embeddings()(input_ids_without_image_token)
 
-                    cur_input_embeds = self.get_input_embeddings()(input_ids_without_image_token)
-                    cur_input_embeds_no_im = torch.split(cur_input_embeds, split_sizes, dim=0)
+                    inputs_embed_without_image = torch.split(inputs_embed_without_image, split_sizes, dim=0)
+                    labels_without_image_token = torch.split(labels_without_image_token, split_sizes, dim=0)
 
-                    cur_new_input_embeds = []
-                    cur_new_labels = []
+                    current_processed_inputs_embed = []
+                    current_processed_labels = []
 
-                    for i in range(num_pixel_values + 1):
-                        cur_new_input_embeds.append(cur_input_embeds_no_im[i])
-                        cur_new_labels.append(labels_without_image_token[i])
-                        if i < num_pixel_values:
-                            # TODO: check if this is correct
-                            cur_image_features = image_features[cur_image_idx]
-                            cur_image_idx += 1
-                            cur_new_input_embeds.append(cur_image_features)
-                            cur_new_labels.append(
+                    for i in range(num_image_tokens + 1):
+                        current_processed_inputs_embed.append(inputs_embed_without_image[i])
+                        current_processed_labels.append(labels_without_image_token[i])
+
+                        if i < num_image_tokens:
+                            current_image_features = image_features[current_image_index]
+                            current_image_index += 1
+
+                            current_processed_inputs_embed.append(current_image_features)
+                            current_processed_labels.append(
                                 torch.full(
-                                    (cur_image_features.shape[0],),
+                                    (current_image_features.shape[0],),
                                     self.config.ignore_index,
                                     device=current_labels.device,
                                     dtype=current_labels.dtype,
                                 )
                             )
 
-                    cur_new_input_embeds = torch.cat(cur_new_input_embeds)
-                    cur_new_labels = torch.cat(cur_new_labels)
-
-                    new_input_embeds.append(cur_new_input_embeds)
-                    new_labels.append(cur_new_labels)
+                    processed_inputs_embeds.append(torch.cat(current_processed_inputs_embed))
+                    processed_labels.append(torch.cat(current_processed_labels))
 
                 # Truncate sequences to max length as image embeddings can make the sequence longer
                 tokenizer_model_max_length = getattr(self.config, "tokenizer_model_max_length", None)
                 if tokenizer_model_max_length is not None:
-                    new_input_embeds = [x[:tokenizer_model_max_length] for x in new_input_embeds]
-                    new_labels = [x[:tokenizer_model_max_length] for x in new_labels]
+                    processed_inputs_embeds = [x[:tokenizer_model_max_length] for x in processed_inputs_embeds]
+                    processed_labels = [x[:tokenizer_model_max_length] for x in processed_labels]
 
                 # Combine them
-                max_len = max(x.shape[0] for x in new_input_embeds)
-                batch_size = len(new_input_embeds)
+                max_len = max(x.shape[0] for x in processed_inputs_embeds)
+                batch_size = len(processed_inputs_embeds)
 
                 attention_mask = torch.zeros(
                     (batch_size, max_len), dtype=attention_mask.dtype, device=attention_mask.device
@@ -939,10 +934,10 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
                 position_ids = torch.zeros((batch_size, max_len), dtype=position_ids.dtype, device=position_ids.device)
 
                 inputs_embeds, attention_mask, position_ids, labels = self._optionally_pad_input_embeds(
-                    new_input_embeds, attention_mask, position_ids, new_labels, max_len, batch_size
+                    processed_inputs_embeds, attention_mask, position_ids, processed_labels, max_len, batch_size
                 )
-                # Set input_ids to None so that the LM will only use
-                # input_embeds
+
+                # Set input_ids to None so that the LM will only use input_embeds
                 input_ids = None
 
         outputs = self.language_model(
@@ -1021,6 +1016,17 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
 
         inputs_embeds = torch.stack(padded_inputs_embeds, dim=0)
         return inputs_embeds, attention_mask, position_ids, padded_labels
+
+    def _split_input_ids_and_labels(self, input_ids, labels, image_token_id):
+        """
+        Simple method to split the input ids and labels in 2: the parts before / after `image_token_id`.
+        """
+        exclude_mask = input_ids != image_token_id
+
+        input_ids_without_image_token = input_ids[exclude_mask]
+        labels_without_image_token = labels[exclude_mask]
+
+        return input_ids_without_image_token, labels_without_image_token
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
         # Pop the pixel_values to pick it up later
