@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 The Persimmon model was created by [ADEPT](https://www.adept.ai/blog/persimmon-8b), and authored by Erich Elsen, Augustus Odena, Maxwell Nye, Sağnak Taşırlar, Tri Dao, Curtis Hawthorne, Deepak Moparthi, Arushi Somani.
 
-The authors introduced Persimmon-8B, a decoder model based on the classic transformers architecture, with query and key normalization. Persimmon-8B is a fully permissively-licensed model with approximately 8 billion parameters, released under the Apache license.  Some of the key attributes of Persimmon-8B are long context size (16K), performance, and capabilities for multimodal extensions.
+The authors introduced Persimmon-8B, a decoder model based on the classic transformers architecture, with query and key normalization. Persimmon-8B is a fully permissively-licensed model with approximately 8 billion parameters, released under the Apache license. Some of the key attributes of Persimmon-8B are long context size (16K), performance, and capabilities for multimodal extensions.
 
 The authors showcase their approach to model evaluation, focusing on practical text generation, mirroring how users interact with language models. The work also includes a comparative analysis, pitting Persimmon-8B against other prominent models (MPT 7B Instruct and Llama 2 Base 7B 1-Shot), across various evaluation tasks. The results demonstrate Persimmon-8B's competitive performance, even with limited training data.
 
@@ -34,14 +34,13 @@ The original code can be found [here](https://github.com/persimmon-ai-labs/adept
 <Tip warning={true}>
 
 The `Persimmon` models were trained using `bfloat16`, but the original inference uses `float16` The checkpoints uploaded on the hub use `torch_dtype = 'float16'` which will be
-used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`. 
+used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`.
 
 The `dtype` of the online weights is mostly irrelevant, unless you are using `torch_dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online) then it will be cast to the default `dtype` of `torch` (becomes `torch.float32`). Users should specify the `torch_dtype` they want, and if they don't it will be `torch.float32`.
 
 Finetuning the model in `float16` is not recommended and known to produce `nan`, as such the model should be fine-tuned in `bfloat16`.
 
 </Tip>
-
 
 Tips:
 
@@ -57,6 +56,7 @@ python src/transformers/models/persimmon/convert_persimmon_weights_to_hf.py  --i
 ```
 
 For the chat model:
+
 ```bash
 wget https://axtkn4xl5cip.objectstorage.us-phoenix-1.oci.customer-oci.com/n/axtkn4xl5cip/b/adept-public-data/o/8b_chat_model_release.tar
 tar -xvf 8b_base_model_release.tar
@@ -71,12 +71,43 @@ model = PersimmonForCausalLM.from_pretrained("/output/path")
 tokenizer = PersimmonTokenizer.from_pretrained("/output/path")
 ```
 
-
-- Perismmon uses a `sentencepiece` based tokenizer, with a `Unigram` model. It supports bytefallback, which is only available in `tokenizers==0.14.0` for the fast tokenizer.
-The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece. The `chat` template will be updated with the templating functions in a follow up PR!
+- Persimmon uses a `sentencepiece` based tokenizer, with a `Unigram` model. It supports bytefallback, which is only available in `tokenizers==0.14.0` for the fast tokenizer.
+  The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece. The `chat` template will be updated with the templating functions in a follow up PR!
 
 - The authors suggest to use the following prompt format for the chat mode: `f"human: {prompt}\n\nadept:"`
 
+## Combining Persimmon and Flash Attention 2
+
+First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
+
+```bash
+pip install -U flash-attn --no-build-isolation
+```
+
+Make also sure that you have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of flash-attn repository. Make also sure to load your model in half-precision (e.g. `torch.float16``)
+
+To load and run a model using Flash Attention 2, refer to the snippet below:
+
+```python
+>>> import torch
+>>> from transformers import PersimmonForCausalLM, AutoTokenizer
+
+>>> # define the model and tokenizer and push the model and tokens to the GPU.
+>>> model = PersimmonForCausalLM.from_pretrained("adept/persimmon-8b-chat", torch_dtype=torch.float16, use_flash_attention_2=True).to("cuda")
+>>> tokenizer = AutoTokenizer.from_pretrained("adept/persimmon-8b-chat")
+
+>>> # feel free to change the prompt to your liking.
+>>> prompt = "If I were an AI that had just achieved"
+
+>>> # apply the tokenizer.
+>>> tokens = tokenizer(prompt, return_tensors="pt").to("cuda")
+
+>>> # use the model to generate new tokens.
+>>> generated_output = model.generate(**tokens, use_cache=True, max_new_tokens=10)
+
+>>> tokenizer.batch_decode(generated_output)[0]
+'If I were an AI that had just achieved a breakthrough in machine learning, I would be thrilled'
+```
 
 ## PersimmonConfig
 
@@ -84,15 +115,12 @@ The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece. T
 
 ## PersimmonModel
 
-[[autodoc]] PersimmonModel
-    - forward
+[[autodoc]] PersimmonModel - forward
 
 ## PersimmonForCausalLM
 
-[[autodoc]] PersimmonForCausalLM
-    - forward
+[[autodoc]] PersimmonForCausalLM - forward
 
 ## PersimmonForSequenceClassification
 
-[[autodoc]] PersimmonForSequenceClassification
-    - forward
+[[autodoc]] PersimmonForSequenceClassification - forward
