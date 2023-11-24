@@ -19,6 +19,7 @@ import warnings
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import torch
+import xformers.ops as xops
 from einops import rearrange
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -29,6 +30,9 @@ from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutpu
 from transformers.utils.logging import get_logger
 
 from .configuration_cogvlm import CogVLMConfig, CogVLMVisionConfig
+
+# TODO remove following dependencies
+from .util import FastRotaryEmbedding
 
 
 if TYPE_CHECKING:
@@ -50,7 +54,7 @@ class CogVLMPatchEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.proj = nn.Conv2d(
-            config.in_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
+            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
         )
         self.cls_embedding = nn.Parameter(torch.zeros(1, config.hidden_size))
         self.position_embedding = nn.Embedding(config.num_positions, config.hidden_size)
@@ -161,12 +165,12 @@ class CogVLMGLU(nn.Module):
 
 
 class CogVLMVisionModel(nn.Module):
-    def __init__(self, config: CogVLMVisionConfig):
+    def __init__(self, config: CogVLMConfig):
         super().__init__()
 
-        self.patch_embedding = CogVLMPatchEmbedding(config)
-        self.transformer = CogVLMTransformer(config)
-        self.linear_proj = CogVLMGLU(config, in_features=config.hidden_size)
+        self.patch_embedding = CogVLMPatchEmbedding(config.vision_config)
+        self.transformer = CogVLMTransformer(config.vision_config)
+        self.linear_proj = CogVLMGLU(config, in_features=config.vision_config.hidden_size)
         self.boi = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.eoi = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
 
@@ -340,9 +344,8 @@ class CogVLMVisionExpertAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads
         self.max_position_embeddings = config.max_position_embeddings
 
-        self.rotary_emb = CogVLMRotaryEmbedding(self.hidden_size // self.num_heads)
-        # from .util import FastRotaryEmbedding
-        # self.rotary_emb = FastRotaryEmbedding(dim=self.head_dim, pos_idx_in_fp32=False)
+        # self.rotary_emb = CogVLMRotaryEmbedding(self.hidden_size // self.num_heads)
+        self.rotary_emb = FastRotaryEmbedding(dim=self.head_dim, pos_idx_in_fp32=False)
         self.vision_expert_query_key_value = nn.Linear(self.hidden_size, self.hidden_size * 3, bias=False)
         self.vision_expert_dense = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.language_expert_query_key_value = nn.Linear(self.hidden_size, self.hidden_size * 3, bias=False)

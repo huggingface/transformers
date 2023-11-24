@@ -25,6 +25,8 @@ from PIL import Image
 from transformers import (
     AutoModelForCausalLM,
     CLIPImageProcessor,
+    CogVLMConfig,
+    CogVLMForCausalLM,
     CogVLMProcessor,
     LlamaTokenizer,
 )
@@ -58,22 +60,38 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         tokenizer, query=query, history=[], images=[image]
     )  # chat mode
     original_pixel_values = inputs["images"][0]
-    inputs = {
-        "input_ids": inputs["input_ids"].unsqueeze(0).to("cuda"),
-        "token_type_ids": inputs["token_type_ids"].unsqueeze(0).to("cuda"),
-        "attention_mask": inputs["attention_mask"].unsqueeze(0).to("cuda"),
-        "images": [[inputs["images"][0].to("cuda").to(torch.bfloat16)]],
-    }
+
+    def gather_inputs(inputs, device, use_bfloat16=True):
+        dtype = torch.bfloat16 if use_bfloat16 else torch.float32
+        inputs = {
+            "input_ids": inputs["input_ids"].unsqueeze(0).to(device),
+            "token_type_ids": inputs["token_type_ids"].unsqueeze(0).to(device),
+            "attention_mask": inputs["attention_mask"].unsqueeze(0).to(device),
+            "images": [[inputs["images"][0].to(device).to(dtype)]],
+        }
+        return inputs
+    
+    original_inputs = gather_inputs(inputs, device="cuda")
     gen_kwargs = {"max_length": 2048, "do_sample": False}
 
     with torch.no_grad():
-        outputs = original_model.generate(**inputs, **gen_kwargs)
-        outputs = outputs[:, inputs["input_ids"].shape[1] :]
+        outputs = original_model.generate(**original_inputs, **gen_kwargs)
+        outputs = outputs[:, original_inputs["input_ids"].shape[1] :]
         print(tokenizer.decode(outputs[0]))
 
     # load HF model
-    # config = CogVLMConfig()
-    # model = CogVLMForCausalLM(config)
+    # rename in_channels to num_channels for sake of consistency
+    original_model.config.vision_config["num_channels"] = original_model.config.vision_config.pop("in_channels")
+
+    print("Original config:", original_model.config)
+
+    config = CogVLMConfig(**original_model.config.to_dict())
+    model = CogVLMForCausalLM(config)
+
+    # load state dict
+    model.load_state_dict(original_model.state_dict())
+    model.to("cuda:1")
+    model.eval()
 
     # create processor
     image_size = original_model.config.vision_config["image_size"]
@@ -89,21 +107,17 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     # verify pixel values
     assert torch.allclose(pixel_values, original_pixel_values.to(pixel_values.device))
 
-    # make sure processor creates exact same pixel values
-    # assert torch.allclose(pixel_values, original_pixel_values.to(pixel_values.device))
+    # TODO use processor instead
+    inputs = gather_inputs(inputs, device="cuda:1", use_bfloat16=False)
 
-    # original_model.to(lavis_device)
-    # model.to(model_device)
+    with torch.no_grad():
+        outputs = model.generate(**inputs, **gen_kwargs)
+        outputs = outputs[:, inputs["input_ids"].shape[1] :]
+        print("HF outputs:", tokenizer.decode(outputs[0]))
+
     # with torch.no_grad():
-    #     if "opt" in model_name:
-    #         original_logits = original_model({"image": original_pixel_values, "text_input": [""]}).logits
-    #         logits = model(pixel_values, input_ids).logits
-    #     else:
-    #         original_logits = original_model(
-    #             {"image": original_pixel_values, "text_input": ["\n"], "text_output": ["\n"]}
-    #         ).logits
-    #         labels = input_ids.masked_fill(input_ids == tokenizer.pad_token_id, -100)
-    #         logits = model(pixel_values, input_ids, labels=labels).logits
+    #      original_logits = original_model({"image": original_pixel_values, "text_input": [""]}).logits
+    #      logits = model(pixel_values, input_ids).logits
 
     # assert original_logits.shape == logits.shape
     # print("First values of original logits:", original_logits[0, :3, :3])
