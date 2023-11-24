@@ -446,9 +446,10 @@ class LlamaFlashAttention2(LlamaAttention):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used
-        # to handle this difference.
-        self.flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_210()
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_210()
 
     def forward(
         self,
@@ -565,10 +566,10 @@ class LlamaFlashAttention2(LlamaAttention):
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
-        if not self.flash_attn_uses_top_left_mask:
+        if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
         else:
-            # NOTE: `causal=self.is_causal and query_length != 1` is required for compatibility with flash_attn>=2.0,<2.1, reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0. We need to remove this check `query_length != 1` once Flash Attention for RoCm is bumped to 2.1. With flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen ==1) produces a wrong mask (top-left).
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
             causal = self.is_causal and query_length != 1
 
         # Contains at least one padding token in the sequence
