@@ -1236,11 +1236,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(config, "_attn_implementation") and config._attn_implementation is not None:
             if config.attn_implementation != "flash_attention_2" and use_flash_attention_2:
                 raise ValueError(
-                    f'Both config.attn_implementation ("{config.attn_implementation}") and use_flash_attention_2=True are used, and are incompatible.'
+                    f'Both config.attn_implementation ("{config.attn_implementation}"), with `config.attn_implementation != "flash_attention_2"`. This is not compatible, we recommend you to just use `config.attn_implementation = "flash_attention_2"` or to pass the argument `attn_implementation="flash_attention_2"`.'
                 )
 
             # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config, with hard checks that the requested attention implementation is available.
-            hard_check_only = True
+            hard_check_only = not use_flash_attention_2
         else:
             hard_check_only = False
 
