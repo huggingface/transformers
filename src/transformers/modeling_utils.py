@@ -1215,29 +1215,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return model
 
-    def use_attn_implementation(self, attn_implementation: str):
-        """
-        Specifies the attention implementation to use in the model.
-
-        Args:
-            attn_implementation (`str`):
-                The attention implementation to use. Can be any of "eager" (manual implementation of the attention), "sdpa" (attention using [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), or "flash_attention_2" (attention using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)).
-        """
-        # TODO: Implement it. An implementation could be to define `self._eager_attn_class = XXXAttention`, `self._sdpa_attn_class = XXXSdpaAttention`, `self._flash_attn_class = XXXFlashAttention2` in the __init__ of XXXPreTrainedModel, and leverage those attributes here to replace the correct submodules. Alternatively, the `XXX_ATTENTION_CLASSES` in each modeling file can be leveraged.
-        raise NotImplementedError("model.use_attn_implementation is currently not implemented.")
-
-        if attn_implementation == "sdpa":
-            self.config = self._check_and_enable_sdpa(self.config, hard_check_only=False)
-        elif attn_implementation == "flash_attention_2":
-            # TODO: define torch_dtype properly
-            torch_dtype = None
-            self.config = self._check_and_enable_flash_attn_2(
-                self.config,
-                torch_dtype=torch_dtype,
-                device_map=getattr(self, "hf_device_map", None),
-                hard_check_only=False,
-            )
-
     @classmethod
     def _autoset_attn_implementation(
         cls,
