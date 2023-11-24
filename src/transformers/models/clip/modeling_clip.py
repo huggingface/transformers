@@ -64,15 +64,12 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     image_loss = contrastive_loss(similarity.t())
     return (caption_loss + image_loss) / 2.0
 
-
-
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
-    import pdb; pdb.set_trace()
     return (
         indices,
         cu_seqlens,
@@ -278,7 +275,6 @@ class CLIPAttention(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-
         bsz, tgt_len, embed_dim = hidden_states.size()
 
         # get query proj
@@ -351,16 +347,10 @@ class CLIPAttention(nn.Module):
 
 class CLIPFlashAttention2(CLIPAttention):
     """
-    CLIP flash attention module. This module inherits from `BartAttention` as the weights of the module stays
+    CLIP flash attention module. This module inherits from `CLIPAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
-
-    def _reshape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
@@ -368,64 +358,49 @@ class CLIPFlashAttention2(CLIPAttention):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
-
-        # CLIPFlashAttention2 attention does not support output_attentions
         if output_attentions:
-            raise ValueError("BartFlashAttention2 attention does not support output_attentions")
+            raise ValueError("CLIPFlashAttention2 does not support output_attentions")
+
+        if self.is_causal and causal_attention_mask is None:
+            raise ValueError("CLIPFlashAttention2 has causal=True but no causal_attention_mask provided")
 
         bsz, tgt_len, embed_dim = hidden_states.size()
 
-        # get query proj
-        query_states = self._shape(self.q_proj(hidden_states), -1, bsz)
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        # [batch_size, tgt_len, embed_dim]
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
-        # proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        # query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        # key_states = key_states.view(*proj_shape)
-        # value_states = value_states.view(*proj_shape)
-
-        src_len = key_states.size(1)
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in the correct dtype just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (LlamaRMSNorm handles it correctly)
-        input_dtype = query_states.dtype
-        if input_dtype != torch.float32:
-            # Handle the case where the model is quantized
-            if hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
-            else:
-                target_dtype = self.q_proj.weight.dtype
-
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-            query_states = query_states.to(dtype=target_dtype)
-            key_states = key_states.to(dtype=target_dtype)
-            value_states = value_states.to(dtype=target_dtype)
+        # [batch_size, tgt_len, embed_dim] -> [batch_size, tgt_len, num_heads, head_dim]
+        query_states = query_states.view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
+        key_states = key_states.view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
+        value_states = value_states.view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
 
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, causal_attention_mask, src_len, self.dropout, self.scale
+            query_states=query_states,
+            key_states=key_states,
+            value_states=value_states,
+            attention_mask=attention_mask,
+            query_length=tgt_len,
+            dropout=self.dropout,
+            softmax_scale=self.scale,
         )
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+        # [batch_size, tgt_len, num_heads, head_dim] -> [batch_size, tgt_len, embed_dim]
+        attn_output = attn_output.view(bsz, tgt_len, embed_dim)
         attn_output = self.out_proj(attn_output)
 
         return attn_output, None
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, causal_attention_mask, query_length, dropout=0.0, softmax_scale=None
-    ):
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+    ) -> torch.Tensor:
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
         first unpad the input, then computes the attention scores and pad the final attention scores.
+
         Args:
             query_states (`torch.Tensor`):
                 Input query states to be passed to Flash Attention API
@@ -441,13 +416,7 @@ class CLIPFlashAttention2(CLIPAttention):
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
-        import pdb; pdb.set_trace()
         # Contains at least one padding token in the sequence
-        if causal_attention_mask is not None and attention_mask is not None:
-            raise ValueError("Cannot pass both attention_mask and causal_attention_mask")
-
-        attention_mask = attention_mask if attention_mask is not None else causal_attention_mask
-
         if attention_mask is not None:
             batch_size = query_states.shape[0]
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
@@ -496,18 +465,13 @@ class CLIPFlashAttention2(CLIPAttention):
             indices_q = indices_k
         elif query_length == 1:
             max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
+            # There is a memcpy here, that is very bad.
+            cu_seqlens_q = torch.arange(batch_size + 1, dtype=torch.int32, device=query_layer.device)
             indices_q = cu_seqlens_q[:-1]
             query_layer = query_layer.squeeze(1)
         else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            causal_attention_mask = causal_attention_mask[:, -query_length:]
-            # Apply causal attention mask first
-            if causal_attention_mask is not None:
-                query_layer, *_ = unpad_input(query_layer, causal_attention_mask)
+            # The :q_len slice assumes right padding.
+            attention_mask = attention_mask[:, :query_length]
             query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
 
         return (

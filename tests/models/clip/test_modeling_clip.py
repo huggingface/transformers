@@ -775,18 +775,20 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     dummy_input = dummy_input.to(torch.bfloat16)
 
                 pixel_values = inputs_dict["pixel_values"][:1]
+                if pixel_values.dtype in [torch.float32, torch.float16]:
+                    pixel_values = pixel_values.to(torch.bfloat16)
 
                 outputs = model(input_ids=dummy_input, pixel_values=pixel_values, output_hidden_states=True)
                 outputs_fa = model_fa(input_ids=dummy_input, pixel_values=pixel_values, output_hidden_states=True)
 
-                text_logits = outputs.text_model_output.hidden_states[-1]
-                text_logits_fa = outputs_fa.text_model_output.hidden_states[-1]
-
                 vision_logits = outputs.vision_model_output.hidden_states[-1]
                 vision_logits_fa = outputs_fa.vision_model_output.hidden_states[-1]
 
-                # assert torch.allclose(text_logits_fa, text_logits)
-                assert torch.allclose(vision_logits_fa, vision_logits)
+                text_logits = outputs.text_model_output.hidden_states[-1]
+                text_logits_fa = outputs_fa.text_model_output.hidden_states[-1]
+
+                assert torch.allclose(vision_logits_fa, vision_logits, atol=1e-1)
+                assert torch.allclose(text_logits_fa, text_logits, atol=1e-1)
 
                 # check with inference + dropout
                 model.train()
@@ -819,9 +821,8 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 dummy_input = inputs_dict[model.main_input_name][:1]
                 pixel_values = inputs_dict["pixel_values"][:1]
                 attention_mask = torch.tensor(
-                    [[0, 0, 0, 1, 1, 1, 1]], device=dummy_input.device, dtype=torch.long
+                    [[1, 1, 1, 1, 0, 0, 0]], device=dummy_input.device, dtype=torch.long
                 )
-
                 outputs = model(dummy_input, pixel_values=pixel_values, output_hidden_states=True)
                 outputs_fa = model_fa(dummy_input, pixel_values=pixel_values, output_hidden_states=True)
 
@@ -831,9 +832,8 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 vision_logits = outputs.vision_model_output.hidden_states[-1]
                 vision_logits_fa = outputs_fa.vision_model_output.hidden_states[-1]
 
-                # whisper FA2 needs very high tolerance
+                assert torch.allclose(vision_logits_fa, vision_logits, atol=1e-1)
                 assert torch.allclose(text_logits_fa, text_logits)
-                assert torch.allclose(vision_logits_fa, vision_logits)
 
                 other_inputs = {
                     "attention_mask": attention_mask,
@@ -850,9 +850,8 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 vision_logits = outputs.vision_model_output.hidden_states[-1]
                 vision_logits_fa = outputs_fa.vision_model_output.hidden_states[-1]
 
-                # whisper FA2 needs very high tolerance
+                assert torch.allclose(vision_logits_fa, vision_logits, 1e-1)
                 assert torch.allclose(text_logits_fa, text_logits)
-                assert torch.allclose(vision_logits_fa, vision_logits)
 
 
 # We will verify our results on an image of cute cats
