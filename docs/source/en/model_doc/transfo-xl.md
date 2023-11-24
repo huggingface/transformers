@@ -24,6 +24,7 @@ We recommend switching to more recent models for improved security.
 
 In case you would still like to use `TransfoXL` in your experiments, we recommend using the [Hub checkpoint](https://huggingface.co/transfo-xl-wt103) with a specific revision to ensure you are downloading safe files from the Hub:
 
+```
 from transformers import TransfoXLTokenizer, TransfoXLLMHeadModel
 
 checkpoint = 'transfo-xl-wt103'
@@ -31,6 +32,7 @@ revision = '40a186da79458c9f9de846edfaea79c412137f97'
 
 tokenizer = TransfoXLTokenizer.from_pretrained(checkpoint, revision=revision)
 model = TransfoXLLMHeadModel.from_pretrained(checkpoint, revision=revision)
+```
 
 If you run into any issues running this model, please reinstall the last version that supported this model: v4.35.0.
 You can do so by running the following command: `pip install -U transformers==4.35.0`.
