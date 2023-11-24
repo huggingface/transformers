@@ -51,9 +51,11 @@ python utils/tests_fetcher.py --diff_with_last_commit
 
 import argparse
 import collections
+import importlib
 import json
 import os
 import re
+import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
@@ -252,6 +254,120 @@ def diff_contains_doc_examples(repo: Repo, branching_point: str, filename: str) 
     new_content_clean = keep_doc_examples_only(new_content)
 
     return old_content_clean != new_content_clean
+
+
+def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = False) -> List[str]:
+    """
+    Return a list of python modeling files that are impacted by the changes of `tiny_model_summary.json` in between:
+
+    - the current head and the main branch if `diff_with_last_commit=False` (default)
+    - the current head and its parent commit otherwise.
+
+    Returns:
+        `List[str]`: The list of Python modeling files that are impacted by the changes of `tiny_model_summary.json`.
+    """
+    repo = Repo(PATH_TO_REPO)
+
+    folder = Path(repo.working_dir)
+
+    if not diff_with_last_commit:
+        print(f"main is at {repo.refs.main.commit}")
+        print(f"Current head is at {repo.head.commit}")
+
+        commits = repo.merge_base(repo.refs.main, repo.head)
+        for commit in commits:
+            print(f"Branching commit: {commit}")
+    else:
+        print(f"main is at {repo.head.commit}")
+        commits = repo.head.commit.parents
+        for commit in commits:
+            print(f"Parent commit: {commit}")
+
+    files = set()
+    for commit in commits:
+        with checkout_commit(repo, commit):
+            with open(folder / "tests/utils/tiny_model_summary.json", "r", encoding="utf-8") as f:
+                old_content = f.read()
+
+        with open(folder / "tests/utils/tiny_model_summary.json", "r", encoding="utf-8") as f:
+            new_content = f.read()
+
+        # get the content as json object
+        old_content = json.loads(old_content)
+        new_content = json.loads(new_content)
+
+        old_keys = set(old_content.keys())
+        new_keys = set(new_content.keys())
+
+        # get the difference
+        diff_keys = old_keys.symmetric_difference(new_keys)
+        common_keys = old_keys.intersection(new_keys)
+        # if both have the same key, check its content
+        for key in common_keys:
+            if old_content[key] != new_content[key]:
+                diff_keys.add(key)
+
+        # get the model classes
+        impacted_model_classes = []
+        for key in diff_keys:
+            if key in new_keys:
+                impacted_model_classes.extend(new_content[key]["model_classes"])
+
+        # get the module where the model classes are defined. We want to use the main `__init__` file, but it requires
+        # all the framework being installed, which is not ideal for a simple script like test fetcher.
+        # So we create a temporary and modified main `__init__` and access its `_import_structure`.
+        with open(folder / "src/transformers/__init__.py") as fp:
+            lines = fp.readlines()
+            new_lines = []
+            # Get all the code related to `_import_structure`
+            for line in lines:
+                if line == "_import_structure = {\n":
+                    new_lines.append(line)
+                elif line == "# Direct imports for type-checking\n":
+                    break
+                elif len(new_lines) > 0:
+                    # bypass the framework check so we can get all the information even if frameworks are not available
+                    line = re.sub(r"is_.+_available\(\)", "True", line)
+                    line = line.replace("OptionalDependencyNotAvailable", "Exception")
+                    line = line.replace("Exception()", "Exception")
+                    new_lines.append(line)
+
+        # create and load the temporary module
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with open(os.path.join(tmpdirname, "temp_init.py"), "w") as fp:
+                fp.write("".join(new_lines))
+
+            spec = importlib.util.spec_from_file_location("temp_init", os.path.join(tmpdirname, "temp_init.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            # Finally, get `_import_structure` that we need
+            import_structure = module._import_structure
+
+            # map model classes to their defined module
+            reversed_structure = {}
+            for key, values in import_structure.items():
+                for value in values:
+                    reversed_structure[value] = key
+
+            # Get the corresponding modeling file path
+            for model_class in impacted_model_classes:
+                module = reversed_structure[model_class]
+                framework = ""
+                if model_class.startswith("TF"):
+                    framework = "tf"
+                elif model_class.startswith("Flax"):
+                    framework = "flax"
+                fn = (
+                    f"modeling_{module.split('.')[-1]}.py"
+                    if framework == ""
+                    else f"modeling_{framework}_{module.split('.')[-1]}.py"
+                )
+                files.add(
+                    f"src.transformers.{module}.{fn}".replace(".", os.path.sep).replace(f"{os.path.sep}py", ".py")
+                )
+
+    breakpoint()
+    return sorted(files)
 
 
 def get_diff(repo: Repo, base_commit: str, commits: List[str]) -> List[str]:
@@ -949,18 +1065,16 @@ def infer_tests_to_run(
     if any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"]):
         test_files_to_run = ["tests", "examples"]
         repo_utils_launch = True
-    # in order to trigger pipeline tests even if no code change at all
-    elif "tests/utils/tiny_model_summary.json" in modified_files:
-        test_files_to_run = ["tests"]
-        repo_utils_launch = any(f.split(os.path.sep)[0] == "utils" for f in modified_files)
     else:
         # All modified tests need to be run.
         test_files_to_run = [
             f for f in modified_files if f.startswith("tests") and f.split(os.path.sep)[-1].startswith("test")
         ]
+        impacted_files = get_impacted_files_from_tiny_model_summary(diff_with_last_commit=diff_with_last_commit)
+
         # Then we grab the corresponding test files.
         test_map = create_module_to_test_map(reverse_map=reverse_map, filter_models=filter_models)
-        for f in modified_files:
+        for f in modified_files + impacted_files:
             if f in test_map:
                 test_files_to_run.extend(test_map[f])
         test_files_to_run = sorted(set(test_files_to_run))
