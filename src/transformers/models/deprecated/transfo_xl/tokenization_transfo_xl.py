@@ -27,8 +27,8 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import (
+from ....tokenization_utils import PreTrainedTokenizer
+from ....utils import (
     cached_file,
     is_sacremoses_available,
     is_torch_available,

@@ -15,8 +15,8 @@
 # limitations under the License.
 """ Transformer XL configuration"""
 
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ....configuration_utils import PretrainedConfig
+from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -74,7 +74,7 @@ class TransfoXLConfig(PretrainedConfig):
             Whether or not to use adaptive softmax.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        dropatt (`float`, *optional*, defaults to 0):
+        dropatt (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         untie_r (`boolean`, *optional*, defaults to `True`):
             Whether ot not to untie relative position biases.
@@ -86,8 +86,10 @@ class TransfoXLConfig(PretrainedConfig):
             Parameters initialized by N(0, init_std)
         init_std (`float`, *optional*, defaults to 0.02):
             Parameters initialized by N(0, init_std)
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
             The epsilon to use in the layer normalization layers
+        eos_token_id (`int`, *optional*, defaults to 0):
+            End of stream token id.
 
     Examples:
 

@@ -706,6 +706,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
     ]
 )
 
+# This is tied to the processing `-` -> `_` in `model_type_to_module_name`. For example, instead of putting
+# `transfo-xl` (as in `CONFIG_MAPPING_NAMES`), we should use `transfo_xl`.
 DEPRECATED_MODELS = [
     "bort",
     "mctct",
@@ -714,6 +716,7 @@ DEPRECATED_MODELS = [
     "retribert",
     "tapex",
     "trajectory_transformer",
+    "transfo_xl",
     "van",
 ]
 
