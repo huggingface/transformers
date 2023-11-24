@@ -488,12 +488,13 @@ class T5Attention(nn.Module):
         self.relative_attention_bias_dict = nn.ModuleDict()
         if self.positional_embedding_injected_in_attention is not None:
             for pos_emb_name, pos_emb_config in self.positional_embedding_injected_in_attention.items():
+                pos_emb_config = pos_emb_config if pos_emb_config is not None else {}
                 if pos_emb_name == POSITION_EMBEDDING_T5_RELATIVE:
                     self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)                                          
                     relative_attention_num_buckets = pos_emb_config.get("num_buckets", self.relative_attention_num_buckets)
                     self.relative_attention_bias_dict[pos_emb_name] = nn.Embedding(relative_attention_num_buckets, self.n_heads)
                 elif pos_emb_name == POSITION_EMBEDDING_ROTARY:
-                    self.rotary_op = RotaryEmbedding(self.d_model)
+                    self.rotary_op = RotaryEmbedding(self.d_model) #TODO: should this be inside self.relative_attention_bias_dict module dict as well? it has no parameters (but does have a buffer)
                 else:
                     raise Exception(f'unfamiliar positional attention type to be injected at attention level. Got "{pos_emb_name}". Supported options are {POSITION_EMBEDDING_T5_RELATIVE} and {POSITION_EMBEDDING_ROTARY}')
 
@@ -714,6 +715,9 @@ class T5Attention(nn.Module):
 
         add_to_scores = None
 
+        if 2==1+1:
+            assert False, "use self.positional_embedding_injected_in_attention and figure out the content of position_ids_info_list"
+        
         pos_embedding_found_in_add_bias = False
 
         if position_ids_info_list:
@@ -1129,7 +1133,7 @@ class T5PreTrainedModel(PreTrainedModel):
             module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
             module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
             module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
-            if module.has_relative_attention_bias:
+            if 't5_default_relative' in module.positional_embedding_injected_in_attention:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
     def _set_gradient_checkpointing(self, module, value=False):
@@ -1177,9 +1181,9 @@ class T5Stack(T5PreTrainedModel):
         if 'injected_in_stack' in self.position_embedding_definitions:                   
             for position_embedding_name, embedding_config in self.position_embedding_definitions['injected_in_stack'].items():                
                 if position_embedding_name == POSITION_EMBEDDING_SINUSOIDAL:
-                    self.abs_position_embedding_dict[POSITION_EMBEDDING_SINUSOIDAL] = SinusoidalPositionalEmbedding(config.d_model)
+                    self.attention_injected_in_t5_stack_level[POSITION_EMBEDDING_SINUSOIDAL] = SinusoidalPositionalEmbedding(config.d_model)
                 elif position_embedding_name == POSITION_EMBEDDING_LEARNED:
-                    self.abs_position_embedding_dict[position_embedding_name] =  nn.Embedding(embedding_config.num_embeddings, config.d_model)
+                    self.attention_injected_in_t5_stack_level[position_embedding_name] =  nn.Embedding(embedding_config.num_embeddings, config.d_model)
                 else:
                     raise Exception(f'unfamiliar positional embedding for injection in stack "{position_embedding_name}" supported options are {POSITION_EMBEDDING_SINUSOIDAL} and {POSITION_EMBEDDING_LEARNED}.')
                 
@@ -1321,8 +1325,8 @@ class T5Stack(T5PreTrainedModel):
             else:
                 position_ids = position_ids.view(-1, input_shape[-1])
             
-            if position_embedding_name in self.abs_position_embedding_dict:
-                position_embeds = self.abs_position_embedding_dict[position_embedding_name](position_ids)
+            if position_embedding_name in self.attention_injected_in_t5_stack_level:
+                position_embeds = self.attention_injected_in_t5_stack_level[position_embedding_name](position_ids)
                 inputs_embeds += position_embeds
             else:
                 position_ids_info_list_for_relative_embeddings.append((position_ids, position_embedding_name))
