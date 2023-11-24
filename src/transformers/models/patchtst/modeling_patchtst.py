@@ -307,6 +307,7 @@ def forecast_masking(
         `tuple(torch.Tensor)`: inputs_mask, masked input, same shape as inputs Tensor and Mask tensor of shape `(bs,
         num_channels , num_patch)` or `(bs, tsg1, tsg2, num_channels, num_patch)`
     """
+
     if isinstance(num_forecast_mask_patches, int):
         num_forecast_mask_patches = [num_forecast_mask_patches]
     forecast_mask_ratios = [1 for _ in num_forecast_mask_patches]
@@ -370,8 +371,8 @@ class PatchTSTPatchify(nn.Module):
             )
 
         # get the number of patches
-        config.num_patches = (max(self.sequence_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
-        new_sequence_length = self.patch_length + self.patch_stride * (config.num_patches - 1)
+        self.num_patches = (max(self.sequence_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
+        new_sequence_length = self.patch_length + self.patch_stride * (self.num_patches - 1)
         self.sequence_start = self.sequence_length - new_sequence_length
 
     def forward(self, past_values: torch.Tensor):
@@ -640,7 +641,6 @@ class PatchTSTEmbedding(nn.Module):
             self.input_embedding = nn.ModuleList()
             for _ in range(config.num_input_channels):
                 self.input_embedding.append(nn.Linear(config.patch_length, config.d_model))
-
 
     def forward(self, patch_input: torch.Tensor):
         """
@@ -1258,7 +1258,9 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if past_observed_mask is None:
             past_observed_mask = torch.ones_like(past_values)
@@ -1435,10 +1437,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
             outputs = (masked_loss,) + outputs if masked_loss is not None else outputs
             return outputs
         return PatchTSTForPretrainingOutput(
-            loss=masked_loss,
-            prediction_output=x_hat,
-            hidden_states=encoder_states,
-            attentions=model_output.attentions
+            loss=masked_loss, prediction_output=x_hat, hidden_states=encoder_states, attentions=model_output.attentions
         )
 
 
