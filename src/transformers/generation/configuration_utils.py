@@ -410,7 +410,7 @@ class GenerationConfig(PushToHubMixin):
 
         # 2. detect beam-only parameterization when not in beam mode
         if self.num_beams is None:
-            logging.warning("`num_beams` is set to None - defaulting to 1.", UserWarning)
+            warnings.warn("`num_beams` is set to None - defaulting to 1.", UserWarning)
             self.num_beams = 1
 
         if self.num_beams == 1:
