@@ -99,7 +99,6 @@ from .trainer_utils import (
     BestRun,
     EvalLoopOutput,
     EvalPrediction,
-    FSDPOption,
     HPSearchBackend,
     HubStrategy,
     IntervalStrategy,
@@ -193,15 +192,15 @@ if is_peft_available():
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
     from accelerate import __version__ as accelerate_version
-    from accelerate.utils import DistributedDataParallelKwargs, GradientAccumulationPlugin
+    from accelerate.utils import (
+        DistributedDataParallelKwargs,
+        GradientAccumulationPlugin,
+        load_fsdp_model,
+        load_fsdp_optimizer,
+        save_fsdp_model,
+        save_fsdp_optimizer,
+    )
 
-    if version.parse(accelerate_version) > version.parse("0.20.3"):
-        from accelerate.utils import (
-            load_fsdp_model,
-            load_fsdp_optimizer,
-            save_fsdp_model,
-            save_fsdp_optimizer,
-        )
     DATA_SAMPLERS = [RandomSampler]
     if version.parse(accelerate_version) > version.parse("0.23.0"):
         from accelerate.data_loader import SeedableRandomSampler
@@ -226,6 +225,7 @@ OPTIMIZER_NAME = "optimizer.pt"
 OPTIMIZER_NAME_BIN = "optimizer.bin"
 SCHEDULER_NAME = "scheduler.pt"
 SCALER_NAME = "scaler.pt"
+FSDP_MODEL_NAME = "pytorch_model_fsdp"
 
 
 class Trainer:
@@ -415,7 +415,7 @@ class Trainer:
                 " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
             )
 
-        self.fsdp = None
+        self.is_fsdp_xla_enabled = args.fsdp_config["xla"]
         if len(args.fsdp) > 0:
             if self.is_deepspeed_enabled:
                 raise ValueError(
@@ -423,32 +423,6 @@ class Trainer:
                 )
             if not args.fsdp_config["xla"] and args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise ValueError("Using fsdp only works in distributed training.")
-
-            # dep_version_check("torch>=1.12.0")
-            # Would have to update setup.py with torch>=1.12.0
-            # which isn't ideally given that it will force people not using FSDP to also use torch>=1.12.0
-            # below is the current alternative.
-            if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.12.0"):
-                raise ValueError("FSDP requires PyTorch >= 1.12.0")
-
-            from torch.distributed.fsdp.fully_sharded_data_parallel import BackwardPrefetch, ShardingStrategy
-
-            if FSDPOption.FULL_SHARD in args.fsdp:
-                self.fsdp = ShardingStrategy.FULL_SHARD
-            elif FSDPOption.SHARD_GRAD_OP in args.fsdp:
-                self.fsdp = ShardingStrategy.SHARD_GRAD_OP
-            elif FSDPOption.NO_SHARD in args.fsdp:
-                self.fsdp = ShardingStrategy.NO_SHARD
-
-            self.backward_prefetch = BackwardPrefetch.BACKWARD_PRE
-            if "backward_prefetch" in self.args.fsdp_config and "backward_post" in self.args.fsdp_config.get(
-                "backward_prefetch", []
-            ):
-                self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
-
-            self.limit_all_gathers = False
-            if self.args.fsdp_config.get("limit_all_gathers", False):
-                self.limit_all_gathers = True
 
         # one place to sort out whether to place the model on device or not
         # postpone switching model to cuda when:
@@ -462,7 +436,7 @@ class Trainer:
             self.is_model_parallel
             or self.is_deepspeed_enabled
             or ((args.fp16_full_eval or args.bf16_full_eval) and not args.do_train)
-            or (self.fsdp is not None)
+            or self.is_fsdp_xla_enabled
             or self.is_fsdp_enabled
         ):
             self.place_model_on_device = False
@@ -513,7 +487,7 @@ class Trainer:
                     " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
                     " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
                 )
-        if (self.is_deepspeed_enabled or (self.fsdp is not None)) and (
+        if (self.is_deepspeed_enabled or self.is_fsdp_xla_enabled or self.is_fsdp_enabled) and (
             self.optimizer is not None or self.lr_scheduler is not None
         ):
             raise RuntimeError(
@@ -1367,7 +1341,7 @@ class Trainer:
 
         # Distributed training (should be after apex fp16 initialization)
         # Distributed training using PyTorch FSDP
-        if self.fsdp is not None and self.args.fsdp_config["xla"]:
+        if self.is_fsdp_xla_enabled:
             try:
                 from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
                 from torch_xla.distributed.fsdp import checkpoint_module
@@ -1626,7 +1600,7 @@ class Trainer:
             else:
                 debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
 
-        delay_optimizer_creation = is_sagemaker_mp_enabled() or self.fsdp is not None or self.is_fsdp_enabled
+        delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled
 
         # We need to reset the scheduler, as its parameters may be different on subsequent calls
         if self._created_lr_scheduler:
@@ -1676,8 +1650,6 @@ class Trainer:
         use_accelerator_prepare = True if model is self.model else False
 
         if delay_optimizer_creation:
-            if use_accelerator_prepare:
-                self.model = self.accelerator.prepare(self.model)
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         # prepare using `accelerator` prepare
@@ -1895,9 +1867,7 @@ class Trainer:
                 ):
                     # the `or` condition of `is_last_step_and_steps_less_than_grad_acc` is not covered
                     # in accelerate. So, explicitly enable sync gradients to True in that case.
-                    if is_last_step_and_steps_less_than_grad_acc or (
-                        version.parse(accelerate_version) <= version.parse("0.20.3")
-                    ):
+                    if is_last_step_and_steps_less_than_grad_acc:
                         self.accelerator.gradient_state._set_sync_gradients(True)
 
                     # Gradient clipping
@@ -2051,7 +2021,7 @@ class Trainer:
         safe_weights_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_NAME)
         safe_weights_index_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_INDEX_NAME)
         is_fsdp_ckpt = os.path.isdir(resume_from_checkpoint) and any(
-            WEIGHTS_NAME.split(".")[0] in folder_name
+            FSDP_MODEL_NAME in folder_name
             for folder_name in os.listdir(resume_from_checkpoint)
             if os.path.isdir(os.path.join(resume_from_checkpoint, folder_name))
         )
@@ -2360,56 +2330,12 @@ class Trainer:
         run_dir = self._get_output_dir(trial=trial)
         output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir, _internal_call=True)
-        if self.is_deepspeed_enabled:
-            # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
-            # config `stage3_gather_16bit_weights_on_model_save` is True
-            self.model_wrapped.save_checkpoint(output_dir)
 
-        # Save optimizer and scheduler
-        if self.fsdp or self.is_fsdp_enabled:
-            if self.is_fsdp_enabled:
-                save_fsdp_optimizer(
-                    self.accelerator.state.fsdp_plugin, self.accelerator, self.optimizer, self.model, output_dir
-                )
-            else:
-                # FSDP has a different interface for saving optimizer states.
-                # Needs to be called on all ranks to gather all states.
-                # full_optim_state_dict will be deprecated after Pytorch 2.2!
-                full_osd = self.model.__class__.full_optim_state_dict(self.model, self.optimizer)
-                torch.save(full_osd, os.path.join(output_dir, OPTIMIZER_NAME))
-
-        if is_torch_tpu_available():
-            xm.rendezvous("saving_optimizer_states")
-            xm.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
-            with warnings.catch_warnings(record=True) as caught_warnings:
-                xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
-                reissue_pt_warnings(caught_warnings)
-        elif is_sagemaker_mp_enabled():
-            opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)
-            smp.barrier()
-            if smp.rdp_rank() == 0 or smp.state.cfg.shard_optimizer_state:
-                smp.save(
-                    opt_state_dict,
-                    os.path.join(output_dir, OPTIMIZER_NAME),
-                    partial=True,
-                    v3=smp.state.cfg.shard_optimizer_state,
-                )
-        elif self.args.should_save and not self.is_deepspeed_enabled and not (self.fsdp or self.is_fsdp_enabled):
-            # deepspeed.save_checkpoint above saves model/optim/sched
-            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
-
-        # Save SCHEDULER & SCALER
-        is_deepspeed_custom_scheduler = self.is_deepspeed_enabled and not isinstance(
-            self.lr_scheduler, DeepSpeedSchedulerWrapper
-        )
-        if (
-            self.args.should_save
-            and (not self.is_deepspeed_enabled or is_deepspeed_custom_scheduler)
-            and not is_torch_tpu_available()
-        ):
-            with warnings.catch_warnings(record=True) as caught_warnings:
-                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
-            reissue_pt_warnings(caught_warnings)
+        if not self.args.save_only_model:
+            # Save optimizer and scheduler
+            self._save_optimizer_and_scheduler(output_dir)
+            # Save RNG state
+            self._save_rng_state(output_dir)
 
         # Determine the new best metric / best model checkpoint
         if metrics is not None and self.args.metric_for_best_model is not None:
@@ -2431,6 +2357,14 @@ class Trainer:
         if self.args.should_save:
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
+        if self.args.push_to_hub:
+            self._push_from_checkpoint(output_dir)
+
+        # Maybe delete some older checkpoints.
+        if self.args.should_save:
+            self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+
+    def _save_rng_state(self, output_dir):
         # Save RNG state in non-distributed training
         rng_states = {
             "python": random.getstate(),
@@ -2462,12 +2396,49 @@ class Trainer:
         else:
             torch.save(rng_states, os.path.join(output_dir, f"rng_state_{self.args.process_index}.pth"))
 
-        if self.args.push_to_hub:
-            self._push_from_checkpoint(output_dir)
+    def _save_optimizer_and_scheduler(self, output_dir):
+        if is_torch_tpu_available():
+            xm.rendezvous("saving_optimizer_states")
+            xm.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+            with warnings.catch_warnings(record=True) as caught_warnings:
+                xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+                reissue_pt_warnings(caught_warnings)
+        elif is_sagemaker_mp_enabled():
+            opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)
+            smp.barrier()
+            if smp.rdp_rank() == 0 or smp.state.cfg.shard_optimizer_state:
+                smp.save(
+                    opt_state_dict,
+                    os.path.join(output_dir, OPTIMIZER_NAME),
+                    partial=True,
+                    v3=smp.state.cfg.shard_optimizer_state,
+                )
+        elif self.is_deepspeed_enabled:
+            # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
+            # config `stage3_gather_16bit_weights_on_model_save` is True
+            self.model_wrapped.save_checkpoint(output_dir)
+        elif self.is_fsdp_enabled:
+            # save fsdp specific ckpt for resuming from ckpt
+            save_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir)
+            save_fsdp_optimizer(
+                self.accelerator.state.fsdp_plugin, self.accelerator, self.optimizer, self.model, output_dir
+            )
+        elif self.args.should_save:
+            # deepspeed.save_checkpoint above saves model/optim/sched
+            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
 
-        # Maybe delete some older checkpoints.
-        if self.args.should_save:
-            self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+        # Save SCHEDULER & SCALER
+        is_deepspeed_custom_scheduler = self.is_deepspeed_enabled and not isinstance(
+            self.lr_scheduler, DeepSpeedSchedulerWrapper
+        )
+        if (
+            self.args.should_save
+            and (not self.is_deepspeed_enabled or is_deepspeed_custom_scheduler)
+            and not is_torch_tpu_available()
+        ):
+            with warnings.catch_warnings(record=True) as caught_warnings:
+                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+            reissue_pt_warnings(caught_warnings)
 
     def _load_optimizer_and_scheduler(self, checkpoint):
         """If optimizer and scheduler states exist, load them."""
@@ -2535,23 +2506,14 @@ class Trainer:
                     # In distributed training however, we load directly on each GPU and risk the GPU OOM as it's more
                     # likely to get OOM on CPU (since we load num_gpu times the optimizer state
                     map_location = self.args.device if self.args.world_size > 1 else "cpu"
-                    if self.fsdp or self.is_fsdp_enabled:
-                        if self.is_fsdp_enabled:
-                            load_fsdp_optimizer(
-                                self.accelerator.state.fsdp_plugin,
-                                self.accelerator,
-                                self.optimizer,
-                                self.model,
-                                checkpoint,
-                            )
-                        else:
-                            full_osd = None
-                            # In FSDP, we need to load the full optimizer state dict on rank 0 and then shard it
-                            if self.args.process_index == 0:
-                                full_osd = torch.load(os.path.join(checkpoint, OPTIMIZER_NAME))
-                            # call scatter_full_optim_state_dict on all ranks
-                            sharded_osd = self.model.__class__.scatter_full_optim_state_dict(full_osd, self.model)
-                            self.optimizer.load_state_dict(sharded_osd)
+                    if self.is_fsdp_enabled:
+                        load_fsdp_optimizer(
+                            self.accelerator.state.fsdp_plugin,
+                            self.accelerator,
+                            self.optimizer,
+                            self.model,
+                            checkpoint,
+                        )
                     else:
                         self.optimizer.load_state_dict(
                             torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
@@ -2826,19 +2788,14 @@ class Trainer:
             if IS_SAGEMAKER_MP_POST_1_10:
                 # 'user_content.pt' indicates model state_dict saved with smp >= 1.10
                 Path(os.path.join(output_dir, "user_content.pt")).touch()
-        elif self.fsdp is not None or self.is_fsdp_enabled:
-            state_dict = self.model.state_dict() if not self.is_fsdp_enabled else {}
-            if self.args.should_save:
-                self._save(output_dir, state_dict=state_dict)
-            if self.is_fsdp_enabled:
-                # remove the dummy state_dict
-                remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
-                save_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir)
-
+        elif self.is_fsdp_enabled:
+            if ("FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)) and (
+                version.parse(accelerate_version) > version.parse("0.24.1")
+            ):
+                state_dict = self.accelerator.get_state_dict(self.model)
+                if self.args.should_save:
+                    self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
-            # this takes care of everything as long as we aren't under zero3
-            if version.parse(accelerate_version) <= version.parse("0.20.3"):
-                raise ValueError("Install Accelerate from main branch")
             try:
                 state_dict = self.accelerator.get_state_dict(self.deepspeed)
                 if self.args.should_save:
@@ -3247,11 +3204,7 @@ class Trainer:
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
-            if (
-                args.eval_accumulation_steps is not None
-                and (step + 1) % args.eval_accumulation_steps == 0
-                and (self.accelerator.sync_gradients or version.parse(accelerate_version) > version.parse("0.20.3"))
-            ):
+            if args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0:
                 if losses_host is not None:
                     losses = nested_numpify(losses_host)
                     all_losses = losses if all_losses is None else np.concatenate((all_losses, losses), axis=0)
@@ -3877,8 +3830,7 @@ class Trainer:
 
     def create_accelerator_and_postprocess(self):
         grad_acc_kwargs = {"num_steps": self.args.gradient_accumulation_steps}
-        if version.parse(accelerate_version) > version.parse("0.20.3"):
-            grad_acc_kwargs["sync_with_dataloader"] = False
+        grad_acc_kwargs["sync_with_dataloader"] = False
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
         # create accelerator object
