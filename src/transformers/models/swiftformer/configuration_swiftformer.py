@@ -85,6 +85,7 @@ class SwiftFormerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "swiftformer"
 
     def __init__(

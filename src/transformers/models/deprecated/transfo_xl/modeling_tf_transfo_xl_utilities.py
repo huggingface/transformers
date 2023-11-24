@@ -20,7 +20,7 @@
 
 import tensorflow as tf
 
-from ...tf_utils import shape_list
+from ....tf_utils import shape_list
 
 
 class TFAdaptiveSoftmaxMask(tf.keras.layers.Layer):

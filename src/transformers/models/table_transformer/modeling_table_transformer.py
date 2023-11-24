@@ -65,10 +65,9 @@ TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Copied from transformers.models.detr.modeling_detr.DetrDecoderOutput with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
 class TableTransformerDecoderOutput(BaseModelOutputWithCrossAttentions):
     """
-    Base class for outputs of the TABLE_TRANSFORMER decoder. This class adds one attribute to
-    BaseModelOutputWithCrossAttentions, namely an optional stack of intermediate decoder activations, i.e. the output
-    of each decoder layer, each of them gone through a layernorm. This is useful when training the model with auxiliary
-    decoding losses.
+    Base class for outputs of the TABLE_TRANSFORMER decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
+    namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
+    gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -97,10 +96,9 @@ class TableTransformerDecoderOutput(BaseModelOutputWithCrossAttentions):
 # Copied from transformers.models.detr.modeling_detr.DetrModelOutput with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
 class TableTransformerModelOutput(Seq2SeqModelOutput):
     """
-    Base class for outputs of the TABLE_TRANSFORMER encoder-decoder model. This class adds one attribute to
-    Seq2SeqModelOutput, namely an optional stack of intermediate decoder activations, i.e. the output of each decoder
-    layer, each of them gone through a layernorm. This is useful when training the model with auxiliary decoding
-    losses.
+    Base class for outputs of the TABLE_TRANSFORMER encoder-decoder model. This class adds one attribute to Seq2SeqModelOutput,
+    namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
+    gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -153,8 +151,8 @@ class TableTransformerObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~TableTransformerImageProcessor.post_process_object_detection`] to
-            retrieve the unnormalized bounding boxes.
+            possible padding). You can use [`~TableTransformerImageProcessor.post_process_object_detection`] to retrieve the
+            unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
@@ -1583,15 +1581,15 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
 # Copied from transformers.models.detr.modeling_detr.DetrLoss with Detr->TableTransformer,detr->table_transformer
 class TableTransformerLoss(nn.Module):
     """
-    This class computes the losses for TableTransformerForObjectDetection/TableTransformerForSegmentation. The process
-    happens in two steps: 1) we compute hungarian assignment between ground truth boxes and the outputs of the model 2)
-    we supervise each pair of matched ground-truth / prediction (supervise class and box).
+    This class computes the losses for TableTransformerForObjectDetection/TableTransformerForSegmentation. The process happens in two steps: 1)
+    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
+    of matched ground-truth / prediction (supervise class and box).
 
-    A note on the `num_classes` argument (copied from original repo in table_transformer.py): "the naming of the
-    `num_classes` parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where
-    `max_obj_id` is the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass
-    `num_classes` to be 91. As another example, for a dataset that has a single class with `id` 1, you should pass
-    `num_classes` to be 2 (`max_obj_id` + 1). For more details on this, check the following discussion
+    A note on the `num_classes` argument (copied from original repo in table_transformer.py): "the naming of the `num_classes`
+    parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is
+    the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass `num_classes` to
+    be 91. As another example, for a dataset that has a single class with `id` 1, you should pass `num_classes` to be 2
+    (`max_obj_id` + 1). For more details on this, check the following discussion
     https://github.com/facebookresearch/table_transformer/issues/108#issuecomment-650269223"
 
 

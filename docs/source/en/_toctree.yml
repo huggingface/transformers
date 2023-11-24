@@ -60,7 +60,7 @@
     - local: tasks/image_classification
       title: Image classification
     - local: tasks/semantic_segmentation
-      title: Semantic segmentation
+      title: Image segmentation
     - local: tasks/video_classification
       title: Video classification
     - local: tasks/object_detection
@@ -424,6 +424,8 @@
         title: PEGASUS-X
       - local: model_doc/persimmon
         title: Persimmon
+      - local: model_doc/phi
+        title: Phi
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart
@@ -626,6 +628,8 @@
         title: UniSpeech
       - local: model_doc/unispeech-sat
         title: UniSpeech-SAT
+      - local: model_doc/univnet
+        title: UnivNet
       - local: model_doc/vits
         title: VITS
       - local: model_doc/wav2vec2
@@ -663,6 +667,8 @@
         title: CLIP
       - local: model_doc/clipseg
         title: CLIPSeg
+      - local: model_doc/clvp
+        title: CLVP
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deplot
@@ -719,6 +725,8 @@
         title: TrOCR
       - local: model_doc/tvlt
         title: TVLT
+      - local: model_doc/tvp
+        title: TVP
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vision-encoder-decoder

@@ -614,6 +614,14 @@ def is_flash_attn_2_available():
     return _flash_attn_2_available and torch.cuda.is_available()
 
 
+def is_flash_attn_available():
+    logger.warning(
+        "Using `is_flash_attn_available` is deprecated and will be removed in v4.38. "
+        "Please use `is_flash_attn_2_available` instead."
+    )
+    return is_flash_attn_2_available()
+
+
 def is_torchdistx_available():
     return _torchdistx_available
 
@@ -644,7 +652,7 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
-def is_accelerate_available(min_version: str = None):
+def is_accelerate_available(min_version: str = "0.21.0"):
     if min_version is not None:
         return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
     return _accelerate_available

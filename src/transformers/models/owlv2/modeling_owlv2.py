@@ -245,11 +245,11 @@ class Owlv2ImageGuidedObjectDetectionOutput(ModelOutput):
             (disregarding possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to
             retrieve the unnormalized bounding boxes.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
-            Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes image
-            embeddings for each patch.
+            Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes
+            image embeddings for each patch.
         query_image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
-            Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes image
-            embeddings for each patch.
+            Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes
+            image embeddings for each patch.
         class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
             Class embeddings of all image patches. OWLv2 represents images as a set of image patches where the total
             number of patches is (image_size / patch_size)**2.
@@ -548,9 +548,7 @@ class Owlv2PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, Owlv2MLP):
             factor = self.config.initializer_factor
-            in_proj_std = (
-                (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            )
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)

@@ -70,8 +70,8 @@ DETA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoderOutput with DeformableDetr->Deta
 class DetaDecoderOutput(ModelOutput):
     """
-    Base class for outputs of the DetaDecoder. This class adds two attributes to BaseModelOutputWithCrossAttentions,
-    namely:
+    Base class for outputs of the DetaDecoder. This class adds two attributes to
+    BaseModelOutputWithCrossAttentions, namely:
     - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
     - a stacked tensor of intermediate reference points.
 
