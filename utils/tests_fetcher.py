@@ -283,6 +283,9 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
         for commit in commits:
             print(f"Parent commit: {commit}")
 
+    if not os.path.isfile(folder / "tests/utils/tiny_model_summary.json"):
+        return []
+
     files = set()
     for commit in commits:
         with checkout_commit(repo, commit):

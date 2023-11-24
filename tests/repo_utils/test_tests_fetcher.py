@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import os
 import shutil
 import sys
@@ -103,7 +102,6 @@ def create_tmp_repo(tmp_dir, models=None):
     transformers_dir.mkdir(parents=True, exist_ok=True)
     with open(transformers_dir / "__init__.py", "w") as f:
         init_lines = ["from .utils import cached_file, is_torch_available"]
-        init_lines.append("_import_structure = {\n}\n")
         init_lines.extend(
             [f"from .models.{model} import {cls}Config, {cls}Model" for model, cls in zip(models, class_names)]
         )
@@ -140,12 +138,6 @@ def create_tmp_repo(tmp_dir, models=None):
 
     test_dir = tmp_dir / "tests"
     test_dir.mkdir(exist_ok=True)
-
-    test_util_dir = test_dir / "utils"
-    test_util_dir.mkdir(exist_ok=True)
-    with open(test_util_dir / "tiny_model_summary.json", "w") as f:
-        json.dump({}, f)
-
     with open(test_dir / "test_modeling_common.py", "w") as f:
         f.write("from transformers.modeling_utils import PreTrainedModel\ncode")
 
