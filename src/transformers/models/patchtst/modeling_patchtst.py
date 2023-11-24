@@ -651,13 +651,15 @@ class PatchTSTEmbedding(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
         self.num_input_channels = config.num_input_channels
+        self.share_embedding = config.share_embedding
         # Input encoding: projection of feature vectors onto a d-dim vector space
-        if not config.share_embedding:
+        if self.share_embedding:
+            self.input_embedding = nn.Linear(config.patch_length, config.d_model)
+        else:
             self.input_embedding = nn.ModuleList()
             for _ in range(config.num_input_channels):
                 self.input_embedding.append(nn.Linear(config.patch_length, config.d_model))
-        else:
-            self.input_embedding = nn.Linear(config.patch_length, config.d_model)
+
 
     def forward(self, patch_input: torch.Tensor):
         """
@@ -674,11 +676,11 @@ class PatchTSTEmbedding(nn.Module):
                 f"The defined number of input channels ({self.num_input_channels}) in the config "
                 f"has to be the same as the number of channels in the batch input ({num_input_channels})"
             )
-        if isinstance(self.input_embedding, nn.ModuleList):
+        if self.share_embedding:
+            embeddings = self.input_embedding(patch_input)  # x: [bs x num_channels  x num_patches x d_model]
+        else:
             embeddings = [self.input_embedding[i](patch_input[:, i, :, :]) for i in range(num_input_channels)]
             embeddings = torch.stack(embeddings, dim=1)
-        else:
-            embeddings = self.input_embedding(patch_input)  # x: [bs x num_channels  x num_patches x d_model]
         return embeddings
 
 
