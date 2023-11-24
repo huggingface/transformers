@@ -95,8 +95,6 @@ class PatchTSTConfig(PretrainedConfig):
             The standard deviation of the truncated normal weight initialization distribution.
         share_projection (`bool`, *optional*, defaults to `True`):
             Sharing the projection layer across different channels in the forecast head.
-        seed (`Optional`, *optional*):
-            Seed number used for random masking. If unset, no seed is set.
         scaling (`Union`, *optional*, defaults to `"std"`):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
             scaler is set to "mean".
@@ -185,7 +183,6 @@ class PatchTSTConfig(PretrainedConfig):
         use_cls_token: bool = False,
         init_std: float = 0.02,
         share_projection: bool = True,
-        seed: Optional[int] = None,
         scaling: Optional[Union[str, bool]] = "std",
         # mask pretraining
         mask_input: Optional[bool] = None,
@@ -239,7 +236,6 @@ class PatchTSTConfig(PretrainedConfig):
         self.patch_stride = patch_stride
 
         # Mask pretraining
-        self.seed = seed
         self.mask_input = mask_input
         self.mask_type = mask_type
         self.random_mask_ratio = random_mask_ratio  # for random masking
