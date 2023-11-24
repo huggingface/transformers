@@ -159,6 +159,9 @@ class TextGenerationPipeline(Pipeline):
         Parse arguments and tokenize
         """
         # Parse arguments
+        if self.model.__class__.__name__ in ["TransfoXLLMHeadModel"]:
+            kwargs.update({"add_space_before_punct_symbol": True})
+
         return super()._parse_and_tokenize(*args, **kwargs)
 
     def __call__(self, text_inputs, **kwargs):
