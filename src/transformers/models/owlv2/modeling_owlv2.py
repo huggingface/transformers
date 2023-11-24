@@ -1681,7 +1681,10 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> texts = [["a photo of a cat", "a photo of a dog"]]
         >>> inputs = processor(text=texts, images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
+
+        >>> # forward pass
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
 
         >>> # Note: boxes need to be visualized on the padded, unnormalized image
         >>> # hence we'll set the target image sizes (height, width) based on that
