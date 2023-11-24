@@ -3013,9 +3013,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(
-                    f"{model_class.__name__} does not support Flash Attention 2"
-                )
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             model = model_class(config)
 
@@ -3039,9 +3037,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(
-                    f"{model_class.__name__} does not support Flash Attention 2"
-                )
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             (
                 config,
@@ -3149,9 +3145,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(
-                    f"{model_class.__name__} does not support Flash Attention 2"
-                )
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             (
                 config,
@@ -3183,9 +3177,7 @@ class ModelTesterMixin:
                     dummy_attention_mask[:, -1:] = 0
 
                 if model.config.is_encoder_decoder:
-                    decoder_input_ids = inputs_dict.get(
-                        "decoder_input_ids", dummy_input
-                    )[:1]
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:1]
 
                     outputs = model(
                         dummy_input,
@@ -3257,9 +3249,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(
-                    f"{model_class.__name__} does not support Flash Attention 2"
-                )
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             (
                 config,
@@ -3317,9 +3307,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(
-                    f"{model_class.__name__} does not support Flash Attention 2"
-                )
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             (
                 config,
@@ -3341,9 +3329,7 @@ class ModelTesterMixin:
                 if dummy_input.dtype in [torch.float32, torch.bfloat16]:
                     dummy_input = dummy_input.to(torch.float16)
 
-                dummy_attention_mask = inputs_dict.get(
-                    "attention_mask", torch.ones_like(dummy_input)
-                )
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
                 # make sure we do right padding
                 dummy_attention_mask[:, :-1] = 1
                 dummy_attention_mask[:, -1:] = 0
@@ -3382,9 +3368,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(
-                    f"{model_class.__name__} does not support Flash Attention 2"
-                )
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             (
                 config,
@@ -3432,9 +3416,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(
-                    f"{model_class.__name__} does not support Flash Attention 2"
-                )
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             (
                 config,
@@ -3543,9 +3525,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
-                self.skipTest(
-                    f"{model_class.__name__} does not support Flash Attention 2"
-                )
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             # TODO: to change it in the future with other relevant auto classes
@@ -3553,12 +3533,8 @@ class ModelTesterMixin:
                 config, use_flash_attention_2=True, torch_dtype=torch.bfloat16
             ).to(torch_device)
 
-            dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(
-                torch_device
-            )
-            dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(
-                torch_device
-            )
+            dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+            dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
 
             fa2_correctly_converted = False
 
@@ -3576,11 +3552,7 @@ class ModelTesterMixin:
 
                 model_from_pretrained = AutoModelForCausalLM.from_pretrained(tmpdirname)
 
-                self.assertFalse(
-                    getattr(
-                        model_from_pretrained.config, "_flash_attn_2_enabled", False
-                    )
-                )
+                self.assertFalse(getattr(model_from_pretrained.config, "_flash_attn_2_enabled", False))
 
                 fa2_correctly_converted = False
 
