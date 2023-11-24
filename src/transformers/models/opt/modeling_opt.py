@@ -719,6 +719,7 @@ class OPTDecoder(OPTPreTrainedModel):
             self.final_layer_norm = None
 
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -817,7 +818,7 @@ class OPTDecoder(OPTPreTrainedModel):
         mask_seq_length = past_key_values_length + seq_length
 
         # embed positions
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             causal_attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             attention_mask = (
