@@ -489,7 +489,23 @@ class LlavaVisionEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIP->Llava
+LLAVA_VISION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIPEncoder->LlavaVisionEncoder,CLIP->Llava,Llava_VISION_INPUTS_DOCSTRING->LLAVA_VISION_INPUTS_DOCSTRING
 class LlavaVisionTransformer(nn.Module):
     def __init__(self, config: LlavaVisionConfig):
         super().__init__()
@@ -501,6 +517,8 @@ class LlavaVisionTransformer(nn.Module):
         self.encoder = LlavaVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+    @add_start_docstrings_to_model_forward(LLAVA_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=LlavaVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -670,7 +688,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
     """The vision model from LLAVA without any head or projection on top.""",
     LLAMA_START_DOCSTRING,
 )
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionModel with CLIP->Llava
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionModel with CLIP->Llava,Llava_VISION_INPUTS_DOCSTRING->LLAVA_VISION_INPUTS_DOCSTRING
 class LlavaVisionModel(LlavaPreTrainedModel):
     config_class = LlavaVisionConfig
     main_input_name = "pixel_values"
@@ -684,6 +702,7 @@ class LlavaVisionModel(LlavaPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
+    @add_start_docstrings_to_model_forward(LLAVA_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=LlavaVisionConfig)
     def forward(
         self,
