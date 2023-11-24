@@ -22,7 +22,6 @@ from typing import Dict, Tuple
 import jax
 import jax.numpy as jnp
 import numpy as np
-import torch
 from flax.serialization import from_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
 
@@ -31,6 +30,9 @@ import transformers
 from . import is_safetensors_available, is_torch_available
 from .utils import logging
 
+
+if is_torch_available():
+    import torch
 
 if is_safetensors_available():
     from safetensors import safe_open
