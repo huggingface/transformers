@@ -1448,10 +1448,14 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
 
         encoder_states = model_output.hidden_states
         if not return_dict:
-            outputs = (masked_loss, x_hat) + model_output[1:3]
-            return tuple(v for v in outputs if v is not None)
+            outputs = (x_hat,) + model_output[1:]
+            outputs = (masked_loss,) + outputs if masked_loss is not None else outputs
+            return outputs
         return PatchTSTForPretrainingOutput(
-            loss=masked_loss, prediction_output=x_hat, hidden_states=encoder_states, attentions=model_output.attentions
+            loss=masked_loss,
+            prediction_output=x_hat,
+            hidden_states=encoder_states,
+            attentions=model_output.attentions
         )
 
 
@@ -1582,8 +1586,9 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
             loss_val = loss(y_hat, target_values)
 
         if not return_dict:
-            outputs = (loss_val, y_hat, model_output.hidden_states, model_output.attentions)
-            return tuple(v for v in outputs if v is not None)
+            outputs = (y_hat,) + model_output[1:]
+            outputs = (loss_val,) + outputs if loss_val is not None else outputs
+            return outputs
         return PatchTSTForClassificationOutput(
             loss=loss_val,
             prediction_logits=y_hat,
@@ -1825,8 +1830,9 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         scale = model_output.scale
 
         if not return_dict:
-            outputs = (loss_val, y_hat_out, model_output.hidden_states, model_output.attentions, loc, scale)
-            return tuple(v for v in outputs if v is not None)
+            outputs = (y_hat_out,) + model_output[1:]
+            outputs = (loss_val,) + outputs if loss_val is not None else outputs
+            return outputs
         return PatchTSTForPredictionOutput(
             loss=loss_val,
             prediction_outputs=y_hat_out,
