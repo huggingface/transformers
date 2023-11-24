@@ -4603,6 +4603,13 @@ class LlavaPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class LlavaProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class LlavaVisionModel(metaclass=DummyObject):
     _backends = ["torch"]
 
