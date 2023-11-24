@@ -632,7 +632,9 @@ class FlaxLlamaModel(FlaxLlamaPreTrainedModel):
     module_class = FlaxLlamaModule
 
 
-append_call_sample_docstring(FlaxLlamaModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC, revision="refs/pr/4")
+append_call_sample_docstring(
+    FlaxLlamaModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC, revision="refs/pr/4"
+)
 
 
 class FlaxLlamaForCausalLMModule(nn.Module):
@@ -716,4 +718,6 @@ class FlaxLlamaForCausalLM(FlaxLlamaPreTrainedModel):
         return model_kwargs
 
 
-append_call_sample_docstring(FlaxLlamaForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC, revision="refs/pr/4")
+append_call_sample_docstring(
+    FlaxLlamaForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC, revision="refs/pr/4"
+)
