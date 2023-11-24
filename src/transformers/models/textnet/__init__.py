@@ -27,6 +27,14 @@ _import_structure = {
 }
 
 try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_textnet"] = ["TextNetImageProcessor"]
+
+try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -43,6 +51,14 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_textnet import TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP, TextNetConfig
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_textnet import TextNetImageProcessor
 
     try:
         if not is_torch_available():

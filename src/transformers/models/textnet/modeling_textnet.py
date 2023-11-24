@@ -60,7 +60,7 @@ TEXTNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`ClipImageProcessor.__call__`] for details.
+            [`TextNetImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -320,11 +320,12 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.textnet = TextNetModel(config)
-        scale = config.image_size // 32
+        scale_h = config.image_size[0] // 32
+        scale_w = config.image_size[1] // 32
         # classification head
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1] * scale * scale, config.num_labels)
+            nn.Linear(config.hidden_sizes[-1] * scale_h * scale_w, config.num_labels)
             if config.num_labels > 0
             else nn.Identity(),
         )
@@ -344,14 +345,14 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         Returns:
         Examples:
         ```python
-        >>> from transformers import CLIPImageProcessor, TextNetForImageClassification
+        >>> from transformers import TextNetForImageClassification,TextNetImageProcessor
         >>> from PIL import Image
         >>> import requests
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> processor = CLIPImageProcessor.from_pretrained("Raghavan/textnet-base")
+        >>> processor = TextNetImageProcessor.from_pretrained("Raghavan/textnet-base")
         >>> model = TextNetForImageClassification.from_pretrained("Raghavan/textnet-base")
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, return_tensors="pt",size={"shortest_edge": 640},default_to_square=True)
         >>> # forward pass
         >>> outputs = model(**inputs)
         >>> outputs.logits.shape

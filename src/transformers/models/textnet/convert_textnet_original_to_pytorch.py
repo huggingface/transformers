@@ -26,7 +26,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import CLIPImageProcessor, TextNetBackbone, TextNetConfig
+from transformers import CLIPImageProcessor, TextNetBackbone, TextNetConfig, TextNetImageProcessor
 from transformers.image_utils import PILImageResampling
 from transformers.utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
@@ -112,7 +112,7 @@ def prepare_config(size_config_url, size):
         ],
         out_features=["stage1", "stage2", "stage3", "stage4"],
         out_indices=[1, 2, 3, 4],
-        image_size=size,
+        image_size=(size, size),
     )
 
     return textnet_config
@@ -142,12 +142,8 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
         config = prepare_config(base_config_url, size)
 
     model = TextNetBackbone(config)
-    textnet_image_processor = CLIPImageProcessor(
+    textnet_image_processor = TextNetImageProcessor(
         size={"shortest_edge": size},
-        resample=PILImageResampling.BILINEAR,
-        do_center_crop=False,
-        image_mean=IMAGENET_DEFAULT_MEAN,
-        image_std=IMAGENET_DEFAULT_STD,
     )
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)["ema"]
     state_dict_changed = OrderedDict()
