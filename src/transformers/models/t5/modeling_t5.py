@@ -715,45 +715,54 @@ class T5Attention(nn.Module):
 
         add_to_scores = None
 
-        if 2==1+1:
-            assert False, "use self.positional_embedding_injected_in_attention and figure out the content of position_ids_info_list"
+        # if 2==1+1:
+        #     assert False, "use self.positional_embedding_injected_in_attention and figure out the content of position_ids_info_list"
         
         pos_embedding_found_in_add_bias = False
 
-        if position_ids_info_list:
-            if position_bias is None:
-                if not self.has_relative_attention_bias:
+        # Note: we are skipping all positional attention injection here if position_bias is not None,
+        # possibly because that's how it is cached for decoder layers
+        # verify that changes here still make sense after adding support for causal in FLASH attention        
+        if position_bias is None: 
+            if position_ids_info_list:
+                
+                for position_ids, position_embedding_name in position_ids_info_list:
+                    if position_embedding_name == POSITION_EMBEDDING_T5_RELATIVE: #T5 default relative positional embedding
+                        assert position_bias is None, "TODO: add support for multiple (accumulate if already exists)"
+                        curr_position_bias = self.compute_bias_for_position_embedding_name(position_embedding_name=position_embedding_name, position_ids=position_ids, query_length=real_seq_length, key_length=key_length, device=scores.device)
+                        position_bias = curr_position_bias if position_bias is None else (position_bias+curr_position_bias)  # michal: shape don't match
+                    elif position_embedding_name == POSITION_EMBEDDING_ROTARY:
+                        #TODO: make it consider the actual provided positions, and not just the default indices
+                        query_states, key_states = self.rotary_op(
+                            query_states.permute(0,2,1,3).reshape(B,M,H*K), 
+                            key_states.permute(0,2,1,3).reshape(B,M,H*K),
+                            custom_indices=position_ids)
+                        query_states = query_states.reshape(B,M,H,K).permute(0,2,1,3)
+                        key_states = key_states.reshape(B,M,H,K).permute(0,2,1,3)
+                    else:
+                        raise Exception(f'Encountered position_embedding_name={position_embedding_name} but the only supported options to be injected inside attention are {POSITION_EMBEDDING_T5_RELATIVE} and {POSITION_EMBEDDING_ROTARY}')
+
+                if position_bias is None: # if it's STILL None (so no one requested POSITION_EMBEDDING_T5_RELATIVE)
                     position_bias = torch.zeros(
                         (1, self.n_heads, real_seq_length, key_length), device=query_states.device, dtype=query_states.dtype
                     )
                     if self.gradient_checkpointing and self.training:
                         position_bias.requires_grad = True
-                else:
-                    for position_ids, position_embedding_name in position_ids_info_list:
-                        curr_position_bias = self.compute_bias_for_position_embedding_name(position_embedding_name=position_embedding_name, position_ids=position_ids, query_length=real_seq_length, key_length=key_length, device=query_states.device)
-                        if curr_position_bias is not None:
-                            position_bias = curr_position_bias if position_bias is None else (position_bias+curr_position_bias)  # michal: shape don't match
 
-                        if position_embedding_name == POSITION_EMBEDDING_ROTARY:
-                            #TODO: make it consider the actual provided positions, and not just the default indices
-                            query_states, key_states = self.rotary_op(
-                                query_states.permute(0,2,1,3).reshape(B,M,H*K), 
-                                key_states.permute(0,2,1,3).reshape(B,M,H*K))
-                            query_states = query_states.reshape(B,M,H,K).permute(0,2,1,3)
-                            key_states = key_states.reshape(B,M,H,K).permute(0,2,1,3)
-                # if key and values are already calculated
-                # we want only the last query position bias
-                if past_key_value is not None:
-                    position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
+                        
+            # if key and values are already calculated
+            # we want only the last query position bias
+            if past_key_value is not None:
+                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
-                if mask is not None:
-                    if position_bias is None:
-                        position_bias = torch.zeros(
-                            (1, self.n_heads, real_seq_length, key_length), device=query_states.device, dtype=query_states.dtype
-                        )
-                        if self.gradient_checkpointing and self.training:
-                            position_bias.requires_grad = True
-                    position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
+            if mask is not None:
+                if position_bias is None:
+                    position_bias = torch.zeros(
+                        (1, self.n_heads, real_seq_length, key_length), device=query_states.device, dtype=query_states.dtype
+                    )
+                    if self.gradient_checkpointing and self.training:
+                        position_bias.requires_grad = True
+                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
             if self.pruned_heads:
                 mask = torch.ones(position_bias.shape[1])
@@ -874,7 +883,7 @@ class T5LayerSelfAttention(nn.Module):
 class T5LayerCrossAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.EncDecAttention = T5Attention(config, relative_position_embedding_definitions=None)
+        self.EncDecAttention = T5Attention(config)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -1133,7 +1142,8 @@ class T5PreTrainedModel(PreTrainedModel):
             module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
             module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
             module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
-            if 't5_default_relative' in module.positional_embedding_injected_in_attention:
+            
+            if hasattr(module, 'relative_attention_bias'):            
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
     def _set_gradient_checkpointing(self, module, value=False):
@@ -1200,9 +1210,7 @@ class T5Stack(T5PreTrainedModel):
         # Model parallel
         self.model_parallel = False
         self.device_map = None
-        self.gradient_checkpointing = False
-        self.add_t5_relative_position_embedding = config.add_t5_relative_position_embedding
-        self.add_rotary_position_embedding = config.add_rotary_position_embedding
+        self.gradient_checkpointing = False        
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
@@ -1303,11 +1311,15 @@ class T5Stack(T5PreTrainedModel):
         if position_ids_dict is None:
             position_ids_dict = {}
 
-        position_ids_info_list_for_relative_embeddings = []
-        if self.add_t5_relative_position_embedding:
-            position_ids_info_list_for_relative_embeddings.append( (None, POSITION_EMBEDDING_T5_RELATIVE))
-        if self.add_rotary_position_embedding:
-            position_ids_info_list_for_relative_embeddings.append( (None, POSITION_EMBEDDING_ROTARY))
+        # position_ids_info_list_for_relative_embeddings = []
+        # if self.add_t5_relative_position_embedding:
+        #     position_ids_info_list_for_relative_embeddings.append( (None, POSITION_EMBEDDING_T5_RELATIVE))
+        # if self.add_rotary_position_embedding:
+        #     position_ids_info_list_for_relative_embeddings.append( (None, POSITION_EMBEDDING_ROTARY))
+
+        positional_indices_for_pos_emb_injection_in_attention = []
+        print("TODO: take care of defaults when no pos embedding related configs are defined by a user (default to T5 default behavior of using relative pos embedding)")
+
         for position_ids, position_embedding_names  in position_ids_dict.values(): #orig
             position_embedding_name = position_embedding_names[0]  # till collate if fixed, we move a list of identical embedding names of batch_size
             if position_ids is None:
@@ -1325,11 +1337,13 @@ class T5Stack(T5PreTrainedModel):
             else:
                 position_ids = position_ids.view(-1, input_shape[-1])
             
-            if position_embedding_name in self.attention_injected_in_t5_stack_level:
+            if position_embedding_name in self.attention_injected_in_t5_stack_level:            
                 position_embeds = self.attention_injected_in_t5_stack_level[position_embedding_name](position_ids)
                 inputs_embeds += position_embeds
+            elif position_embedding_name in self.position_embedding_definitions['injected_in_attention']:
+                positional_indices_for_pos_emb_injection_in_attention.append((position_ids, position_embedding_name))
             else:
-                position_ids_info_list_for_relative_embeddings.append((position_ids, position_embedding_name))
+                raise Exception(f'the following positional attention name was provided during forward: "{position_embedding_name}" but it was not defined as part of position_embedding_definitions.injected_in_attention or position_embedding_definitions.injected_in_stack')
             
             
            
@@ -1432,7 +1446,7 @@ class T5Stack(T5PreTrainedModel):
                     layer_head_mask,
                     cross_attn_layer_head_mask,
                     None,  # past_key_value is always None with gradient checkpointing
-                    position_ids_info_list_for_relative_embeddings,
+                    positional_indices_for_pos_emb_injection_in_attention,
                 )
             else:
                 layer_outputs = layer_module(
@@ -1445,7 +1459,7 @@ class T5Stack(T5PreTrainedModel):
                     layer_head_mask=layer_head_mask,
                     cross_attn_layer_head_mask=cross_attn_layer_head_mask,
                     past_key_value=past_key_value,
-                    position_ids_info_list=position_ids_info_list_for_relative_embeddings,
+                    position_ids_info_list=positional_indices_for_pos_emb_injection_in_attention,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                 )
