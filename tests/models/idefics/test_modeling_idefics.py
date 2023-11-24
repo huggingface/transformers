@@ -314,8 +314,8 @@ class IdeficsModelTester:
 
     @require_torch_sdpa
     @slow
-    @parameterized.expand([("left",), ("right",)])
-    def test_eager_matches_sdpa_inference(self, padding_side: str):
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         self.skipTest("Idefics has a hard requirement on SDPA, skipping this test")
 
 
@@ -568,8 +568,8 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @require_torch_sdpa
     @slow
-    @parameterized.expand([("left",), ("right",)])
-    def test_eager_matches_sdpa_inference(self, padding_side: str):
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         self.skipTest("Idefics has a hard requirement on SDPA, skipping this test")
 
 
