@@ -244,27 +244,15 @@ class DataTrainingArguments:
     )
     fim_prefix_token: Optional[str] = field(
         default="<fim_prefix>",
-        metadata={
-            "help": (
-                "Fill-in-Middle Prefix token. Defaults to '<fim_prefix>'."
-            )
-        },
+        metadata={"help": ("Fill-in-Middle Prefix token. Defaults to '<fim_prefix>'.")},
     )
     fim_middle_token: Optional[str] = field(
         default="<fim_middle>",
-        metadata={
-            "help": (
-                "Fill-in-Middle Middle token. Defaults to '<fim_middle>'."
-            )
-        },
+        metadata={"help": ("Fill-in-Middle Middle token. Defaults to '<fim_middle>'.")},
     )
     fim_suffix_token: Optional[str] = field(
         default="<fim_suffix>",
-        metadata={
-            "help": (
-                "Fill-in-Middle Suffix token. Defaults to '<fim_suffix>'."
-            )
-        },
+        metadata={"help": ("Fill-in-Middle Suffix token. Defaults to '<fim_suffix>'.")},
     )
     fim_pad_token: Optional[str] = field(
         default="<fim_pad>",
@@ -375,7 +363,7 @@ def main():
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
-    
+
     # Set a numpy random state for FIM transformations
     np_rng = np.random.RandomState(seed=training_args.seed)
 
@@ -529,7 +517,6 @@ def main():
         tokenizer.add_tokens(special_tokens)
         model.resize_token_embeddings(len(tokenizer))
 
-
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
     embedding_size = model.get_input_embeddings().weight.shape[0]
@@ -612,7 +599,7 @@ def main():
     middle_tok_id = tokenizer.convert_tokens_to_ids(data_args.fim_middle_token)
     suffix_tok_id = tokenizer.convert_tokens_to_ids(data_args.fim_suffix_token)
     pad_tok_id = None
-    
+
     # If truncate_or_pad is on, also get pad token id
     if data_args.truncate_or_pad:
         pad_tok_id = tokenizer.convert_tokens_to_ids(data_args.fim_pad_token)
@@ -627,15 +614,15 @@ def main():
         if np_rng.binomial(1, data_args.fim_rate):
             boundaries = sorted(np_rng.randint(low=0, high=len(example) + 1, size=2))
 
-            prefix = example[:boundaries[0]]
-            middle = example[boundaries[0]:boundaries[1]]
-            suffix = example[boundaries[1]:]
+            prefix = example[: boundaries[0]]
+            middle = example[boundaries[0] : boundaries[1]]
+            suffix = example[boundaries[1] :]
 
             if data_args.truncate_or_pad:
                 total_length = len(prefix) + len(middle) + len(suffix) + 3
                 diff = total_length - len(example)
                 if diff > 0:
-                    suffix = suffix[:max(0, len(suffix) - diff)]
+                    suffix = suffix[: max(0, len(suffix) - diff)]
                 elif diff < 0:
                     suffix.extend([pad_tok_id] * (-diff))
 
@@ -655,13 +642,13 @@ def main():
         """
         Apply FIM transformation to a batch of examples
         """
-        fim_transform_ids = [fim_transform(ids) for ids in examples['input_ids']]
-        examples['input_ids'] = fim_transform_ids
-        examples['labels'] = fim_transform_ids
+        fim_transform_ids = [fim_transform(ids) for ids in examples["input_ids"]]
+        examples["input_ids"] = fim_transform_ids
+        examples["labels"] = fim_transform_ids
         # If your application requires custom attention mask, please adjust this function's below line
-        # since FIM transformation increases the number of tokens in input_ids and labels 
+        # since FIM transformation increases the number of tokens in input_ids and labels
         # but leaves the number of tokens unchanged in attention_masks which would cause problems
-        examples['attention_mask'] = [[1]*len(mask) for mask in examples['input_ids']]
+        examples["attention_mask"] = [[1] * len(mask) for mask in examples["input_ids"]]
         return examples
 
     # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a remainder
