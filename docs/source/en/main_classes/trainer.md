@@ -26,7 +26,7 @@ If you're looking to fine-tune a language model like Llama-2 or Mistral on a tex
 
 Before instantiating your [`Trainer`], create a [`TrainingArguments`] to access all the points of customization during training.
 
-The API supports distributed training on multiple GPUs/TPUs, mixed precision through [NVIDIA Apex](https://github.com/NVIDIA/apex) (or similarly [RoCm APEX](https://github.com/ROCmSoftwarePlatform/apex) on AMD GPUs) and Native AMP for PyTorch.
+The API supports distributed training on multiple GPUs/TPUs, mixed precision through [NVIDIA Apex] for NVIDIA GPUs, [RoCm APEX](https://github.com/ROCmSoftwarePlatform/apex) for AMD GPUs, and Native AMP for PyTorch.
 
 The [`Trainer`] contains the basic training loop which supports the above features. To inject custom behavior you can subclass them and override the following methods:
 
