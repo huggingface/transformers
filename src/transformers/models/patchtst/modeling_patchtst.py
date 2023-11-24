@@ -257,7 +257,7 @@ def random_masking(
         raise ValueError(f"Mask ratio {mask_ratio} has to be between 0 and 1.")
 
     if seed is not None:
-        generator = torch.manual_seed(seed)
+        generator = torch.Generator(device=inputs.device).manual_seed(seed)
     else:
         generator = None
 
@@ -319,7 +319,7 @@ def forecast_masking(
         num_channels , num_patch)` or `(bs, tsg1, tsg2, num_channels, num_patch)`
     """
     if seed is not None:
-        generator = torch.manual_seed(seed)
+        generator = torch.Generator(device=inputs.device).manual_seed(seed)
     else:
         generator = None
 
@@ -386,10 +386,8 @@ class PatchTSTPatchify(nn.Module):
             )
 
         # get the number of patches
-        config.num_patches = (
-            max(self.sequence_length, self.patch_length) - self.patch_length
-        ) // self.patch_stride + 1
-        new_sequence_length = self.patch_length + self.patch_stride * (config.num_patches - 1)
+        self.num_patches = (max(self.sequence_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
+        new_sequence_length = self.patch_length + self.patch_stride * (self.num_patches - 1)
         self.sequence_start = self.sequence_length - new_sequence_length
 
     def forward(self, past_values: torch.Tensor):
