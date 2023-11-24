@@ -82,20 +82,20 @@ class LlavaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        prompts: Union[List[TextInput], List[List[TextInput]]],
-        images=None,
+        text: Union[List[TextInput], List[List[TextInput]]],
+        images: Optional["torch.FloatTensor"] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         transform: Callable = None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchEncoding:
-        """This method takes batched or non-batched prompts made of text and images and converts them into prompts that
+        """This method takes batched or non-batched text made of text and images and converts them into text that
         the model was trained on and prepares the image pixel values for the model to process.
 
         Args:
-            prompts (`Union[List[TextInput], [List[List[TextInput]]]]`):
-                either a single prompt or a batched list of prompts - see the detailed description immediately after
+            text (`Union[List[TextInput], [List[List[TextInput]]]]`):
+                either a single prompt or a batched list of text - see the detailed description immediately after
                 the end of the arguments doc section.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
@@ -132,7 +132,7 @@ class LlavaProcessor(ProcessorMixin):
 
         Detailed explanation:
 
-        Each entry in `prompts` is either a text to be passed as is or an image that will be processed.
+        Each entry in `text` is either a text to be passed as is or an image that will be processed.
 
         An image can be either an image object (`PIL.Image`) or a url from which the image can be retrieved.
 
@@ -148,7 +148,7 @@ class LlavaProcessor(ProcessorMixin):
 
         # TODO: what about attention masks?
         input_ids = self.tokenize_and_fill_token(
-            prompts, image_token_index=IMAGE_TOKEN_ID, return_tensors=return_tensors
+            text, image_token_index=IMAGE_TOKEN_ID, return_tensors=return_tensors
         ).unsqueeze(0)
 
         return BatchFeature(

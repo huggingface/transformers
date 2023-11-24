@@ -40,6 +40,7 @@ _CONFIG_FOR_DOC = "LlavaConfig"
 
 LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "llava/llava-v1.5-7b",
+    "llava/llava-v1.5-13b",
     # See all Llava models at https://huggingface.co/models?filter=llava
 ]
 
