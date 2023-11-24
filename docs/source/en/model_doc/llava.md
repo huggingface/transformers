@@ -36,6 +36,10 @@ The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/
 
 [[autodoc]] LlavaConfig
 
+## LlavaProcessor
+
+[[autodoc]] LlavaProcessor
+
 ## LlavaVisionModel
 
 [[autodoc]] LlavaVisionModel

@@ -66,9 +66,6 @@ class LlavaVisionConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1.0, used internally for initialization
-            testing).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
@@ -91,7 +88,6 @@ class LlavaVisionConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=0.02,
-        initializer_factor=1.0,
         **kwargs,
     ):
         self.embed_dim = embed_dim
@@ -104,7 +100,6 @@ class LlavaVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
         self.hidden_act = hidden_act
 
         super().__init__(**kwargs)
@@ -122,64 +117,23 @@ class LlavaConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        vision_config (`LlavaVisionConfig`,  *optional*):
+            Custom vision config or dict
+        text_config (`Union[AutoConfig, dict]`, *optional*):
+            The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
+        ignore_index (`int`, *optional*, defaults to -100):
+            The ignore index for the loss function.
+        image_token_index (`int`, *optional*, defaults to -200):
+            The image token index to encode the image prompt.
+        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The activation function used by the multimodal projector.
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            The feature selection strategy used to select the vision feature from the CLIP backbone.
+        vision_feature_layer (`int`, *optional*, defaults to -2):
+            The index of the layer to select the vision feature.
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Llava model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`~LlavaVisionModel`]
-        additional_vocab_size (`int`, *optional`, defaults to 0, *optional*, defaults to 0):
-            Additional vocabulary size of the model, typically for the special "<img>" token. Additional vocab tokens
-            are always trainable whereas regular vocab tokens can be frozen or not.
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        alpha_initializer (`str`, *optional*, defaults to `"zeros"`):
-            Initialization type for the alphas.
-        alphas_initializer_range (`float`, *optional*, defaults to 0.0):
-            The standard deviation of the truncated_normal_initializer for initializing the alphas in the Gated Cross
-            Attention.
-        alpha_type (`str`, *optional*, defaults to `"float"`):
-            Whether the gating alphas should be vectors or single floats.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            End of stream token id.
-            Whether to tie weight embeddings
-        tie_word_embeddings (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        cross_layer_interval (`int`, *optional*, defaults to 1):
-            Interval for cross attention (from text to image) layers.
-        qk_layer_norms (`bool`, *optional*, defaults to `False`): Whether to add layer norm after q and k
-        freeze_text_layers (`bool`, *optional*, defaults to `True`): Whether to freeze text layers
-        freeze_text_module_exceptions (`bool`, *optional*, defaults to `[]`):
-            Exceptions to freezing text layers when `freeze_text_layers` is `True`
-        freeze_lm_head (`bool`, *optional*, defaults to `False`): Whether to freeze lm head
-        freeze_vision_layers (`bool`, *optional*, defaults to `True`):  Whether to freeze vision layers
-        freeze_vision_module_exceptions (`bool`, *optional*, defaults to `[]`):
-            Exceptions to freezing vision layers when `freeze_vision_layers` is `True`
-        use_resampler (`bool`, *optional*, defaults to `False`): Whether to use the Resampler
-        vision_config (`LlavaVisionConfig`,  *optional*): Custom vision config or dict
-        text_config (`<fill_type>`, *optional*): <fill_docstring>
-        ignore_index (`<fill_type>`, *optional*, defaults to -100): <fill_docstring>
-        image_token_index (`<fill_type>`, *optional*, defaults to -200): <fill_docstring>
-        projector_hidden_act (`<fill_type>`, *optional*, defaults to `"gelu"`): <fill_docstring>
-        vision_feature_select_strategy (`<fill_type>`, *optional*, defaults to `"default"`): <fill_docstring>
-        vision_feature_layer (`<fill_type>`, *optional*, defaults to -2): <fill_docstring>
 
     Example:
 

@@ -580,7 +580,7 @@ class LlavaMultiModalProjector(nn.Module):
         return hidden_states
 
 
-LLAMA_START_DOCSTRING = r"""
+LLAVA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -590,7 +590,7 @@ LLAMA_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`LlavaConfig`]):
+        config ([`LlavaConfig`] or [`LlavaVisionConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -599,7 +599,7 @@ LLAMA_START_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    LLAMA_START_DOCSTRING,
+    LLAVA_START_DOCSTRING,
 )
 class LlavaPreTrainedModel(PreTrainedModel):
     config_class = LlavaConfig
@@ -694,7 +694,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     """The vision model from LLAVA without any head or projection on top.""",
-    LLAMA_START_DOCSTRING,
+    LLAVA_START_DOCSTRING,
 )
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel with CLIP->Llava,Llava_VISION_INPUTS_DOCSTRING->LLAVA_VISION_INPUTS_DOCSTRING
 class LlavaVisionModel(LlavaPreTrainedModel):
@@ -751,6 +751,10 @@ class LlavaVisionModel(LlavaPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """The LLAVA model which consists of a vision backbone and a language model.""",
+    LLAVA_START_DOCSTRING,
+)
 class LlavaForVisionText2Text(LlavaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

@@ -16,11 +16,11 @@
 Processor class for Llava.
 """
 
-from typing import Callable, List, Optional, Union
+from typing import Callable, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
+from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, is_torch_available
 
 
@@ -41,16 +41,15 @@ class LlavaProcessor(ProcessorMixin):
     Args:
         image_processor (`CLIPImageProcessor`):
             An instance of [`CLIPImageProcessor`]. The image processor is a required input.
-        tokenizer (`LlamaTokenizerFast`):
+        tokenizer (`LlamaTokenizerFast`, *optional*):
             An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
-        image_size (`int`, *optional*, defaults to 224): Image size (assuming a square image)
     """
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 
-    def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
+    def __init__(self, image_processor, tokenizer=None):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -82,11 +81,8 @@ class LlavaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[List[TextInput], List[List[TextInput]]],
-        images: Optional["torch.FloatTensor"] = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
+        text=None,
+        images=None,
         transform: Callable = None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchEncoding:
