@@ -272,6 +272,8 @@ class FlaxModelUtilsTest(unittest.TestCase):
         This test checks that we can load safetensors from a checkpoint that only has those on the Hub.
         saved in the "pt" format.
         """
+        import torch
+
         model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors")
         model.to(torch.bfloat16)
 
