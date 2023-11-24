@@ -91,7 +91,7 @@ class TextNetModelTester:
         out_indices=[1, 2, 3, 4],
         batch_size=3,
         num_channels=3,
-        image_size=32,
+        image_size=[32, 32],
         is_training=True,
         use_labels=True,
         hidden_act="relu",
@@ -145,10 +145,11 @@ class TextNetModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        scale = self.image_size // 32
+        scale_h = self.image_size[0] // 32
+        scale_w = self.image_size[1] // 32
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_sizes[-1], scale, scale),
+            (self.batch_size, self.hidden_sizes[-1], scale_h, scale_w),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -160,7 +161,7 @@ class TextNetModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
 
         labels = None
         if self.use_labels:
@@ -178,9 +179,10 @@ class TextNetModelTester:
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        scale = self.image_size // 32
+        scale_h = self.image_size[0] // 32
+        scale_w = self.image_size[1] // 32
         self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 8 * scale, 8 * scale]
+            list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 8 * scale_h, 8 * scale_w]
         )
 
         # verify channels
@@ -196,8 +198,9 @@ class TextNetModelTester:
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
-        scale = self.image_size // 32
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, 64, scale, scale])
+        scale_h = self.image_size[0] // 32
+        scale_w = self.image_size[1] // 32
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, 64, scale_h, scale_w])
 
         # verify channels
         self.parent.assertEqual(len(model.channels), 1)
@@ -290,7 +293,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [self.model_tester.image_size // 2, self.model_tester.image_size // 2],
+                [self.model_tester.image_size[0] // 2, self.model_tester.image_size[1] // 2],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

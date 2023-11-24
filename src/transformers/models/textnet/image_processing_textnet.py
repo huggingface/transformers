@@ -106,7 +106,7 @@ class TextNetImageProcessor(BaseImageProcessor):
         size = size if size is not None else {"shortest_edge": 224}
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
+        crop_size = get_size_dict(crop_size, default_to_square=False, param_name="crop_size")
 
         self.do_resize = do_resize
         self.size = size

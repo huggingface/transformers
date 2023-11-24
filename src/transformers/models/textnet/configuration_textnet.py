@@ -50,7 +50,7 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
                 The list of stagewise conv layer's kernel sizes.
                                     [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1]]`):
                 The list of stagewise conv layer's kernel strides.
-            image_size (`int`, *optional*, defaults to `(640, 640)`):
+            image_size (`int`, *optional*, defaults to `[640, 640]`):
                 The size (resolution) of each image.
             conv_layer_kernel_sizes (`List[List[List[int]]]`, *optional*, defaults to `[[[3, 3], [3, 3], [3, 3]], [[3, 3], [1, 3], [3, 3], [3, 1]], [[3, 3], [3, 3], [3, 1], [1, 3]], [[3, 3], [3, 1], [1, 3], [3, 3]]]`):
                 A list of stage wise kernel sizes.
@@ -98,7 +98,7 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
         stem_num_channels=3,
         stem_out_channels=64,
         stem_act_func="relu",
-        image_size=(640, 640),
+        image_size=[640, 640],
         conv_layer_kernel_sizes=[
             [[3, 3], [3, 3], [3, 3]],
             [[3, 3], [1, 3], [3, 3], [3, 1]],
