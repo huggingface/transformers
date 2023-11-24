@@ -958,6 +958,10 @@ class PatchTSTForPredictionOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        loc: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*)
+            Mean of the input data (batch_size, sequence_length, num_channels) over the sequence_length
+        scale: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*)
+            Std of the input data (batch_size, sequence_length, num_channels) over the sequence_length
     """
 
     loss: Optional[torch.FloatTensor] = None
