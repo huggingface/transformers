@@ -92,7 +92,7 @@ class LlavaVisionModelTester:
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
-            hidden_size=self.hidden_size,
+            embed_dim=self.hidden_size,
             projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -137,9 +137,7 @@ class LlavaVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = LlavaVisionModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=LlavaVisionConfig, has_text_modality=False, hidden_size=37
-        )
+        self.config_tester = ConfigTester(self, config_class=LlavaVisionConfig, embed_dim=37, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
