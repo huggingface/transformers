@@ -51,7 +51,7 @@ python utils/tests_fetcher.py --diff_with_last_commit
 
 import argparse
 import collections
-import importlib
+import importlib.util
 import json
 import os
 import re
