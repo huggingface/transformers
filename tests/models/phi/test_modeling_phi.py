@@ -23,7 +23,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -38,7 +38,6 @@ if is_torch_available():
     )
 
 
-# Copied from tests.models.llama.test_modeling_llama.LlamaModelTester with Llama->Phi
 class PhiModelTester:
     def __init__(
         self,
@@ -95,7 +94,7 @@ class PhiModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length))
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_type_ids = None
         if self.use_token_type_ids:
