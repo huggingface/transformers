@@ -497,7 +497,7 @@ class CLIPVisionBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
 class VisionTextDualEncoderIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian", logit_scale_init_value=1)
+        model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian", logit_scale_init_value=1.0)
         processor = VisionTextDualEncoderProcessor.from_pretrained("clip-italian/clip-italian")
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")

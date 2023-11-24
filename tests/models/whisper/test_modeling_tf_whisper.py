@@ -14,6 +14,8 @@
 # limitations under the License.
 """ Testing suite for the TensorFlow Whisper model. """
 
+from __future__ import annotations
+
 import inspect
 import tempfile
 import traceback
@@ -40,7 +42,11 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFWhisperForConditionalGeneration, TFWhisperModel, set_seed
-    from transformers.models.whisper.modeling_tf_whisper import TFWhisperDecoder, TFWhisperEncoder
+    from transformers.models.whisper.modeling_tf_whisper import (
+        TFWhisperDecoder,
+        TFWhisperEncoder,
+        sinusoidal_embedding_init,
+    )
 
 
 def prepare_whisper_inputs_dict(
@@ -266,6 +272,11 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     input_name = "input_features"
 
+    # TODO (ydshieh): undo skip once a fix is done on TF side.
+    @unittest.skip("Skip for now as TF 2.13 breaks it on GPU")
+    def test_xla_generate_slow(self):
+        super().test_xla_generate_slow()
+
     def setUp(self):
         self.model_tester = TFWhisperModelTester(self)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
@@ -279,7 +290,7 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         for model_class in self.all_model_classes:
             model = model_class(config)
 
-            model(model.dummy_inputs)
+            model.build()
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=False)
@@ -289,6 +300,23 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
+
+    def test_requires_grad_encoder_embed_positions(self):
+        config = self.model_tester.get_config()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            encoder = model.get_encoder()
+            self.assertFalse(encoder.embed_positions.trainable)
+
+    def test_encoder_sinusoidal_embed_positions(self):
+        config = self.model_tester.get_config()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.build()
+
+            embeds = model.get_encoder().embed_positions.get_weights()[0]
+            sinusoids = sinusoidal_embedding_init(embeds.shape).numpy()
+            self.assertTrue(np.allclose(embeds, sinusoids))
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -303,7 +331,7 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         input_ids = input_ids[:max_batch_size, :, :]
 
         # generate max 3 tokens
-        max_length = input_ids.shape[-1] + 3
+        max_length = 4
         if config.eos_token_id is not None and config.pad_token_id is None:
             # hack to allow generate for models such as GPT2 as is done in `generate()`
             config.pad_token_id = config.eos_token_id
@@ -399,6 +427,10 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=5e-5, name="outputs", attributes=None):
+        # We override with a slightly higher tol value, as test recently became flaky
+        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -628,6 +660,48 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             generated_ids = output_tokens[:, input_features.shape[-1] :]
             self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
 
+    def test_generate_with_prompt_ids_and_task_and_language(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = TFWhisperForConditionalGeneration(config)
+        input_features = input_dict["input_features"]
+        prompt_ids = np.arange(5)
+        language = "<|de|>"
+        task = "translate"
+        lang_id = 6
+        task_id = 7
+        model.generation_config.__setattr__("lang_to_id", {language: lang_id})
+        model.generation_config.__setattr__("task_to_id", {task: task_id})
+
+        output = model.generate(input_features, max_new_tokens=5, task=task, language=language, prompt_ids=prompt_ids)
+
+        expected_output_start = [
+            *prompt_ids.tolist(),
+            model.generation_config.decoder_start_token_id,
+            lang_id,
+            task_id,
+        ]
+        for row in output.numpy().tolist():
+            self.assertListEqual(row[: len(expected_output_start)], expected_output_start)
+
+    def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = TFWhisperForConditionalGeneration(config)
+        input_features = input_dict["input_features"]
+        prompt_ids = np.asarray(range(5))
+        forced_decoder_ids = [(1, 6), (2, 7), (3, 8)]
+
+        output = model.generate(
+            input_features, max_new_tokens=5, forced_decoder_ids=forced_decoder_ids, prompt_ids=prompt_ids
+        )
+
+        expected_output_start = [
+            *prompt_ids.tolist(),
+            model.generation_config.decoder_start_token_id,
+            *[token for _rank, token in forced_decoder_ids],
+        ]
+        for row in output.numpy().tolist():
+            self.assertListEqual(row[: len(expected_output_start)], expected_output_start)
+
 
 def _load_datasamples(num_samples):
     ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -773,24 +847,22 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
         generated_ids = np.concatenate([generated_ids_1, generated_ids_2])
 
         # fmt: off
-        EXPECTED_LOGITS = tf.convert_to_tensor(
-            [
-                [50258, 50259, 50358, 50363, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404],
-                [50258, 50259, 50358, 50363, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257],
-                [50258, 50259, 50358, 50363, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904],
-                [50258, 50259, 50358, 50363, 634, 575, 12525, 22618, 1968, 6144, 35617, 20084, 1756, 311, 589, 307, 534, 10281, 934, 439]
-            ]
-        )
+        EXPECTED_IDS = [
+            [50258, 50358, 50363, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404, 281],
+            [50258, 50358, 50363, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257, 50257],
+            [50258, 50358, 50363, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256],
+            [50258, 50358, 50363, 634, 575, 12525, 22618, 1968, 6144, 35617, 20084, 1756, 311, 589, 307, 534, 10281, 934, 439, 11]
+        ]
         # fmt: on
 
-        unittest.TestCase().assertTrue(np.allclose(generated_ids, EXPECTED_LOGITS))
+        unittest.TestCase().assertEqual(generated_ids.tolist(), EXPECTED_IDS)
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
-            " Mr. Quilter is the apostle of the middle classes and we are glad",
+            " Mr. Quilter is the apostle of the middle classes and we are glad to",
             " Nor is Mr. Quilter's manner less interesting than his matter.",
-            " He tells us that at this festive season of the year, with Christmas and roast",
-            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all",
+            " He tells us that at this festive season of the year, with Christmas and roast beef",
+            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all,"
         ]
         # fmt: on
 

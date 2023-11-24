@@ -21,7 +21,7 @@ import unittest
 
 from transformers import is_speech_available, is_torch_available
 from transformers.models.speecht5 import SpeechT5Tokenizer
-from transformers.testing_utils import get_tests_dir, require_torch, require_torchaudio
+from transformers.testing_utils import get_tests_dir, require_torch
 from transformers.utils import FEATURE_EXTRACTOR_NAME
 
 
@@ -35,7 +35,6 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_bpe_char.model")
 
 
 @require_torch
-@require_torchaudio
 class SpeechT5ProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
@@ -52,7 +51,6 @@ class SpeechT5ProcessorTest(unittest.TestCase):
             "hop_length": 16,
             "win_length": 64,
             "win_function": "hann_window",
-            "frame_signal_scale": 1.0,
             "fmin": 80,
             "fmax": 7600,
             "mel_floor": 1e-10,

@@ -37,6 +37,7 @@ class Pix2StructProcessor(ProcessorMixin):
         tokenizer (Union[`T5TokenizerFast`, `T5Tokenizer`]):
             An instance of ['T5TokenizerFast`] or ['T5Tokenizer`]. The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "Pix2StructImageProcessor"
     tokenizer_class = ("T5Tokenizer", "T5TokenizerFast")
@@ -49,7 +50,7 @@ class Pix2StructProcessor(ProcessorMixin):
         self,
         images=None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        add_special_tokens: bool = False,
+        add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,

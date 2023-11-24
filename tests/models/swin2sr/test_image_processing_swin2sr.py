@@ -21,7 +21,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingSavingTestMixin
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -67,40 +67,34 @@ class Swin2SRImageProcessingTester(unittest.TestCase):
             "pad_size": self.pad_size,
         }
 
-    def prepare_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
+    def expected_output_image_shape(self, images):
+        img = images[0]
 
-        assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
-
-        if equal_resolution:
-            image_inputs = []
-            for i in range(self.batch_size):
-                image_inputs.append(
-                    np.random.randint(
-                        255, size=(self.num_channels, self.max_resolution, self.max_resolution), dtype=np.uint8
-                    )
-                )
+        if isinstance(img, Image.Image):
+            input_width, input_height = img.size
         else:
-            image_inputs = []
-            for i in range(self.batch_size):
-                width, height = np.random.choice(np.arange(self.min_resolution, self.max_resolution), 2)
-                image_inputs.append(np.random.randint(255, size=(self.num_channels, width, height), dtype=np.uint8))
+            input_height, input_width = img.shape[-2:]
 
-        if not numpify and not torchify:
-            # PIL expects the channel dimension as last dimension
-            image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+        pad_height = (input_height // self.pad_size + 1) * self.pad_size - input_height
+        pad_width = (input_width // self.pad_size + 1) * self.pad_size - input_width
 
-        if torchify:
-            image_inputs = [torch.from_numpy(x) for x in image_inputs]
+        return self.num_channels, input_height + pad_height, input_width + pad_width
 
-        return image_inputs
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        return prepare_image_inputs(
+            batch_size=self.batch_size,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
 
 
 @require_torch
 @require_vision
-class Swin2SRImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
+class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Swin2SRImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -117,9 +111,6 @@ class Swin2SRImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCa
         self.assertTrue(hasattr(image_processor, "do_pad"))
         self.assertTrue(hasattr(image_processor, "pad_size"))
 
-    def test_batch_feature(self):
-        pass
-
     def calculate_expected_size(self, image):
         old_height, old_width = get_image_size(image)
         size = self.image_processor_tester.pad_size
@@ -128,65 +119,63 @@ class Swin2SRImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCa
         pad_width = (old_width // size + 1) * size - old_width
         return old_height + pad_height, old_width + pad_width
 
+    # Swin2SRImageProcessor does not support batched input
     def test_call_pil(self):
-        # Initialize image_processor
-        image_processor = self.image_processing_class(**self.image_processor_dict)
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_inputs(equal_resolution=False)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
         # Test not batched input
-        encoded_images = image_processor(image_inputs[0], return_tensors="pt").pixel_values
-        expected_height, expected_width = self.calculate_expected_size(np.array(image_inputs[0]))
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.image_processor_tester.num_channels,
-                expected_height,
-                expected_width,
-            ),
-        )
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
+    # Swin2SRImageProcessor does not support batched input
     def test_call_numpy(self):
-        # Initialize image_processor
-        image_processor = self.image_processing_class(**self.image_processor_dict)
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        image_inputs = self.image_processor_tester.prepare_inputs(equal_resolution=False, numpify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
         # Test not batched input
-        encoded_images = image_processor(image_inputs[0], return_tensors="pt").pixel_values
-        expected_height, expected_width = self.calculate_expected_size(image_inputs[0])
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.image_processor_tester.num_channels,
-                expected_height,
-                expected_width,
-            ),
-        )
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
+    # Swin2SRImageProcessor does not support batched input
+    def test_call_numpy_4_channels(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random numpy tensors
+        self.image_processor_tester.num_channels = 4
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        for image in image_inputs:
+            self.assertIsInstance(image, np.ndarray)
+
+        # Test not batched input
+        encoded_images = image_processing(
+            image_inputs[0], return_tensors="pt", input_data_format="channels_first"
+        ).pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+        self.image_processor_tester.num_channels = 3
+
+    # Swin2SRImageProcessor does not support batched input
     def test_call_pytorch(self):
-        # Initialize image_processor
-        image_processor = self.image_processing_class(**self.image_processor_dict)
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_inputs(equal_resolution=False, torchify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
         # Test not batched input
-        encoded_images = image_processor(image_inputs[0], return_tensors="pt").pixel_values
-        expected_height, expected_width = self.calculate_expected_size(image_inputs[0])
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.image_processor_tester.num_channels,
-                expected_height,
-                expected_width,
-            ),
-        )
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))

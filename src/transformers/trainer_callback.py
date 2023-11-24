@@ -53,6 +53,14 @@ class TrainerState:
             During training, represents the number of update steps completed.
         max_steps (`int`, *optional*, defaults to 0):
             The number of update steps to do during the current training.
+        logging_steps (`int`, *optional*, defaults to 500):
+            Log every X updates steps
+        eval_steps (`int`, *optional*):
+            Run an evaluation every X steps.
+        save_steps (`int`, *optional*, defaults to 500):
+            Save checkpoint every X updates steps.
+        num_input_tokens_seen (`int`, *optional*, defaults to 0):
+            The number of tokens seen during training (number of input tokens, not the number of prediction tokens).
         total_flos (`float`, *optional*, defaults to 0):
             The total number of floating operations done by the model since the beginning of training (stored as floats
             to avoid overflow).
@@ -77,7 +85,11 @@ class TrainerState:
     epoch: Optional[float] = None
     global_step: int = 0
     max_steps: int = 0
+    logging_steps: int = 500
+    eval_steps: int = 500
+    save_steps: int = 500
     num_train_epochs: int = 0
+    num_input_tokens_seen: int = 0
     total_flos: float = 0
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
@@ -157,6 +169,7 @@ class TrainerControl:
 
 
 class TrainerCallback:
+    # no-format
     """
     A class for objects that will inspect the state of the training loop at some events and take some decisions. At
     each of those events the following arguments are available:
@@ -421,13 +434,13 @@ class DefaultFlowCallback(TrainerCallback):
         # Log
         if state.global_step == 1 and args.logging_first_step:
             control.should_log = True
-        if args.logging_strategy == IntervalStrategy.STEPS and state.global_step % args.logging_steps == 0:
+        if args.logging_strategy == IntervalStrategy.STEPS and state.global_step % state.logging_steps == 0:
             control.should_log = True
 
         # Evaluate
         if (
             args.evaluation_strategy == IntervalStrategy.STEPS
-            and state.global_step % args.eval_steps == 0
+            and state.global_step % state.eval_steps == 0
             and args.eval_delay <= state.global_step
         ):
             control.should_evaluate = True
@@ -435,8 +448,8 @@ class DefaultFlowCallback(TrainerCallback):
         # Save
         if (
             args.save_strategy == IntervalStrategy.STEPS
-            and args.save_steps > 0
-            and state.global_step % args.save_steps == 0
+            and state.save_steps > 0
+            and state.global_step % state.save_steps == 0
         ):
             control.should_save = True
 
@@ -473,7 +486,7 @@ class ProgressCallback(TrainerCallback):
 
     def on_train_begin(self, args, state, control, **kwargs):
         if state.is_local_process_zero:
-            self.training_bar = tqdm(total=state.max_steps)
+            self.training_bar = tqdm(total=state.max_steps, dynamic_ncols=True)
         self.current_step = 0
 
     def on_step_end(self, args, state, control, **kwargs):
@@ -484,7 +497,9 @@ class ProgressCallback(TrainerCallback):
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
         if state.is_local_process_zero and has_length(eval_dataloader):
             if self.prediction_bar is None:
-                self.prediction_bar = tqdm(total=len(eval_dataloader), leave=self.training_bar is None)
+                self.prediction_bar = tqdm(
+                    total=len(eval_dataloader), leave=self.training_bar is None, dynamic_ncols=True
+                )
             self.prediction_bar.update(1)
 
     def on_evaluate(self, args, state, control, **kwargs):
@@ -526,15 +541,16 @@ class EarlyStoppingCallback(TrainerCallback):
     A [`TrainerCallback`] that handles early stopping.
 
     Args:
-       early_stopping_patience (`int`):
+        early_stopping_patience (`int`):
             Use with `metric_for_best_model` to stop training when the specified metric worsens for
             `early_stopping_patience` evaluation calls.
-       early_stopping_threshold(`float`, *optional*):
+        early_stopping_threshold(`float`, *optional*):
             Use with TrainingArguments `metric_for_best_model` and `early_stopping_patience` to denote how much the
             specified metric must improve to satisfy early stopping conditions. `
 
     This callback depends on [`TrainingArguments`] argument *load_best_model_at_end* functionality to set best_metric
-    in [`TrainerState`].
+    in [`TrainerState`]. Note that if the [`TrainingArguments`] argument *save_steps* differs from *eval_steps*, the
+    early stopping will not occur until the next save step.
     """
 
     def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):

@@ -77,13 +77,13 @@ class WhisperConfig(PretrainedConfig):
         num_mel_bins (`int`, *optional*, defaults to 80):
             Number of mel features used per input features. Should correspond to the value used in the
             `WhisperProcessor` class.
-        encoder_layers (`int`, *optional*, defaults to 6):
+        encoder_layers (`int`, *optional*, defaults to 4):
             Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 6):
+        decoder_layers (`int`, *optional*, defaults to 4):
             Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 4):
+        encoder_attention_heads (`int`, *optional*, defaults to 6):
             Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 4):
+        decoder_attention_heads (`int`, *optional*, defaults to 6):
             Number of attention heads for each attention layer in the Transformer decoder.
         encoder_ffn_dim (`int`, *optional*, defaults to 1536):
             Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
@@ -106,7 +106,7 @@ class WhisperConfig(PretrainedConfig):
         activation_function (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        d_model (`int`, *optional*, defaults to 256):
+        d_model (`int`, *optional*, defaults to 384):
             Dimensionality of the layers.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
@@ -127,7 +127,7 @@ class WhisperConfig(PretrainedConfig):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 50256):
             Begin of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 50257):
+        eos_token_id (`int`, *optional*, defaults to 50256):
             End of stream token id.
         suppress_tokens (`List[int]`, *optional*):
             A list containing the non-speech tokens that will be used by the logit processor in the `generate`
@@ -171,7 +171,9 @@ class WhisperConfig(PretrainedConfig):
             The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
             step, irrespectively of `mask_feature_prob`. Only relevant if
             `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
-
+        median_filter_width (`int`, *optional*, defaults to 7):
+            Width of the median filter used to smoothen to cross-attention outputs when computing token timestamps.
+            Should be an odd number.
 
     Example:
 
@@ -187,6 +189,7 @@ class WhisperConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "whisper"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
@@ -195,10 +198,10 @@ class WhisperConfig(PretrainedConfig):
         self,
         vocab_size=51865,
         num_mel_bins=80,
-        encoder_layers=6,
-        encoder_attention_heads=4,
-        decoder_layers=6,
-        decoder_attention_heads=4,
+        encoder_layers=4,
+        encoder_attention_heads=6,
+        decoder_layers=4,
+        decoder_attention_heads=6,
         decoder_ffn_dim=1536,
         encoder_ffn_dim=1536,
         encoder_layerdrop=0.0,
@@ -207,7 +210,7 @@ class WhisperConfig(PretrainedConfig):
         use_cache=True,
         is_encoder_decoder=True,
         activation_function="gelu",
-        d_model=256,
+        d_model=384,
         dropout=0.0,
         attention_dropout=0.0,
         activation_dropout=0.0,
@@ -216,7 +219,7 @@ class WhisperConfig(PretrainedConfig):
         max_source_positions=1500,
         max_target_positions=448,
         pad_token_id=50256,
-        bos_token_id=50257,
+        bos_token_id=50256,
         eos_token_id=50256,
         suppress_tokens=None,
         begin_suppress_tokens=[220, 50256],
@@ -229,6 +232,7 @@ class WhisperConfig(PretrainedConfig):
         mask_feature_prob=0.0,
         mask_feature_length=10,
         mask_feature_min_masks=0,
+        median_filter_width=7,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -265,6 +269,9 @@ class WhisperConfig(PretrainedConfig):
         self.mask_feature_prob = mask_feature_prob
         self.mask_feature_length = mask_feature_length
         self.mask_feature_min_masks = mask_feature_min_masks
+
+        self.median_filter_width = median_filter_width
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

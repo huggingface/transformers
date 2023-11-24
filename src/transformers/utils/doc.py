@@ -122,6 +122,11 @@ def _prepare_output_docstrings(output_type, config_class, min_indent=None):
     if i < len(lines):
         params_docstring = "\n".join(lines[(i + 1) :])
         params_docstring = _convert_output_args_doc(params_docstring)
+    else:
+        raise ValueError(
+            f"No `Args` or `Parameters` section is found in the docstring of `{output_type.__name__}`. Make sure it has "
+            "docstring and contain either `Args` or `Parameters`."
+        )
 
     # Add the return introduction
     full_output_type = f"{output_type.__module__}.{output_type.__name__}"
@@ -1070,6 +1075,7 @@ def add_code_sample_docstrings(
     expected_output=None,
     expected_loss=None,
     real_checkpoint=None,
+    revision=None,
 ):
     def docstring_decorator(fn):
         # model_class defaults to function's class if not specified otherwise
@@ -1138,6 +1144,15 @@ def add_code_sample_docstrings(
         func_doc = (fn.__doc__ or "") + "".join(docstr)
         output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
         built_doc = code_sample.format(**doc_kwargs)
+        if revision is not None:
+            if re.match(r"^refs/pr/\\d+", revision):
+                raise ValueError(
+                    f"The provided revision '{revision}' is incorrect. It should point to"
+                    " a pull request reference on the hub like 'refs/pr/6'"
+                )
+            built_doc = built_doc.replace(
+                f'from_pretrained("{checkpoint}")', f'from_pretrained("{checkpoint}", revision="{revision}")'
+            )
         fn.__doc__ = func_doc + output_doc + built_doc
         return fn
 

@@ -19,11 +19,12 @@ import inspect
 import unittest
 
 from transformers import EfficientNetConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_pipeline_test, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -48,7 +49,7 @@ class EfficientNetModelTester:
         num_channels=3,
         kernel_sizes=[3, 3, 5],
         in_channels=[32, 16, 24],
-        out_channels=[16, 24, 40],
+        out_channels=[16, 24, 20],
         strides=[1, 1, 2],
         num_block_repeats=[1, 1, 2],
         expand_ratios=[1, 6, 6],
@@ -122,13 +123,18 @@ class EfficientNetModelTester:
 
 
 @require_torch
-class EfficientNetModelTest(ModelTesterMixin, unittest.TestCase):
+class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as EfficientNet does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (EfficientNetModel, EfficientNetForImageClassification) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": EfficientNetModel, "image-classification": EfficientNetForImageClassification}
+        if is_torch_available()
+        else {}
+    )
 
     fx_compatible = False
     test_pruning = False
@@ -223,6 +229,12 @@ class EfficientNetModelTest(ModelTesterMixin, unittest.TestCase):
             model = EfficientNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @is_pipeline_test
+    @require_vision
+    @slow
+    def test_pipeline_image_classification(self):
+        super().test_pipeline_image_classification()
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -253,5 +265,5 @@ class EfficientNetModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([0.0001, 0.0002, 0.0002]).to(torch_device)
+        expected_slice = torch.tensor([-0.2962, 0.4487, 0.4499]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

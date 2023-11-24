@@ -17,6 +17,8 @@ File utilities: utilities related to download and cache models
 This module should not be update anymore and is only left for backward compatibility.
 """
 
+from huggingface_hub import get_full_repo_name  # for backward compatibility
+
 from . import __version__
 
 # Backward compatibility imports, to make sure all those objects can be found in file_utils
@@ -71,7 +73,7 @@ from .utils import (
     define_sagemaker_information,
     get_cached_models,
     get_file_from_repo,
-    get_full_repo_name,
+    get_torch_version,
     has_file,
     http_user_agent,
     is_apex_available,
@@ -100,6 +102,7 @@ from .utils import (
     is_sagemaker_mp_enabled,
     is_scipy_available,
     is_sentencepiece_available,
+    is_seqio_available,
     is_sklearn_available,
     is_soundfile_availble,
     is_spacy_available,
@@ -115,6 +118,7 @@ from .utils import (
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
+    is_torch_mps_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
@@ -125,5 +129,4 @@ from .utils import (
     to_numpy,
     to_py_obj,
     torch_only_method,
-    torch_version,
 )

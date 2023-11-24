@@ -46,11 +46,14 @@ if is_torch_available():
         NoRepeatNGramLogitsProcessor,
         PrefixConstrainedLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
+        SequenceBiasLogitsProcessor,
         TemperatureLogitsWarper,
         TopKLogitsWarper,
         TopPLogitsWarper,
         TypicalLogitsWarper,
+        UnbatchedClassifierFreeGuidanceLogitsProcessor,
     )
+    from transformers.generation.logits_process import BarkEosPrioritizerLogitsProcessor
 
 
 @require_torch
@@ -512,6 +515,30 @@ class LogitsProcessorTest(unittest.TestCase):
         filtered_scores = no_bad_words_dist_proc(input_ids, scores.clone())
         self.assertTrue(torch.allclose(scores, filtered_scores, atol=1e-3))
 
+    def test_bias_dist_processor(self):
+        vocab_size = 5
+        batch_size = 2
+
+        input_ids = torch.tensor([[0, 1, 3, 1], [0, 1, 0, 1]], device=torch_device, dtype=torch.long)
+        positive_bias = {(1,): 100.0, (4,): 100.0}
+        negative_bias = {(1, 0): -100.0, (0, 1, 2): -100.0, (1, 3, 1, 3): -100.0}
+        # biases the same termination twice, to ensure we can handle overlapping terminations (it won't have an effect
+        # on the test cases, though)
+        negative_bias.update({(1, 3, 1, 3, 1, 3): -100.0})
+        sequence_bias = {**positive_bias, **negative_bias}
+
+        # scores = 0 to facilitate checks
+        scores = torch.zeros((batch_size, vocab_size), dtype=torch.float, device=torch_device)
+
+        bias_dist_proc = SequenceBiasLogitsProcessor(sequence_bias=sequence_bias)
+        filtered_scores = bias_dist_proc(input_ids, scores.clone())
+
+        # batch 1: positive bias: tokens (1, 4); negative bias: tokens (0, 3); neutral: tokens (2)
+        # batch 2: positive bias: tokens (1, 4); negative bias: tokens (0, 2); neutral: tokens (3)
+        self.assertListEqual(
+            filtered_scores.tolist(), [[-100.0, 100.0, 0.0, -100.0, 100.0], [-100.0, 100.0, -100.0, 0.0, 100.0]]
+        )
+
     def test_processor_list(self):
         batch_size = 4
         sequence_length = 10
@@ -665,7 +692,7 @@ class LogitsProcessorTest(unittest.TestCase):
             torch.allclose(
                 scores,
                 torch.tensor(
-                    [[0.0, 0.7, 0.8, 0.0], [0.1, torch.finfo(scores.dtype).max, 0.3, float("-inf")]],
+                    [[0.0, 0.7, 0.8, 0.0], [0.1, torch.finfo(scores.dtype).max, 0.3, torch.finfo(scores.dtype).min]],
                     device=torch_device,
                 ),
                 atol=1e-6,
@@ -691,18 +718,23 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # check that penalty is not applied before start
         scores = self._get_uniform_logits(batch_size, vocab_size)
-        scores_before_start = length_decay_processor(input_ids, scores)
+        scores_before_start = torch.clone(scores)  # clone scores as precessor updates them inplace
+        scores_before_start = length_decay_processor(input_ids, scores_before_start)
         self.assertListEqual(scores_before_start[:, eos_token_id].tolist(), scores[:, eos_token_id].tolist())
 
         # check that penalty is applied after start
         input_ids = ids_tensor((batch_size, 20), vocab_size=vocab_size)
         scores = self._get_uniform_logits(batch_size, vocab_size)
-        scores_after_start = length_decay_processor(input_ids, scores)
-        self.assertTrue(
-            torch.gt(
-                scores_after_start[penalty_start + 1 :, eos_token_id], scores[penalty_start + 1 :, eos_token_id]
-            ).all()
-        )
+        scores_after_start = torch.clone(scores)  # clone scores as precessor updates them inplace
+        scores_after_start = length_decay_processor(input_ids, scores_after_start)
+        self.assertTrue(torch.gt(scores_after_start[:, eos_token_id], scores[:, eos_token_id]).all())
+
+        # check the penalty increases negative scores
+        input_ids = ids_tensor((batch_size, 20), vocab_size=vocab_size)
+        scores = torch.neg(self._get_uniform_logits(batch_size, vocab_size))
+        scores_after_start = torch.clone(scores)  # clone scores as precessor updates them inplace
+        scores_after_start = length_decay_processor(input_ids, scores_after_start)
+        self.assertTrue(torch.gt(scores_after_start[:, eos_token_id], scores[:, eos_token_id]).all())
 
     def test_normalization(self):
         input_ids = None
@@ -718,3 +750,70 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertTrue(normalized_scores.sum(dim=-1).allclose(ones))
 
         self.assertTrue(normalized_scores.allclose(scores.softmax(dim=-1)))
+
+    def test_classifier_free_guidance(self):
+        class Namespace(dict):
+            pass
+
+        logits_uncond = torch.tensor([[[1.0, 0, 1.5]]])
+        logits_cond = torch.tensor([[[1.0, 1.0, 1.0]]])
+
+        def dummy_model(input_ids, attention_mask, use_cache=True, past_key_values=None):
+            out = Namespace()
+            out.logits = logits_uncond
+            out.past_key_values = None
+            return out
+
+        def lsm(x):
+            return torch.nn.functional.log_softmax(x, dim=-1)
+
+        # explicit unconditional prompt + attention mask
+        input_ids = torch.LongTensor([[0]])
+        cfg = UnbatchedClassifierFreeGuidanceLogitsProcessor(
+            1.5, dummy_model, input_ids, torch.ones_like(input_ids, dtype=torch.long)
+        )
+        out = cfg(input_ids, logits_cond)[0, -1]
+
+        res = (lsm(logits_uncond) + 1.5 * (lsm(logits_cond) - lsm(logits_uncond)))[0, -1]
+
+        self.assertAlmostEqual(out[0].item(), res[0].item())
+        self.assertAlmostEqual(out[1].item(), res[1].item())
+        self.assertAlmostEqual(out[2].item(), res[2].item())
+
+        # explicit unconditional prompt
+        input_ids = torch.LongTensor([[0]])
+        cfg = UnbatchedClassifierFreeGuidanceLogitsProcessor(1.5, dummy_model, input_ids)
+        out = cfg(input_ids, logits_cond)[0, -1]
+
+        res = (lsm(logits_uncond) + 1.5 * (lsm(logits_cond) - lsm(logits_uncond)))[0, -1]
+
+        self.assertAlmostEqual(out[0].item(), res[0].item())
+        self.assertAlmostEqual(out[1].item(), res[1].item())
+        self.assertAlmostEqual(out[2].item(), res[2].item())
+
+        # all implicit
+        input_ids = torch.LongTensor([[0]])
+        cfg = UnbatchedClassifierFreeGuidanceLogitsProcessor(1.5, dummy_model)
+        out = cfg(input_ids, logits_cond)[0, -1]
+
+        res = (lsm(logits_uncond) + 1.5 * (lsm(logits_cond) - lsm(logits_uncond)))[0, -1]
+
+        self.assertAlmostEqual(out[0].item(), res[0].item())
+        self.assertAlmostEqual(out[1].item(), res[1].item())
+        self.assertAlmostEqual(out[2].item(), res[2].item())
+
+    def test_early_stop_processor(self):
+        input_ids = None
+        eos_token_id = 2
+        min_eos_p = 0.1  ## some small float
+
+        scores = self._get_uniform_logits(2, 4)
+        scores[0][eos_token_id] = -6  ## less than log(min_eos_p)
+
+        esp = BarkEosPrioritizerLogitsProcessor(eos_token_id=eos_token_id, min_eos_p=min_eos_p)
+        actual_scores = esp(input_ids, scores)
+        expected_scores_list = [
+            scores[0].tolist(),
+            [float("-inf"), float("-inf"), scores[0][0], float("-inf")],
+        ]
+        self.assertListEqual(actual_scores.tolist(), expected_scores_list)

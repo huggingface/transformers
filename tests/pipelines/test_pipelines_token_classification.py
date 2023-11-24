@@ -30,8 +30,9 @@ from transformers.testing_utils import (
     nested_simplify,
     require_tf,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
+    torch_device,
 )
 
 from .test_pipelines_common import ANY
@@ -39,11 +40,21 @@ from .test_pipelines_common import ANY
 
 VALID_INPUTS = ["A simple string", ["list of strings", "A simple string that is quite a bit longer"]]
 
+# These 2 model types require different inputs than those of the usual text models.
+_TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
+
 
 @is_pipeline_test
 class TokenClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+
+    if model_mapping is not None:
+        model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
+    if tf_model_mapping is not None:
+        tf_model_mapping = {
+            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
+        }
 
     def get_test_pipeline(self, model, tokenizer, processor):
         token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer)
@@ -381,13 +392,13 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             ],
         )
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
-    def test_gpu(self):
+    def test_accelerator(self):
         sentence = "This is dummy sentence"
         ner = pipeline(
             "token-classification",
-            device=0,
+            device=torch_device,
             aggregation_strategy=AggregationStrategy.SIMPLE,
         )
 
@@ -475,8 +486,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         token_classifier.model.config.id2label = {0: "O", 1: "MISC", 2: "PER", 3: "ORG", 4: "LOC"}
         example = [
             {
-                # fmt : off
-                "scores": np.array([0, 0, 0, 0, 0.9968166351318359]),
+                "scores": np.array([0, 0, 0, 0, 0.9968166351318359]),  # fmt : skip
                 "index": 1,
                 "is_subword": False,
                 "word": "En",
@@ -484,8 +494,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                 "end": 2,
             },
             {
-                # fmt : off
-                "scores": np.array([0, 0, 0, 0, 0.9957635998725891]),
+                "scores": np.array([0, 0, 0, 0, 0.9957635998725891]),  # fmt : skip
                 "index": 2,
                 "is_subword": True,
                 "word": "##zo",
@@ -493,9 +502,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                 "end": 4,
             },
             {
-                # fmt: off
-                "scores": np.array([0, 0, 0, 0.9986497163772583, 0]),
-                # fmt: on
+                "scores": np.array([0, 0, 0, 0.9986497163772583, 0]),  # fmt : skip
                 "index": 7,
                 "word": "UN",
                 "is_subword": False,
@@ -531,8 +538,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         )
         example = [
             {
-                # fmt : off
-                "scores": np.array([0, 0, 0, 0, 0.9968166351318359, 0, 0, 0]),
+                "scores": np.array([0, 0, 0, 0, 0.9968166351318359, 0, 0, 0]),  # fmt : skip
                 "index": 1,
                 "is_subword": False,
                 "word": "En",
@@ -540,8 +546,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                 "end": 2,
             },
             {
-                # fmt : off
-                "scores": np.array([0, 0, 0, 0, 0.9957635998725891, 0, 0, 0]),
+                "scores": np.array([0, 0, 0, 0, 0.9957635998725891, 0, 0, 0]),  # fmt : skip
                 "index": 2,
                 "is_subword": True,
                 "word": "##zo",
@@ -549,9 +554,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                 "end": 4,
             },
             {
-                # fmt: off
-                "scores": np.array([0, 0, 0, 0, 0, 0.9986497163772583, 0, 0, ]),
-                # fmt: on
+                "scores": np.array([0, 0, 0, 0, 0, 0.9986497163772583, 0, 0]),  # fmt : skip
                 "index": 7,
                 "word": "UN",
                 "is_subword": False,

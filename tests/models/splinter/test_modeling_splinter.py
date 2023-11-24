@@ -46,7 +46,7 @@ class SplinterModelTester:
         vocab_size=99,
         hidden_size=32,
         question_token_id=1,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -229,6 +229,8 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
         if pipeline_test_casse_name == "QAPipelineTests":
+            return True
+        elif pipeline_test_casse_name == "FeatureExtractionPipelineTests" and tokenizer_name.endswith("Fast"):
             return True
 
         return False

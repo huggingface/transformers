@@ -52,7 +52,7 @@ class EfficientFormerConfig(PretrainedConfig):
             The size of the key in meta3D block.
         attention_ratio (`int`, *optional*, defaults to 4):
             Ratio of the dimension of the query and value to the dimension of the key in MSHA block
-        resolution (`int`, *optional*, defaults to 5)
+        resolution (`int`, *optional*, defaults to 7)
             Size of each patch
         num_hidden_layers (`int`, *optional*, defaults to 5):
             Number of hidden layers in the Transformer encoder.
@@ -91,6 +91,8 @@ class EfficientFormerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        image_size (`int`, *optional*, defaults to `224`):
+            The size (resolution) of each image.
 
     Example:
 
@@ -136,6 +138,8 @@ class EfficientFormerConfig(PretrainedConfig):
         hidden_act: str = "gelu",
         initializer_range: float = 0.02,
         layer_norm_eps: float = 1e-12,
+        image_size: int = 224,
+        batch_norm_eps: float = 1e-05,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -165,3 +169,5 @@ class EfficientFormerConfig(PretrainedConfig):
         self.distillation = distillation
         self.use_layer_scale = use_layer_scale
         self.layer_scale_init_value = layer_scale_init_value
+        self.image_size = image_size
+        self.batch_norm_eps = batch_norm_eps

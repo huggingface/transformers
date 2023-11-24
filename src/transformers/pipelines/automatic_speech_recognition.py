@@ -17,20 +17,25 @@ from typing import TYPE_CHECKING, Dict, Optional, Union
 import numpy as np
 import requests
 
-from ..utils import is_torch_available, logging
+from ..modelcard import ModelCard
+from ..tokenization_utils import PreTrainedTokenizer
+from ..utils import is_torch_available, is_torchaudio_available, logging
 from .audio_utils import ffmpeg_read
-from .base import ChunkPipeline
+from .base import ArgumentHandler, ChunkPipeline, infer_framework_load_model
 
 
 if TYPE_CHECKING:
     from pyctcdecode import BeamSearchDecoderCTC
 
     from ..feature_extraction_sequence_utils import SequenceFeatureExtractor
+    from ..modeling_utils import PreTrainedModel
 
 logger = logging.get_logger(__name__)
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
+    import torch
+
+    from ..models.auto.modeling_auto import MODEL_FOR_CTC_MAPPING_NAMES, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES
 
 
 def rescale_stride(stride, ratio):
@@ -156,8 +161,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         feature_extractor ([`SequenceFeatureExtractor`]):
             The feature extractor that will be used by the pipeline to encode waveform for the model.
         chunk_length_s (`float`, *optional*, defaults to 0):
-            The input length for in each chunk. If `chunk_length_s = 0` then chunking is disabled (default). Only
-            available for CTC models, e.g. [`Wav2Vec2ForCTC`].
+            The input length for in each chunk. If `chunk_length_s = 0` then chunking is disabled (default).
 
             <Tip>
 
@@ -195,17 +199,81 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
     def __init__(
         self,
-        feature_extractor: Union["SequenceFeatureExtractor", str],
-        *,
+        model: "PreTrainedModel",
+        feature_extractor: Union["SequenceFeatureExtractor", str] = None,
+        tokenizer: Optional[PreTrainedTokenizer] = None,
         decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
+        modelcard: Optional[ModelCard] = None,
+        framework: Optional[str] = None,
+        task: str = "",
+        args_parser: ArgumentHandler = None,
+        device: Union[int, "torch.device"] = None,
+        torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
+        binary_output: bool = False,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-        self.feature_extractor = feature_extractor
+        if framework is None:
+            framework, model = infer_framework_load_model(model, config=model.config)
 
+        self.task = task
+        self.model = model
+        self.tokenizer = tokenizer
+        self.feature_extractor = feature_extractor
+        self.modelcard = modelcard
+        self.framework = framework
+
+        # `accelerate` device map
+        hf_device_map = getattr(self.model, "hf_device_map", None)
+
+        if hf_device_map is not None and device is not None:
+            raise ValueError(
+                "The model has been loaded with `accelerate` and therefore cannot be moved to a specific device. Please "
+                "discard the `device` argument when creating your pipeline object."
+            )
+
+        if self.framework == "tf":
+            raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
+
+        # We shouldn't call `model.to()` for models loaded with accelerate
+        if device is not None and not (isinstance(device, int) and device < 0):
+            self.model.to(device)
+
+        if device is None:
+            if hf_device_map is not None:
+                # Take the first device used by `accelerate`.
+                device = next(iter(hf_device_map.values()))
+            else:
+                device = -1
+
+        if is_torch_available() and self.framework == "pt":
+            if isinstance(device, torch.device):
+                self.device = device
+            elif isinstance(device, str):
+                self.device = torch.device(device)
+            elif device < 0:
+                self.device = torch.device("cpu")
+            else:
+                self.device = torch.device(f"cuda:{device}")
+        else:
+            self.device = device if device is not None else -1
+        self.torch_dtype = torch_dtype
+        self.binary_output = binary_output
+
+        # Update config and generation_config with task specific parameters
+        task_specific_params = self.model.config.task_specific_params
+        if task_specific_params is not None and task in task_specific_params:
+            self.model.config.update(task_specific_params.get(task))
+            if self.model.can_generate():
+                self.model.generation_config.update(**task_specific_params.get(task))
+
+        self.call_count = 0
+        self._batch_size = kwargs.pop("batch_size", None)
+        self._num_workers = kwargs.pop("num_workers", None)
+
+        # set the model type so we can check we have the right pre- and post-processing parameters
         if self.model.config.model_type == "whisper":
             self.type = "seq2seq_whisper"
-        elif self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
+        elif self.model.__class__.__name__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.values():
             self.type = "seq2seq"
         elif (
             feature_extractor._processor_class
@@ -217,10 +285,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         else:
             self.type = "ctc"
 
-        if self.framework == "tf":
-            raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
+        self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
 
-        self.check_model_type(dict(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items()))
+        mapping = MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.copy()
+        mapping.update(MODEL_FOR_CTC_MAPPING_NAMES)
+        self.check_model_type(mapping)
 
     def __call__(
         self,
@@ -234,8 +303,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         Args:
             inputs (`np.ndarray` or `bytes` or `str` or `dict`):
                 The inputs is either :
-                    - `str` that is the filename of the audio file, the file will be read at the correct sampling rate
-                      to get the waveform using *ffmpeg*. This requires *ffmpeg* to be installed on the system.
+                    - `str` that is either the filename of a local audio file, or a public URL address to download the
+                      audio file. The file will be read at the correct sampling rate to get the waveform using
+                      *ffmpeg*. This requires *ffmpeg* to be installed on the system.
                     - `bytes` it is supposed to be the content of an audio file and is interpreted by *ffmpeg* in the
                       same way.
                     - (`np.ndarray` of shape (n, ) of type `np.float32` or `np.float64`)
@@ -245,14 +315,29 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                       np.array}` with optionally a `"stride": (left: int, right: int)` than can ask the pipeline to
                       treat the first `left` samples and last `right` samples to be ignored in decoding (but used at
                       inference to provide more context to the model). Only use `stride` with CTC models.
-            return_timestamps (*optional*, `str`):
-                Only available for pure CTC models. If set to `"char"`, the pipeline will return `timestamps` along the
-                text for every character in the text. For instance if you get `[{"text": "h", "timestamps": (0.5,0.6),
-                {"text": "i", "timestamps": (0.7, .9)}]`, then it means the model predicts that the letter "h" was
-                pronounced after `0.5` and before `0.6` seconds. If set to `"word"`, the pipeline will return
-                `timestamps` along the text for every word in the text. For instance if you get `[{"text": "hi ",
-                "timestamps": (0.5,0.9), {"text": "there", "timestamps": (1.0, .1.5)}]`, then it means the model
-                predicts that the word "hi" was pronounced after `0.5` and before `0.9` seconds.
+            return_timestamps (*optional*, `str` or `bool`):
+                Only available for pure CTC models (Wav2Vec2, HuBERT, etc) and the Whisper model. Not available for
+                other sequence-to-sequence models.
+
+                For CTC models, timestamps can take one of two formats:
+                    - `"char"`: the pipeline will return timestamps along the text for every character in the text. For
+                        instance, if you get `[{"text": "h", "timestamp": (0.5, 0.6)}, {"text": "i", "timestamp": (0.7,
+                        0.9)}]`, then it means the model predicts that the letter "h" was spoken after `0.5` and before
+                        `0.6` seconds.
+                    - `"word"`: the pipeline will return timestamps along the text for every word in the text. For
+                        instance, if you get `[{"text": "hi ", "timestamp": (0.5, 0.9)}, {"text": "there", "timestamp":
+                        (1.0, 1.5)}]`, then it means the model predicts that the word "hi" was spoken after `0.5` and
+                        before `0.9` seconds.
+
+                For the Whisper model, timestamps can take one of two formats:
+                    - `"word"`: same as above for word-level CTC timestamps. Word-level timestamps are predicted
+                        through the *dynamic-time warping (DTW)* algorithm, an approximation to word-level timestamps
+                        by inspecting the cross-attention weights.
+                    - `True`: the pipeline will return timestamps along the text for *segments* of words in the text.
+                        For instance, if you get `[{"text": " Hi there!", "timestamp": (0.5, 1.5)}]`, then it means the
+                        model predicts that the segment "Hi there!" was spoken after `0.5` and before `1.5` seconds.
+                        Note that a segment of text refers to a sequence of one or more words, rather than individual
+                        words as with word-level timestamps.
             generate_kwargs (`dict`, *optional*):
                 The dictionary of ad-hoc parametrization of `generate_config` to be used for the generation call. For a
                 complete overview of generate, check the [following
@@ -262,12 +347,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         Return:
             `Dict`: A dictionary with the following keys:
-                - **text** (`str` ) -- The recognized text.
+                - **text** (`str`): The recognized text.
                 - **chunks** (*optional(, `List[Dict]`)
-                        When using `return_timestamps`, the `chunks` will become a list containing all the various text
-                        chunks identified by the model, *e.g.* `[{"text": "hi ", "timestamps": (0.5,0.9), {"text":
-                        "there", "timestamps": (1.0, 1.5)}]`. The original full text can roughly be recovered by doing
-                        `"".join(chunk["text"] for chunk in output["chunks"])`.
+                    When using `return_timestamps`, the `chunks` will become a list containing all the various text
+                    chunks identified by the model, *e.g.* `[{"text": "hi ", "timestamp": (0.5, 0.9)}, {"text":
+                    "there", "timestamp": (1.0, 1.5)}]`. The original full text can roughly be recovered by doing
+                    `"".join(chunk["text"] for chunk in output["chunks"])`.
         """
         return super().__call__(inputs, **kwargs)
 
@@ -285,11 +370,16 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         # No parameters on this pipeline right now
         preprocess_params = {}
         if chunk_length_s is not None:
+            if self.type == "seq2seq" and not ignore_warning:
+                logger.warning(
+                    "Using `chunk_length_s` is very experimental with seq2seq models. The results will not necessarily"
+                    " be entirely accurate and will have caveats. More information:"
+                    " https://github.com/huggingface/transformers/pull/20104. Ignore this warning with pipeline(...,"
+                    " ignore_warning=True)"
+                )
             preprocess_params["chunk_length_s"] = chunk_length_s
         if stride_length_s is not None:
             preprocess_params["stride_length_s"] = stride_length_s
-        if ignore_warning is not None:
-            preprocess_params["ignore_warning"] = ignore_warning
 
         forward_params = defaultdict(dict)
         if max_new_tokens is not None:
@@ -306,14 +396,31 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if decoder_kwargs is not None:
             postprocess_params["decoder_kwargs"] = decoder_kwargs
         if return_timestamps is not None:
+            # Check whether we have a valid setting for return_timestamps and throw an error before we perform a forward pass
+            if self.type == "seq2seq" and return_timestamps:
+                raise ValueError("We cannot return_timestamps yet on non-CTC models apart from Whisper!")
+            if self.type == "ctc_with_lm" and return_timestamps != "word":
+                raise ValueError("CTC with LM can only predict word level timestamps, set `return_timestamps='word'`")
+            if self.type == "ctc" and return_timestamps not in ["char", "word"]:
+                raise ValueError(
+                    "CTC can either predict character level timestamps, or word level timestamps. "
+                    "Set `return_timestamps='char'` or `return_timestamps='word'` as required."
+                )
+            if self.type == "seq2seq_whisper" and return_timestamps == "char":
+                raise ValueError(
+                    "Whisper cannot return `char` timestamps, only word level or segment level timestamps. "
+                    "Use `return_timestamps='word'` or `return_timestamps=True` respectively."
+                )
             forward_params["return_timestamps"] = return_timestamps
             postprocess_params["return_timestamps"] = return_timestamps
         if return_language is not None:
+            if self.type != "seq2seq_whisper":
+                raise ValueError("Only Whisper can return language for now.")
             postprocess_params["return_language"] = return_language
 
         return preprocess_params, forward_params, postprocess_params
 
-    def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None, ignore_warning=False):
+    def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None):
         if isinstance(inputs, str):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
@@ -348,8 +455,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             extra = inputs
             inputs = _inputs
             if in_sampling_rate != self.feature_extractor.sampling_rate:
-                import torch
-                from torchaudio import functional as F
+                if is_torchaudio_available():
+                    from torchaudio import functional as F
+                else:
+                    raise ImportError(
+                        "torchaudio is required to resample audio samples in AutomaticSpeechRecognitionPipeline. "
+                        "The torchaudio package can be installed through: `pip install torchaudio`."
+                    )
 
                 inputs = F.resample(
                     torch.from_numpy(inputs), in_sampling_rate, self.feature_extractor.sampling_rate
@@ -372,14 +484,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
         if chunk_length_s:
-            if self.type == "seq2seq" and not ignore_warning:
-                logger.warning(
-                    "Using `chunk_length_s` is very experimental with seq2seq models. The results will not necessarily"
-                    " be entirely accurate and will have caveats. More information:"
-                    " https://github.com/huggingface/transformers/pull/20104. Ignore this warning with pipeline(...,"
-                    " ignore_warning=True)"
-                )
-                self._preprocess_params["ignore_warning"] = True
             if stride_length_s is None:
                 stride_length_s = chunk_length_s / 6
 
@@ -404,9 +508,19 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             ):
                 yield item
         else:
-            processed = self.feature_extractor(
-                inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
-            )
+            if self.type == "seq2seq_whisper" and inputs.shape[0] > self.feature_extractor.n_samples:
+                processed = self.feature_extractor(
+                    inputs,
+                    sampling_rate=self.feature_extractor.sampling_rate,
+                    truncation=False,
+                    padding="longest",
+                    return_tensors="pt",
+                )
+            else:
+                processed = self.feature_extractor(
+                    inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+                )
+
             if self.torch_dtype is not None:
                 processed = processed.to(dtype=self.torch_dtype)
             if stride is not None:
@@ -419,8 +533,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     def _forward(self, model_inputs, return_timestamps=False, generate_kwargs=None):
         if generate_kwargs is None:
             generate_kwargs = {}
-        if return_timestamps and self.type == "seq2seq_whisper":
-            generate_kwargs["return_timestamps"] = return_timestamps
+
+        attention_mask = model_inputs.pop("attention_mask", None)
+        stride = model_inputs.pop("stride", None)
         is_last = model_inputs.pop("is_last")
 
         if self.type in {"seq2seq", "seq2seq_whisper"}:
@@ -437,26 +552,34 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     f"`input_features` or `input_values` key, but only has {model_inputs.keys()}"
                 )
 
-            # we need to pass `processed.get("attention_mask")` here since audio encoder
-            # attention mask  length is different from expected text decoder `encoder_attention_mask` length
-            # `generate` magic to create the mask automatically won't work, we basically need to help
-            # it here.
-            attention_mask = model_inputs.pop("attention_mask", None)
+            # custom processing for Whisper timestamps and word-level timestamps
+            if return_timestamps and self.type == "seq2seq_whisper":
+                generate_kwargs["return_timestamps"] = return_timestamps
+                if return_timestamps == "word":
+                    generate_kwargs["return_token_timestamps"] = True
+
+                    if stride is not None:
+                        generate_kwargs["num_frames"] = stride[0] // self.feature_extractor.hop_length
+
+            if self.type == "seq2seq_whisper" and inputs.shape[-1] > self.feature_extractor.nb_max_frames:
+                generate_kwargs["input_features"] = inputs
+            else:
+                generate_kwargs["encoder_outputs"] = encoder(inputs, attention_mask=attention_mask)
+
             tokens = self.model.generate(
-                encoder_outputs=encoder(inputs, attention_mask=attention_mask),
                 attention_mask=attention_mask,
                 **generate_kwargs,
             )
-            out = {"tokens": tokens}
+            if return_timestamps == "word" and self.type == "seq2seq_whisper":
+                out = {"tokens": tokens["sequences"], "token_timestamps": tokens["token_timestamps"]}
+            else:
+                out = {"tokens": tokens}
             if self.type == "seq2seq_whisper":
-                stride = model_inputs.pop("stride", None)
                 if stride is not None:
                     out["stride"] = stride
 
         else:
-            stride = model_inputs.pop("stride", None)
             input_values = model_inputs.pop("input_values")
-            attention_mask = model_inputs.pop("attention_mask", None)
             outputs = self.model(input_values=input_values, attention_mask=attention_mask)
             logits = outputs.logits
 
@@ -482,16 +605,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     ):
         # Optional return types
         optional = {}
-
-        if return_timestamps and self.type == "seq2seq":
-            raise ValueError("We cannot return_timestamps yet on non-ctc models apart from Whisper !")
-        if return_timestamps == "char" and self.type == "ctc_with_lm":
-            raise ValueError("CTC with LM cannot return `char` timestamps, only `words`")
-        if return_timestamps in {"char", "words"} and self.type == "seq2seq_whisper":
-            raise ValueError("Whisper cannot return `char` nor `words` timestamps, use `True` instead.")
-
-        if return_language is not None and self.type != "seq2seq_whisper":
-            raise ValueError("Only whisper can return language for now.")
 
         final_items = []
         key = "logits" if self.type == "ctc_with_lm" else "tokens"
@@ -574,6 +687,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             output.pop("logits", None)
             output.pop("is_last", None)
             output.pop("stride", None)
+            output.pop("token_timestamps", None)
             for k, v in output.items():
                 extra[k].append(v)
         return {"text": text, **optional, **extra}

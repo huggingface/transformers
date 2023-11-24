@@ -16,6 +16,7 @@
 Speech processor class for Whisper
 """
 
+
 from ...processing_utils import ProcessorMixin
 
 
@@ -33,6 +34,7 @@ class WhisperProcessor(ProcessorMixin):
         tokenizer (`WhisperTokenizer`):
             An instance of [`WhisperTokenizer`]. The tokenizer is a required input.
     """
+
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "WhisperTokenizer"
 
@@ -91,3 +93,6 @@ class WhisperProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    def get_prompt_ids(self, text: str, return_tensors="np"):
+        return self.tokenizer.get_prompt_ids(text, return_tensors=return_tensors)

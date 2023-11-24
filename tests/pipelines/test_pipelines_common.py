@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import logging
 import os
 import sys
@@ -39,14 +40,17 @@ from transformers.testing_utils import (
     USER,
     CaptureLogger,
     RequestCounter,
+    backend_empty_cache,
     is_pipeline_test,
     is_staging_test,
     nested_simplify,
     require_tensorflow_probability,
     require_tf,
     require_torch,
+    require_torch_accelerator,
     require_torch_or_tf,
     slow,
+    torch_device,
 )
 from transformers.utils import direct_transformers_import, is_tf_available, is_torch_available
 from transformers.utils import logging as transformers_logging
@@ -507,6 +511,10 @@ class PipelineUtilsTest(unittest.TestCase):
 
             self.check_default_pipeline(task, "pt", set_seed_fn, self.check_models_equal_pt)
 
+            # clean-up as much as possible GPU memory occupied by PyTorch
+            gc.collect()
+            backend_empty_cache(torch_device)
+
     @slow
     @require_tf
     def test_load_default_pipelines_tf(self):
@@ -522,6 +530,9 @@ class PipelineUtilsTest(unittest.TestCase):
 
             self.check_default_pipeline(task, "tf", set_seed_fn, self.check_models_equal_tf)
 
+            # clean-up as much as possible GPU memory occupied by PyTorch
+            gc.collect()
+
     @slow
     @require_torch
     def test_load_default_pipelines_pt_table_qa(self):
@@ -529,6 +540,24 @@ class PipelineUtilsTest(unittest.TestCase):
 
         set_seed_fn = lambda: torch.manual_seed(0)  # noqa: E731
         self.check_default_pipeline("table-question-answering", "pt", set_seed_fn, self.check_models_equal_pt)
+
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        backend_empty_cache(torch_device)
+
+    @slow
+    @require_torch
+    @require_torch_accelerator
+    def test_pipeline_accelerator(self):
+        pipe = pipeline("text-generation", device=torch_device)
+        _ = pipe("Hello")
+
+    @slow
+    @require_torch
+    @require_torch_accelerator
+    def test_pipeline_accelerator_indexed(self):
+        pipe = pipeline("text-generation", device=torch_device)
+        _ = pipe("Hello")
 
     @slow
     @require_tf
@@ -538,6 +567,9 @@ class PipelineUtilsTest(unittest.TestCase):
 
         set_seed_fn = lambda: tf.random.set_seed(0)  # noqa: E731
         self.check_default_pipeline("table-question-answering", "tf", set_seed_fn, self.check_models_equal_tf)
+
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
 
     def check_default_pipeline(self, task, framework, set_seed_fn, check_models_equal_fn):
         from transformers.pipelines import SUPPORTED_TASKS, pipeline
@@ -731,9 +763,9 @@ class CustomPipelineTest(unittest.TestCase):
         _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
         with RequestCounter() as counter:
             _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
-            self.assertEqual(counter.get_request_count, 0)
-            self.assertEqual(counter.head_request_count, 1)
-            self.assertEqual(counter.other_request_count, 0)
+        self.assertEqual(counter["GET"], 0)
+        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter.total_calls, 1)
 
     @require_torch
     def test_chunk_pipeline_batching_single_file(self):

@@ -15,13 +15,15 @@
 
 
 import itertools
+import os
 import random
+import tempfile
 import unittest
 
 import numpy as np
 
 from transformers import ASTFeatureExtractor
-from transformers.testing_utils import require_torch, require_torchaudio
+from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -33,6 +35,7 @@ if is_torch_available():
     import torch
 
 
+# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
 def floats_list(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
     if rng is None:
@@ -125,6 +128,14 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = np.asarray(speech_inputs)
+        encoded_sequences_1 = feat_extract(speech_inputs, return_tensors="np").input_values
+        encoded_sequences_2 = feat_extract(np_speech_inputs, return_tensors="np").input_values
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
     @require_torch
     def test_double_precision_pad(self):
         import torch
@@ -160,6 +171,52 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         # fmt: on
 
         input_speech = self._load_datasamples(1)
-        feaure_extractor = ASTFeatureExtractor()
-        input_values = feaure_extractor(input_speech, return_tensors="pt").input_values
+        feature_extractor = ASTFeatureExtractor()
+        input_values = feature_extractor(input_speech, return_tensors="pt").input_values
+        self.assertEquals(input_values.shape, (1, 1024, 128))
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
+
+    def test_feat_extract_from_and_save_pretrained(self):
+        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            saved_file = feat_extract_first.save_pretrained(tmpdirname)[0]
+            check_json_file_has_correct_format(saved_file)
+            feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
+
+        dict_first = feat_extract_first.to_dict()
+        dict_second = feat_extract_second.to_dict()
+        self.assertDictEqual(dict_first, dict_second)
+
+    def test_feat_extract_to_json_file(self):
+        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            json_file_path = os.path.join(tmpdirname, "feat_extract.json")
+            feat_extract_first.to_json_file(json_file_path)
+            feat_extract_second = self.feature_extraction_class.from_json_file(json_file_path)
+
+        dict_first = feat_extract_first.to_dict()
+        dict_second = feat_extract_second.to_dict()
+        self.assertEqual(dict_first, dict_second)
+
+
+# exact same tests than before, except that we simulate that torchaudio is not available
+@require_torch
+@unittest.mock.patch(
+    "transformers.models.audio_spectrogram_transformer.feature_extraction_audio_spectrogram_transformer.is_speech_available",
+    lambda: False,
+)
+class ASTFeatureExtractionWithoutTorchaudioTest(ASTFeatureExtractionTest):
+    def test_using_audio_utils(self):
+        # Tests that it uses audio_utils instead of torchaudio
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+
+        self.assertTrue(hasattr(feat_extract, "window"))
+        self.assertTrue(hasattr(feat_extract, "mel_filters"))
+
+        from transformers.models.audio_spectrogram_transformer.feature_extraction_audio_spectrogram_transformer import (
+            is_speech_available,
+        )
+
+        self.assertFalse(is_speech_available())

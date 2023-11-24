@@ -15,7 +15,9 @@
 """ TF 2.0 ConvNext model."""
 
 
-from typing import Dict, Optional, Tuple, Union
+from __future__ import annotations
+
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -48,11 +50,11 @@ class TFConvNextDropPath(tf.keras.layers.Layer):
         (1) github.com:rwightman/pytorch-image-models
     """
 
-    def __init__(self, drop_path, **kwargs):
+    def __init__(self, drop_path: float, **kwargs):
         super().__init__(**kwargs)
         self.drop_path = drop_path
 
-    def call(self, x, training=None):
+    def call(self, x: tf.Tensor, training=None):
         if training:
             keep_prob = 1 - self.drop_path
             shape = (tf.shape(x)[0],) + (1,) * (len(tf.shape(x)) - 1)
@@ -67,7 +69,7 @@ class TFConvNextEmbeddings(tf.keras.layers.Layer):
     found in src/transformers/models/swin/modeling_swin.py.
     """
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: ConvNextConfig, **kwargs):
         super().__init__(**kwargs)
         self.patch_embeddings = tf.keras.layers.Conv2D(
             filters=config.hidden_sizes[0],
@@ -75,7 +77,7 @@ class TFConvNextEmbeddings(tf.keras.layers.Layer):
             strides=config.patch_size,
             name="patch_embeddings",
             kernel_initializer=get_initializer(config.initializer_range),
-            bias_initializer="zeros",
+            bias_initializer=tf.keras.initializers.Zeros(),
         )
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layernorm")
         self.num_channels = config.num_channels
@@ -84,15 +86,15 @@ class TFConvNextEmbeddings(tf.keras.layers.Layer):
         if isinstance(pixel_values, dict):
             pixel_values = pixel_values["pixel_values"]
 
-        num_channels = shape_list(pixel_values)[1]
-        if tf.executing_eagerly() and num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
+        tf.debugging.assert_equal(
+            shape_list(pixel_values)[1],
+            self.num_channels,
+            message="Make sure that the channel dimension of the pixel values match with the one set in the configuration.",
+        )
 
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
-        # shape = (batch_size, in_height, in_width, in_channels=num_channels)
+        # shape = (batch_size, in_height, in_width, in_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
 
         embeddings = self.patch_embeddings(pixel_values)
@@ -153,7 +155,7 @@ class TFConvNextLayer(tf.keras.layers.Layer):
             else tf.keras.layers.Activation("linear", name="drop_path")
         )
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape: tf.TensorShape = None):
         # PT's `nn.Parameters` must be mapped to a TF layer weight to inherit the same name hierarchy (and vice-versa)
         self.layer_scale_parameter = (
             self.add_weight(
@@ -186,15 +188,28 @@ class TFConvNextStage(tf.keras.layers.Layer):
     """ConvNext stage, consisting of an optional downsampling layer + multiple residual blocks.
 
     Args:
-        config ([`ConvNextConfig`]): Model configuration class.
-        in_channels (`int`): Number of input channels.
-        out_channels (`int`): Number of output channels.
-        depth (`int`): Number of residual blocks.
-        drop_path_rates(`List[float]`): Stochastic depth rates for each layer.
+        config (`ConvNextV2Config`):
+            Model configuration class.
+        in_channels (`int`):
+            Number of input channels.
+        out_channels (`int`):
+            Number of output channels.
+        depth (`int`):
+            Number of residual blocks.
+        drop_path_rates(`List[float]`):
+            Stochastic depth rates for each layer.
     """
 
     def __init__(
-        self, config, in_channels, out_channels, kernel_size=2, stride=2, depth=2, drop_path_rates=None, **kwargs
+        self,
+        config: ConvNextConfig,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 2,
+        stride: int = 2,
+        depth: int = 2,
+        drop_path_rates: Optional[List[float]] = None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         if in_channels != out_channels or stride > 1:
@@ -213,7 +228,7 @@ class TFConvNextStage(tf.keras.layers.Layer):
                     kernel_size=kernel_size,
                     strides=stride,
                     kernel_initializer=get_initializer(config.initializer_range),
-                    bias_initializer="zeros",
+                    bias_initializer=tf.keras.initializers.Zeros(),
                     name="downsampling_layer.1",
                 ),
             ]
@@ -297,7 +312,7 @@ class TFConvNextMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
@@ -348,43 +363,6 @@ class TFConvNextPreTrainedModel(TFPreTrainedModel):
     config_class = ConvNextConfig
     base_model_prefix = "convnext"
     main_input_name = "pixel_values"
-
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(
-                3,
-                self.config.num_channels,
-                self.config.image_size,
-                self.config.image_size,
-            ),
-            dtype=tf.float32,
-        )
-        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-        return self.serving_output(output)
 
 
 CONVNEXT_START_DOCSTRING = r"""
@@ -458,7 +436,7 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
@@ -507,14 +485,6 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        return TFBaseModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=output.hidden_states,
-        )
-
 
 @add_start_docstrings(
     """
@@ -543,10 +513,10 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
     @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
@@ -607,7 +577,3 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
-
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=output.hidden_states)

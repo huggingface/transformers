@@ -18,6 +18,7 @@ import collections.abc
 import copy
 import inspect
 import json
+import multiprocessing
 import os
 import shutil
 import tempfile
@@ -109,6 +110,7 @@ UNCONVERTIBLE_MODEL_ARCHITECTURES = {
     "MaskFormerSwinBackbone",
     "MT5Model",
     "MT5ForConditionalGeneration",
+    "UMT5ForConditionalGeneration",
     "TFMT5ForConditionalGeneration",
     "TFMT5Model",
     "QDQBertForSequenceClassification",
@@ -679,12 +681,22 @@ def convert_processors(processors, tiny_config, output_folder, result):
 
     if hasattr(tiny_config, "max_position_embeddings") and tiny_config.max_position_embeddings > 0:
         if fast_tokenizer is not None:
-            if fast_tokenizer.__class__.__name__ in ["RobertaTokenizerFast", "XLMRobertaTokenizerFast"]:
+            if fast_tokenizer.__class__.__name__ in [
+                "RobertaTokenizerFast",
+                "XLMRobertaTokenizerFast",
+                "LongformerTokenizerFast",
+                "MPNetTokenizerFast",
+            ]:
                 fast_tokenizer.model_max_length = tiny_config.max_position_embeddings - 2
             else:
                 fast_tokenizer.model_max_length = tiny_config.max_position_embeddings
         if slow_tokenizer is not None:
-            if slow_tokenizer.__class__.__name__ in ["RobertaTokenizer", "XLMRobertaTokenizer"]:
+            if slow_tokenizer.__class__.__name__ in [
+                "RobertaTokenizer",
+                "XLMRobertaTokenizer",
+                "LongformerTokenizer",
+                "MPNetTokenizer",
+            ]:
                 slow_tokenizer.model_max_length = tiny_config.max_position_embeddings - 2
             else:
                 slow_tokenizer.model_max_length = tiny_config.max_position_embeddings
@@ -724,7 +736,7 @@ def build_model(model_arch, tiny_config, output_dir):
 
     tiny_config = copy.deepcopy(tiny_config)
 
-    if any([model_arch.__name__.endswith(x) for x in ["ForCausalLM", "LMHeadModel"]]):
+    if any(model_arch.__name__.endswith(x) for x in ["ForCausalLM", "LMHeadModel"]):
         tiny_config.is_encoder_decoder = False
         tiny_config.is_decoder = True
 
@@ -904,7 +916,7 @@ def build_composite_models(config_class, output_dir):
             model.save_pretrained(model_path)
 
             if tf_model_class is not None:
-                model = tf_model_class.from_pretrained(model_path, from_pt=True)
+                model = tf_model_class.from_pretrained(model_path)
                 model.save_pretrained(model_path)
 
             # copy the processors
@@ -962,6 +974,10 @@ def get_token_id_from_tokenizer(token_id_name, tokenizer, original_token_id):
 
 
 def get_config_overrides(config_class, processors):
+    # `Bark` configuration is too special. Let's just not handle this for now.
+    if config_class.__name__ == "BarkConfig":
+        return {}
+
     config_overrides = {}
 
     # Check if there is any tokenizer (prefer fast version if any)
@@ -980,6 +996,12 @@ def get_config_overrides(config_class, processors):
     # We use `len(tokenizer)` instead of `tokenizer.vocab_size` to avoid potential issues for tokenizers with non-empty
     # `added_tokens_encoder`. One example is the `DebertaV2Tokenizer` where the mask token is the extra token.
     vocab_size = len(tokenizer)
+
+    # The original checkpoint has length `35998`, but it doesn't have ids `30400` and `30514` but instead `35998` and
+    # `35999`.
+    if config_class.__name__ == "GPTSanJapaneseConfig":
+        vocab_size += 2
+
     config_overrides["vocab_size"] = vocab_size
 
     # Used to create a new model tester with `tokenizer.vocab_size` in order to get the (updated) special token ids.
@@ -1047,6 +1069,10 @@ def build(config_class, models_to_create, output_dir):
             The directory to save all the checkpoints. Each model architecture will be saved in a subdirectory under
             it. Models in different frameworks with the same architecture will be saved in the same subdirectory.
     """
+    if data["training_ds"] is None or data["testing_ds"] is None:
+        ds = load_dataset("wikitext", "wikitext-2-raw-v1")
+        data["training_ds"] = ds["train"]
+        data["testing_ds"] = ds["test"]
 
     if config_class.model_type in [
         "encoder-decoder",
@@ -1178,7 +1204,7 @@ def build(config_class, models_to_create, output_dir):
             ckpt = get_checkpoint_dir(output_dir, pt_arch)
             # Use the same weights from PyTorch.
             try:
-                model = tensorflow_arch.from_pretrained(ckpt, from_pt=True)
+                model = tensorflow_arch.from_pretrained(ckpt)
                 model.save_pretrained(ckpt)
             except Exception as e:
                 # Conversion may fail. Let's not create a model with different weights to avoid confusion (for now).
@@ -1314,6 +1340,33 @@ def build_simple_report(results):
     return text, failed_text
 
 
+def update_tiny_model_summary_file(report_path):
+    with open(os.path.join(report_path, "tiny_model_summary.json")) as fp:
+        new_data = json.load(fp)
+    with open("tests/utils/tiny_model_summary.json") as fp:
+        data = json.load(fp)
+    for key, value in new_data.items():
+        if key not in data:
+            data[key] = value
+        else:
+            for attr in ["tokenizer_classes", "processor_classes", "model_classes"]:
+                # we might get duplication here. We will remove them below when creating `updated_data`.
+                data[key][attr].extend(value[attr])
+            new_sha = value.get("sha", None)
+            if new_sha is not None:
+                data[key]["sha"] = new_sha
+
+    updated_data = {}
+    for key in sorted(data.keys()):
+        updated_data[key] = {}
+        for attr, value in data[key].items():
+            # deduplication and sort
+            updated_data[key][attr] = sorted(set(value)) if attr != "sha" else value
+
+    with open(os.path.join(report_path, "updated_tiny_model_summary.json"), "w") as fp:
+        json.dump(updated_data, fp, indent=4, ensure_ascii=False)
+
+
 def create_tiny_models(
     output_path,
     all,
@@ -1323,6 +1376,7 @@ def create_tiny_models(
     upload,
     organization,
     token,
+    num_workers=1,
 ):
     clone_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     if os.getcwd() != clone_path:
@@ -1343,10 +1397,6 @@ def create_tiny_models(
     pytorch_arch_mappings = [getattr(transformers_module, x) for x in _pytorch_arch_mappings]
     tensorflow_arch_mappings = [getattr(transformers_module, x) for x in _tensorflow_arch_mappings]
 
-    ds = load_dataset("wikitext", "wikitext-2-raw-v1")
-    data["training_ds"] = ds["train"]
-    data["testing_ds"] = ds["test"]
-
     config_classes = CONFIG_MAPPING.values()
     if not all:
         config_classes = [CONFIG_MAPPING[model_type] for model_type in model_types]
@@ -1363,11 +1413,19 @@ def create_tiny_models(
             to_create[c] = {"processor": processors, "pytorch": models, "tensorflow": tf_models}
 
     results = {}
-    for c, models_to_create in list(to_create.items()):
-        print(f"Create models for {c.__name__} ...")
-        result = build(c, models_to_create, output_dir=os.path.join(output_path, c.model_type))
-        results[c.__name__] = result
-        print("=" * 40)
+    if num_workers <= 1:
+        for c, models_to_create in list(to_create.items()):
+            print(f"Create models for {c.__name__} ...")
+            result = build(c, models_to_create, output_dir=os.path.join(output_path, c.model_type))
+            results[c.__name__] = result
+            print("=" * 40)
+    else:
+        all_build_args = []
+        for c, models_to_create in list(to_create.items()):
+            all_build_args.append((c, models_to_create, os.path.join(output_path, c.model_type)))
+        with multiprocessing.Pool() as pool:
+            results = pool.starmap(build, all_build_args)
+            results = {buid_args[0].__name__: result for buid_args, result in zip(all_build_args, results)}
 
     if upload:
         if organization is None:
@@ -1424,11 +1482,12 @@ def create_tiny_models(
     with open(os.path.join(report_path, "simple_failed_report.txt"), "w") as fp:
         fp.write(failed_report)
 
+    update_tiny_model_summary_file(report_path=os.path.join(output_path, "reports"))
+
 
 if __name__ == "__main__":
-    ds = load_dataset("wikitext", "wikitext-2-raw-v1")
-    training_ds = ds["train"]
-    testing_ds = ds["test"]
+    # This has to be `spawn` to avoid hanging forever!
+    multiprocessing.set_start_method("spawn")
 
     def list_str(values):
         return values.split(",")
@@ -1450,7 +1509,7 @@ if __name__ == "__main__":
         "--models_to_skip",
         type=list_str,
         help=(
-            "Comma-separated list of model class names(s) from which the tiny models won't be created.\nThis is usually"
+            "Comma-separated list of model class names(s) from which the tiny models won't be created.\nThis is usually "
             "the list of model classes that have their tiny versions already uploaded to the Hub."
         ),
     )
@@ -1465,6 +1524,7 @@ if __name__ == "__main__":
         "--token", default=None, type=str, help="A valid authentication token for HuggingFace Hub with write access."
     )
     parser.add_argument("output_path", type=Path, help="Path indicating where to store generated model.")
+    parser.add_argument("--num_workers", default=1, type=int, help="The number of workers to run.")
 
     args = parser.parse_args()
 
@@ -1480,4 +1540,5 @@ if __name__ == "__main__":
         args.upload,
         args.organization,
         args.token,
+        args.num_workers,
     )

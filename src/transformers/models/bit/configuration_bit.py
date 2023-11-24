@@ -16,6 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -25,7 +26,7 @@ BIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class BitConfig(PretrainedConfig):
+class BitConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BitModel`]. It is used to instantiate an BiT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -51,7 +52,7 @@ class BitConfig(PretrainedConfig):
             are supported.
         global_padding (`str`, *optional*):
             Padding strategy to use for the convolutional layers. Can be either `"valid"`, `"same"`, or `None`.
-        num_groups (`int`, *optional*, defaults to `32`):
+        num_groups (`int`, *optional*, defaults to 32):
             Number of groups used for the `BitGroupNormActivation` layers.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop path rate for the stochastic depth.
@@ -63,7 +64,12 @@ class BitConfig(PretrainedConfig):
             The width factor for the model.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). Will default to the last stage if unset.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage.
 
     Example:
     ```python
@@ -79,6 +85,7 @@ class BitConfig(PretrainedConfig):
     >>> configuration = model.config
     ```
     """
+
     model_type = "bit"
     layer_types = ["preactivation", "bottleneck"]
     supported_padding = ["SAME", "VALID"]
@@ -98,6 +105,7 @@ class BitConfig(PretrainedConfig):
         output_stride=32,
         width_factor=1,
         out_features=None,
+        out_indices=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -122,12 +130,6 @@ class BitConfig(PretrainedConfig):
         self.width_factor = width_factor
 
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        if out_features is not None:
-            if not isinstance(out_features, list):
-                raise ValueError("out_features should be a list")
-            for feature in out_features:
-                if feature not in self.stage_names:
-                    raise ValueError(
-                        f"Feature {feature} is not a valid feature name. Valid names are {self.stage_names}"
-                    )
-        self.out_features = out_features
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )

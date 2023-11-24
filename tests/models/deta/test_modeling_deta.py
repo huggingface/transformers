@@ -19,7 +19,7 @@ import inspect
 import math
 import unittest
 
-from transformers import DetaConfig, is_torch_available, is_torchvision_available, is_vision_available
+from transformers import DetaConfig, ResNetConfig, is_torch_available, is_torchvision_available, is_vision_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torchvision, require_vision, slow, torch_device
 
@@ -49,7 +49,7 @@ class DetaModelTester:
         batch_size=8,
         is_training=True,
         use_labels=True,
-        hidden_size=256,
+        hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=8,
         intermediate_size=4,
@@ -118,6 +118,16 @@ class DetaModelTester:
         return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
+        resnet_config = ResNetConfig(
+            num_channels=3,
+            embeddings_size=10,
+            hidden_sizes=[10, 20, 30, 40],
+            depths=[1, 1, 2, 1],
+            hidden_act="relu",
+            num_labels=3,
+            out_features=["stage2", "stage3", "stage4"],
+            out_indices=[2, 3, 4],
+        )
         return DetaConfig(
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -134,6 +144,7 @@ class DetaModelTester:
             encoder_n_points=self.encoder_n_points,
             decoder_n_points=self.decoder_n_points,
             two_stage=self.two_stage,
+            backbone_config=resnet_config,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -191,6 +202,10 @@ class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             return True
 
         return False
+
+    @unittest.skip("Skip for now. PR #22437 causes some loading issue. See (not merged) #22656 for some discussions.")
+    def test_can_use_safetensors(self):
+        super().test_can_use_safetensors()
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

@@ -351,12 +351,11 @@ def convert_speecht5_checkpoint(
     if vocab_path:
         tokenizer = SpeechT5Tokenizer(vocab_path, model_max_length=config.max_text_positions)
 
-        if task == "pretrain":
-            # Mask token behaves like a normal word, i.e. include the space before it
-            mask_token = AddedToken("<mask>", lstrip=True, rstrip=False)
-            tokenizer.mask_token = mask_token
-            tokenizer.add_special_tokens({"mask_token": mask_token})
-            tokenizer.add_tokens(["<ctc_blank>"])
+        # Mask token behaves like a normal word, i.e. include the space before it
+        mask_token = AddedToken("<mask>", lstrip=True, rstrip=False)
+        tokenizer.mask_token = mask_token
+        tokenizer.add_special_tokens({"mask_token": mask_token})
+        tokenizer.add_tokens(["<ctc_blank>"])
 
     feature_extractor = SpeechT5FeatureExtractor()
     processor = SpeechT5Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)

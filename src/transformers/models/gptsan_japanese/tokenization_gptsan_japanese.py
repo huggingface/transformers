@@ -17,7 +17,7 @@ import collections
 import json
 import os
 import re
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -31,10 +31,6 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import PaddingStrategy, logging
-
-
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
 
 
 logger = logging.get_logger(__name__)
@@ -55,7 +51,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-# Copied from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese.load_vocab_and_emoji
 def load_vocab_and_emoji(vocab_file, emoji_file):
     """Loads a vocabulary file and emoji file into a dictionary."""
     with open(emoji_file, "r", encoding="utf-8") as f:
@@ -66,7 +61,7 @@ def load_vocab_and_emoji(vocab_file, emoji_file):
     ids_to_tokens = collections.OrderedDict()
     with open(vocab_file, "r", encoding="utf-8") as f:
         token = f.readlines()
-    token = [[t.rstrip("\n")] if (t == "," or "," not in t) else t.rstrip("\n").split(",") for t in token]
+    token = [[t.rstrip("\n")] if (t == ",\n" or "," not in t) else t.rstrip("\n").split(",") for t in token]
     for idx, b in enumerate(token):
         ids_to_tokens[idx] = b
         raw_vocab[",".join(b)] = idx
@@ -144,7 +139,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
             The token used for unknown charactor
         pad_token (`str`, *optional*, defaults to `"<|separator|>"`):
             The token used for padding
-        bos_token (`str`, *optional*, defaults to `"<|startoftext|>""`):
+        bos_token (`str`, *optional*, defaults to `"<|startoftext|>"`):
             The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
@@ -171,15 +166,6 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         do_clean_text=False,
         **kwargs,
     ):
-        super().__init__(
-            unk_token=unk_token,
-            pad_token=pad_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            sep_token=sep_token,
-            do_clean_text=do_clean_text,
-            **kwargs,
-        )
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
@@ -194,6 +180,16 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         self.vocab, self.raw_vocab, self.ids_to_tokens, self.emoji = load_vocab_and_emoji(vocab_file, emoji_file)
         self.subword_tokenizer = SubWordJapaneseTokenizer(
             vocab=self.vocab, ids_to_tokens=self.ids_to_tokens, emoji=self.emoji
+        )
+
+        super().__init__(
+            unk_token=unk_token,
+            pad_token=pad_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            do_clean_text=do_clean_text,
+            **kwargs,
         )
 
     @property
@@ -259,16 +255,24 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         text = "".join(words)
         return text
 
-    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer._build_conversation_input_ids
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        """This corresponds to DialoGPT variants of models."""
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
-
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-        return input_ids
+    @property
+    def default_chat_template(self):
+        """
+        A simple chat template that adds standard BOS, SEP and EOS tokens between messages while discarding role
+        information.
+        """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
+        return (
+            "{% for message in messages %}"
+            "{% if not loop.first %}{{ bos_token}}{% endif %}"
+            "{{ sep_token }}{{ message.content }} {{ eos_token }}"
+            "{% endfor %}"
+        )
 
     # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
@@ -371,7 +375,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
     ) -> BatchEncoding:
         # This tokenizer converts input text pairs into Prefix input and subsequent input
-        if type(batch_text_or_text_pairs[0]) is tuple or type(batch_text_or_text_pairs[0]) is list:
+        if isinstance(batch_text_or_text_pairs[0], tuple) or isinstance(tuple(batch_text_or_text_pairs[0]), list):
             # As a single text with an explicit un-prefix position
             batch_prefix_texts = []
             for pref, txt in batch_text_or_text_pairs:

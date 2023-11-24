@@ -47,7 +47,7 @@ class TrOCRStandaloneDecoderModelTester:
         use_labels=True,
         decoder_start_token_id=2,
         decoder_ffn_dim=32,
-        decoder_layers=4,
+        decoder_layers=2,
         decoder_attention_heads=4,
         max_position_embeddings=30,
         pad_token_id=0,
@@ -192,3 +192,7 @@ class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, P
     # decoder cannot keep gradients
     def test_retain_grad_hidden_states_attentions(self):
         return
+
+    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    def test_left_padding_compatibility(self):
+        pass

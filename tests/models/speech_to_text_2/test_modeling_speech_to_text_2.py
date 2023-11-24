@@ -50,7 +50,7 @@ class Speech2Text2StandaloneDecoderModelTester:
         use_labels=True,
         decoder_start_token_id=2,
         decoder_ffn_dim=32,
-        decoder_layers=4,
+        decoder_layers=2,
         decoder_attention_heads=4,
         max_position_embeddings=30,
         pad_token_id=0,
@@ -194,6 +194,10 @@ class Speech2Text2StandaloneDecoderModelTest(
 
     # not implemented currently
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip("This test is currently broken because of safetensors.")
+    def test_tf_from_pt_safetensors(self):
         pass
 
     # speech2text2 has no base model

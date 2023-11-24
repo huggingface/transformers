@@ -60,7 +60,7 @@ class AltCLIPVisionModelTester:
         is_training=True,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -186,6 +186,18 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     @unittest.skip(reason="AltCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
@@ -212,7 +224,7 @@ class AltCLIPTextModelTester:
         hidden_size=32,
         projection_dim=32,
         project_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -298,6 +310,11 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_head_masking = False
 
+    # TODO (@SunMarc): Fix me
+    @unittest.skip("It's broken.")
+    def test_resize_tokens_embeddings(self):
+        super().test_resize_tokens_embeddings()
+
     def setUp(self):
         self.model_tester = AltCLIPTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AltCLIPTextConfig, hidden_size=37)
@@ -313,6 +330,18 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     def test_model_outputs_equivalence(self):
@@ -509,6 +538,17 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
 
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
+
             models_equal = True
             for layer_name, p1 in model_state_dict.items():
                 p2 = loaded_model_state_dict[layer_name]
@@ -534,7 +574,7 @@ class AltCLIPModelIntegrationTest(unittest.TestCase):
         processor = AltCLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
-        inputs = processor(text=["一张猫的照片", "一张狗的照片"], images=image, padding=True, return_tensors="pt").to(torch_device)
+        inputs = processor(text=["一张猫的照片", "一张狗的照片"], images=image, padding=True, return_tensors="pt").to(torch_device)  # fmt: skip
 
         # forward pass
         with torch.no_grad():

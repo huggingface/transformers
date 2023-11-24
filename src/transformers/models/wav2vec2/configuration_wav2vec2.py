@@ -59,10 +59,15 @@ class Wav2Vec2Config(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        activation_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for activations inside the fully connected layer.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`Wav2Vec2ForCTC`].
+        layerdrop (`float`, *optional*, defaults to 0.1):
+            The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
+            details.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -177,6 +182,9 @@ class Wav2Vec2Config(PretrainedConfig):
         num_adapter_layers (`int`, *optional*, defaults to 3):
             Number of convolutional layers that should be used in the adapter network. Only relevant if `add_adapter is
             True`.
+        adapter_attn_dim (`int`, *optional*):
+            Dimension of the attention adapter weights to be used in each attention block. An example of a model using
+            attention adapters is [facebook/mms-1b-all](https://huggingface.co/facebook/mms-1b-all).
         output_hidden_size (`int`, *optional*):
             Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
             if `add_adapter is True`.
@@ -195,6 +203,7 @@ class Wav2Vec2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "wav2vec2"
 
     def __init__(
@@ -253,6 +262,7 @@ class Wav2Vec2Config(PretrainedConfig):
         adapter_stride=2,
         num_adapter_layers=3,
         output_hidden_size=None,
+        adapter_attn_dim=None,
         **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -323,6 +333,7 @@ class Wav2Vec2Config(PretrainedConfig):
         self.adapter_stride = adapter_stride
         self.num_adapter_layers = num_adapter_layers
         self.output_hidden_size = output_hidden_size or hidden_size
+        self.adapter_attn_dim = adapter_attn_dim
 
         # SequenceClassification-specific parameter. Feel free to ignore for other classes.
         self.classifier_proj_size = classifier_proj_size

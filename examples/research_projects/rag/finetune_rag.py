@@ -525,7 +525,7 @@ class GenerativeQAModule(BaseTransformer):
             type=int,
             default=1,
             help=(
-                "The number of retrieval actors to use when Ray is selected"
+                "The number of retrieval actors to use when Ray is selected "
                 "for the distributed retriever. Has no effect when "
                 "distributed_retriever is set to pytorch."
             ),
@@ -552,7 +552,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
             ray.init(address=args.ray_address, namespace="rag")
         except (ConnectionError, ValueError):
             logger.warning(
-                "Connection to Ray cluster failed. Make sure a Ray"
+                "Connection to Ray cluster failed. Make sure a Ray "
                 "cluster is running by either using Ray's cluster "
                 "launcher (`ray up`) or by manually starting Ray on "
                 "each node via `ray start --head` for the head node "

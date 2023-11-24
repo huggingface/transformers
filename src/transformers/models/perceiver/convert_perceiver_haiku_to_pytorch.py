@@ -29,13 +29,13 @@ from PIL import Image
 
 from transformers import (
     PerceiverConfig,
-    PerceiverFeatureExtractor,
     PerceiverForImageClassificationConvProcessing,
     PerceiverForImageClassificationFourier,
     PerceiverForImageClassificationLearned,
     PerceiverForMaskedLM,
     PerceiverForMultimodalAutoencoding,
     PerceiverForOpticalFlow,
+    PerceiverImageProcessor,
     PerceiverTokenizer,
 )
 from transformers.utils import logging
@@ -389,9 +389,9 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architec
         inputs = encoding.input_ids
         input_mask = encoding.attention_mask
     elif architecture in ["image_classification", "image_classification_fourier", "image_classification_conv"]:
-        feature_extractor = PerceiverFeatureExtractor()
+        image_processor = PerceiverImageProcessor()
         image = prepare_img()
-        encoding = feature_extractor(image, return_tensors="pt")
+        encoding = image_processor(image, return_tensors="pt")
         inputs = encoding.pixel_values
     elif architecture == "optical_flow":
         inputs = torch.randn(1, 2, 27, 368, 496)

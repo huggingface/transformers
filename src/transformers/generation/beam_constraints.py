@@ -263,8 +263,9 @@ class DisjunctiveConstraint(Constraint):
     A special [`Constraint`] that is fulfilled by fulfilling just one of several constraints.
 
     Args:
-        nested_token_ids (`List[List[int]]`): a list of words, where each word is a list of ids. This constraint
-        is fulfilled by generating just one from the list of words.
+        nested_token_ids (`List[List[int]]`):
+            A list of words, where each word is a list of ids. This constraint is fulfilled by generating just one from
+            the list of words.
     """
 
     def __init__(self, nested_token_ids: List[List[int]]):

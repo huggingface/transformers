@@ -22,6 +22,7 @@ from transformers import ResNetConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -38,7 +39,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
 class ResNetModelTester:
@@ -57,6 +58,7 @@ class ResNetModelTester:
         num_labels=3,
         scope=None,
         out_features=["stage2", "stage3", "stage4"],
+        out_indices=[2, 3, 4],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -72,6 +74,7 @@ class ResNetModelTester:
         self.scope = scope
         self.num_stages = len(hidden_sizes)
         self.out_features = out_features
+        self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -93,6 +96,7 @@ class ResNetModelTester:
             hidden_act=self.hidden_act,
             num_labels=self.num_labels,
             out_features=self.out_features,
+            out_indices=self.out_indices,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -297,9 +301,9 @@ def prepare_img():
 @require_vision
 class ResNetModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            AutoFeatureExtractor.from_pretrained(RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+            AutoImageProcessor.from_pretrained(RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
             if is_vision_available()
             else None
         )
@@ -308,9 +312,9 @@ class ResNetModelIntegrationTest(unittest.TestCase):
     def test_inference_image_classification_head(self):
         model = ResNetForImageClassification.from_pretrained(RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -323,3 +327,13 @@ class ResNetModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-11.1069, -9.7877, -8.3777]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+
+@require_torch
+class ResNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
+    all_model_classes = (ResNetBackbone,) if is_torch_available() else ()
+    has_attentions = False
+    config_class = ResNetConfig
+
+    def setUp(self):
+        self.model_tester = ResNetModelTester(self)

@@ -46,6 +46,7 @@ class Swin2SRModelTester:
         image_size=32,
         patch_size=1,
         num_channels=3,
+        num_channels_out=1,
         embed_dim=16,
         depths=[1, 2, 1],
         num_heads=[2, 2, 4],
@@ -70,6 +71,7 @@ class Swin2SRModelTester:
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
+        self.num_channels_out = num_channels_out
         self.embed_dim = embed_dim
         self.depths = depths
         self.num_heads = num_heads
@@ -110,6 +112,7 @@ class Swin2SRModelTester:
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
+            num_channels_out=self.num_channels_out,
             embed_dim=self.embed_dim,
             depths=self.depths,
             num_heads=self.num_heads,
@@ -145,7 +148,8 @@ class Swin2SRModelTester:
 
         expected_image_size = self.image_size * self.upscale
         self.parent.assertEqual(
-            result.reconstruction.shape, (self.batch_size, self.num_channels, expected_image_size, expected_image_size)
+            result.reconstruction.shape,
+            (self.batch_size, self.num_channels_out, expected_image_size, expected_image_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -158,7 +162,11 @@ class Swin2SRModelTester:
 @require_torch
 class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Swin2SRModel, Swin2SRForImageSuperResolution) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": Swin2SRModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": Swin2SRModel, "image-to-image": Swin2SRForImageSuperResolution}
+        if is_torch_available()
+        else {}
+    )
 
     fx_compatible = False
     test_pruning = False
@@ -201,6 +209,18 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @unittest.skip(reason="Swin2SR does not support training yet")
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     def test_model_common_attributes(self):

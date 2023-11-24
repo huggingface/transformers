@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Mask2Former model configuration"""
-import copy
 from typing import Dict, List, Optional
 
 from ...configuration_utils import PretrainedConfig
@@ -94,7 +93,7 @@ class Mask2FormerConfig(PretrainedConfig):
             Ratio of points that are sampled via importance sampling.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (`float``, *optional*, defaults to 1.0):
+        init_xavier_std (`float`, *optional*, defaults to 1.0):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
         use_auxiliary_loss (`boolean``, *optional*, defaults to `True`):
             If `True` [`Mask2FormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed using
@@ -120,6 +119,7 @@ class Mask2FormerConfig(PretrainedConfig):
     ```
 
     """
+
     model_type = "mask2former"
     backbones_supported = ["swin"]
     attribute_map = {"hidden_size": "hidden_dim"}
@@ -170,10 +170,18 @@ class Mask2FormerConfig(PretrainedConfig):
                 use_absolute_embeddings=False,
                 out_features=["stage1", "stage2", "stage3", "stage4"],
             )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
+
+        if isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.pop("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
+
+        # verify that the backbone is supported
+        if backbone_config.model_type not in self.backbones_supported:
+            logger.warning_once(
+                f"Backbone {backbone_config.model_type} is not a supported model and may not be compatible with Mask2Former. "
+                f"Supported model types: {','.join(self.backbones_supported)}"
+            )
 
         self.backbone_config = backbone_config
         self.feature_size = feature_size
@@ -222,15 +230,3 @@ class Mask2FormerConfig(PretrainedConfig):
             backbone_config=backbone_config,
             **kwargs,
         )
-
-    def to_dict(self) -> Dict[str, any]:
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["backbone_config"] = self.backbone_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

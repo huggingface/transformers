@@ -51,14 +51,16 @@ Library:
 - pipelines: @Narsil
 - tensorflow: @gante and @Rocketknight1
 - tokenizers: @ArthurZucker
-- trainer: @sgugger
+- trainer: @muellerzr and @pacman100
 
 Integrations:
 
-- deepspeed: HF Trainer: @stas00, Accelerate: @pacman100
+- deepspeed: HF Trainer/Accelerate: @pacman100
 - ray/raytune: @richardliaw, @amogkam
+- Big Model Inference: @SunMarc
+- quantization (bitsandbytes, autogpt): @SunMarc and @younesbelkada
 
-Documentation: @sgugger, @stevhliu and @MKhalusova
+Documentation: @stevhliu and @MKhalusova
 
 HF projects:
 
@@ -70,7 +72,7 @@ HF projects:
 Maintained examples (not research project or legacy):
 
 - Flax: @sanchit-gandhi
-- PyTorch: @sgugger
+- PyTorch: See Models above and tag the person corresponding to the modality of the example.
 - TensorFlow: @Rocketknight1
 
  -->

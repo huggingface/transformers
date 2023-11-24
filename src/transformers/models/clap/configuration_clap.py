@@ -14,7 +14,6 @@
 # limitations under the License.
 """ CLAP model configuration"""
 
-import copy
 import os
 from typing import Union
 
@@ -65,8 +64,6 @@ class ClapTextConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
             The vocabulary size of the `token_type_ids` passed when calling [`ClapTextModel`].
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
@@ -80,8 +77,6 @@ class ClapTextConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
         projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the projection layer. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
@@ -102,6 +97,7 @@ class ClapTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "clap_text_model"
 
     def __init__(
@@ -116,7 +112,6 @@ class ClapTextConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=514,
         type_vocab_size=1,
-        initializer_range=0.02,
         initializer_factor=1.0,
         layer_norm_eps=1e-12,
         projection_dim=512,
@@ -125,7 +120,6 @@ class ClapTextConfig(PretrainedConfig):
         eos_token_id=2,
         position_embedding_type="absolute",
         use_cache=True,
-        classifier_dropout=None,
         projection_hidden_act="relu",
         **kwargs,
     ):
@@ -141,17 +135,17 @@ class ClapTextConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
         self.projection_hidden_act = projection_hidden_act
         self.projection_dim = projection_dim
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from ClapConfig
@@ -234,7 +228,7 @@ class ClapAudioConfig(PretrainedConfig):
         projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the projection layer. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        layer_norm_eps (`[type]`, *optional*, defaults to `1e-5`):
+        layer_norm_eps (`[type]`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
@@ -320,6 +314,8 @@ class ClapAudioConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the audio config dict if we are loading from ClapConfig
@@ -350,10 +346,10 @@ class ClapConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`ClapTextConfig`].
         audio_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`ClapAudioConfig`].
+        logit_scale_init_value (`float`, *optional*, defaults to 14.29):
+            The inital value of the *logit_scale* paramter. Default is used as per the original CLAP implementation.
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and audio projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original CLAP implementation.
         projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
             Activation function for the projection layers.
         initializer_factor (`float`, *optional*, defaults to 1.0):
@@ -386,7 +382,6 @@ class ClapConfig(PretrainedConfig):
     ```"""
 
     model_type = "clap"
-    is_composition = True
 
     def __init__(
         self,
@@ -435,16 +430,3 @@ class ClapConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["audio_config"] = self.audio_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

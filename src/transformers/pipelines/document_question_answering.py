@@ -37,7 +37,7 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES
 
 TESSERACT_LOADED = False
 if is_pytesseract_available():
@@ -131,13 +131,18 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.tokenizer is not None and not self.tokenizer.__class__.__name__.endswith("Fast"):
+            raise ValueError(
+                "`DocumentQuestionAnsweringPipeline` requires a fast tokenizer, but a slow tokenizer "
+                f"(`{self.tokenizer.__class__.__name__}`) is provided."
+            )
 
         if self.model.config.__class__.__name__ == "VisionEncoderDecoderConfig":
             self.model_type = ModelType.VisionEncoderDecoder
             if self.model.config.encoder.model_type != "donut-swin":
                 raise ValueError("Currently, the only supported VisionEncoderDecoder model is Donut")
         else:
-            self.check_model_type(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING)
+            self.check_model_type(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES)
             if self.model.config.__class__.__name__ == "LayoutLMConfig":
                 self.model_type = ModelType.LayoutLM
             else:
@@ -154,6 +159,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         max_seq_len=None,
         top_k=None,
         handle_impossible_answer=None,
+        timeout=None,
         **kwargs,
     ):
         preprocess_params, postprocess_params = {}, {}
@@ -169,6 +175,8 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             preprocess_params["lang"] = lang
         if tesseract_config is not None:
             preprocess_params["tesseract_config"] = tesseract_config
+        if timeout is not None:
+            preprocess_params["timeout"] = timeout
 
         if top_k is not None:
             if top_k < 1:
@@ -239,6 +247,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                 Language to use while running OCR. Defaults to english.
             tesseract_config (`str`, *optional*):
                 Additional flags to pass to tesseract while running OCR.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
 
         Return:
             A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
@@ -268,6 +279,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         word_boxes: Tuple[str, List[float]] = None,
         lang=None,
         tesseract_config="",
+        timeout=None,
     ):
         # NOTE: This code mirrors the code in question answering and will be implemented in a follow up PR
         # to support documents with enough tokens that overflow the model's window
@@ -280,7 +292,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         image = None
         image_features = {}
         if input.get("image", None) is not None:
-            image = load_image(input["image"])
+            image = load_image(input["image"], timeout=timeout)
             if self.image_processor is not None:
                 image_features.update(self.image_processor(images=image, return_tensors=self.framework))
             elif self.feature_extractor is not None:

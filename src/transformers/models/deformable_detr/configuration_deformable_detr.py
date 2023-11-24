@@ -77,7 +77,7 @@ class DeformableDetrConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         init_xavier_std (`float`, *optional*, defaults to 1):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         auxiliary_loss (`bool`, *optional*, defaults to `False`):
@@ -125,6 +125,9 @@ class DeformableDetrConfig(PretrainedConfig):
             based on the predictions from the previous layer.
         focal_alpha (`float`, *optional*, defaults to 0.25):
             Alpha parameter in the focal loss.
+        disable_custom_kernels (`bool`, *optional*, defaults to `False`):
+            Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
+            kernels are not supported by PyTorch ONNX export.
 
     Examples:
 
@@ -140,6 +143,7 @@ class DeformableDetrConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "deformable_detr"
     attribute_map = {
         "hidden_size": "d_model",
@@ -189,6 +193,7 @@ class DeformableDetrConfig(PretrainedConfig):
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
         focal_alpha=0.25,
+        disable_custom_kernels=False,
         **kwargs,
     ):
         if backbone_config is not None and use_timm_backbone:
@@ -246,6 +251,7 @@ class DeformableDetrConfig(PretrainedConfig):
         self.giou_loss_coefficient = giou_loss_coefficient
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
+        self.disable_custom_kernels = disable_custom_kernels
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property

@@ -13,16 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Loading of Deformable DETR's CUDA kernels"""
-
 import os
+from pathlib import Path
 
 
 def load_cuda_kernels():
     from torch.utils.cpp_extension import load
 
-    root = os.path.join(os.path.dirname(os.path.realpath(__file__)), "custom_kernel")
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deformable_detr"
     src_files = [
-        os.path.join(root, filename)
+        root / filename
         for filename in [
             "vision.cpp",
             os.path.join("cpu", "ms_deform_attn_cpu.cpp"),
@@ -33,10 +33,8 @@ def load_cuda_kernels():
     load(
         "MultiScaleDeformableAttention",
         src_files,
-        # verbose=True,
         with_cuda=True,
-        extra_include_paths=[root],
-        # build_directory=os.path.dirname(os.path.realpath(__file__)),
+        extra_include_paths=[str(root)],
         extra_cflags=["-DWITH_CUDA=1"],
         extra_cuda_cflags=[
             "-DCUDA_HAS_FP16=1",

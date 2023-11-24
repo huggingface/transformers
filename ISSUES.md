@@ -158,7 +158,7 @@ You are not required to read the following guidelines before opening an issue. H
     --do_train --n_train 500 --num_train_epochs 1 \
     --per_device_train_batch_size 1  --freeze_embeds \
     --src_lang en_XX --tgt_lang ro_RO --task translation \
-    --fp16 --sharded_ddp
+    --fp16
    ```
 
    If you don't break it up, one has to scroll horizontally which often makes it quite difficult to quickly see what's happening.

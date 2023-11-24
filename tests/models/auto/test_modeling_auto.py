@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+import transformers
 from transformers import BertConfig, GPT2Model, is_safetensors_available, is_torch_available
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
@@ -45,6 +46,7 @@ if is_torch_available():
     from test_module.custom_modeling import CustomModel
 
     from transformers import (
+        AutoBackbone,
         AutoConfig,
         AutoModel,
         AutoModelForCausalLM,
@@ -66,11 +68,13 @@ if is_torch_available():
         FunnelModel,
         GPT2Config,
         GPT2LMHeadModel,
+        ResNetBackbone,
         RobertaForMaskedLM,
         T5Config,
         T5ForConditionalGeneration,
         TapasConfig,
         TapasForQuestionAnswering,
+        TimmBackbone,
     )
     from transformers.models.auto.modeling_auto import (
         MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -89,6 +93,9 @@ if is_torch_available():
 
 @require_torch
 class AutoModelTest(unittest.TestCase):
+    def setUp(self):
+        transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -224,6 +231,42 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForTokenClassification)
 
+    @slow
+    def test_auto_backbone_timm_model_from_pretrained(self):
+        # Configs can't be loaded for timm models
+        model = AutoBackbone.from_pretrained("resnet18", use_timm_backbone=True)
+
+        with pytest.raises(ValueError):
+            # We can't pass output_loading_info=True as we're loading from timm
+            AutoBackbone.from_pretrained("resnet18", use_timm_backbone=True, output_loading_info=True)
+
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, TimmBackbone)
+
+        # Check kwargs are correctly passed to the backbone
+        model = AutoBackbone.from_pretrained("resnet18", use_timm_backbone=True, out_indices=(-1, -2))
+        self.assertEqual(model.out_indices, (-1, -2))
+
+        # Check out_features cannot be passed to Timm backbones
+        with self.assertRaises(ValueError):
+            _ = AutoBackbone.from_pretrained("resnet18", use_timm_backbone=True, out_features=["stage1"])
+
+    @slow
+    def test_auto_backbone_from_pretrained(self):
+        model = AutoBackbone.from_pretrained("microsoft/resnet-18")
+        model, loading_info = AutoBackbone.from_pretrained("microsoft/resnet-18", output_loading_info=True)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, ResNetBackbone)
+
+        # Check kwargs are correctly passed to the backbone
+        model = AutoBackbone.from_pretrained("microsoft/resnet-18", out_indices=[-1, -2])
+        self.assertEqual(model.out_indices, [-1, -2])
+        self.assertEqual(model.out_features, ["stage4", "stage3"])
+
+        model = AutoBackbone.from_pretrained("microsoft/resnet-18", out_features=["stage2", "stage4"])
+        self.assertEqual(model.out_indices, [2, 4])
+        self.assertEqual(model.out_features, ["stage2", "stage4"])
+
     def test_from_pretrained_identifier(self):
         model = AutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(model, BertForMaskedLM)
@@ -273,6 +316,13 @@ class AutoModelTest(unittest.TestCase):
                 del MODEL_MAPPING._extra_content[CustomConfig]
 
     def test_from_pretrained_dynamic_model_distant(self):
+        # If remote code is not set, we will time out when asking whether to load the model.
+        with self.assertRaises(ValueError):
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model")
+        # If remote code is disabled, we can't load this config.
+        with self.assertRaises(ValueError):
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=False)
+
         model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
         self.assertEqual(model.__class__.__name__, "NewModel")
 
@@ -287,6 +337,34 @@ class AutoModelTest(unittest.TestCase):
 
         # This one uses a relative import to a util file, this checks it is downloaded and used properly.
         model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model_with_util", trust_remote_code=True)
+        self.assertEqual(model.__class__.__name__, "NewModel")
+
+        # Test model can be reloaded.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            reloaded_model = AutoModel.from_pretrained(tmp_dir, trust_remote_code=True)
+
+        self.assertEqual(reloaded_model.__class__.__name__, "NewModel")
+        for p1, p2 in zip(model.parameters(), reloaded_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
+
+    def test_from_pretrained_dynamic_model_distant_with_ref(self):
+        model = AutoModel.from_pretrained("hf-internal-testing/ref_to_test_dynamic_model", trust_remote_code=True)
+        self.assertEqual(model.__class__.__name__, "NewModel")
+
+        # Test model can be reloaded.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            reloaded_model = AutoModel.from_pretrained(tmp_dir, trust_remote_code=True)
+
+        self.assertEqual(reloaded_model.__class__.__name__, "NewModel")
+        for p1, p2 in zip(model.parameters(), reloaded_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
+
+        # This one uses a relative import to a util file, this checks it is downloaded and used properly.
+        model = AutoModel.from_pretrained(
+            "hf-internal-testing/ref_to_test_dynamic_model_with_util", trust_remote_code=True
+        )
         self.assertEqual(model.__class__.__name__, "NewModel")
 
         # Test model can be reloaded.
@@ -349,6 +427,34 @@ class AutoModelTest(unittest.TestCase):
                 if CustomConfig in mapping._extra_content:
                     del mapping._extra_content[CustomConfig]
 
+    def test_from_pretrained_dynamic_model_conflict(self):
+        class NewModelConfigLocal(BertConfig):
+            model_type = "new-model"
+
+        class NewModel(BertModel):
+            config_class = NewModelConfigLocal
+
+        try:
+            AutoConfig.register("new-model", NewModelConfigLocal)
+            AutoModel.register(NewModelConfigLocal, NewModel)
+            # If remote code is not set, the default is to use local
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model")
+            self.assertEqual(model.config.__class__.__name__, "NewModelConfigLocal")
+
+            # If remote code is disabled, we load the local one.
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=False)
+            self.assertEqual(model.config.__class__.__name__, "NewModelConfigLocal")
+
+            # If remote is enabled, we load from the Hub
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
+            self.assertEqual(model.config.__class__.__name__, "NewModelConfig")
+
+        finally:
+            if "new-model" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["new-model"]
+            if NewModelConfigLocal in MODEL_MAPPING._extra_content:
+                del MODEL_MAPPING._extra_content[NewModelConfigLocal]
+
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"
@@ -381,17 +487,17 @@ class AutoModelTest(unittest.TestCase):
         _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         with RequestCounter() as counter:
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-            self.assertEqual(counter.get_request_count, 0)
-            self.assertEqual(counter.head_request_count, 1)
-            self.assertEqual(counter.other_request_count, 0)
+        self.assertEqual(counter["GET"], 0)
+        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter.total_calls, 1)
 
         # With a sharded checkpoint
         _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
         with RequestCounter() as counter:
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
-            self.assertEqual(counter.get_request_count, 0)
-            self.assertEqual(counter.head_request_count, 1)
-            self.assertEqual(counter.other_request_count, 0)
+        self.assertEqual(counter["GET"], 0)
+        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter.total_calls, 1)
 
     def test_attr_not_existing(self):
         from transformers.models.auto.auto_factory import _LazyAutoMapping

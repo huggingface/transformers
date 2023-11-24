@@ -12,7 +12,6 @@ from tensorflow.keras.callbacks import Callback
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
 from .modelcard import TrainingSummary
-from .utils import get_full_repo_name
 
 
 logger = logging.getLogger(__name__)
@@ -144,7 +143,7 @@ class KerasMetricCallback(Callback):
     @staticmethod
     def _concatenate_batches(batches, padding_index=-100):
         # If all batches are unidimensional or same length, do a simple concatenation
-        if batches[0].ndim == 1 or all([batch.shape[1] == batches[0].shape[1] for batch in batches]):
+        if batches[0].ndim == 1 or all(batch.shape[1] == batches[0].shape[1] for batch in batches):
             return np.concatenate(batches, axis=0)
 
         # Welp, they're not the same length. Let's do some padding
@@ -193,8 +192,7 @@ class KerasMetricCallback(Callback):
             # This dense conditional recognizes the case where we have an encoder-decoder model, but
             # avoids getting tangled up when we just have a model with a layer called 'encoder'
             if hasattr(self.model, "encoder") and hasattr(self.model.encoder, "main_input_name"):
-                if self.model.encoder.main_input_name != self.model.main_input_name:
-                    main_input_name = self.model.encoder.main_input_name
+                main_input_name = self.model.encoder.main_input_name
             else:
                 main_input_name = getattr(self.model, "main_input_name", "input_ids")
 
@@ -224,7 +222,9 @@ class KerasMetricCallback(Callback):
                 if self.use_xla_generation:
                     predictions = self.generation_function(generation_inputs, attention_mask=attention_mask)
                 else:
-                    predictions = self.model.generate(generation_inputs, attention_mask=attention_mask)
+                    predictions = self.model.generate(
+                        generation_inputs, attention_mask=attention_mask, **self.generate_kwargs
+                    )
             else:
                 predictions = self.model.predict_on_batch(batch)
                 if isinstance(predictions, dict):
@@ -333,14 +333,13 @@ class PushToHubCallback(Callback):
             raise ValueError("Please supply a positive integer argument for save_steps when save_strategy == 'steps'!")
         self.save_steps = save_steps
         output_dir = Path(output_dir)
+
+        # Create repo and retrieve repo_id
         if hub_model_id is None:
             hub_model_id = output_dir.absolute().name
-        if "/" not in hub_model_id:
-            hub_model_id = get_full_repo_name(hub_model_id, token=hub_token)
+        self.hub_model_id = create_repo(repo_id=hub_model_id, exist_ok=True, token=hub_token).repo_id
 
         self.output_dir = output_dir
-        self.hub_model_id = hub_model_id
-        create_repo(self.hub_model_id, exist_ok=True)
         self.repo = Repository(str(self.output_dir), clone_from=self.hub_model_id, token=hub_token)
 
         self.tokenizer = tokenizer

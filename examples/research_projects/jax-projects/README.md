@@ -227,7 +227,7 @@ the forum and making use of the [🤗 hub](http://huggingface.co/) to have a ver
 control for your models and training logs.
 - When debugging, it is important that the debugging cycle is kept as short as possible to 
 be able to effectively debug. *E.g.* if there is a problem with your training script, 
-you should run it with just a couple of hundreds of examples and not the whole dataset script. This can be done by either making use of [datasets streaming](https://huggingface.co/docs/datasets/master/dataset_streaming.html?highlight=streaming) or by selecting just the first 
+you should run it with just a couple of hundreds of examples and not the whole dataset script. This can be done by either making use of [datasets streaming](https://huggingface.co/docs/datasets/master/dataset_streaming?highlight=streaming) or by selecting just the first 
 X number of data samples after loading:
 
 ```python
@@ -1117,7 +1117,7 @@ params = model.init(key2, x)
 
 bytes_output = serialization.to_bytes(params)
 
-repo = Repository("flax-model", clone_from="flax-community/flax-model-dummy", use_auth_token=True)
+repo = Repository("flax-model", clone_from="flax-community/flax-model-dummy", token=True)
 with repo.commit("My cool Flax model :)"):
     with open("flax_model.msgpack", "wb") as f:
         f.write(bytes_output)

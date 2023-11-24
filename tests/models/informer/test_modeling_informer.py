@@ -26,6 +26,7 @@ from transformers.testing_utils import is_flaky, require_torch, slow, torch_devi
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 TOLERANCE = 1e-4
@@ -117,7 +118,7 @@ class InformerModelTester:
 
         past_time_features = floats_tensor([self.batch_size, _past_length, config.num_time_features])
         past_values = floats_tensor([self.batch_size, _past_length])
-        past_observed_mask = floats_tensor([self.batch_size, _past_length])
+        past_observed_mask = floats_tensor([self.batch_size, _past_length]) > 0.5
 
         # decoder inputs
         future_time_features = floats_tensor([self.batch_size, config.prediction_length, config.num_time_features])
@@ -177,9 +178,10 @@ class InformerModelTester:
 
 
 @require_torch
-class InformerModelTest(ModelTesterMixin, unittest.TestCase):
+class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (InformerModel, InformerForPrediction) if is_torch_available() else ()
     all_generative_model_classes = (InformerForPrediction,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": InformerModel} if is_torch_available() else {}
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
@@ -275,6 +277,24 @@ class InformerModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     def test_determinism(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     # # Input is 'static_categorical_features' not 'input_ids'
@@ -436,7 +456,7 @@ class InformerModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 def prepare_batch(filename="train-batch.pt"):
-    file = hf_hub_download(repo_id="kashif/tourism-monthly-batch", filename=filename, repo_type="dataset")
+    file = hf_hub_download(repo_id="hf-internal-testing/tourism-monthly-batch", filename=filename, repo_type="dataset")
     batch = torch.load(file, map_location=torch_device)
     return batch
 

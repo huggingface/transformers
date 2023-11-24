@@ -56,6 +56,15 @@ class GPTNeoXConfig(PretrainedConfig):
             percentage of hidden dimensions to allocate to rotary embeddings
         rotary_emb_base (`int`, *optional*, defaults to 10000)
             base for computing rotary embeddings frequency
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio probability of the attention score.
+        hidden_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio of (1) the word embeddings, (2) the post-attention hidden states, and (3) the post-mlp
+            hidden states.
+        classifier_dropout (`float`, *optional*, defaults to 0.1):
+            Argument used when doing token classification, used in the model [`GPTNeoXForTokenClassification`].
+
+            The dropout ratio for the hidden layer.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -69,6 +78,15 @@ class GPTNeoXConfig(PretrainedConfig):
         use_parallel_residual (`bool`, *optional*, defaults to `True`):
             Whether to use a "parallel" formulation in each Transformer layer, which can provide a slight training
             speedup at large scales (e.g. 20B).
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
+            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
+            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
+            `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
+            these scaling strategies behave:
+            https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
+            experimental feature, subject to breaking API changes in future versions.
+
         Example:
 
     ```python
@@ -83,6 +101,7 @@ class GPTNeoXConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config  # doctest: +SKIP
     ```"""
+
     model_type = "gpt_neox"
 
     def __init__(
@@ -95,6 +114,9 @@ class GPTNeoXConfig(PretrainedConfig):
         hidden_act="gelu",
         rotary_pct=0.25,
         rotary_emb_base=10000,
+        attention_dropout=0.0,
+        hidden_dropout=0.0,
+        classifier_dropout=0.1,
         max_position_embeddings=2048,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
@@ -103,6 +125,7 @@ class GPTNeoXConfig(PretrainedConfig):
         eos_token_id=2,
         tie_word_embeddings=False,
         use_parallel_residual=True,
+        rope_scaling=None,
         **kwargs,
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -115,8 +138,40 @@ class GPTNeoXConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.rotary_pct = rotary_pct
         self.rotary_emb_base = rotary_emb_base
+        self.attention_dropout = attention_dropout
+        self.hidden_dropout = hidden_dropout
+        self.classifier_dropout = classifier_dropout
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.tie_word_embeddings = tie_word_embeddings
         self.use_parallel_residual = use_parallel_residual
+        self.rope_scaling = rope_scaling
+        self._rope_scaling_validation()
+
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                "The hidden size is not divisble by the number of attention heads! Make sure to update them!"
+            )
+
+    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
+    def _rope_scaling_validation(self):
+        """
+        Validate the `rope_scaling` configuration.
+        """
+        if self.rope_scaling is None:
+            return
+
+        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
+            raise ValueError(
+                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
+                f"got {self.rope_scaling}"
+            )
+        rope_scaling_type = self.rope_scaling.get("type", None)
+        rope_scaling_factor = self.rope_scaling.get("factor", None)
+        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic"]:
+            raise ValueError(
+                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
+            )
+        if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
+            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")

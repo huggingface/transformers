@@ -19,7 +19,7 @@ import tempfile
 import unittest
 
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, T5Tokenizer, T5TokenizerFast
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_seqio, require_tokenizers, slow
 from transformers.utils import cached_property, is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -63,11 +63,12 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(vocab_keys[0], "<unk>")
         self.assertEqual(vocab_keys[1], "<s>")
-        self.assertEqual(vocab_keys[-1], "<pad>")
+        self.assertEqual(vocab_keys[1100], "<pad>")
         self.assertEqual(len(vocab_keys), 1_101)
 
     def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 1_100)
+        self.assertEqual(self.get_tokenizer().vocab_size, 1000)
+        self.assertEqual(len(self.get_tokenizer()), 1101)
 
     def test_full_tokenizer(self):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB)
@@ -144,10 +145,10 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return T5TokenizerFast.from_pretrained("t5-base")
 
     def get_tokenizer(self, **kwargs) -> T5Tokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, pad_token=None, **kwargs)
+        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs) -> T5TokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, pad_token=None, **kwargs)
+        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
@@ -368,9 +369,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_tokenizer_integration(self):
-        # fmt: off
-        expected_encoding = {'input_ids': [[31220, 7, 41, 14034, 801, 38, 3, 102, 63, 17, 127, 524, 18, 7031, 2032, 277, 11, 3, 102, 63, 17, 127, 524, 18, 2026, 17, 10761, 18, 7041, 61, 795, 879, 18, 19681, 4648, 7, 41, 12920, 382, 6, 350, 6383, 4949, 6, 2158, 12920, 382, 9, 6, 3, 4, 11160, 6, 2043, 17153, 279, 49, 17, 6, 3, 4, 434, 9688, 11439, 21, 6869, 10509, 17725, 41, 567, 9138, 61, 11, 6869, 10509, 11946, 41, 18207, 517, 61, 28, 147, 3538, 1220, 7140, 10761, 2250, 16, 910, 1220, 8024, 11, 1659, 1413, 32, 883, 2020, 344, 2215, 226, 6, 12901, 382, 127, 524, 11, 4738, 7, 127, 15390, 5, 1], [272, 24203, 19, 876, 12, 554, 18, 9719, 1659, 2647, 26352, 6497, 7, 45, 73, 9339, 400, 26, 1499, 57, 22801, 10760, 30, 321, 646, 11, 269, 2625, 16, 66, 7500, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [37, 1704, 4216, 3, 20400, 4418, 7, 147, 8, 19743, 1782, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E501
-        # fmt: on
+        expected_encoding = {'input_ids': [[31220, 7, 41, 14034, 801, 38, 3, 102, 63, 17, 127, 524, 18, 7031, 2032, 277, 11, 3, 102, 63, 17, 127, 524, 18, 2026, 17, 10761, 18, 7041, 61, 795, 879, 18, 19681, 4648, 7, 41, 12920, 382, 6, 350, 6383, 4949, 6, 2158, 12920, 382, 9, 6, 3, 4, 11160, 6, 2043, 17153, 279, 49, 17, 6, 3, 4, 434, 9688, 11439, 21, 6869, 10509, 17725, 41, 567, 9138, 61, 11, 6869, 10509, 11946, 41, 18207, 517, 61, 28, 147, 3538, 1220, 7140, 10761, 2250, 16, 910, 1220, 8024, 11, 1659, 1413, 32, 883, 2020, 344, 2215, 226, 6, 12901, 382, 127, 524, 11, 4738, 7, 127, 15390, 5, 1], [272, 24203, 19, 876, 12, 554, 18, 9719, 1659, 2647, 26352, 6497, 7, 45, 73, 9339, 400, 26, 1499, 57, 22801, 10760, 30, 321, 646, 11, 269, 2625, 16, 66, 7500, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [37, 1704, 4216, 3, 20400, 4418, 7, 147, 8, 19743, 1782, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # fmt: skip
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
@@ -381,7 +380,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_get_sentinel_tokens(self):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=10)
         sentinel_tokens = tokenizer.get_sentinel_tokens()
-        self.assertEquals(len(sentinel_tokens), 10)
+        self.assertEqual(len(sentinel_tokens), 10)
         self.assertListEqual(sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)]))
         self.assertTrue([re.search(r"<extra_id_\d+>", token) is not None for token in sentinel_tokens])
 
@@ -392,10 +391,195 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_get_sentinel_tokens_for_fasttokenizer(self):
         tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
         sentinel_tokens = tokenizer.get_sentinel_tokens()
-        self.assertEquals(len(sentinel_tokens), 10)
+        self.assertEqual(len(sentinel_tokens), 10)
         self.assertListEqual(sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)]))
         self.assertTrue([re.search(r"<extra_id_\d+>", token) is not None for token in sentinel_tokens])
 
     def test_get_sentinel_token_ids_for_fasttokenizer(self):
         tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
         self.assertListEqual(sorted(tokenizer.get_sentinel_token_ids()), sorted(range(1000, 1010)))
+
+    def test_some_edge_cases(self):
+        tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
+
+        sp_tokens = tokenizer.sp_model.encode("</s>>", out_type=str)
+        self.assertEqual(sp_tokens, ["<", "/", "s", ">", ">"])
+        tokens = tokenizer.tokenize("</s>>")
+        self.assertNotEqual(sp_tokens, tokens)
+        self.assertEqual(tokens, ["</s>", ">"])
+
+        tokens = tokenizer.tokenize("")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, tokenizer.sp_model.encode("", out_type=str))
+
+        tokens = tokenizer.tokenize(" ")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, tokenizer.sp_model.encode(" ", out_type=str))
+
+        tokens = tokenizer.tokenize("▁")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
+
+        tokens = tokenizer.tokenize(" ▁")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
+
+
+@require_sentencepiece
+@require_tokenizers
+class CommonSpmIntegrationTests(unittest.TestCase):
+    """
+    A class that regroups important test to make sure that we properly handle the special tokens.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0, legacy=False)
+        tokenizer.add_special_tokens(
+            {"additional_special_tokens": [AddedToken("<extra_id_0>", rstrip=False, lstrip=False)]}
+        )
+        # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
+        # So the extra ids are split....
+        cls.tokenizer = tokenizer
+
+    def test_add_dummy_prefix(self):
+        # make sure `'▁'` is prepended, and outputs match sp_model's
+        # `sentencepiece.NormalizerSpec.add_dummy_prefix` attribute
+        input_ids = self.tokenizer.encode(". Hello", add_special_tokens=False)
+        self.assertEqual(input_ids, [7, 4, 156, 86, 20])
+        sp_encode = self.tokenizer.sp_model.encode(". Hello")
+        self.assertEqual(input_ids, [7] + sp_encode)
+        tokens = self.tokenizer.tokenize(". Hello")
+        self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
+
+        tokens = self.tokenizer.tokenize("")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, self.tokenizer.sp_model.encode("", out_type=str))
+
+        tokens = self.tokenizer.tokenize(" ")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, self.tokenizer.sp_model.encode(" ", out_type=str))
+
+        tokens = self.tokenizer.tokenize("▁")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, self.tokenizer.sp_model.encode("▁", out_type=str))
+
+    def test_remove_extra_whitespaces(self):
+        # make sure the extra spaces are eaten
+        # sentencepiece.NormalizerSpec.remove_extra_whitespaces attribute
+        input_ids = self.tokenizer.encode("       . Hello", add_special_tokens=False)
+        self.assertEqual(input_ids, [7, 4, 156, 86, 20])
+        sp_encode = self.tokenizer.sp_model.encode("       . Hello")
+        self.assertEqual(input_ids, [7] + sp_encode)
+        tokens = self.tokenizer.tokenize(" . Hello")
+        self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
+
+        # `'▁'` is also a whitespace
+        input_ids = self.tokenizer.encode("▁He is not")
+        self.assertEqual(input_ids, [156, 46, 44, 2])
+        tokens = self.tokenizer.tokenize("▁He is not")
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not"])  # no extra space added
+
+        input_ids = self.tokenizer.encode("▁He is not<extra_id_0>             ▁He")
+        # here t5x does not eat with lstrip, so there is and extra ▁He in the original one
+        self.assertEqual(input_ids, [156, 46, 44, 1001, 156, 2])
+        tokens = self.tokenizer.tokenize("▁He is not<extra_id_0>              ▁He")
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "▁He"])  # spaces are eaten by spm
+        # make sure that the output after the extra id is the same as if
+        # extra_id was not there
+        input_ids = self.tokenizer.encode("▁He is not             ▁He")
+        self.assertEqual(input_ids, [156, 46, 44, 156, 2])
+        tokens = self.tokenizer.tokenize("▁He is not              ▁He")
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "▁He"])  # spaces are eaten by spm even if not start
+
+    def test_character_after_special_token(self):
+        # Make sure that `tokenizer.tokenize` is similar to
+        # adding the equivalent special token to the vocab
+        input_ids = self.tokenizer.encode("Hey <extra_id_0>I")
+        self.assertEqual(input_ids, [156, 30, 1001, 100, 2])
+        tokens = self.tokenizer.tokenize("Hey <extra_id_0>I")
+        self.assertEqual(tokens, ["▁He", "y", "<extra_id_0>", "I"])
+
+        input_ids = self.tokenizer.encode("Hello, <extra_id_0>,")
+        self.assertEqual(input_ids, [156, 86, 20, 3, 1001, 3, 2])
+        tokens = self.tokenizer.tokenize("Hello, <extra_id_0>,")
+        self.assertEqual(tokens, ["▁He", "ll", "o", ",", "<extra_id_0>", ","])
+
+    def test_special_tokens_strip(self):
+        input_ids = self.tokenizer.encode(" <extra_id_0> ,")
+        self.assertEqual(input_ids, [1001, 7, 3, 2])
+        tokens = self.tokenizer.tokenize(" <extra_id_0> ,")
+        # spaces are not longer eaten by rstrip and lstrip
+        self.assertEqual(tokens, ["<extra_id_0>", "▁", ","])
+
+        # test with a begin of word like `▁He`
+        input_ids = self.tokenizer.encode("No <extra_id_0> He")
+        self.assertEqual(input_ids, [284, 1001, 156, 2])
+        # spaces are eaten by rstrip / lstrip, so this is expected. Don't strip otherwise you break
+        tokens = self.tokenizer.tokenize("No <extra_id_0> He")
+        self.assertEqual(tokens, ["▁No", "<extra_id_0>", "▁He"])
+
+        # Make sure this does not happen if we don't strip
+        tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0)
+        tokenizer.add_special_tokens({"bos_token": AddedToken("<bos>")})
+        input_ids = tokenizer.encode("No <bos> He")
+        self.assertEqual(input_ids, [284, 1001, 156, 2])
+        tokens = tokenizer.tokenize("No <bos> He")
+        # the first `' '` after `'No'` is eaten by spm:
+        self.assertEqual(tokenizer.sp_model.encode("No         ", out_type=str), ["▁No"])
+        self.assertEqual(tokens, ["▁No", "<bos>", "▁He"])
+
+    @require_seqio
+    @unittest.skipIf(
+        os.getenv("RUN_TOKENIZER_INTEGRATION", "0") == "0",
+        "RUN_TOKENIZER_INTEGRATION=1 to run tokenizer integration tests",
+    )
+    def test_integration_seqio(self):
+        from datasets import load_dataset
+        from seqio import SentencePieceVocabulary
+
+        ds = load_dataset("xnli", "all_languages", split="train+test+validation")
+
+        # TODO @ArthurZucker fix the 3 commented tests with #23909
+        input_texts = [
+            "Bonjour <extra_id_0>.",
+            # "Bonjour<extra_id_0>.",  # this will fail. In T5 the special token has to be at the end.
+            # because in T5 they add `_<extra_id_0>` to the vocab, not `<extra_id_0>`.
+            "                   Hey <extra_id_0>I love you",
+            # "Hey <extra_id_0> I love you", # this will fail, we strip left, to _I vs I
+            # "Hey <extra_id_0>▁He", # this will fail for the same reason, we replace `_` then strip
+        ]
+
+        import tqdm
+
+        # Test with umt5
+        vocab_path = "gs://t5-data/vocabs/umt5.256000/sentencepiece.model"
+        t5x_tokenizer = SentencePieceVocabulary(vocab_path, extra_ids=300)
+        hf_tokenizer = T5Tokenizer.from_pretrained("google/umt5-small", legacy=False)
+        for text in input_texts:
+            self.assertEqual(
+                hf_tokenizer.encode(text, add_special_tokens=False), t5x_tokenizer.tokenizer.tokenize(text), f"{text}"
+            )
+        for texts in tqdm.tqdm(ds["premise"]):
+            for text in texts:
+                self.assertEqual(
+                    hf_tokenizer.encode(text, add_special_tokens=False),
+                    t5x_tokenizer.tokenizer.tokenize(text),
+                    f"{text}",
+                )
+
+        # Test with T5
+        hf_tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        vocab_path = "gs://t5-data/vocabs/cc_all.32000/sentencepiece.model"
+        t5x_tokenizer = SentencePieceVocabulary(vocab_path, extra_ids=300)
+        for text in input_texts:
+            self.assertEqual(
+                hf_tokenizer.encode(text, add_special_tokens=False), t5x_tokenizer.tokenizer.tokenize(text), f"{text}"
+            )
+        for texts in tqdm.tqdm(ds["premise"]):
+            for text in texts:
+                self.assertEqual(
+                    hf_tokenizer.encode(text, add_special_tokens=False),
+                    t5x_tokenizer.tokenizer.tokenize(text),
+                    f"{text}",
+                )

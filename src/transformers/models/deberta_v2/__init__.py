@@ -46,6 +46,7 @@ else:
         "TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFDebertaV2ForMaskedLM",
         "TFDebertaV2ForQuestionAnswering",
+        "TFDebertaV2ForMultipleChoice",
         "TFDebertaV2ForSequenceClassification",
         "TFDebertaV2ForTokenClassification",
         "TFDebertaV2Model",
@@ -95,6 +96,7 @@ if TYPE_CHECKING:
         from .modeling_tf_deberta_v2 import (
             TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDebertaV2ForMaskedLM,
+            TFDebertaV2ForMultipleChoice,
             TFDebertaV2ForQuestionAnswering,
             TFDebertaV2ForSequenceClassification,
             TFDebertaV2ForTokenClassification,

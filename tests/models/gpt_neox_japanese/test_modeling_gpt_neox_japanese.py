@@ -44,7 +44,7 @@ class GPTNeoXJapaneseModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_multiple_size=4,
         hidden_act="gelu",
@@ -238,7 +238,7 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     def test_generation(self):
         model_id = "abeja/gpt-neox-japanese-2.7b"
 
-        prompts = ["データサイエンティストとは、", "100年後に必要とされる会社は、", "フルリモートの環境で働くために必要なことは、", "国境の長いトンネルを抜けると", "美味しい日本食といえば、"]
+        prompts = ["データサイエンティストとは、", "100年後に必要とされる会社は、", "フルリモートの環境で働くために必要なことは、", "国境の長いトンネルを抜けると", "美味しい日本食といえば、"]  # fmt: skip
 
         EXPECTED_OUTPUTS = [
             "データサイエンティストとは、データを分析し、ビジネスに役立つ知見を導き出す専門家のことです。",

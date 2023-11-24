@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import copy
 import tempfile
 import unittest
@@ -20,7 +22,7 @@ import unittest
 import numpy as np
 
 from transformers import BartConfig, BartTokenizer, is_tf_available
-from transformers.testing_utils import require_tf, slow, tooslow
+from transformers.testing_utils import require_tf, slow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -50,7 +52,7 @@ class TFBartModelTester:
         use_labels=False,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_dropout_prob=0.1,
@@ -199,8 +201,9 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
             "conversational": TFBartForConditionalGeneration,
             "feature-extraction": TFBartModel,
             "summarization": TFBartForConditionalGeneration,
-            "text2text-generation": TFBartForConditionalGeneration,
             "text-classification": TFBartForSequenceClassification,
+            "text2text-generation": TFBartForConditionalGeneration,
+            "translation": TFBartForConditionalGeneration,
             "zero-shot": TFBartForSequenceClassification,
         }
         if is_tf_available()
@@ -221,30 +224,6 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
     def test_decoder_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in self.all_generative_model_classes:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
-
-    @tooslow
-    def test_saved_model_creation(self):
-        pass
 
     # TODO (Joao): fix me
     @unittest.skip("Onnx compliancy broke with TF 2.10")
@@ -325,7 +304,7 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
             old_total_size = config.vocab_size
             new_total_size = old_total_size + new_tokens_size
             model = model_class(config=copy.deepcopy(config))  # `resize_token_embeddings` mutates `config`
-            model(model.dummy_inputs)  # builds the embeddings layer
+            model.build()
             model.resize_token_embeddings(new_total_size)
 
             # fetch the output for an input exclusively made of new members of the vocabulary
@@ -363,6 +342,10 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
 
                 # check that the output for the restored model is the same
                 self.assert_outputs_same(restored_model_outputs, outputs)
+
+    @unittest.skip("Does not support conversations.")
+    def test_pipeline_conversational(self):
+        pass
 
 
 def _long_tensor(tok_lst):

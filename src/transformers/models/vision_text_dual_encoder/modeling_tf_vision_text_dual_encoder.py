@@ -15,6 +15,8 @@
 """TensorFlow VisionTextDualEncoder model."""
 
 
+from __future__ import annotations
+
 import re
 from typing import Optional, Tuple, Union
 
@@ -223,6 +225,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         # Build in the build() method to make sure the names are right
         initializer = tf.keras.initializers.Constant(self.config.logit_scale_init_value)
         self.logit_scale = self.add_weight(shape=(1,), initializer=initializer, name="logit_scale")
+        super().build(input_shape)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -340,12 +343,12 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
     @replace_return_docstrings(output_type=TFCLIPOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
-        pixel_values: Optional[tf.Tensor] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor | None = None,
+        pixel_values: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
         return_loss: Optional[bool] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
+        token_type_ids: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -589,7 +592,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         if text_model.name != "text_model":
             raise ValueError("text model must be created with the name `text_model`.")
 
-        model(model.dummy_inputs)  # Ensure model is fully built
+        model.build()  # Ensure model is fully built
 
         return model
 

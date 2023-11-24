@@ -55,7 +55,7 @@ class LayoutLMv2ModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=36,
-        num_hidden_layers=3,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -270,40 +270,10 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         else ()
     )
     pipeline_model_mapping = (
-        {
-            "document-question-answering": LayoutLMv2ForQuestionAnswering,
-            "feature-extraction": LayoutLMv2Model,
-            "question-answering": LayoutLMv2ForQuestionAnswering,
-            "text-classification": LayoutLMv2ForSequenceClassification,
-            "token-classification": LayoutLMv2ForTokenClassification,
-            "zero-shot": LayoutLMv2ForSequenceClassification,
-        }
+        {"document-question-answering": LayoutLMv2ForQuestionAnswering, "feature-extraction": LayoutLMv2Model}
         if is_torch_available()
         else {}
     )
-
-    # TODO: Fix the failed tests
-    def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
-    ):
-        if pipeline_test_casse_name in [
-            "QAPipelineTests",
-            "TextClassificationPipelineTests",
-            "TokenClassificationPipelineTests",
-            "ZeroShotClassificationPipelineTests",
-        ]:
-            # `LayoutLMv2Config` was never used in pipeline tests (`test_pt_LayoutLMv2Config_XXX`) due to lack of tiny
-            # config. With new tiny model creation, it is available, but we need to fix the failed tests.
-            return True
-        elif (
-            pipeline_test_casse_name == "DocumentQuestionAnsweringPipelineTests"
-            and tokenizer_name is not None
-            and not tokenizer_name.endswith("Fast")
-        ):
-            # This pipeline uses `sequence_ids()` which is only available for fast tokenizers.
-            return True
-
-        return False
 
     def setUp(self):
         self.model_tester = LayoutLMv2ModelTester(self)
@@ -444,6 +414,10 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    @unittest.skip("We cannot configure detectron2 to output a smaller backbone")
+    def test_model_is_small(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):

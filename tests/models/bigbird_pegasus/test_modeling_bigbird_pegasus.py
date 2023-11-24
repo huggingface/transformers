@@ -20,7 +20,14 @@ import tempfile
 import unittest
 
 from transformers import BigBirdPegasusConfig, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -251,9 +258,10 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
             "feature-extraction": BigBirdPegasusModel,
             "question-answering": BigBirdPegasusForQuestionAnswering,
             "summarization": BigBirdPegasusForConditionalGeneration,
-            "text2text-generation": BigBirdPegasusForConditionalGeneration,
             "text-classification": BigBirdPegasusForSequenceClassification,
             "text-generation": BigBirdPegasusForCausalLM,
+            "text2text-generation": BigBirdPegasusForConditionalGeneration,
+            "translation": BigBirdPegasusForConditionalGeneration,
             "zero-shot": BigBirdPegasusForSequenceClassification,
         }
         if is_torch_available()
@@ -279,7 +287,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
     # overwrite from GenerationTesterMixin to solve problem
     # with conflicting random seeds
-    def _get_input_ids_and_config(self):
+    def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.attention_type = "original_full"
 
@@ -287,10 +295,9 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         attention_mask = torch.ones_like(input_ids, dtype=torch.long)
 
         # cut to half length & take max batch_size 3
-        max_batch_size = 2
         sequence_length = input_ids.shape[-1] // 2
-        input_ids = input_ids[:max_batch_size, :sequence_length]
-        attention_mask = attention_mask[:max_batch_size, :sequence_length]
+        input_ids = input_ids[:batch_size, :sequence_length]
+        attention_mask = attention_mask[:batch_size, :sequence_length]
 
         # generate max 3 tokens
         max_length = input_ids.shape[-1] + 3
@@ -376,13 +383,13 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_dict.pop("decoder_attention_mask")
         input_dict.pop("decoder_input_ids")
         model = BigBirdPegasusForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(**input_dict)
         model.generate(**input_dict, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -513,9 +520,10 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
         self.assertEqual(prediction_logits.shape, torch.Size((1, 16, 96103)))
         # fmt: off
         expected_prediction_logits_slice = torch.tensor(
-            [[1.7769, 5.8479, 6.2375, 2.2745, 8.6157, 4.7483, 5.0647, 6.5358, 2.3393, 7.8333, 3.8403, 0.0255, 7.219, 5.2759, 3.097, 6.387, 4.9341, 7.1409, 5.1179, 0.1144, 6.8268, 0.7598, 0.6258, 2.373, 0.4627, -1.9919, 1.8422, 3.4578], [1.8026, 5.9604, 5.954, 2.8642, 9.0608, 4.394, 5.3779, 7.0216, 1.543, 7.8744, 4.4231, -0.0398, 7.6091, 5.6611, 3.3536, 6.8624, 4.7699, 6.5241, 4.8893, 0.5791, 6.8368, 0.1034, 0.0338, 2.9393, 0.5034, -2.5509, 2.0172, 3.2858], [1.8426, 5.9151, 5.5374, 3.0426, 9.1762, 3.6287, 5.3916, 7.4621, 1.2582, 7.9244, 4.694, -0.1308, 7.4725, 5.5385, 3.4598, 7.0422, 4.2455, 5.797, 4.5927, 0.7478, 6.7467, -0.2695, -0.3207, 3.0269, 0.4714, -2.8134, 2.0406, 3.1089], [1.6527, 5.8416, 5.4558, 3.0044, 9.3478, 3.2607, 5.3887, 7.52, 0.9362, 7.8877, 4.8465, -0.1705, 7.3932, 5.6352, 3.5744, 7.2623, 4.0485, 5.2788, 4.5859, 0.8325, 6.6088, -0.3676, -0.6287, 3.1731, 0.4483, -3.1573, 2.0522, 2.8868]],  # noqa: E231
+            [[1.5118, 5.5227, 4.8125, 1.7603, 8.1704, 3.996, 4.8118, 6.7806, 2.2297, 6.9834, 3.1906, 0.103, 7.1515, 6.3679, 3.1896, 6.3054, 3.9741, 6.3772, 5.0042, -0.6338, 6.7868, 0.592, 0.5363, 1.87, -0.331, -2.4518, 1.8263, 3.1899], [1.5702, 5.8135, 4.6675, 2.3674, 8.9828, 3.7913, 5.4027, 7.6567, 1.9007, 7.3706, 3.8824, 0.0247, 7.6094, 6.6985, 3.2826, 7.0094, 3.8713, 5.6555, 5.0439, -0.3519, 7.1525, 0.4062, -0.2419, 2.2194, -0.6447, -2.9614, 2.0713, 3.248], [1.4527, 5.6003, 4.5381, 2.6382, 9.2809, 3.2969, 5.6811, 8.4011, 1.6909, 7.4937, 4.3185, -0.0878, 7.61, 6.6822, 3.4753, 7.3962, 3.5336, 4.9216, 4.943, -0.2043, 7.3326, 0.2199, -0.6016, 2.4367, -0.7043, -3.0689, 2.3215, 3.0611], [1.1084, 5.6308, 4.4886, 2.717, 9.4103, 3.0733, 5.5825, 8.4325, 1.3075, 7.5495, 4.4782, -0.1092, 7.8115, 6.6285, 3.5311, 7.6853, 3.509, 4.4994, 4.9224, -0.1384, 7.3069, -0.0473, -0.8578, 2.4632, -0.5249, -3.4627, 2.2671, 2.8818]],  # noqa: E231
             device=torch_device,
         )
+
         # fmt: on
         self.assertTrue(
             torch.allclose(prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, atol=1e-4)
@@ -563,24 +571,23 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
         hypotheses_batch = model.generate(**inputs)
 
         EXPECTED_LEP = (
-            "motivated by some recent studies on the light cp - odd higgs boson @xmath0 in non - minimal"
-            " supersymmetric models, we investigate the rare @xmath1-decays @xmath2 ( @xmath3 ) in the two higgs"
-            " doublet model ( 2hdm ), the nearly minimal supersymmetric standard model ( nmssm ), the next - to -"
-            " minimal supersymmetric standard model ( nmssm ) and the minimal supersymmetric standard model ( mssm"
-            " ).<n> we find that the branching ratios of @xmath4 can reach @xmath5 in 2hdm, @xmath6 in nmssm and"
-            " @xmath7 in mssm, which are at the level of @xmath8 in 2hdm, @xmath9 in nmssm and @xmath10 in mssm,"
-            " respectively.<n> these rates can be significantly enhanced in new physics models which lie within the"
-            " expected sensitivity of the gigaz option of the international linear collider ( ilc ). <n> = # 1,nucl."
-            " <n> phys. <n> b * # 1"
+            "we study the rare decays @xmath0 ( @xmath1 ) at the gigaz option of the international linear collider "
+            "( ilc ).<n> we calculate the branching ratios of @xmath2 in the two higgs doublet model ( 2hdm ), the "
+            "minimal supersymmetric standard model ( mssm ), the next - to - minimal supersymmetric standard model "
+            "( nmssm ) and the nearly minimal supersymmetric standard model ( nmssm ).<n> we find that the branching "
+            "ratios of @xmath3 can reach @xmath4 in 2hdm, @xmath5 in mssm, @xmath6 in nmssm and @xmath7 in nmssm, "
+            "while they are much smaller than @xmath8 in 2hdm, @xmath9 in mssm, @xmath10 in nmssm and @xmath11 in "
+            "nmssm."
         )
 
         EXPECTED_MAGNET = (
-            "a positive, nonsaturating and dominantly linear magnetoresistance can appear within quite wide magnetic -"
-            " field range in the surface state of a topological insulator having a positive and finite effective g -"
-            " factor. this linear magnetoresistance shows up in the system of high carrier concentration and low"
-            " mobility when electrons are in extended states and spread over many smeared landau levels, and persists"
-            " up to room temperature, providing a possible mechanism for the recently observed linear"
-            " magnetoresistance in topological insulator bi@xmath0se@xmath1 nanoribbons."
+            "we investigate the two - dimensional magnetotransport in the surface state of a topological insulator "
+            "( ti ).<n> we find that a positive, nonsaturating and dominantly linear magnetoresistance can appear "
+            "within quite wide magnetic - field range in the ti surface state having a positive and finite effective g "
+            "- factor.<n> this linear magnetoresistance shows up in the system of high carrier concentration and low "
+            "mobility when electrons are in extended states and spread over many smeared landau levels, and persists "
+            "up to room temperature, providing a possible mechanism for the recently observed linear magnetoresistance "
+            "in topological insulator bi@xmath0se@xmath1 nanoribbons."
         )
 
         generated = tokenizer.batch_decode(
@@ -605,7 +612,7 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         use_labels=True,
         decoder_start_token_id=2,
         decoder_ffn_dim=32,
-        decoder_layers=4,
+        decoder_layers=2,
         encoder_attention_heads=4,
         decoder_attention_heads=4,
         max_position_embeddings=30,
@@ -811,3 +818,7 @@ class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTeste
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         return
+
+    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    def test_left_padding_compatibility(self):
+        pass

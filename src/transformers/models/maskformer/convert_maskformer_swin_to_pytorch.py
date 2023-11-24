@@ -26,7 +26,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import MaskFormerConfig, MaskFormerFeatureExtractor, MaskFormerForInstanceSegmentation, SwinConfig
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, MaskFormerImageProcessor, SwinConfig
 from transformers.utils import logging
 
 
@@ -278,9 +278,9 @@ def convert_maskformer_checkpoint(
     else:
         ignore_index = 255
     reduce_labels = True if "ade" in model_name else False
-    feature_extractor = MaskFormerFeatureExtractor(ignore_index=ignore_index, reduce_labels=reduce_labels)
+    image_processor = MaskFormerImageProcessor(ignore_index=ignore_index, reduce_labels=reduce_labels)
 
-    inputs = feature_extractor(image, return_tensors="pt")
+    inputs = image_processor(image, return_tensors="pt")
 
     outputs = model(**inputs)
 
@@ -294,15 +294,15 @@ def convert_maskformer_checkpoint(
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
+        print(f"Saving model and image processor to {pytorch_dump_folder_path}")
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         model.save_pretrained(pytorch_dump_folder_path)
-        feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print("Pushing model and feature extractor to the hub...")
+        print("Pushing model and image processor to the hub...")
         model.push_to_hub(f"nielsr/{model_name}")
-        feature_extractor.push_to_hub(f"nielsr/{model_name}")
+        image_processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

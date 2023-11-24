@@ -88,17 +88,18 @@ class M2M100Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import M2M100Model, M2M100Config
+    >>> from transformers import M2M100Config, M2M100Model
 
     >>> # Initializing a M2M100 facebook/m2m100_418M style configuration
     >>> configuration = M2M100Config()
 
-    >>> # Initializing a model from the facebook/m2m100_418M style configuration
+    >>> # Initializing a model (with random weights) from the facebook/m2m100_418M style configuration
     >>> model = M2M100Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "m2m_100"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}

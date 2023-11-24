@@ -6,7 +6,10 @@ from typing import Optional
 
 import torch
 
-from ..utils import add_start_docstrings
+from ..utils import add_start_docstrings, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
@@ -14,14 +17,15 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be scores for each vocabulary token before SoftMax
-            or scores for each vocabulary token after SoftMax.
-        kwargs:
+            or scores for each vocabulary token after SoftMax. If this stopping criteria depends on the `scores` input,
+            make sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`.
+        kwargs (`Dict[str, Any]`, *optional*):
             Additional stopping criteria specific kwargs.
 
     Return:
@@ -31,7 +35,11 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
 
 
 class StoppingCriteria(ABC):
-    """Abstract base class for all stopping criteria that can be applied during generation."""
+    """Abstract base class for all stopping criteria that can be applied during generation.
+
+    If your stopping criteria depends on the `scores` input, make sure you pass `return_dict_in_generate=True,
+    output_scores=True` to `generate`.
+    """
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
@@ -46,14 +54,25 @@ class MaxLengthCriteria(StoppingCriteria):
     Args:
         max_length (`int`):
             The maximum length that the output sequence can have in number of tokens.
+        max_position_embeddings (`int`, *optional*):
+            The maximum model length, as defined by the model's `config.max_position_embeddings` attribute.
     """
 
-    def __init__(self, max_length: int):
+    def __init__(self, max_length: int, max_position_embeddings: Optional[int] = None):
         self.max_length = max_length
+        self.max_position_embeddings = max_position_embeddings
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
-        return input_ids.shape[-1] >= self.max_length
+        cur_len = input_ids.shape[-1]
+        is_done = cur_len >= self.max_length
+        if self.max_position_embeddings is not None and not is_done and cur_len >= self.max_position_embeddings:
+            logger.warning_once(
+                "This is a friendly reminder - the current text generation call will exceed the model's predefined "
+                f"maximum length ({self.max_position_embeddings}). Depending on the model, you may observe "
+                "exceptions, performance degradation, or nothing at all."
+            )
+        return is_done
 
 
 class MaxNewTokensCriteria(StoppingCriteria):

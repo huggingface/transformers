@@ -50,12 +50,12 @@ def rename_key(old_name, num_meta4D_last_stage):
         else:
             new_name = old_name.replace("4", "batchnorm_after")
 
-    if "network" in old_name and re.search("\d\.\d", old_name):
+    if "network" in old_name and re.search(r"\d\.\d", old_name):
         two_digit_num = r"\b\d{2}\b"
         if bool(re.search(two_digit_num, old_name)):
-            match = re.search("\d\.\d\d.", old_name).group()
+            match = re.search(r"\d\.\d\d.", old_name).group()
         else:
-            match = re.search("\d\.\d.", old_name).group()
+            match = re.search(r"\d\.\d.", old_name).group()
         if int(match[0]) < 6:
             trimmed_name = old_name.replace(match, "")
             trimmed_name = trimmed_name.replace("network", match[0] + ".meta4D_layers.blocks." + match[2:-1])
@@ -78,7 +78,7 @@ def rename_key(old_name, num_meta4D_last_stage):
 
             new_name = "last_stage." + trimmed_name
 
-    elif "network" in old_name and re.search(".\d.", old_name):
+    elif "network" in old_name and re.search(r".\d.", old_name):
         new_name = old_name.replace("network", "intermediate_stages")
 
     if "fc" in new_name:
@@ -208,7 +208,7 @@ def convert_efficientformer_checkpoint(
         )
         processor.push_to_hub(
             repo_id=f"Bearnardd/{pytorch_dump_path}",
-            commit_message="Add feature extractor",
+            commit_message="Add image processor",
             use_temp_dir=True,
         )
 
@@ -234,12 +234,12 @@ if __name__ == "__main__":
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
     )
 
-    parser.add_argument("--push_to_hub", action="store_true", help="Push model and feature extractor to the hub")
+    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image processor to the hub")
     parser.add_argument(
         "--no-push_to_hub",
         dest="push_to_hub",
         action="store_false",
-        help="Do not push model and feature extractor to the hub",
+        help="Do not push model and image processor to the hub",
     )
     parser.set_defaults(push_to_hub=True)
 

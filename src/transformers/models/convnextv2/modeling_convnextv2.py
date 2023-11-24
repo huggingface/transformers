@@ -29,7 +29,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -37,6 +37,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_convnextv2 import ConvNextV2Config
 
 
@@ -60,7 +61,7 @@ CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input, drop_prob: float = 0.0, training: bool = False):
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -100,14 +101,14 @@ class ConvNextV2GRN(nn.Module):
 
     def __init__(self, dim: int):
         super().__init__()
-        self.gamma = nn.Parameter(torch.zeros(1, 1, 1, dim))
-        self.beta = nn.Parameter(torch.zeros(1, 1, 1, dim))
+        self.weight = nn.Parameter(torch.zeros(1, 1, 1, dim))
+        self.bias = nn.Parameter(torch.zeros(1, 1, 1, dim))
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         # Compute and normalize global spatial feature maps
         global_features = torch.norm(hidden_states, p=2, dim=(1, 2), keepdim=True)
         norm_features = global_features / (global_features.mean(dim=-1, keepdim=True) + 1e-6)
-        hidden_states = self.gamma * (hidden_states * norm_features) + self.beta + hidden_states
+        hidden_states = self.weight * (hidden_states * norm_features) + self.bias + hidden_states
 
         return hidden_states
 
@@ -302,7 +303,6 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
     config_class = ConvNextV2Config
     base_model_prefix = "convnextv2"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -315,10 +315,6 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ConvNextV2Encoder):
-            module.gradient_checkpointing = value
 
 
 CONVNEXTV2_START_DOCSTRING = r"""
@@ -503,17 +499,15 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
 class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
+        super()._init_backbone(config)
 
-        self.stage_names = config.stage_names
         self.embeddings = ConvNextV2Embeddings(config)
         self.encoder = ConvNextV2Encoder(config)
-
-        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
         self.num_features = [config.hidden_sizes[0]] + config.hidden_sizes
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
-        for stage, num_channels in zip(self.out_features, self.channels):
+        for stage, num_channels in zip(self._out_features, self.channels):
             hidden_states_norms[stage] = ConvNextV2LayerNorm(num_channels, data_format="channels_first")
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
 
@@ -558,14 +552,13 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
         outputs = self.encoder(
             embedding_output,
             output_hidden_states=True,
-            return_dict=True,
+            return_dict=return_dict,
         )
 
-        hidden_states = outputs.hidden_states
+        hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         feature_maps = ()
-        # we skip the stem
-        for idx, (stage, hidden_state) in enumerate(zip(self.stage_names[1:], hidden_states[1:])):
+        for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 hidden_state = self.hidden_states_norms[stage](hidden_state)
                 feature_maps += (hidden_state,)
@@ -573,11 +566,11 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
         if not return_dict:
             output = (feature_maps,)
             if output_hidden_states:
-                output += (outputs.hidden_states,)
+                output += (hidden_states,)
             return output
 
         return BackboneOutput(
             feature_maps=feature_maps,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=hidden_states if output_hidden_states else None,
             attentions=None,
         )

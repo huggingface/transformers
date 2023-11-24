@@ -305,12 +305,12 @@ def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path, save_m
         # Create folder to save model
         if not os.path.isdir(pytorch_dump_folder_path):
             os.mkdir(pytorch_dump_folder_path)
-        # Save converted model and feature extractor
+        # Save converted model and image processor
         hf_model.save_pretrained(pytorch_dump_folder_path)
         preprocessor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        # Push model and feature extractor to hub
+        # Push model and image processor to hub
         print(f"Pushing converted {model_name} to the hub...")
         model_name = f"efficientnet-{model_name}"
         preprocessor.push_to_hub(model_name)
@@ -333,7 +333,7 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument("--save_model", action="store_true", help="Save model to local")
-    parser.add_argument("--push_to_hub", action="store_true", help="Push model and feature extractor to the hub")
+    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image processor to the hub")
 
     args = parser.parse_args()
     convert_efficientnet_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub)

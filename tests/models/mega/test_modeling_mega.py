@@ -17,7 +17,13 @@
 import unittest
 
 from transformers import MegaConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    TestCasePlus,
+    require_torch,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -51,7 +57,7 @@ class MegaModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         intermediate_size=37,
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -313,6 +319,34 @@ class MegaModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    def create_and_check_decoder_model_with_chunking(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        config.use_chunking = True
+        config.output_attentions = True
+        config.attention_activation = "laplace"
+        config.chunk_size = input_ids.size(1) * 2
+
+        model = MegaForCausalLM(config).to(torch_device).eval()
+
+        input_ids = input_ids.repeat(1, 8)
+        # multiply the sequence length by 8 since we repeat the same ids 8 times in input_ids
+        input_mask = random_attention_mask([self.batch_size, self.seq_length * 8])
+
+        result = model(input_ids, attention_mask=input_mask)
+
+        # test if the sequence length of attentions is same provided chunk_size
+        self.parent.assertEqual(result["attentions"][0].shape[-1], config.chunk_size)
+
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -387,6 +421,8 @@ class MegaModelTester:
         config.use_chunking = True
         config.chunk_size = input_ids.size(1) + 25
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
@@ -400,6 +436,8 @@ class MegaModelTester:
         # we want the chunk size to be < sequence length, and the sequence length to be a multiple of chunk size
         config.chunk_size = input_ids.size(1) * 2
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(
             input_ids.repeat(1, 8),
@@ -412,6 +450,8 @@ class MegaModelTester:
     ):
         config.attention_activation = "laplace"
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
@@ -422,6 +462,8 @@ class MegaModelTester:
     ):
         config.attention_activation = "relu2"
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
@@ -432,6 +474,8 @@ class MegaModelTester:
     ):
         config.max_positions = self.seq_length - 2
         model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
 
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
@@ -471,9 +515,11 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {
             "feature-extraction": MegaModel,
+            "fill-mask": MegaForMaskedLM,
             "question-answering": MegaForQuestionAnswering,
             "text-classification": MegaForSequenceClassification,
             "text-generation": MegaForCausalLM,
+            "token-classification": MegaForTokenClassification,
             "zero-shot": MegaForSequenceClassification,
         }
         if is_torch_available()
@@ -535,6 +581,10 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
+    def test_decoder_model_with_chunking(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_decoder_model_with_chunking(*config_and_inputs)
+
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
@@ -575,12 +625,12 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_sequence_length_beyond_max_positions(*config_and_inputs)
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_ids, _, attention_mask, *_ = self.model_tester.prepare_config_and_inputs_for_decoder()
         # attention_mask = torch.LongTensor(input_ids.ne(1)).to(torch_device)
         model = MegaForCausalLM(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -612,6 +662,39 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         for model_name in MEGA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = MegaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    def test_cpu_offload(self):
+        super().test_cpu_offload()
+
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    def test_disk_offload(self):
+        super().test_disk_offload()
+
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    def test_model_parallelism(self):
+        super().test_model_parallelism()
+
+    @unittest.skip(
+        reason=(
+            "Calling `self.attention_function` in `MegaMovingAverageGatedAttention.forward` changes the submodules on "
+            "device 1 to device 0 (also changes `requires_grad`). No idea how this could happen for now."
+        )
+    )
+    def test_multi_gpu_data_parallel_forward(self):
+        super().test_multi_gpu_data_parallel_forward()
+
+    @unittest.skip(reason="Tracing of the dynamically computed `MegaMultiDimensionDampedEma._kernel` doesn't work.")
+    def test_torchscript_simple(self):
+        super().test_torchscript_simple()
+
+    @unittest.skip(reason="Tracing of the dynamically computed `MegaMultiDimensionDampedEma._kernel` doesn't work.")
+    def test_torchscript_output_hidden_state(self):
+        super().test_torchscript_output_hidden_state()
+
+    @unittest.skip(reason="Tracing of the dynamically computed `MegaMultiDimensionDampedEma._kernel` doesn't work.")
+    def test_torchscript_output_attentions(self):
+        super().test_torchscript_output_attentions()
 
 
 @require_torch

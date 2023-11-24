@@ -22,7 +22,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import AutoBackbone
 from ...modeling_outputs import SemanticSegmenterOutput
-from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .configuration_upernet import UperNetConfig
 
@@ -298,23 +298,20 @@ class UperNetPreTrainedModel(PreTrainedModel):
 
     config_class = UperNetConfig
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         if isinstance(module, UperNetPreTrainedModel):
             module.backbone.init_weights()
             module.decode_head.init_weights()
-            module.auxiliary_head.init_weights()
+            if module.auxiliary_head is not None:
+                module.auxiliary_head.init_weights()
 
     def init_weights(self):
         """Initialize the weights"""
         self.backbone.init_weights()
         self.decode_head.init_weights()
-        self.auxiliary_head.init_weights()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BackboneMixin):
-            module.gradient_checkpointing = value
+        if self.auxiliary_head is not None:
+            self.auxiliary_head.init_weights()
 
 
 UPERNET_START_DOCSTRING = r"""
@@ -428,9 +425,10 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
             else:
                 # compute weighted loss
                 loss_fct = CrossEntropyLoss(ignore_index=self.config.loss_ignore_index)
-                main_loss = loss_fct(logits, labels)
-                auxiliary_loss = loss_fct(auxiliary_logits, labels)
-                loss = main_loss + self.config.auxiliary_loss_weight * auxiliary_loss
+                loss = loss_fct(logits, labels)
+                if auxiliary_logits is not None:
+                    auxiliary_loss = loss_fct(auxiliary_logits, labels)
+                    loss += self.config.auxiliary_loss_weight * auxiliary_loss
 
         if not return_dict:
             if output_hidden_states:

@@ -45,7 +45,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from transformers import VideoMAEFeatureExtractor
+    from transformers import VideoMAEImageProcessor
 
 
 class TimesformerModelTester:
@@ -60,7 +60,7 @@ class TimesformerModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -339,10 +339,10 @@ def prepare_video():
 @require_vision
 class TimesformerModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         # logits were tested with a different mean and std, so we use the same here
         return (
-            VideoMAEFeatureExtractor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
+            VideoMAEImageProcessor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
             if is_vision_available()
             else None
         )
@@ -353,9 +353,9 @@ class TimesformerModelIntegrationTest(unittest.TestCase):
             torch_device
         )
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         video = prepare_video()
-        inputs = feature_extractor(video[:8], return_tensors="pt").to(torch_device)
+        inputs = image_processor(video[:8], return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():

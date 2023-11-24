@@ -57,7 +57,7 @@ class XLMModelTester:
         vocab_size=99,
         n_special=0,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -395,11 +395,7 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
-        if pipeline_test_casse_name == "FillMaskPipelineTests":
-            # Get `ValueError: AttributeError: 'NoneType' object has no attribute 'new_ones'` or `AssertionError`.
-            # `XLMConfig` was never used in pipeline tests: cannot create a simple tokenizer
-            return True
-        elif (
+        if (
             pipeline_test_casse_name == "QAPipelineTests"
             and tokenizer_name is not None
             and not tokenizer_name.endswith("Fast")

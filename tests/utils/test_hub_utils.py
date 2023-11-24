@@ -36,6 +36,9 @@ RANDOM_BERT = "hf-internal-testing/tiny-random-bert"
 CACHE_DIR = os.path.join(TRANSFORMERS_CACHE, "models--hf-internal-testing--tiny-random-bert")
 FULL_COMMIT_HASH = "9b8c223d42b2188cb49d29af482996f9d0f3e5a6"
 
+GATED_REPO = "hf-internal-testing/dummy-gated-model"
+README_FILE = "README.md"
+
 
 class GetFromCacheTests(unittest.TestCase):
     def test_cached_file(self):
@@ -89,7 +92,7 @@ class GetFromCacheTests(unittest.TestCase):
         response_mock.json.return_value = {}
 
         # Under the mock environment we get a 500 error when trying to reach the tokenizer.
-        with mock.patch("requests.request", return_value=response_mock) as mock_head:
+        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
             path = cached_file(RANDOM_BERT, "conf", _raise_exceptions_for_connection_errors=False)
             self.assertIsNone(path)
             # This check we did call the fake head request
@@ -124,3 +127,15 @@ class GetFromCacheTests(unittest.TestCase):
             self.assertEqual(get_file_from_repo(tmp_dir, "a.txt"), str(filename))
 
             self.assertIsNone(get_file_from_repo(tmp_dir, "b.txt"))
+
+    def test_get_file_gated_repo(self):
+        """Test download file from a gated repo fails with correct message when not authenticated."""
+        with self.assertRaisesRegex(EnvironmentError, "You are trying to access a gated repo."):
+            # All files except README.md are protected on a gated repo.
+            cached_file(GATED_REPO, "gated_file.txt", token=False)
+
+    def test_has_file_gated_repo(self):
+        """Test check file existence from a gated repo fails with correct message when not authenticated."""
+        with self.assertRaisesRegex(EnvironmentError, "is a gated repository"):
+            # All files except README.md are protected on a gated repo.
+            has_file(GATED_REPO, "gated_file.txt", token=False)

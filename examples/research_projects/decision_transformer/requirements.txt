@@ -1,5 +1,5 @@
 absl-py==1.0.0
-aiohttp==3.8.1
+aiohttp==3.8.5
 aiosignal==1.2.0
 alembic==1.7.7
 appdirs==1.4.4
@@ -20,7 +20,7 @@ boto3==1.16.34
 botocore==1.19.63
 Brotli==1.0.9
 cachetools==5.0.0
-certifi==2022.12.7
+certifi==2023.7.22
 cffi==1.15.0
 chardet==4.0.0
 charset-normalizer==2.0.12
@@ -34,7 +34,7 @@ cmd2==2.4.0
 codecarbon==1.2.0
 colorlog==6.6.0
 cookiecutter==2.1.1
-cryptography==39.0.1
+cryptography==41.0.2
 csvw==2.0.0
 cycler==0.11.0
 Cython==0.29.28
@@ -57,7 +57,7 @@ fasteners==0.17.3
 filelock==3.6.0
 fire==0.4.0
 flake8==4.0.1
-Flask==2.0.3
+Flask==2.3.2
 Flask-Compress==1.11
 flatbuffers==2.0
 flax==0.4.0
@@ -67,7 +67,7 @@ fsspec==2022.2.0
 fugashi==1.1.2
 gast==0.5.3
 gitdb==4.0.9
-GitPython==3.1.30
+GitPython==3.1.32
 glfw==2.5.1
 google-auth==2.6.2
 google-auth-oauthlib==0.4.6
@@ -133,7 +133,7 @@ pbr==5.8.1
 pexpect==4.8.0
 phonemizer==3.0.1
 pickleshare==0.7.5
-Pillow==9.3.0
+Pillow==10.0.1
 Pint==0.16.1
 plac==1.3.4
 platformdirs==2.5.1
@@ -157,7 +157,7 @@ pycodestyle==2.8.0
 pycparser==2.21
 pyctcdecode==0.3.0
 pyflakes==2.4.0
-Pygments==2.11.2
+Pygments==2.15.0
 pygtrie==2.4.2
 pynvml==11.4.1
 pyOpenSSL==22.0.0
@@ -175,9 +175,9 @@ pytz==2022.1
 pytz-deprecation-shim==0.1.0.post0
 PyYAML==6.0
 ray==1.11.0
-redis==4.5.3
+redis==4.5.4
 regex==2022.3.15
-requests==2.27.1
+requests==2.31.0
 requests-oauthlib==1.3.1
 resampy==0.2.2
 responses==0.18.0
@@ -229,11 +229,11 @@ tzlocal==4.1
 unidic==1.1.0
 unidic-lite==1.0.8
 uritemplate==4.1.1
-urllib3==1.26.9
+urllib3==1.26.18
 wasabi==0.9.0
 wcwidth==0.2.5
 websocket-client==1.3.1
-Werkzeug==2.2.3
+Werkzeug==3.0.1
 wrapt==1.14.0
 xxhash==3.0.0
 yarl==1.7.2

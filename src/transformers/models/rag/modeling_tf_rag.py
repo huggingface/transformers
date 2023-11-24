@@ -15,6 +15,9 @@
 
 """TFRAG model implementation."""
 
+
+from __future__ import annotations
+
 import copy
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -111,22 +114,22 @@ class TFRetrievAugLMMarginOutput(ModelOutput):
             average in the self-attention heads.
     """
 
-    loss: Optional[tf.Tensor] = None
+    loss: tf.Tensor | None = None
     logits: tf.Tensor = None
-    past_key_values: Optional[List[tf.Tensor]] = None
-    doc_scores: Optional[tf.Tensor] = None
-    retrieved_doc_embeds: Optional[tf.Tensor] = None
-    retrieved_doc_ids: Optional[tf.Tensor] = None
-    context_input_ids: Optional[tf.Tensor] = None
-    context_attention_mask: Optional[tf.Tensor] = None
-    question_encoder_last_hidden_state: Optional[tf.Tensor] = None
-    question_enc_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    question_enc_attentions: Optional[Tuple[tf.Tensor]] = None
-    generator_enc_last_hidden_state: Optional[tf.Tensor] = None
-    generator_enc_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    generator_enc_attentions: Optional[Tuple[tf.Tensor]] = None
-    generator_dec_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    generator_dec_attentions: Optional[Tuple[tf.Tensor]] = None
+    past_key_values: List[tf.Tensor] | None = None
+    doc_scores: tf.Tensor | None = None
+    retrieved_doc_embeds: tf.Tensor | None = None
+    retrieved_doc_ids: tf.Tensor | None = None
+    context_input_ids: tf.Tensor | None = None
+    context_attention_mask: tf.Tensor | None = None
+    question_encoder_last_hidden_state: tf.Tensor | None = None
+    question_enc_hidden_states: Tuple[tf.Tensor] | None = None
+    question_enc_attentions: Tuple[tf.Tensor] | None = None
+    generator_enc_last_hidden_state: tf.Tensor | None = None
+    generator_enc_hidden_states: Tuple[tf.Tensor] | None = None
+    generator_enc_attentions: Tuple[tf.Tensor] | None = None
+    generator_dec_hidden_states: Tuple[tf.Tensor] | None = None
+    generator_dec_attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -196,20 +199,20 @@ class TFRetrievAugLMOutput(ModelOutput):
     """
 
     logits: tf.Tensor = None
-    past_key_values: Optional[List[tf.Tensor]] = None
-    doc_scores: Optional[tf.Tensor] = None
-    retrieved_doc_embeds: Optional[tf.Tensor] = None
-    retrieved_doc_ids: Optional[tf.Tensor] = None
-    context_input_ids: Optional[tf.Tensor] = None
-    context_attention_mask: Optional[tf.Tensor] = None
-    question_encoder_last_hidden_state: Optional[tf.Tensor] = None
-    question_enc_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    question_enc_attentions: Optional[Tuple[tf.Tensor]] = None
-    generator_enc_last_hidden_state: Optional[tf.Tensor] = None
-    generator_enc_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    generator_enc_attentions: Optional[Tuple[tf.Tensor]] = None
-    generator_dec_hidden_states: Optional[Tuple[tf.Tensor]] = None
-    generator_dec_attentions: Optional[Tuple[tf.Tensor]] = None
+    past_key_values: List[tf.Tensor] | None = None
+    doc_scores: tf.Tensor | None = None
+    retrieved_doc_embeds: tf.Tensor | None = None
+    retrieved_doc_ids: tf.Tensor | None = None
+    context_input_ids: tf.Tensor | None = None
+    context_attention_mask: tf.Tensor | None = None
+    question_encoder_last_hidden_state: tf.Tensor | None = None
+    question_enc_hidden_states: Tuple[tf.Tensor] | None = None
+    question_enc_attentions: Tuple[tf.Tensor] | None = None
+    generator_enc_last_hidden_state: tf.Tensor | None = None
+    generator_enc_hidden_states: Tuple[tf.Tensor] | None = None
+    generator_enc_attentions: Tuple[tf.Tensor] | None = None
+    generator_dec_hidden_states: Tuple[tf.Tensor] | None = None
+    generator_dec_attentions: Tuple[tf.Tensor] | None = None
 
 
 class TFRagPreTrainedModel(TFPreTrainedModel):
@@ -221,6 +224,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
     generator, the encoder and generator are trainable while the retriever is just an indexed dataset.
 
     """
+
     config_class = RagConfig
     base_model_prefix = "rag"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -545,24 +549,24 @@ class TFRagModel(TFRagPreTrainedModel):
     @replace_return_docstrings(output_type=TFRetrievAugLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        doc_scores: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        context_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        context_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_retrieved: Optional[bool] = None,
-        n_docs: Optional[int] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        encoder_outputs: np.ndarray | tf.Tensor | None = None,
+        decoder_input_ids: np.ndarray | tf.Tensor | None = None,
+        decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
+        past_key_values: Tuple[Tuple[Union[np.ndarray, tf.Tensor]]] | None = None,
+        doc_scores: np.ndarray | tf.Tensor | None = None,
+        context_input_ids: np.ndarray | tf.Tensor | None = None,
+        context_attention_mask: np.ndarray | tf.Tensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_retrieved: bool | None = None,
+        n_docs: int | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
         **kwargs,
-    ):
+    ) -> TFRetrievAugLMOutput:
         r"""
         Returns:
 
@@ -841,27 +845,27 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     @replace_return_docstrings(output_type=TFRetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        doc_scores: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        context_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        context_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_retrieved: Optional[bool] = None,
-        n_docs: Optional[int] = None,
-        do_marginalize: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        reduce_loss: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        decoder_input_ids: np.ndarray | tf.Tensor | None = None,
+        decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
+        encoder_outputs: np.ndarray | tf.Tensor | None = None,
+        past_key_values: Tuple[Tuple[Union[np.ndarray, tf.Tensor]]] | None = None,
+        doc_scores: np.ndarray | tf.Tensor | None = None,
+        context_input_ids: np.ndarray | tf.Tensor | None = None,
+        context_attention_mask: np.ndarray | tf.Tensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_retrieved: bool | None = None,
+        n_docs: int | None = None,
+        do_marginalize: bool | None = None,
+        labels: np.ndarray | tf.Tensor | None = None,
+        reduce_loss: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
         **kwargs,  # needs kwargs for generation
-    ):
+    ) -> TFRetrievAugLMMarginOutput:
         r"""
         do_marginalize (`bool`, *optional*):
             If `True`, the logits are marginalized over all documents by making use of
@@ -993,8 +997,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
     def generate(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[tf.Tensor] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: tf.Tensor | None = None,
         context_input_ids=None,
         context_attention_mask=None,
         doc_scores=None,
@@ -1048,7 +1052,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 Custom logits processors that complement the default logits processors built from arguments and a
                 model's config. If a logit processor is passed that is already created with the arguments or a model's
                 config an error is thrown.
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model.
 
@@ -1347,22 +1351,22 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
     @replace_return_docstrings(output_type=TFRetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        decoder_input_ids: np.ndarray | tf.Tensor | None = None,
+        decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
+        encoder_outputs: np.ndarray | tf.Tensor | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        doc_scores: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        context_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        context_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        doc_scores: np.ndarray | tf.Tensor | None = None,
+        context_input_ids: np.ndarray | tf.Tensor | None = None,
+        context_attention_mask: np.ndarray | tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_retrieved: Optional[bool] = None,
         n_docs: Optional[int] = None,
         exclude_bos_score: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         reduce_loss: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
@@ -1579,8 +1583,8 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
 
     def generate(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[tf.Tensor] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: tf.Tensor | None = None,
         context_input_ids=None,
         context_attention_mask=None,
         doc_scores=None,
@@ -1626,7 +1630,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
                 Number of beams for beam search. 1 means no beam search.
             n_docs (`int`, *optional*, defaults to `config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Additional kwargs will be passed to [`~generation.GenerationMixin.generate`]
 
         Return:

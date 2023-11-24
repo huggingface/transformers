@@ -29,8 +29,8 @@ from huggingface_hub import Repository
 from transformers import (
     CLIPTokenizer,
     OwlViTConfig,
-    OwlViTFeatureExtractor,
     OwlViTForObjectDetection,
+    OwlViTImageProcessor,
     OwlViTModel,
     OwlViTProcessor,
 )
@@ -350,16 +350,16 @@ def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dum
     # Save HF model
     hf_model.save_pretrained(repo.local_dir)
 
-    # Initialize feature extractor
-    feature_extractor = OwlViTFeatureExtractor(
+    # Initialize image processor
+    image_processor = OwlViTImageProcessor(
         size=config.vision_config.image_size, crop_size=config.vision_config.image_size
     )
     # Initialize tokenizer
     tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32", pad_token="!", model_max_length=16)
 
     # Initialize processor
-    processor = OwlViTProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-    feature_extractor.save_pretrained(repo.local_dir)
+    processor = OwlViTProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    image_processor.save_pretrained(repo.local_dir)
     processor.save_pretrained(repo.local_dir)
 
     repo.git_add()

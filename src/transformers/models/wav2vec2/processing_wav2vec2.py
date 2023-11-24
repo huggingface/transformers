@@ -37,6 +37,7 @@ class Wav2Vec2Processor(ProcessorMixin):
         tokenizer ([`PreTrainedTokenizer`]):
             An instance of [`PreTrainedTokenizer`]. The tokenizer is a required input.
     """
+
     feature_extractor_class = "Wav2Vec2FeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 

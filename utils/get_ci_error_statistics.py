@@ -2,7 +2,6 @@ import argparse
 import json
 import math
 import os
-import subprocess
 import time
 import traceback
 import zipfile
@@ -70,19 +69,16 @@ def download_artifact(artifact_name, artifact_url, output_dir, token):
     but it can't be used to download directly. We need to get a redirect URL first.
     See https://docs.github.com/en/rest/actions/artifacts#download-an-artifact
     """
-    # Get the redirect URL first
-    cmd = f'curl -v -H "Accept: application/vnd.github+json" -H "Authorization: Bearer {token}" {artifact_url}'
-    output = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    o = output.stdout.decode("utf-8")
-    lines = o.splitlines()
+    headers = None
+    if token is not None:
+        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
-    for line in lines:
-        if line.startswith("< Location: "):
-            redirect_url = line[len("< Location: ") :]
-            r = requests.get(redirect_url, allow_redirects=True)
-            p = os.path.join(output_dir, f"{artifact_name}.zip")
-            open(p, "wb").write(r.content)
-            break
+    result = requests.get(artifact_url, headers=headers, allow_redirects=False)
+    download_url = result.headers["Location"]
+    response = requests.get(download_url, allow_redirects=True)
+    file_path = os.path.join(output_dir, f"{artifact_name}.zip")
+    with open(file_path, "wb") as fp:
+        fp.write(response.content)
 
 
 def get_errors_from_single_artifact(artifact_zip_path, job_links=None):

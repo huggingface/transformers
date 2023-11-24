@@ -30,16 +30,18 @@ class CLIPSegProcessor(ProcessorMixin):
     [`~CLIPSegProcessor.__call__`] and [`~CLIPSegProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`ViTImageProcessor`]):
+        image_processor ([`ViTImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`CLIPTokenizerFast`]):
+        tokenizer ([`CLIPTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "ViTImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        feature_extractor = None
         if "feature_extractor" in kwargs:
             warnings.warn(
                 "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"

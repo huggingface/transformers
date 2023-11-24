@@ -1,11 +1,11 @@
-# https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel_22-08.html#rel_22-08
-FROM nvcr.io/nvidia/pytorch:22.08-py3
+# https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-22-12.html#rel-22-12
+FROM nvcr.io/nvidia/pytorch:22.12-py3
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu117'
+ARG CUDA='cu118'
 
 RUN apt -y update
 RUN apt install -y libaio-dev
@@ -14,12 +14,19 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip
 ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
+RUN python3 -m pip uninstall -y torch torchvision torchaudio
+
 # Install **nightly** release PyTorch (flag `--pre`)
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
 # (https://www.deepspeed.ai/tutorials/advanced-install/#pre-install-deepspeed-ops)
 RUN python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
+
+RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
+# Uninstall `transformer-engine` shipped with the base image
+RUN python3 -m pip uninstall -y transformer-engine
 
 # Uninstall `torch-tensorrt` and `apex` shipped with the base image
 RUN python3 -m pip uninstall -y torch-tensorrt apex
@@ -29,7 +36,7 @@ RUN python3 -m pip uninstall -y deepspeed
 # This has to be run inside the GPU VMs running the tests. (So far, it fails here due to GPU checks during compilation.)
 # Issue: https://github.com/microsoft/DeepSpeed/issues/2010
 # RUN git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build && \
-#    DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check 2>&1
+#    DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_UTILS=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check 2>&1
 
 ## For `torchdynamo` tests
 ## (see https://github.com/huggingface/transformers/pull/17765)

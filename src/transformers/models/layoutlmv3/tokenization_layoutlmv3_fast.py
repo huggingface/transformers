@@ -508,7 +508,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-    # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast._batch_encode_plus with LayoutLMv2->LayoutLMv3
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
@@ -640,6 +639,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
                 else:
                     original_index = batch_index
                 labels_example = []
+                previous_token_empty = False
                 for id, offset, word_id in zip(
                     sanitized_tokens["input_ids"][batch_index],
                     sanitized_tokens["offset_mapping"][batch_index],
@@ -647,11 +647,15 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
                 ):
                     if word_id is not None:
                         if self.only_label_first_subword:
-                            if offset[0] == 0:
+                            if offset[0] == 0 and not previous_token_empty:
                                 # Use the real label id for the first token of the word, and padding ids for the remaining tokens
                                 labels_example.append(word_labels[original_index][word_id])
                             else:
                                 labels_example.append(self.pad_token_label)
+                            if offset == (0, 0):
+                                previous_token_empty = True
+                            else:
+                                previous_token_empty = False
                         else:
                             labels_example.append(word_labels[original_index][word_id])
                     else:

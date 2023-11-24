@@ -81,10 +81,10 @@ The `preview` command only works with existing doc files. When you add a complet
 
 ## Adding a new element to the navigation bar
 
-Accepted files are Markdown (.md or .mdx).
+Accepted files are Markdown (.md).
 
 Create a file with its extension and put it in the source directory. You can then link it to the toc-tree by putting
-the filename without the extension in the [`_toctree.yml`](https://github.com/huggingface/transformers/blob/main/docs/source/_toctree.yml) file.
+the filename without the extension in the [`_toctree.yml`](https://github.com/huggingface/transformers/blob/main/docs/source/en/_toctree.yml) file.
 
 ## Renaming section headers and moving sections
 
@@ -109,7 +109,7 @@ Sections that were moved:
 
 Use the relative style to link to the new file so that the versioned docs continue to work.
 
-For an example of a rich moved section set please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/main/docs/source/en/main_classes/trainer.mdx).
+For an example of a rich moved section set please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/main/docs/source/en/main_classes/trainer.md).
 
 
 ## Writing Documentation - Specification
@@ -138,7 +138,7 @@ When translating, refer to the guide at [./TRANSLATING.md](https://github.com/hu
 
 When adding a new model:
 
-- Create a file `xxx.mdx` or under `./source/model_doc` (don't hesitate to copy an existing file as template).
+- Create a file `xxx.md` or under `./source/model_doc` (don't hesitate to copy an existing file as template).
 - Link that file in `./source/_toctree.yml`.
 - Write a short overview of the model:
     - Overview with paper & authors
@@ -147,7 +147,7 @@ When adding a new model:
 - Add the classes that should be linked in the model. This generally includes the configuration, the tokenizer, and
   every model of that class (the base model, alongside models with additional heads), both in PyTorch and TensorFlow.
   The order is generally:
-    - Configuration,
+    - Configuration
     - Tokenizer
     - PyTorch base model
     - PyTorch head models
@@ -364,25 +364,9 @@ We use pytests' [doctest integration](https://docs.pytest.org/doctest.html) to v
 For Transformers, the doctests are run on a daily basis via GitHub Actions as can be 
 seen [here](https://github.com/huggingface/transformers/actions/workflows/doctests.yml).
 
-To include your example in the daily doctests, you need to add the filename that
-contains the example docstring to the [documentation_tests.txt](../utils/documentation_tests.txt).
-
 ### For Python files
 
-You will first need to run the following command (from the root of the repository) to prepare the doc file (doc-testing needs to add additional lines that we don't include in the doc source files):
-
-```bash
-python utils/prepare_for_doc_test.py src docs
-```
-
-If you work on a specific python module, say `modeling_wav2vec2.py`, you can run the command as follows (to avoid the unnecessary temporary changes in irrelevant files):
-
-```bash
-python utils/prepare_for_doc_test.py src/transformers/utils/doc.py src/transformers/models/wav2vec2/modeling_wav2vec2.py
-```
-(`utils/doc.py` should always be included)
-
-Then you can run all the tests in the docstrings of a given file with the following command, here is how we test the modeling file of Wav2Vec2 for instance:
+Run all the tests in the docstrings of a given file with the following command, here is how we test the modeling file of Wav2Vec2 for instance:
 
 ```bash
 pytest --doctest-modules src/transformers/models/wav2vec2/modeling_wav2vec2.py -sv --doctest-continue-on-failure
@@ -394,30 +378,12 @@ If you want to isolate a specific docstring, just add `::` after the file name t
 pytest --doctest-modules src/transformers/models/wav2vec2/modeling_wav2vec2.py::transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC.forward -sv --doctest-continue-on-failure
 ```
 
-Once you're done, you can run the following command (still from the root of the repository) to undo the changes made by the first command before committing:
-
-```bash
-python utils/prepare_for_doc_test.py src docs --remove_new_line
-```
-
 ### For Markdown files
 
-You will first need to run the following command (from the root of the repository) to prepare the doc file (doc-testing needs to add additional lines that we don't include in the doc source files):
+You can test locally a given file with this command (here testing the quicktour):
 
 ```bash
-python utils/prepare_for_doc_test.py src docs
-```
-
-Then you can test locally a given file with this command (here testing the quicktour):
-
-```bash
-pytest --doctest-modules docs/source/quicktour.mdx -sv --doctest-continue-on-failure --doctest-glob="*.mdx"
-```
-
-Once you're done, you can run the following command (still from the root of the repository) to undo the changes made by the first command before committing:
-
-```bash
-python utils/prepare_for_doc_test.py src docs --remove_new_line
+pytest --doctest-modules docs/source/quicktour.md -sv --doctest-continue-on-failure --doctest-glob="*.md"
 ```
 
 ### Writing doctests

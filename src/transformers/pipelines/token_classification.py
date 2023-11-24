@@ -17,9 +17,9 @@ from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline, Dataset
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
 
 
 class TokenClassificationArgumentHandler(ArgumentHandler):
@@ -68,7 +68,9 @@ class AggregationStrategy(ExplicitEnum):
             same entity together in the predictions or not.
         stride (`int`, *optional*):
             If stride is provided, the pipeline is applied on all the text. The text is split into chunks of size
-            model_max_length. Works only with fast tokenizers and `aggregation_strategy` different from `NONE`.
+            model_max_length. Works only with fast tokenizers and `aggregation_strategy` different from `NONE`. The
+            value of this argument defines the number of overlapping tokens between chunks. In other words, the model
+            will shift forward by `tokenizer.model_max_length - stride` tokens each step.
         aggregation_strategy (`str`, *optional*, defaults to `"none"`):
             The strategy to fuse (or not) tokens based on the model prediction.
 
@@ -133,9 +135,9 @@ class TokenClassificationPipeline(ChunkPipeline):
     def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(
-            TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+            TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
             if self.framework == "tf"
-            else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+            else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
         )
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
@@ -190,6 +192,10 @@ class TokenClassificationPipeline(ChunkPipeline):
         if ignore_labels is not None:
             postprocess_params["ignore_labels"] = ignore_labels
         if stride is not None:
+            if stride >= self.tokenizer.model_max_length:
+                raise ValueError(
+                    "`stride` must be less than `tokenizer.model_max_length` (or even lower if the tokenizer adds special tokens)"
+                )
             if aggregation_strategy == AggregationStrategy.NONE:
                 raise ValueError(
                     "`stride` was provided to process all the text but `aggregation_strategy="
@@ -485,7 +491,8 @@ class TokenClassificationPipeline(ChunkPipeline):
                 word_entities.append(self.aggregate_word(word_group, aggregation_strategy))
                 word_group = [entity]
         # Last item
-        word_entities.append(self.aggregate_word(word_group, aggregation_strategy))
+        if word_group is not None:
+            word_entities.append(self.aggregate_word(word_group, aggregation_strategy))
         return word_entities
 
     def group_sub_entities(self, entities: List[dict]) -> dict:

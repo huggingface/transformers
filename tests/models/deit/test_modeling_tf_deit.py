@@ -15,6 +15,8 @@
 """ Testing suite for the TensorFlow DeiT model. """
 
 
+from __future__ import annotations
+
 import inspect
 import unittest
 
@@ -44,7 +46,7 @@ if is_tf_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DeiTFeatureExtractor
+    from transformers import DeiTImageProcessor
 
 
 class TFDeiTModelTester:
@@ -58,7 +60,7 @@ class TFDeiTModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -242,7 +244,7 @@ class TFDeiTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ == "DeiTForImageClassificationWithTeacher":
+            if "labels" in inputs_dict and "labels" not in inspect.signature(model_class.call).parameters:
                 del inputs_dict["labels"]
 
         return inputs_dict
@@ -264,9 +266,9 @@ def prepare_img():
 @require_vision
 class DeiTModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+            DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
             if is_vision_available()
             else None
         )
@@ -275,9 +277,9 @@ class DeiTModelIntegrationTest(unittest.TestCase):
     def test_inference_image_classification_head(self):
         model = TFDeiTForImageClassificationWithTeacher.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs)

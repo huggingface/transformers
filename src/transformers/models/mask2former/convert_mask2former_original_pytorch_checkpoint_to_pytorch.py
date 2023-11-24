@@ -192,7 +192,7 @@ class OriginalMask2FormerConfigToOursConverter:
         return config
 
 
-class OriginalMask2FormerConfigToFeatureExtractorConverter:
+class OriginalMask2FormerConfigToImageProcessorConverter:
     def __call__(self, original_config: object) -> Mask2FormerImageProcessor:
         model = original_config.MODEL
         model_input = original_config.INPUT
@@ -846,7 +846,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
 def test(
     original_model,
     our_model: Mask2FormerForUniversalSegmentation,
-    feature_extractor: Mask2FormerImageProcessor,
+    image_processor: Mask2FormerImageProcessor,
     tolerance: float,
 ):
     with torch.no_grad():
@@ -854,7 +854,7 @@ def test(
         our_model = our_model.eval()
 
         im = prepare_img()
-        x = feature_extractor(images=im, return_tensors="pt")["pixel_values"]
+        x = image_processor(images=im, return_tensors="pt")["pixel_values"]
 
         original_model_backbone_features = original_model.backbone(x.clone())
         our_model_output: Mask2FormerModelOutput = our_model.model(x.clone(), output_hidden_states=True)
@@ -979,10 +979,10 @@ if __name__ == "__main__":
         checkpoints_dir, config_dir
     ):
         model_name = get_model_name(checkpoint_file)
-        feature_extractor = OriginalMask2FormerConfigToFeatureExtractorConverter()(
+        image_processor = OriginalMask2FormerConfigToImageProcessorConverter()(
             setup_cfg(Args(config_file=config_file))
         )
-        feature_extractor.size = {"height": 384, "width": 384}
+        image_processor.size = {"height": 384, "width": 384}
 
         original_config = setup_cfg(Args(config_file=config_file))
         mask2former_kwargs = OriginalMask2Former.from_config(original_config)
@@ -1012,8 +1012,8 @@ if __name__ == "__main__":
             tolerance = 3e-1
 
         logger.info(f"🪄 Testing {model_name}...")
-        test(original_model, mask2former_for_segmentation, feature_extractor, tolerance)
+        test(original_model, mask2former_for_segmentation, image_processor, tolerance)
         logger.info(f"🪄 Pushing {model_name} to hub...")
 
-        feature_extractor.push_to_hub(model_name)
+        image_processor.push_to_hub(model_name)
         mask2former_for_segmentation.push_to_hub(model_name)

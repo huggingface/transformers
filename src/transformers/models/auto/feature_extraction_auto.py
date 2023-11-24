@@ -16,12 +16,13 @@
 import importlib
 import json
 import os
+import warnings
 from collections import OrderedDict
 from typing import Dict, Optional, Union
 
 # Build the list of all feature extractors
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module
+from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
@@ -43,6 +44,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("clap", "ClapFeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),
         ("clipseg", "ViTFeatureExtractor"),
+        ("clvp", "ClvpFeatureExtractor"),
         ("conditional_detr", "ConditionalDetrFeatureExtractor"),
         ("convnext", "ConvNextFeatureExtractor"),
         ("cvt", "ConvNextFeatureExtractor"),
@@ -54,6 +56,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("dinat", "ViTFeatureExtractor"),
         ("donut-swin", "DonutFeatureExtractor"),
         ("dpt", "DPTFeatureExtractor"),
+        ("encodec", "EncodecFeatureExtractor"),
         ("flava", "FlavaFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
         ("groupvit", "CLIPFeatureExtractor"),
@@ -71,13 +74,16 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("owlvit", "OwlViTFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
+        ("pop2piano", "Pop2PianoFeatureExtractor"),
         ("regnet", "ConvNextFeatureExtractor"),
         ("resnet", "ConvNextFeatureExtractor"),
+        ("seamless_m4t", "SeamlessM4TFeatureExtractor"),
         ("segformer", "SegformerFeatureExtractor"),
         ("sew", "Wav2Vec2FeatureExtractor"),
         ("sew-d", "Wav2Vec2FeatureExtractor"),
         ("speech_to_text", "Speech2TextFeatureExtractor"),
         ("speecht5", "SpeechT5FeatureExtractor"),
+        ("swiftformer", "ViTFeatureExtractor"),
         ("swin", "ViTFeatureExtractor"),
         ("swinv2", "ViTFeatureExtractor"),
         ("table-transformer", "DetrFeatureExtractor"),
@@ -85,6 +91,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("tvlt", "TvltFeatureExtractor"),
         ("unispeech", "Wav2Vec2FeatureExtractor"),
         ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
+        ("univnet", "UnivNetFeatureExtractor"),
         ("van", "ConvNextFeatureExtractor"),
         ("videomae", "VideoMAEFeatureExtractor"),
         ("vilt", "ViltFeatureExtractor"),
@@ -133,7 +140,7 @@ def get_feature_extractor_config(
     force_download: bool = False,
     resume_download: bool = False,
     proxies: Optional[Dict[str, str]] = None,
-    use_auth_token: Optional[Union[bool, str]] = None,
+    token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
     **kwargs,
@@ -162,7 +169,7 @@ def get_feature_extractor_config(
         proxies (`Dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-        use_auth_token (`str` or *bool*, *optional*):
+        token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `huggingface-cli login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
@@ -174,7 +181,7 @@ def get_feature_extractor_config(
 
     <Tip>
 
-    Passing `use_auth_token=True` is required when you want to use a private model.
+    Passing `token=True` is required when you want to use a private model.
 
     </Tip>
 
@@ -196,6 +203,16 @@ def get_feature_extractor_config(
     tokenizer.save_pretrained("tokenizer-test")
     tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
+    use_auth_token = kwargs.pop("use_auth_token", None)
+    if use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
+        )
+        if token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        token = use_auth_token
+
     resolved_config_file = get_file_from_repo(
         pretrained_model_name_or_path,
         FEATURE_EXTRACTOR_NAME,
@@ -203,7 +220,7 @@ def get_feature_extractor_config(
         force_download=force_download,
         resume_download=resume_download,
         proxies=proxies,
-        use_auth_token=use_auth_token,
+        token=token,
         revision=revision,
         local_files_only=local_files_only,
     )
@@ -267,7 +284,7 @@ class AutoFeatureExtractor:
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            use_auth_token (`str` or *bool*, *optional*):
+            token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
@@ -290,7 +307,7 @@ class AutoFeatureExtractor:
 
         <Tip>
 
-        Passing `use_auth_token=True` is required when you want to use a private model.
+        Passing `token=True` is required when you want to use a private model.
 
         </Tip>
 
@@ -305,8 +322,20 @@ class AutoFeatureExtractor:
         >>> # If feature extractor files are in a directory (e.g. feature extractor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # feature_extractor = AutoFeatureExtractor.from_pretrained("./test/saved_model/")
         ```"""
+        use_auth_token = kwargs.pop("use_auth_token", None)
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
+            )
+            if kwargs.get("token", None) is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            kwargs["token"] = use_auth_token
+
         config = kwargs.pop("config", None)
-        trust_remote_code = kwargs.pop("trust_remote_code", False)
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
         config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
@@ -325,28 +354,23 @@ class AutoFeatureExtractor:
                 feature_extractor_auto_map = config.auto_map["AutoFeatureExtractor"]
 
         if feature_extractor_class is not None:
-            # If we have custom code for a feature extractor, we get the proper class.
-            if feature_extractor_auto_map is not None:
-                if not trust_remote_code:
-                    raise ValueError(
-                        f"Loading {pretrained_model_name_or_path} requires you to execute the feature extractor file "
-                        "in that repo on your local machine. Make sure you have read the code there to avoid "
-                        "malicious use, then set the option `trust_remote_code=True` to remove this error."
-                    )
-                if kwargs.get("revision", None) is None:
-                    logger.warning(
-                        "Explicitly passing a `revision` is encouraged when loading a feature extractor with custom "
-                        "code to ensure no malicious code has been contributed in a newer revision."
-                    )
+            feature_extractor_class = feature_extractor_class_from_name(feature_extractor_class)
 
-                module_file, class_name = feature_extractor_auto_map.split(".")
-                feature_extractor_class = get_class_from_dynamic_module(
-                    pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
-                )
+        has_remote_code = feature_extractor_auto_map is not None
+        has_local_code = feature_extractor_class is not None or type(config) in FEATURE_EXTRACTOR_MAPPING
+        trust_remote_code = resolve_trust_remote_code(
+            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
+        )
+
+        if has_remote_code and trust_remote_code:
+            feature_extractor_class = get_class_from_dynamic_module(
+                feature_extractor_auto_map, pretrained_model_name_or_path, **kwargs
+            )
+            _ = kwargs.pop("code_revision", None)
+            if os.path.isdir(pretrained_model_name_or_path):
                 feature_extractor_class.register_for_auto_class()
-            else:
-                feature_extractor_class = feature_extractor_class_from_name(feature_extractor_class)
-
+            return feature_extractor_class.from_dict(config_dict, **kwargs)
+        elif feature_extractor_class is not None:
             return feature_extractor_class.from_dict(config_dict, **kwargs)
         # Last try: we use the FEATURE_EXTRACTOR_MAPPING.
         elif type(config) in FEATURE_EXTRACTOR_MAPPING:
@@ -360,7 +384,7 @@ class AutoFeatureExtractor:
         )
 
     @staticmethod
-    def register(config_class, feature_extractor_class):
+    def register(config_class, feature_extractor_class, exist_ok=False):
         """
         Register a new feature extractor for this class.
 
@@ -369,4 +393,4 @@ class AutoFeatureExtractor:
                 The configuration corresponding to the model to register.
             feature_extractor_class ([`FeatureExtractorMixin`]): The feature extractor to register.
         """
-        FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class)
+        FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class, exist_ok=exist_ok)

@@ -352,10 +352,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
 
         # save mask value here. Need fp32 and fp16 mask values
-        self.register_buffer("self_mask_value_float16", torch.tensor(-1e3))
-        self.register_buffer("self_mask_value_float32", torch.tensor(-1e5))
-        self.register_buffer("mask_value_float16", torch.tensor(-1e4))
-        self.register_buffer("mask_value_float32", torch.tensor(-1e9))
+        self.register_buffer("self_mask_value_float16", torch.tensor(-1e3), persistent=False)
+        self.register_buffer("self_mask_value_float32", torch.tensor(-1e5), persistent=False)
+        self.register_buffer("mask_value_float16", torch.tensor(-1e4), persistent=False)
+        self.register_buffer("mask_value_float32", torch.tensor(-1e9), persistent=False)
 
     def forward(
         self,
@@ -1049,8 +1049,8 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         self.dropout = config.local_attention_probs_dropout_prob
 
         # save mask value here
-        self.register_buffer("mask_value_float16", torch.tensor(-1e4))
-        self.register_buffer("mask_value_float32", torch.tensor(-1e9))
+        self.register_buffer("mask_value_float16", torch.tensor(-1e4), persistent=False)
+        self.register_buffer("mask_value_float32", torch.tensor(-1e9), persistent=False)
 
     def forward(
         self,
@@ -2031,6 +2031,7 @@ class ReformerModel(ReformerPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()  # noqa: F841
             device = input_ids.device
         elif inputs_embeds is not None:
@@ -2185,7 +2186,7 @@ class ReformerModel(ReformerPreTrainedModel):
 
 @add_start_docstrings("""Reformer Model with a `language modeling` head on top.""", REFORMER_START_DOCSTRING)
 class ReformerModelWithLMHead(ReformerPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.decoder.bias"]
+    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -2299,18 +2300,20 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         for layer_past in past_key_values:
             # buckets
             if layer_past[0] is not None:
-                reord_buckets = layer_past[0].index_select(0, beam_idx)
+                reord_buckets = layer_past[0].index_select(0, beam_idx.to(layer_past[0].device))
             else:
                 reord_buckets = None
 
             # hidden states
-            reord_hidden_states = layer_past[1].index_select(0, beam_idx)
+            reord_hidden_states = layer_past[1].index_select(0, beam_idx.to(layer_past[1].device))
             reord_past_buckets_states.append((reord_buckets, reord_hidden_states))
         return reord_past_buckets_states
 
 
 @add_start_docstrings("""Reformer Model with a `language modeling` head on top.""", REFORMER_START_DOCSTRING)
 class ReformerForMaskedLM(ReformerPreTrainedModel):
+    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
         assert not config.is_decoder, (

@@ -12,17 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import unittest
 
 from transformers import MODEL_FOR_MASKED_LM_MAPPING, TF_MODEL_FOR_MASKED_LM_MAPPING, FillMaskPipeline, pipeline
 from transformers.pipelines import PipelineException
 from transformers.testing_utils import (
+    backend_empty_cache,
     is_pipeline_test,
+    is_torch_available,
     nested_simplify,
     require_tf,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
+    torch_device,
 )
 
 from .test_pipelines_common import ANY
@@ -32,6 +36,13 @@ from .test_pipelines_common import ANY
 class FillMaskPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MASKED_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_MASKED_LM_MAPPING
+
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        if is_torch_available():
+            backend_empty_cache(torch_device)
 
     @require_tf
     def test_small_model_tf(self):
@@ -137,9 +148,14 @@ class FillMaskPipelineTests(unittest.TestCase):
             ],
         )
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_fp16_casting(self):
-        pipe = pipeline("fill-mask", model="hf-internal-testing/tiny-random-distilbert", device=0, framework="pt")
+        pipe = pipeline(
+            "fill-mask",
+            model="hf-internal-testing/tiny-random-distilbert",
+            device=torch_device,
+            framework="pt",
+        )
 
         # convert model to fp16
         pipe.model.half()
@@ -197,6 +213,18 @@ class FillMaskPipelineTests(unittest.TestCase):
                 {"sequence": "My name is Patrick", "score": 0.005, "token": 3499, "token_str": " Patrick"},
                 {"sequence": "My name is Clara", "score": 0.000, "token": 13606, "token_str": " Clara"},
                 {"sequence": "My name is Te", "score": 0.000, "token": 2941, "token_str": " Te"},
+            ],
+        )
+
+        outputs = unmasker(
+            "My name is <mask>" + "Lorem ipsum dolor sit amet, consectetur adipiscing elit," * 100,
+            tokenizer_kwargs={"truncation": True},
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=6),
+            [
+                {"sequence": "My name is grouped", "score": 2.2e-05, "token": 38015, "token_str": " grouped"},
+                {"sequence": "My name is accuser", "score": 2.1e-05, "token": 25506, "token_str": " accuser"},
             ],
         )
 
@@ -302,7 +330,8 @@ class FillMaskPipelineTests(unittest.TestCase):
         )
         target_ids = {vocab[el] for el in targets}
         self.assertEqual({el["token"] for el in outputs}, target_ids)
-        self.assertEqual({el["token_str"] for el in outputs}, set(targets))
+        processed_targets = [tokenizer.decode([x]) for x in target_ids]
+        self.assertEqual({el["token_str"] for el in outputs}, set(processed_targets))
 
         # Call argument
         fill_masker = FillMaskPipeline(model=model, tokenizer=tokenizer)
@@ -316,24 +345,29 @@ class FillMaskPipelineTests(unittest.TestCase):
         )
         target_ids = {vocab[el] for el in targets}
         self.assertEqual({el["token"] for el in outputs}, target_ids)
-        self.assertEqual({el["token_str"] for el in outputs}, set(targets))
+        processed_targets = [tokenizer.decode([x]) for x in target_ids]
+        self.assertEqual({el["token_str"] for el in outputs}, set(processed_targets))
 
         # Score equivalence
         outputs = fill_masker(f"This is a {tokenizer.mask_token}", targets=targets)
         tokens = [top_mask["token_str"] for top_mask in outputs]
         scores = [top_mask["score"] for top_mask in outputs]
 
-        unmasked_targets = fill_masker(f"This is a {tokenizer.mask_token}", targets=tokens)
-        target_scores = [top_mask["score"] for top_mask in unmasked_targets]
-        self.assertEqual(nested_simplify(scores), nested_simplify(target_scores))
+        # For some BPE tokenizers, `</w>` is removed during decoding, so `token_str` won't be the same as in `targets`.
+        if set(tokens) == set(targets):
+            unmasked_targets = fill_masker(f"This is a {tokenizer.mask_token}", targets=tokens)
+            target_scores = [top_mask["score"] for top_mask in unmasked_targets]
+            self.assertEqual(nested_simplify(scores), nested_simplify(target_scores))
 
         # Raises with invalid
         with self.assertRaises(ValueError):
-            outputs = fill_masker(f"This is a {tokenizer.mask_token}", targets=[""])
-        with self.assertRaises(ValueError):
             outputs = fill_masker(f"This is a {tokenizer.mask_token}", targets=[])
-        with self.assertRaises(ValueError):
-            outputs = fill_masker(f"This is a {tokenizer.mask_token}", targets="")
+        # For some tokenizers, `""` is actually in the vocabulary and the expected error won't raised
+        if "" not in tokenizer.get_vocab():
+            with self.assertRaises(ValueError):
+                outputs = fill_masker(f"This is a {tokenizer.mask_token}", targets=[""])
+            with self.assertRaises(ValueError):
+                outputs = fill_masker(f"This is a {tokenizer.mask_token}", targets="")
 
     def run_test_top_k(self, model, tokenizer):
         fill_masker = FillMaskPipeline(model=model, tokenizer=tokenizer, top_k=2)
@@ -368,10 +402,11 @@ class FillMaskPipelineTests(unittest.TestCase):
         # If we use the most probably targets, and filter differently, we should still
         # have the same results
         targets2 = [el["token_str"] for el in sorted(outputs, key=lambda x: x["score"], reverse=True)]
-        outputs2 = fill_masker(f"This is a {tokenizer.mask_token}", top_k=3, targets=targets2)
-
-        # They should yield exactly the same result
-        self.assertEqual(nested_simplify(outputs), nested_simplify(outputs2))
+        # For some BPE tokenizers, `</w>` is removed during decoding, so `token_str` won't be the same as in `targets`.
+        if set(targets2).issubset(targets):
+            outputs2 = fill_masker(f"This is a {tokenizer.mask_token}", top_k=3, targets=targets2)
+            # They should yield exactly the same result
+            self.assertEqual(nested_simplify(outputs), nested_simplify(outputs2))
 
     def fill_mask_with_duplicate_targets_and_top_k(self, model, tokenizer):
         fill_masker = FillMaskPipeline(model=model, tokenizer=tokenizer)

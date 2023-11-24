@@ -14,7 +14,6 @@
 # limitations under the License.
 """ VisionTextDualEncoder model configuration"""
 
-import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -35,10 +34,6 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config (`dict`):
-            Dictionary of configuration options that defines text model config.
-        vision_config (`dict`):
-            Dictionary of configuration options that defines vison model config.
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
@@ -113,16 +108,3 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
         """
 
         return cls(vision_config=vision_config.to_dict(), text_config=text_config.to_dict(), **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["vision_config"] = self.vision_config.to_dict()
-        output["text_config"] = self.text_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

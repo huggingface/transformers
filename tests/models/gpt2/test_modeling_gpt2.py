@@ -15,11 +15,12 @@
 
 
 import datetime
+import gc
 import math
 import unittest
 
 from transformers import GPT2Config, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -33,6 +34,7 @@ if is_torch_available():
     from transformers import (
         GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2DoubleHeadsModel,
+        GPT2ForQuestionAnswering,
         GPT2ForSequenceClassification,
         GPT2ForTokenClassification,
         GPT2LMHeadModel,
@@ -54,7 +56,7 @@ class GPT2ModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -377,6 +379,17 @@ class GPT2ModelTester:
         )
         self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
 
+    def create_and_check_gpt2_for_question_answering(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+    ):
+        config.num_labels = self.num_labels
+        model = GPT2ForQuestionAnswering(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+
     def create_and_check_gpt2_for_sequence_classification(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
@@ -432,7 +445,14 @@ class GPT2ModelTester:
 @require_torch
 class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel, GPT2ForSequenceClassification, GPT2ForTokenClassification)
+        (
+            GPT2Model,
+            GPT2LMHeadModel,
+            GPT2DoubleHeadsModel,
+            GPT2ForQuestionAnswering,
+            GPT2ForSequenceClassification,
+            GPT2ForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )
@@ -440,6 +460,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {
             "feature-extraction": GPT2Model,
+            "question-answering": GPT2ForQuestionAnswering,
             "text-classification": GPT2ForSequenceClassification,
             "text-generation": GPT2LMHeadModel,
             "token-classification": GPT2ForTokenClassification,
@@ -480,6 +501,12 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.model_tester = GPT2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GPT2Config, n_embd=37)
 
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        backend_empty_cache(torch_device)
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -507,6 +534,10 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_double_lm_head_model(*config_and_inputs)
 
+    def test_gpt2_question_answering_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt2_for_question_answering(*config_and_inputs)
+
     def test_gpt2_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_for_sequence_classification(*config_and_inputs)
@@ -530,6 +561,24 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_gpt2_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_weight_initialization(*config_and_inputs)
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
 
     @slow
     def test_batch_generation(self):
@@ -659,6 +708,12 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
 @require_torch
 class GPT2ModelLanguageGenerationTest(unittest.TestCase):
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        backend_empty_cache(torch_device)
+
     def _test_lm_generate_gpt2_helper(
         self,
         gradient_checkpointing=False,
@@ -681,11 +736,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)
 
         # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
-        # fmt: off
-        expected_output_ids = [
-            464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290,
-        ]
-        # fmt: on
+        expected_output_ids = [464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290,]  # fmt: skip
         output_ids = model.generate(input_ids, do_sample=False)
         if verify_outputs:
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
@@ -731,7 +782,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         )
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
         self.assertTrue(
-            all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
+            all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
 
     @slow

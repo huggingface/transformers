@@ -16,7 +16,13 @@ import unittest
 from unittest import skip
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 from transformers.trainer_utils import set_seed
 
 
@@ -167,6 +173,7 @@ class Jukebox1bModelTester(unittest.TestCase):
     @slow
     def test_conditioning(self):
         torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.allow_tf32 = False
         model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
 
         labels = self.prepare_inputs()
@@ -195,6 +202,7 @@ class Jukebox1bModelTester(unittest.TestCase):
     @slow
     def test_primed_sampling(self):
         torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.allow_tf32 = False
 
         model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
         set_seed(0)
@@ -361,35 +369,38 @@ class Jukebox5bModelTester(unittest.TestCase):
         self.assertIn(zs[2][0].detach().cpu().tolist(), [self.EXPECTED_OUTPUT_0, self.EXPECTED_OUTPUT_0_PT_2])
 
     @slow
+    @require_torch_accelerator
     @skip("Not enough GPU memory on CI runners")
     def test_slow_sampling(self):
         model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
-        labels = [i.cuda() for i in self.prepare_inputs(self.model_id)]
+        labels = [i.to(torch_device) for i in self.prepare_inputs(self.model_id)]
 
         set_seed(0)
-        model.priors[0].cuda()
-        zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
+        model.priors[0].to(torch_device)
+        zs = [torch.zeros(1, 0, dtype=torch.long).to(torch_device) for _ in range(3)]
         zs = model._sample(zs, labels, [0], sample_length=60 * model.priors[0].raw_to_tokens, save_results=False)
         torch.testing.assert_allclose(zs[0][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_2))
         model.priors[0].cpu()
 
         set_seed(0)
-        model.priors[1].cuda()
+        model.priors[1].to(torch_device)
         zs = model._sample(zs, labels, [1], sample_length=60 * model.priors[1].raw_to_tokens, save_results=False)
         torch.testing.assert_allclose(zs[1][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_1))
         model.priors[1].cpu()
 
         set_seed(0)
-        model.priors[2].cuda()
+        model.priors[2].to(torch_device)
         zs = model._sample(zs, labels, [2], sample_length=60 * model.priors[2].raw_to_tokens, save_results=False)
         torch.testing.assert_allclose(zs[2][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_0))
 
     @slow
+    @require_torch_accelerator
+    @require_torch_fp16
     def test_fp16_slow_sampling(self):
         prior_id = "ArthurZ/jukebox_prior_0"
-        model = JukeboxPrior.from_pretrained(prior_id, min_duration=0).eval().half().to("cuda")
+        model = JukeboxPrior.from_pretrained(prior_id, min_duration=0).eval().half().to(torch_device)
 
-        labels = self.prepare_inputs(prior_id)[0].cuda()
+        labels = self.prepare_inputs(prior_id)[0].to(torch_device)
         metadata = model.get_metadata(labels, 0, 7680, 0)
         set_seed(0)
         outputs = model.sample(1, metadata=metadata, sample_tokens=60)

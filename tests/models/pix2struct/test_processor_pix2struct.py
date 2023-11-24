@@ -19,8 +19,13 @@ import numpy as np
 import pytest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
+
+if is_torch_available():
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_11
+else:
+    is_torch_greater_or_equal_than_1_11 = False
 
 if is_vision_available():
     from PIL import Image
@@ -34,6 +39,10 @@ if is_vision_available():
     )
 
 
+@unittest.skipIf(
+    not is_torch_greater_or_equal_than_1_11,
+    reason="`Pix2StructImageProcessor` requires `torch>=1.11.0`.",
+)
 @require_vision
 @require_torch
 class Pix2StructProcessorTest(unittest.TestCase):
@@ -108,7 +117,7 @@ class Pix2StructProcessorTest(unittest.TestCase):
 
         encoded_processor = processor(text=input_str)
 
-        encoded_tok = tokenizer(input_str, return_token_type_ids=False, add_special_tokens=False)
+        encoded_tok = tokenizer(input_str, return_token_type_ids=False, add_special_tokens=True)
 
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_tok[key], encoded_processor[key])

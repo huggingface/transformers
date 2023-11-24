@@ -76,7 +76,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def get_rust_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
-        return RobertaTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"

@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import torch
 
-from ...audio_utils import fram_wave, get_mel_filter_banks, power_to_db, stft
+from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
@@ -41,32 +41,32 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
     Fourier Transform* (STFT) which should match pytorch's `torch.stft` equivalent.
 
     Args:
-        feature_size (`int`, defaults to 64):
+        feature_size (`int`, *optional*, defaults to 64):
             The feature dimension of the extracted Mel spectrograms. This corresponds to the number of mel filters
             (`n_mels`).
-        sampling_rate (`int`, defaults to 48_000):
+        sampling_rate (`int`, *optional*, defaults to 48000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz). This only serves
             to warn users if the audio fed to the feature extractor does not have the same sampling rate.
-        hop_length (`int`, defaults to 480):
+        hop_length (`int`,*optional*, defaults to 480):
             Length of the overlaping windows for the STFT used to obtain the Mel Spectrogram. The audio will be split
             in smaller `frames` with a step of `hop_length` between each frame.
-        max_length_s (`int`, defaults to 10):
-            The maximum input lenght of the model in seconds. This is used to pad the audio.
-        fft_window_size (`int`, defaults to 1024):
+        max_length_s (`int`, *optional*, defaults to 10):
+            The maximum input length of the model in seconds. This is used to pad the audio.
+        fft_window_size (`int`, *optional*, defaults to 1024):
             Size of the window (in samples) on which the Fourier transform is applied. This controls the frequency
             resolution of the spectrogram. 400 means that the fourrier transform is computed on windows of 400 samples.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return the attention masks coresponding to the input.
-        frequency_min (`float`, *optional*, default to 0):
+        frequency_min (`float`, *optional*, defaults to 0):
             The lowest frequency of interest. The STFT will not be computed for values below this.
-        frequency_max (`float`, *optional*, default to 14_000):
+        frequency_max (`float`, *optional*, defaults to 14000):
             The highest frequency of interest. The STFT will not be computed for values above this.
         top_db (`float`, *optional*):
             The highest decibel value used to convert the mel spectrogram to the log scale. For more details see the
             `audio_utils.power_to_db` function
-        truncation (`str`, *optional*, default to `"fusions"`):
+        truncation (`str`, *optional*, defaults to `"fusion"`):
             Truncation pattern for long audio inputs. Two patterns are available:
                 - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and a
                   downsampled version of the entire mel spectrogram.
@@ -116,21 +116,21 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         self.sampling_rate = sampling_rate
         self.frequency_min = frequency_min
         self.frequency_max = frequency_max
-        self.mel_filters = get_mel_filter_banks(
-            nb_frequency_bins=self.nb_frequency_bins,
-            nb_mel_filters=feature_size,
-            frequency_min=frequency_min,
-            frequency_max=frequency_max,
-            sample_rate=sampling_rate,
+        self.mel_filters = mel_filter_bank(
+            num_frequency_bins=self.nb_frequency_bins,
+            num_mel_filters=feature_size,
+            min_frequency=frequency_min,
+            max_frequency=frequency_max,
+            sampling_rate=sampling_rate,
             norm=None,
             mel_scale="htk",
         )
-        self.mel_filters_slaney = get_mel_filter_banks(
-            nb_frequency_bins=self.nb_frequency_bins,
-            nb_mel_filters=feature_size,
-            frequency_min=frequency_min,
-            frequency_max=frequency_max,
-            sample_rate=sampling_rate,
+        self.mel_filters_slaney = mel_filter_bank(
+            num_frequency_bins=self.nb_frequency_bins,
+            num_mel_filters=feature_size,
+            min_frequency=frequency_min,
+            max_frequency=frequency_max,
+            sampling_rate=sampling_rate,
             norm="slaney",
             mel_scale="slaney",
         )
@@ -153,24 +153,25 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
     def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
         """
-        Compute the log-Mel spectrogram of the provided `waveform` using the `hanning` window. In CLAP, two different
-        filter banks are used depending on the truncation pattern:
-            - `self.mel_filters`: they correspond to the defaults parameters of `torchaduio` which can be obtained from
+        Compute the log-mel spectrogram of the provided `waveform` using the Hann window. In CLAP, two different filter
+        banks are used depending on the truncation pattern:
+            - `self.mel_filters`: they correspond to the default parameters of `torchaudio` which can be obtained from
               calling `torchaudio.transforms.MelSpectrogram().mel_scale.fb`. These filters are used when `truncation`
               is set to `"fusion"`.
-            - `self.mel_filteres_slaney` : they correspond to the defaults parameters of `torchlibrosa` which used
+            - `self.mel_filteres_slaney` : they correspond to the default parameters of `librosa` which used
               `librosa.filters.mel` when computing the mel spectrogram. These filters were only used in the original
               implementation when the truncation mode is not `"fusion"`.
         """
-        window = np.hanning(self.fft_window_size + 1)[:-1]
-        frames = fram_wave(waveform, self.hop_length, self.fft_window_size)
-        spectrogram = stft(frames, window, fft_window_size=self.fft_window_size)
-
-        magnitudes = np.abs(spectrogram) ** 2
-        mel_spectrogram = np.matmul(mel_filters.T, magnitudes)
-        log_mel_spectrogram = power_to_db(mel_spectrogram).T
-        log_mel_spectrogram = np.asarray(log_mel_spectrogram, np.float32)
-        return log_mel_spectrogram
+        log_mel_spectrogram = spectrogram(
+            waveform,
+            window_function(self.fft_window_size, "hann"),
+            frame_length=self.fft_window_size,
+            hop_length=self.hop_length,
+            power=2.0,
+            mel_filters=mel_filters,
+            log_mel="dB",
+        )
+        return log_mel_spectrogram.T
 
     def _random_mel_fusion(self, mel, total_frames, chunk_frames):
         ranges = np.array_split(list(range(0, total_frames - chunk_frames + 1)), 3)
@@ -191,10 +192,10 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
         mel = torch.tensor(mel[None, None, :])
         mel_shrink = torch.nn.functional.interpolate(
-            mel, size=[chunk_frames, 64], mode="bilinear", align_corners=False, antialias=False
+            mel, size=[chunk_frames, 64], mode="bilinear", align_corners=False
         )
         mel_shrink = mel_shrink[0][0].numpy()
-        mel_fusion = np.stack([mel_chunk_front, mel_chunk_middle, mel_chunk_back, mel_shrink], axis=0)
+        mel_fusion = np.stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back], axis=0)
         return mel_fusion
 
     def _get_input_mel(self, waveform: np.array, max_length, truncation, padding) -> np.array:
@@ -241,10 +242,10 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             if waveform.shape[0] < max_length:
                 if padding == "repeat":
                     n_repeat = int(max_length / len(waveform))
-                    waveform = np.stack(np.tile(waveform, n_repeat + 1))[:max_length]
+                    waveform = np.tile(waveform, n_repeat + 1)[:max_length]
                 if padding == "repeatpad":
                     n_repeat = int(max_length / len(waveform))
-                    waveform = np.stack(np.tile(waveform, n_repeat))
+                    waveform = np.tile(waveform, n_repeat)
                 waveform = np.pad(waveform, (0, max_length - waveform.shape[0]), mode="constant", constant_values=0)
 
             if truncation == "fusion":
@@ -271,7 +272,8 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values.
+                values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
+                stereo, i.e. single float per timestep.
             truncation (`str`, *optional*):
                 Truncation pattern for long audio inputs. Two patterns are available:
                     - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and
@@ -311,9 +313,11 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched = bool(
-            isinstance(raw_speech, (list, tuple))
-            and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
+        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        if is_batched_numpy and len(raw_speech.shape) > 2:
+            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        is_batched = is_batched_numpy or (
+            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
 
         if is_batched:

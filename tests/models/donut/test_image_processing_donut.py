@@ -21,7 +21,7 @@ import numpy as np
 from transformers.testing_utils import is_flaky, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -78,10 +78,24 @@ class DonutImageProcessingTester(unittest.TestCase):
             "image_std": self.image_std,
         }
 
+    def expected_output_image_shape(self, images):
+        return self.num_channels, self.size["height"], self.size["width"]
+
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        return prepare_image_inputs(
+            batch_size=self.batch_size,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
+
 
 @require_torch
 @require_vision
-class DonutImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
+class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = DonutImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -113,15 +127,12 @@ class DonutImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=(42, 84))
         self.assertEqual(image_processor.size, {"height": 84, "width": 42})
 
-    def test_batch_feature(self):
-        pass
-
     @is_flaky()
     def test_call_pil(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
@@ -154,7 +165,7 @@ class DonutImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, numpify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
@@ -187,7 +198,7 @@ class DonutImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, torchify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 

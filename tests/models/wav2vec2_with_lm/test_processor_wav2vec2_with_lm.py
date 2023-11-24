@@ -23,7 +23,6 @@ from pathlib import Path
 import datasets
 import numpy as np
 from datasets import load_dataset
-from packaging import version
 from parameterized import parameterized
 
 from transformers import AutoProcessor
@@ -435,7 +434,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
     def test_word_time_stamp_integration(self):
         import torch
 
-        ds = load_dataset("common_voice", "en", split="train", streaming=True)
+        ds = load_dataset("mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True)
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
         ds_iter = iter(ds)
         sample = next(ds_iter)
@@ -443,7 +442,6 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
         model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
 
-        # compare to filename `common_voice_en_100038.mp3` of dataset viewer on https://huggingface.co/datasets/common_voice/viewer/en/train
         input_values = processor(sample["audio"]["array"], return_tensors="pt").input_values
 
         with torch.no_grad():
@@ -461,7 +459,8 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
             for d in output["word_offsets"]
         ]
 
-        EXPECTED_TEXT = "WHY DOES A MILE SANDRA LOOK LIKE SHE WANTS TO CONSUME JOHN SNOW ON THE RIVER AT THE WALL"
+        EXPECTED_TEXT = "WHY DOES MILISANDRA LOOK LIKE SHE WANTS TO CONSUME JOHN SNOW ON THE RIVER AT THE WALL"
+        EXPECTED_TEXT = "THE TRACK APPEARS ON THE COMPILATION ALBUM CRAFT FORKS"
 
         # output words
         self.assertEqual(" ".join(self.get_from_offsets(word_time_stamps, "word")), EXPECTED_TEXT)
@@ -472,14 +471,8 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         end_times = torch.tensor(self.get_from_offsets(word_time_stamps, "end_time"))
 
         # fmt: off
-        expected_start_tensor = torch.tensor([1.42, 1.64, 2.12, 2.26, 2.54, 3.0, 3.24, 3.6, 3.8, 4.1, 4.26, 4.94, 5.28, 5.66, 5.78, 5.94, 6.32, 6.54, 6.66])
-
-        # TODO(Patrick): This if-else version statement should be removed once
-        # https://github.com/huggingface/datasets/issues/4889 is resolved
-        if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.12.0"):
-            expected_end_tensor = torch.tensor([1.54, 1.88, 2.14, 2.46, 2.9, 3.16, 3.54, 3.72, 4.02, 4.18, 4.76, 5.16, 5.56, 5.7, 5.86, 6.2, 6.38, 6.62, 6.94])
-        else:
-            expected_end_tensor = torch.tensor([1.54, 1.88, 2.14, 2.46, 2.9, 3.18, 3.54, 3.72, 4.02, 4.18, 4.76, 5.16, 5.56, 5.7, 5.86, 6.2, 6.38, 6.62, 6.94])
+        expected_start_tensor = torch.tensor([0.6800, 0.8800, 1.1800, 1.8600, 1.9600, 2.1000, 3.0000, 3.5600, 3.9800])
+        expected_end_tensor = torch.tensor([0.7800, 1.1000, 1.6600, 1.9200, 2.0400, 2.8000, 3.3000, 3.8800, 4.2800])
         # fmt: on
 
         self.assertTrue(torch.allclose(start_times, expected_start_tensor, atol=0.01))

@@ -25,6 +25,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -54,7 +55,7 @@ class MgpstrModelTester:
         num_bpe_labels=99,
         num_wordpiece_labels=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         mlp_ratio=4.0,
         patch_embeds_hidden_size=257,
@@ -116,8 +117,9 @@ class MgpstrModelTester:
 
 
 @require_torch
-class MgpstrModelTest(ModelTesterMixin, unittest.TestCase):
+class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MgpstrForSceneTextRecognition,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": MgpstrForSceneTextRecognition} if is_torch_available() else {}
     fx_compatible = False
 
     test_pruning = False

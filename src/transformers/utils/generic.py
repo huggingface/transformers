@@ -20,9 +20,9 @@ import tempfile
 from collections import OrderedDict, UserDict
 from collections.abc import MutableMapping
 from contextlib import ExitStack, contextmanager
-from dataclasses import fields
+from dataclasses import fields, is_dataclass
 from enum import Enum
-from typing import Any, ContextManager, List, Tuple
+from typing import Any, ContextManager, Iterable, List, Tuple
 
 import numpy as np
 
@@ -56,31 +56,79 @@ class cached_property(property):
         return cached
 
 
+# vendored from distutils.util
+def strtobool(val):
+    """Convert a string representation of truth to true (1) or false (0).
+
+    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values are 'n', 'no', 'f', 'false', 'off', and '0'.
+    Raises ValueError if 'val' is anything else.
+    """
+    val = val.lower()
+    if val in {"y", "yes", "t", "true", "on", "1"}:
+        return 1
+    if val in {"n", "no", "f", "false", "off", "0"}:
+        return 0
+    raise ValueError(f"invalid truth value {val!r}")
+
+
+def infer_framework_from_repr(x):
+    """
+    Tries to guess the framework of an object `x` from its repr (brittle but will help in `is_tensor` to try the
+    frameworks in a smart order, without the need to import the frameworks).
+    """
+    representation = str(type(x))
+    if representation.startswith("<class 'torch."):
+        return "pt"
+    elif representation.startswith("<class 'tensorflow."):
+        return "tf"
+    elif representation.startswith("<class 'jax"):
+        return "jax"
+    elif representation.startswith("<class 'numpy."):
+        return "np"
+
+
+def _get_frameworks_and_test_func(x):
+    """
+    Returns an (ordered since we are in Python 3.7+) dictionary framework to test function, which places the framework
+    we can guess from the repr first, then Numpy, then the others.
+    """
+    framework_to_test = {
+        "pt": is_torch_tensor,
+        "tf": is_tf_tensor,
+        "jax": is_jax_tensor,
+        "np": is_numpy_array,
+    }
+    preferred_framework = infer_framework_from_repr(x)
+    # We will test this one first, then numpy, then the others.
+    frameworks = [] if preferred_framework is None else [preferred_framework]
+    if preferred_framework != "np":
+        frameworks.append("np")
+    frameworks.extend([f for f in framework_to_test if f not in [preferred_framework, "np"]])
+    return {f: framework_to_test[f] for f in frameworks}
+
+
 def is_tensor(x):
     """
-    Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray` or `np.ndarray`.
+    Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray` or `np.ndarray` in the order
+    defined by `infer_framework_from_repr`
     """
+    # This gives us a smart order to test the frameworks with the corresponding tests.
+    framework_to_test_func = _get_frameworks_and_test_func(x)
+    for test_func in framework_to_test_func.values():
+        if test_func(x):
+            return True
+
+    # Tracers
     if is_torch_fx_proxy(x):
         return True
-    if is_torch_available():
-        import torch
-
-        if isinstance(x, torch.Tensor):
-            return True
-    if is_tf_available():
-        import tensorflow as tf
-
-        if isinstance(x, tf.Tensor):
-            return True
 
     if is_flax_available():
-        import jax.numpy as jnp
         from jax.core import Tracer
 
-        if isinstance(x, (jnp.ndarray, Tracer)):
+        if isinstance(x, Tracer):
             return True
 
-    return isinstance(x, np.ndarray)
+    return False
 
 
 def _is_numpy(x):
@@ -151,6 +199,23 @@ def is_tf_tensor(x):
     return False if not is_tf_available() else _is_tensorflow(x)
 
 
+def _is_tf_symbolic_tensor(x):
+    import tensorflow as tf
+
+    # the `is_symbolic_tensor` predicate is only available starting with TF 2.14
+    if hasattr(tf, "is_symbolic_tensor"):
+        return tf.is_symbolic_tensor(x)
+    return type(x) == tf.Tensor
+
+
+def is_tf_symbolic_tensor(x):
+    """
+    Tests if `x` is a tensorflow symbolic tensor or not (ie. not eager). Safe to call even if tensorflow is not
+    installed.
+    """
+    return False if not is_tf_available() else _is_tf_symbolic_tensor(x)
+
+
 def _is_jax(x):
     import jax.numpy as jnp  # noqa: F811
 
@@ -168,17 +233,27 @@ def to_py_obj(obj):
     """
     Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
     """
+
+    framework_to_py_obj = {
+        "pt": lambda obj: obj.detach().cpu().tolist(),
+        "tf": lambda obj: obj.numpy().tolist(),
+        "jax": lambda obj: np.asarray(obj).tolist(),
+        "np": lambda obj: obj.tolist(),
+    }
+
     if isinstance(obj, (dict, UserDict)):
         return {k: to_py_obj(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [to_py_obj(o) for o in obj]
-    elif is_tf_tensor(obj):
-        return obj.numpy().tolist()
-    elif is_torch_tensor(obj):
-        return obj.detach().cpu().tolist()
-    elif is_jax_tensor(obj):
-        return np.asarray(obj).tolist()
-    elif isinstance(obj, (np.ndarray, np.number)):  # tolist also works on 0d np arrays
+
+    # This gives us a smart order to test the frameworks with the corresponding tests.
+    framework_to_test_func = _get_frameworks_and_test_func(obj)
+    for framework, test_func in framework_to_test_func.items():
+        if test_func(obj):
+            return framework_to_py_obj[framework](obj)
+
+    # tolist also works on 0d np arrays
+    if isinstance(obj, np.number):
         return obj.tolist()
     else:
         return obj
@@ -188,18 +263,26 @@ def to_numpy(obj):
     """
     Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a Numpy array.
     """
+
+    framework_to_numpy = {
+        "pt": lambda obj: obj.detach().cpu().numpy(),
+        "tf": lambda obj: obj.numpy(),
+        "jax": lambda obj: np.asarray(obj),
+        "np": lambda obj: obj,
+    }
+
     if isinstance(obj, (dict, UserDict)):
         return {k: to_numpy(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return np.array(obj)
-    elif is_tf_tensor(obj):
-        return obj.numpy()
-    elif is_torch_tensor(obj):
-        return obj.detach().cpu().numpy()
-    elif is_jax_tensor(obj):
-        return np.asarray(obj)
-    else:
-        return obj
+
+    # This gives us a smart order to test the frameworks with the corresponding tests.
+    framework_to_test_func = _get_frameworks_and_test_func(obj)
+    for framework, test_func in framework_to_test_func.items():
+        if test_func(obj):
+            return framework_to_numpy[framework](obj)
+
+    return obj
 
 
 class ModelOutput(OrderedDict):
@@ -216,7 +299,39 @@ class ModelOutput(OrderedDict):
     </Tip>
     """
 
+    def __init_subclass__(cls) -> None:
+        """Register subclasses as pytree nodes.
+
+        This is necessary to synchronize gradients when using `torch.nn.parallel.DistributedDataParallel` with
+        `static_graph=True` with modules that output `ModelOutput` subclasses.
+        """
+        if is_torch_available():
+            _torch_pytree._register_pytree_node(
+                cls,
+                _model_output_flatten,
+                _model_output_unflatten,
+            )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Subclasses of ModelOutput must use the @dataclass decorator
+        # This check is done in __init__ because the @dataclass decorator operates after __init_subclass__
+        # issubclass() would return True for issubclass(ModelOutput, ModelOutput) when False is needed
+        # Just need to check that the current class is not ModelOutput
+        is_modeloutput_subclass = self.__class__ != ModelOutput
+
+        if is_modeloutput_subclass and not is_dataclass(self):
+            raise TypeError(
+                f"{self.__module__}.{self.__class__.__name__} is not a dataclasss."
+                " This is a subclass of ModelOutput and so must use the @dataclass decorator."
+            )
+
     def __post_init__(self):
+        """Check the ModelOutput dataclass.
+
+        Only occurs if @dataclass decorator has been used.
+        """
         class_fields = fields(self)
 
         # Safety and consistency checks
@@ -299,11 +414,35 @@ class ModelOutput(OrderedDict):
         # Don't call self.__setattr__ to avoid recursion errors
         super().__setattr__(key, value)
 
+    def __reduce__(self):
+        if not is_dataclass(self):
+            return super().__reduce__()
+        callable, _args, *remaining = super().__reduce__()
+        args = tuple(getattr(self, field.name) for field in fields(self))
+        return callable, args, *remaining
+
     def to_tuple(self) -> Tuple[Any]:
         """
         Convert self to a tuple containing all the attributes/keys that are not `None`.
         """
         return tuple(self[k] for k in self.keys())
+
+
+if is_torch_available():
+    import torch.utils._pytree as _torch_pytree
+
+    def _model_output_flatten(output: ModelOutput) -> Tuple[List[Any], "_torch_pytree.Context"]:
+        return list(output.values()), (type(output), list(output.keys()))
+
+    def _model_output_unflatten(values: Iterable[Any], context: "_torch_pytree.Context") -> ModelOutput:
+        output_type, keys = context
+        return output_type(**dict(zip(keys, values)))
+
+    _torch_pytree._register_pytree_node(
+        ModelOutput,
+        _model_output_flatten,
+        _model_output_unflatten,
+    )
 
 
 class ExplicitEnum(str, Enum):
@@ -366,11 +505,10 @@ def can_return_loss(model_class):
     Args:
         model_class (`type`): The class of the model.
     """
-    base_classes = str(inspect.getmro(model_class))
-
-    if "keras.engine.training.Model" in base_classes:
+    framework = infer_framework(model_class)
+    if framework == "tf":
         signature = inspect.signature(model_class.call)  # TensorFlow models
-    elif "torch.nn.modules.module.Module" in base_classes:
+    elif framework == "pt":
         signature = inspect.signature(model_class.forward)  # PyTorch models
     else:
         signature = inspect.signature(model_class.__call__)  # Flax models
@@ -390,11 +528,10 @@ def find_labels(model_class):
         model_class (`type`): The class of the model.
     """
     model_name = model_class.__name__
-    base_classes = str(inspect.getmro(model_class))
-
-    if "keras.engine.training.Model" in base_classes:
+    framework = infer_framework(model_class)
+    if framework == "tf":
         signature = inspect.signature(model_class.call)  # TensorFlow models
-    elif "torch.nn.modules.module.Module" in base_classes:
+    elif framework == "pt":
         signature = inspect.signature(model_class.forward)  # PyTorch models
     else:
         signature = inspect.signature(model_class.__call__)  # Flax models
@@ -520,3 +657,34 @@ def tensor_size(array):
         return array.size
     else:
         raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
+
+
+def add_model_info_to_auto_map(auto_map, repo_id):
+    """
+    Adds the information of the repo_id to a given auto map.
+    """
+    for key, value in auto_map.items():
+        if isinstance(value, (tuple, list)):
+            auto_map[key] = [f"{repo_id}--{v}" if (v is not None and "--" not in v) else v for v in value]
+        elif value is not None and "--" not in value:
+            auto_map[key] = f"{repo_id}--{value}"
+
+    return auto_map
+
+
+def infer_framework(model_class):
+    """
+    Infers the framework of a given model without using isinstance(), because we cannot guarantee that the relevant
+    classes are imported or available.
+    """
+    for base_class in inspect.getmro(model_class):
+        module = base_class.__module__
+        name = base_class.__name__
+        if module.startswith("tensorflow") or module.startswith("keras") or name == "TFPreTrainedModel":
+            return "tf"
+        elif module.startswith("torch") or name == "PreTrainedModel":
+            return "pt"
+        elif module.startswith("flax") or module.startswith("jax") or name == "FlaxPreTrainedModel":
+            return "flax"
+    else:
+        raise TypeError(f"Could not infer framework from class {model_class}.")

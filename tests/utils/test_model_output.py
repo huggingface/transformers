@@ -17,6 +17,7 @@ import unittest
 from dataclasses import dataclass
 from typing import Optional
 
+from transformers.testing_utils import require_torch
 from transformers.utils import ModelOutput
 
 
@@ -120,3 +121,47 @@ class ModelOutputTester(unittest.TestCase):
         x = ModelOutputTest(a=(30, 30))
         self.assertEqual(list(x.keys()), ["a"])
         self.assertEqual(x.a, (30, 30))
+
+    @require_torch
+    def test_torch_pytree(self):
+        # ensure torch.utils._pytree treats ModelOutput subclasses as nodes (and not leaves)
+        # this is important for DistributedDataParallel gradient synchronization with static_graph=True
+        import torch.utils._pytree as pytree
+
+        x = ModelOutput({"a": 1.0, "c": 2.0})
+        self.assertFalse(pytree._is_leaf(x))
+
+        x = ModelOutputTest(a=1.0, c=2.0)
+        self.assertFalse(pytree._is_leaf(x))
+
+        expected_flat_outs = [1.0, 2.0]
+        expected_tree_spec = pytree.TreeSpec(
+            ModelOutputTest, (ModelOutputTest, ["a", "c"]), [pytree.LeafSpec(), pytree.LeafSpec()]
+        )
+
+        actual_flat_outs, actual_tree_spec = pytree.tree_flatten(x)
+        self.assertEqual(expected_flat_outs, actual_flat_outs)
+        self.assertEqual(expected_tree_spec, actual_tree_spec)
+
+        unflattened_x = pytree.tree_unflatten(actual_flat_outs, actual_tree_spec)
+        self.assertEqual(x, unflattened_x)
+
+
+class ModelOutputTestNoDataclass(ModelOutput):
+    """Invalid test subclass of ModelOutput where @dataclass decorator is not used"""
+
+    a: float
+    b: Optional[float] = None
+    c: Optional[float] = None
+
+
+class ModelOutputSubclassTester(unittest.TestCase):
+    def test_direct_model_output(self):
+        # Check that direct usage of ModelOutput instantiates without errors
+        ModelOutput({"a": 1.1})
+
+    def test_subclass_no_dataclass(self):
+        # Check that a subclass of ModelOutput without @dataclass is invalid
+        # A valid subclass is inherently tested other unit tests above.
+        with self.assertRaises(TypeError):
+            ModelOutputTestNoDataclass(a=1.1, b=2.2, c=3.3)

@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Flax whisper model."""
 
+import math
 import random
 from functools import partial
 from typing import Optional, Tuple
@@ -23,6 +24,7 @@ import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
+from flax.linen import partitioning as nn_partitioning
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
@@ -35,6 +37,7 @@ from ...modeling_flax_outputs import (
     FlaxCausalLMOutputWithCrossAttentions,
     FlaxSeq2SeqLMOutput,
     FlaxSeq2SeqModelOutput,
+    FlaxSequenceClassifierOutput,
 )
 from ...modeling_flax_utils import (
     ACT2FN,
@@ -52,6 +55,21 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "openai/whisper-tiny"
 _CONFIG_FOR_DOC = "WhisperConfig"
+
+remat = nn_partitioning.remat
+
+
+def sinusoidal_embedding_init(key, shape, dtype=jnp.float_) -> jax.Array:
+    """Returns sinusoids for positional embedding"""
+    length, channels = shape
+    if channels % 2 != 0:
+        raise ValueError(
+            f"Number of channels has to be divisible by 2 for sinusoidal positional embeddings, got {channels} channels."
+        )
+    log_timescale_increment = math.log(10000) / (channels // 2 - 1)
+    inv_timescales = jnp.exp(-log_timescale_increment * jnp.arange(channels // 2))
+    scaled_time = jnp.arange(length).reshape(-1, 1) * inv_timescales.reshape(1, -1)
+    return jnp.concatenate([jnp.sin(scaled_time), jnp.cos(scaled_time)], axis=1).astype(dtype)
 
 
 WHISPER_START_DOCSTRING = r"""
@@ -387,16 +405,23 @@ class FlaxWhisperEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.mbart.modeling_flax_mbart.FlaxMBartEncoderLayerCollection with MBart->Whisper
 class FlaxWhisperEncoderLayerCollection(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.layers = [
-            FlaxWhisperEncoderLayer(self.config, name=str(i), dtype=self.dtype)
-            for i in range(self.config.encoder_layers)
-        ]
+        if self.gradient_checkpointing:
+            FlaxWhisperEncoderCheckpointLayer = remat(FlaxWhisperEncoderLayer, static_argnums=(2, 3))
+            self.layers = [
+                FlaxWhisperEncoderCheckpointLayer(self.config, name=str(i), dtype=self.dtype)
+                for i in range(self.config.encoder_layers)
+            ]
+        else:
+            self.layers = [
+                FlaxWhisperEncoderLayer(self.config, name=str(i), dtype=self.dtype)
+                for i in range(self.config.encoder_layers)
+            ]
         self.layerdrop = self.config.encoder_layerdrop
 
     def __call__(
@@ -531,16 +556,23 @@ class FlaxWhisperDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.mbart.modeling_flax_mbart.FlaxMBartDecoderLayerCollection with MBart->Whisper
 class FlaxWhisperDecoderLayerCollection(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
 
     def setup(self):
-        self.layers = [
-            FlaxWhisperDecoderLayer(self.config, name=str(i), dtype=self.dtype)
-            for i in range(self.config.decoder_layers)
-        ]
+        if self.gradient_checkpointing:
+            FlaxWhisperDecoderCheckpointLayer = remat(FlaxWhisperDecoderLayer, static_argnums=(4, 5, 6))
+            self.layers = [
+                FlaxWhisperDecoderCheckpointLayer(self.config, name=str(i), dtype=self.dtype)
+                for i in range(self.config.decoder_layers)
+            ]
+        else:
+            self.layers = [
+                FlaxWhisperDecoderLayer(self.config, name=str(i), dtype=self.dtype)
+                for i in range(self.config.decoder_layers)
+            ]
         self.layerdrop = self.config.decoder_layerdrop
 
     def __call__(
@@ -570,12 +602,12 @@ class FlaxWhisperDecoderLayerCollection(nn.Module):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    init_cache=init_cache,
-                    output_attentions=output_attentions,
-                    deterministic=deterministic,
+                    attention_mask,
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                    init_cache,
+                    output_attentions,
+                    deterministic,
                 )
 
             hidden_states = layer_outputs[0]
@@ -605,6 +637,7 @@ class FlaxWhisperDecoderLayerCollection(nn.Module):
 class FlaxWhisperEncoder(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self) -> None:
         self.conv1 = nn.Conv(
@@ -628,8 +661,15 @@ class FlaxWhisperEncoder(nn.Module):
         self.layers = FlaxWhisperEncoderLayerCollection(
             self.config,
             dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
-        self.embed_positions = nn.Embed(self.config.max_source_positions, self.config.d_model, dtype=self.dtype)
+
+        self.embed_positions = nn.Embed(
+            self.config.max_source_positions,
+            self.config.d_model,
+            dtype=self.dtype,
+            embedding_init=sinusoidal_embedding_init,
+        )
 
         self.layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
@@ -653,6 +693,8 @@ class FlaxWhisperEncoder(nn.Module):
         hidden_states = jax.nn.gelu(self.conv2(hidden_states), approximate=False)
 
         embed_positions = self.embed_positions(jnp.arange(self.config.max_source_positions))
+        # freeze the sinusoidal embeddings by stopping the back-prop
+        embed_positions = jax.lax.stop_gradient(embed_positions)
         hidden_states = hidden_states + embed_positions
 
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
@@ -689,12 +731,15 @@ class FlaxWhisperEncoder(nn.Module):
 class FlaxWhisperDecoder(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self) -> None:
         self.embed_tokens = nn.Embed(self.config.vocab_size, self.config.d_model, dtype=self.dtype)
         self.embed_positions = nn.Embed(self.config.max_target_positions, self.config.d_model, dtype=self.dtype)
 
-        self.layers = FlaxWhisperDecoderLayerCollection(self.config, dtype=self.dtype)
+        self.layers = FlaxWhisperDecoderLayerCollection(
+            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
 
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
 
@@ -753,10 +798,15 @@ class FlaxWhisperDecoder(nn.Module):
 class FlaxWhisperModule(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self) -> None:
-        self.encoder = FlaxWhisperEncoder(self.config, dtype=self.dtype)
-        self.decoder = FlaxWhisperDecoder(self.config, dtype=self.dtype)
+        self.encoder = FlaxWhisperEncoder(
+            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
+        self.decoder = FlaxWhisperDecoder(
+            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
 
     def __call__(
         self,
@@ -817,14 +867,24 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: WhisperConfig,
-        input_shape: Tuple[int] = (1, 80, 3000),
+        input_shape: Tuple[int] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
+        gradient_checkpointing: bool = False,
         **kwargs,
     ):
-        module = self.module_class(config=config, dtype=dtype, **kwargs)
+        module = self.module_class(config=config, dtype=dtype, gradient_checkpointing=gradient_checkpointing, **kwargs)
+        if input_shape is None:
+            input_shape = (1, config.num_mel_bins, 2 * config.max_source_positions)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+
+    def enable_gradient_checkpointing(self):
+        self._module = self.module_class(
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=True,
+        )
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
@@ -981,16 +1041,17 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import WhisperProcessor, FlaxWhisperForConditionalGeneration
         >>> from datasets import load_dataset
+        >>> import jax.numpy as jnp
 
         >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         >>> model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="np")
-        >>> input_features = inputs.input_features
+        >>> input_features = processor(ds[0]["audio"]["array"], return_tensors="np").input_features
+
         >>> encoder_outputs = model.encode(input_features=input_features)
         >>> decoder_start_token_id = model.config.decoder_start_token_id
 
-        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((input_features.shape[0], 1), dtype="i4") * decoder_start_token_id
 
         >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
         >>> last_decoder_hidden_states = outputs.last_hidden_state
@@ -1137,9 +1198,12 @@ append_call_sample_docstring(FlaxWhisperModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqM
 class FlaxWhisperForConditionalGenerationModule(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
 
     def setup(self) -> None:
-        self.model = FlaxWhisperModule(config=self.config, dtype=self.dtype)
+        self.model = FlaxWhisperModule(
+            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
         self.lm_head = nn.Dense(
             self.config.vocab_size,
             use_bias=False,
@@ -1408,8 +1472,8 @@ class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
         self,
         decoder_input_ids,
         max_length,
-        attention_mask: Optional[jnp.DeviceArray] = None,
-        decoder_attention_mask: Optional[jnp.DeviceArray] = None,
+        attention_mask: Optional[jax.Array] = None,
+        decoder_attention_mask: Optional[jax.Array] = None,
         encoder_outputs=None,
         **kwargs,
     ):
@@ -1467,4 +1531,166 @@ overwrite_call_docstring(
 )
 append_replace_return_docstrings(
     FlaxWhisperForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
+)
+
+
+class FlaxWhisperForAudioClassificationModule(nn.Module):
+    config: WhisperConfig
+    dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
+
+    def setup(self) -> None:
+        self.encoder = FlaxWhisperEncoder(
+            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
+        self.config.is_encoder_decoder = False
+        num_layers = self.config.num_hidden_layers + 1
+        if self.config.use_weighted_layer_sum:
+            self.layer_weights = jnp.repeat(1 / num_layers, num_layers)
+        self.projector = nn.Dense(self.config.classifier_proj_size, dtype=self.dtype)
+        self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_features,
+        encoder_outputs=None,
+        output_attentions=None,
+        output_hidden_states: bool = True,
+        return_dict: bool = True,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_features,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+
+        if self.config.use_weighted_layer_sum:
+            hidden_states = jnp.stack(encoder_outputs, axis=1)
+            norm_weights = jax.nn.softmax(self.layer_weights, axis=-1)
+            hidden_states = jnp.sum(hidden_states * jnp.reshape(norm_weights, [-1, 1, 1]), axis=1)
+        else:
+            hidden_states = encoder_outputs[0]
+
+        hidden_states = self.projector(hidden_states)
+        pooled_output = jnp.mean(hidden_states, axis=1)
+
+        logits = self.classifier(pooled_output)
+
+        if not return_dict:
+            return (logits,) + encoder_outputs[1:]
+
+        return FlaxSequenceClassifierOutput(
+            logits=logits,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+
+@add_start_docstrings("The Whisper Model with an audio classification head on top.", WHISPER_START_DOCSTRING)
+class FlaxWhisperForAudioClassification(FlaxWhisperPreTrainedModel):
+    module_class = FlaxWhisperForAudioClassificationModule
+    dtype: jnp.dtype = jnp.float32
+
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+        # init input tensors
+        input_features = jnp.zeros(input_shape, dtype="f4")
+        input_features = input_features.at[(..., -1)].set(self.config.eos_token_id)
+
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        random_params = self.module.init(
+            rngs,
+            input_features=input_features,
+        )["params"]
+
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
+
+    @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
+    def __call__(
+        self,
+        input_features: jnp.ndarray,
+        attention_mask: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        train: bool = False,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+        **kwargs,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        return self.module.apply(
+            {"params": params or self.params},
+            input_features=jnp.array(input_features, dtype="f4"),
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            rngs=rngs,
+        )
+
+
+FLAX_WHISPER_AUDIO_CLASSIFICATION_DOCSTRING = r"""
+    Returns:
+
+    Transcription example:
+
+    ```python
+    >>> import jax.numpy as jnp
+    >>> from transformers import AutoFeatureExtractor, FlaxWhisperForAudioClassification
+    >>> from datasets import load_dataset
+
+    >>> feature_extractor = AutoFeatureExtractor.from_pretrained("sanchit-gandhi/whisper-medium-fleurs-lang-id")
+    >>> model = FlaxWhisperForAudioClassification.from_pretrained(
+    ...     "sanchit-gandhi/whisper-medium-fleurs-lang-id", from_pt=True
+    ... )
+    >>> ds = load_dataset("google/fleurs", "all", split="validation", streaming=True)
+
+    >>> sample = next(iter(ds))
+
+    >>> inputs = feature_extractor(
+    ...     sample["audio"]["array"], sampling_rate=sample["audio"]["sampling_rate"], return_tensors="np"
+    ... )
+    >>> input_features = inputs.input_features
+
+    >>> logits = model(input_features).logits
+
+    >>> predicted_class_ids = jnp.argmax(logits).item()
+    >>> predicted_label = model.config.id2label[predicted_class_ids]
+    >>> predicted_label
+    'af_za'
+    ```
+"""
+
+overwrite_call_docstring(
+    FlaxWhisperForAudioClassification, WHISPER_INPUTS_DOCSTRING + FLAX_WHISPER_AUDIO_CLASSIFICATION_DOCSTRING
+)
+append_replace_return_docstrings(
+    FlaxWhisperForAudioClassification, output_type=FlaxSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC
 )

@@ -42,7 +42,7 @@ TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
         cur_len (`int`):
             The current length of valid input sequence tokens. In the TF implementation, the input_ids' sequence length
             is the maximum length generate can produce, and we need to know which of its tokens are valid.
-        kwargs:
+        kwargs (`Dict[str, Any]`, *optional*):
             Additional logits processor specific kwargs.
 
     Return:
@@ -122,7 +122,7 @@ class TFTopKLogitsWarper(TFLogitsWarper):
     Args:
         top_k (`int`):
             The number of highest probability vocabulary tokens to keep for top-k-filtering.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -151,7 +151,7 @@ class TFTopPLogitsWarper(TFLogitsWarper):
         top_p (`float`):
             If set to < 1, only the smallest set of most probable tokens with probabilities that add up to `top_p` or
             higher are kept for generation.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -160,6 +160,8 @@ class TFTopPLogitsWarper(TFLogitsWarper):
     def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         if not isinstance(top_p, float) or (top_p < 0 or top_p > 1.0):
             raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
+        if not isinstance(min_tokens_to_keep, int) or (min_tokens_to_keep < 1):
+            raise ValueError(f"`min_tokens_to_keep` has to be a positive integer, but is {min_tokens_to_keep}")
 
         self.top_p = top_p
         self.filter_value = filter_value
@@ -290,7 +292,10 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
     Args:
         bad_words_ids (`List[List[int]]`):
             List of list of token ids that are not allowed to be generated. In order to get the tokens of the words
-            that should not appear in the generated text, use `tokenizer(bad_word, add_prefix_space=True).input_ids`.
+            that should not appear in the generated text, make sure to set `add_prefix_space=True` when initializing
+            the tokenizer, and use `tokenizer(bad_words, add_special_tokens=False).input_ids`. The `add_prefix_space`
+            argument is only supported for some slow tokenizers, as fast tokenizers' prefixing behaviours come from
+            `pre tokenizers`. Read more [here](https://huggingface.co/docs/tokenizers/api/pre-tokenizers).
         eos_token_id (`int`):
             The id of the *end-of-sequence* token.
     """
@@ -313,7 +318,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
         self.bad_word_seqs_ids = tf.ragged.constant(bad_words_ids).to_tensor(default_value=-1)
         # 2. a tensor with the unpadded length of each forbidden sequence, for quick length comparisons
         bad_word_seqs_len = [len(bad_words) for bad_words in bad_words_ids]
-        if any([word_len == 0 for word_len in bad_word_seqs_len]):
+        if any(word_len == 0 for word_len in bad_word_seqs_len):
             raise ValueError(f"Banned words token sequences {bad_words_ids} cannot have an empty list")
         self.bad_word_seqs_len = tf.convert_to_tensor(bad_word_seqs_len, dtype=tf.int32)
         # 3. a tensor containing the last token for each sequence, for easy access to the tokens that may be banned

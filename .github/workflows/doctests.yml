@@ -6,7 +6,7 @@ on:
       - doctest*
   repository_dispatch:
   schedule:
-    - cron: "0 2 * * *"
+    - cron: "17 2 * * *"
 
 
 env:
@@ -20,15 +20,21 @@ env:
 
 jobs:
   run_doctests:
-    runs-on: [self-hosted, doc-tests-gpu]
+    runs-on: [single-gpu, nvidia-gpu, t4, ci]
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
+      - name: uninstall transformers (installed during docker image build)
+        run: python3 -m pip uninstall -y transformers
+
       - uses: actions/checkout@v3
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
+
+      - name: Install transformers in edit mode
+        run: python3 -m pip install -e .[flax]
 
       - name: GPU visibility
         run: |
@@ -37,17 +43,13 @@ jobs:
       - name: Show installed libraries and their versions
         run: pip freeze
 
-      - name: Prepare files for doctests
+      - name: Get doctest files
         run: |
-          python3 utils/prepare_for_doc_test.py src docs
+          $(python3 -c 'from utils.tests_fetcher import get_all_doctest_files; to_test = get_all_doctest_files(); to_test = " ".join(to_test); fp = open("doc_tests.txt", "w"); fp.write(to_test); fp.close()')
 
       - name: Run doctests
         run: |
-          python3 -m pytest -v --make-reports doc_tests_gpu --doctest-modules $(cat utils/documentation_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.mdx"
-
-      - name: Clean files after doctests
-        run: |
-          python3 utils/prepare_for_doc_test.py src docs --remove_new_line
+          python3 -m pytest -v --make-reports doc_tests_gpu --doctest-modules $(cat doc_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.md"
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -64,7 +66,7 @@ jobs:
 
   send_results:
     name: Send results to webhook
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: always()
     needs: [run_doctests]
     steps:

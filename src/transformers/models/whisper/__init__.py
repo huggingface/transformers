@@ -46,6 +46,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_whisper"] = [
         "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "WhisperForCausalLM",
         "WhisperForConditionalGeneration",
         "WhisperModel",
         "WhisperPreTrainedModel",
@@ -75,6 +76,7 @@ else:
         "FlaxWhisperForConditionalGeneration",
         "FlaxWhisperModel",
         "FlaxWhisperPreTrainedModel",
+        "FlaxWhisperForAudioClassification",
     ]
 
 
@@ -101,6 +103,7 @@ if TYPE_CHECKING:
         from .modeling_whisper import (
             WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
             WhisperForAudioClassification,
+            WhisperForCausalLM,
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,
@@ -126,6 +129,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_flax_whisper import (
+            FlaxWhisperForAudioClassification,
             FlaxWhisperForConditionalGeneration,
             FlaxWhisperModel,
             FlaxWhisperPreTrainedModel,

@@ -15,6 +15,8 @@
 """ Classes to support TF Vision-Encoder-Text-Decoder architectures"""
 
 
+from __future__ import annotations
+
 import re
 import warnings
 from typing import Optional, Tuple, Union
@@ -27,7 +29,6 @@ from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
 from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, get_initializer, unpack_inputs
 from ...tf_utils import shape_list
 from ...utils import (
-    DUMMY_INPUTS,
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -179,6 +180,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
     decoder when created with the [`~TFAutoModel.from_pretrained`] class method for the encoder and
     [`~TFAutoModelForCausalLM.from_pretrained`] class method for the decoder.
     """
+
     config_class = VisionEncoderDecoderConfig
     base_model_prefix = "vision_encoder_decoder"
     load_weight_prefix = "tf_vision_encoder_decoder_model"
@@ -252,29 +254,26 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             )
 
     @property
-    def dummy_inputs(self):
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        decoder_input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
-        batch_size, seq_len = decoder_input_ids.shape
-
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(
-                batch_size,
-                self.config.encoder.num_channels,
-                self.config.encoder.image_size,
-                self.config.encoder.image_size,
+    def input_signature(self):
+        vision_config = self.config.encoder
+        if hasattr(vision_config, "vision_config"):
+            vision_config = vision_config.vision_config
+        if hasattr(vision_config, "image_size"):
+            image_size = vision_config.image_size
+        else:
+            image_size = vision_config.input_size
+        return {
+            "pixel_values": tf.TensorSpec(
+                shape=(
+                    None,
+                    vision_config.num_channels,
+                    image_size,
+                    image_size,
+                ),
+                dtype=tf.float32,
             ),
-            dtype=tf.float32,
-        )
-        pixel_values = tf.constant(VISION_DUMMY_INPUTS)
-        # Add `decoder_input_ids` because `self.decoder` requires it.
-        dummy = {"pixel_values": pixel_values, "decoder_input_ids": decoder_input_ids}
-        return dummy
+            "decoder_input_ids": tf.TensorSpec(shape=(None, None), dtype=tf.int32, name="decoder_input_ids"),
+        }
 
     def get_encoder(self):
         return self.encoder
@@ -324,17 +323,21 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         # here that the config model_type is the same as the name of the MainLayer. I don't know of anywhere that's
         # not the case, and I wasn't sure how else to go from the config to the correct MainLayer name!
 
-        if kwargs.get("from_pt", False):
-            config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
-            encoder_model_type = config.encoder.model_type
+        # This override is only needed in the case where we're crossloading weights from PT. However, since weights are
+        # often safetensors now, we don't know if we're going to be crossloading until we sniff the weights file.
+        # Therefore, we specify tf_to_pt_weight_rename anyway, and let the super method figure out if it needs it
+        # or not.
 
-            def tf_to_pt_weight_rename(tf_weight):
-                if "encoder" in tf_weight and "decoder" not in tf_weight:
-                    return re.sub(rf"encoder\.{encoder_model_type}\.", "encoder.", tf_weight)
-                else:
-                    return tf_weight
+        config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+        encoder_model_type = config.encoder.model_type
 
-            kwargs["tf_to_pt_weight_rename"] = tf_to_pt_weight_rename
+        def tf_to_pt_weight_rename(tf_weight):
+            if "encoder" in tf_weight and "decoder" not in tf_weight:
+                return re.sub(rf"encoder\.{encoder_model_type}\.", "encoder.", tf_weight)
+            else:
+                return tf_weight
+
+        kwargs["tf_to_pt_weight_rename"] = tf_to_pt_weight_rename
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod
@@ -492,13 +495,13 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        pixel_values: np.ndarray | tf.Tensor | None = None,
+        decoder_input_ids: np.ndarray | tf.Tensor | None = None,
+        decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -662,14 +665,18 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         )
 
     def serving_output(self, output):
-        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
-        dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
-        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
-        enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
-        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.decoder.use_cache else None
+        dec_hs = (
+            tf.convert_to_tensor(output.decoder_hidden_states) if self.config.decoder.output_hidden_states else None
+        )
+        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.decoder.output_attentions else None
+        enc_hs = (
+            tf.convert_to_tensor(output.encoder_hidden_states) if self.config.encoder.output_hidden_states else None
+        )
+        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.encoder.output_attentions else None
         cross_attns = (
             tf.convert_to_tensor(output.cross_attentions)
-            if self.config.output_attentions and output.cross_attentions is not None
+            if self.config.decoder.output_attentions and output.cross_attentions is not None
             else None
         )
 
@@ -707,6 +714,6 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
     def resize_token_embeddings(self, *args, **kwargs):
         raise NotImplementedError(
-            "Resizing the embedding layers via the TFVisionEncoderDecoderModel directly is not supported."
+            "Resizing the embedding layers via the TFVisionEncoderDecoderModel directly is not supported. "
             "Please use the respective methods of the wrapped objects (model.decoder.resize_token_embeddings(...))"
         )

@@ -22,7 +22,15 @@ import numpy as np
 
 from tests.test_modeling_common import floats_tensor
 from transformers import OneFormerConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_torch_fp16,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -112,16 +120,20 @@ class OneFormerModelTester:
         config = OneFormerConfig(
             text_encoder_vocab_size=self.vocab_size,
             hidden_size=self.hidden_dim,
+            num_queries=self.num_queries,
+            num_labels=self.num_labels,
+            encoder_feedforward_dim=32,
+            dim_feedforward=64,
+            encoder_layers=2,
+            decoder_layers=2,
         )
 
-        config.num_queries = self.num_queries
-        config.num_labels = self.num_labels
-
+        config.backbone_config.embed_dim = 16
         config.backbone_config.depths = [1, 1, 1, 1]
+        config.backbone_config.hidden_size = 16
         config.backbone_config.num_channels = self.num_channels
+        config.backbone_config.num_heads = [1, 1, 2, 2]
 
-        config.encoder_feedforward_dim = 64
-        config.dim_feedforward = 128
         config.hidden_dim = self.hidden_dim
         config.mask_dim = self.hidden_dim
         config.conv_dim = self.hidden_dim
@@ -321,13 +333,13 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             "pixel_values": torch.randn((2, 3, *size), device=torch_device),
             "task_inputs": torch.randint(high=self.model_tester.vocab_size, size=(2, 77), device=torch_device).long(),
             "text_inputs": torch.randint(
-                high=self.model_tester.vocab_size, size=(2, 134, 77), device=torch_device
+                high=self.model_tester.vocab_size, size=(2, 6, 77), device=torch_device
             ).long(),
             "mask_labels": torch.randn((2, 150, *size), device=torch_device),
             "class_labels": torch.zeros(2, 150, device=torch_device).long(),
         }
 
-        config = OneFormerConfig()
+        config = self.model_tester.get_config()
         config.is_training = True
 
         model = OneFormerForUniversalSegmentation(config).to(torch_device)
@@ -528,6 +540,21 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
             [[3.0668, -1.1833, -5.1103], [3.3440, -3.3620, -5.1101], [2.6017, -4.3613, -4.1444]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
+
+    @require_torch_accelerator
+    @require_torch_fp16
+    def test_inference_fp16(self):
+        model = (
+            OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)
+            .to(torch_device, dtype=torch.float16)
+            .eval()
+        )
+        processor = self.default_processor
+        image = prepare_img()
+        inputs = processor(image, ["semantic"], return_tensors="pt").to(torch_device, dtype=torch.float16)
+
+        with torch.no_grad():
+            _ = model(**inputs)
 
     def test_with_segmentation_maps_and_loss(self):
         dummy_model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)

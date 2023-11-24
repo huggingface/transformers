@@ -127,6 +127,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "time_series_transformer"
     attribute_map = {
         "hidden_size": "d_model",
@@ -216,9 +217,6 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
         self.activation_function = activation_function
         self.init_std = init_std
-
-        self.output_attentions = False
-        self.output_hidden_states = False
 
         self.use_cache = use_cache
 

@@ -22,7 +22,7 @@ import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import TimesformerConfig, TimesformerForVideoClassification, VideoMAEFeatureExtractor
+from transformers import TimesformerConfig, TimesformerForVideoClassification, VideoMAEImageProcessor
 
 
 def get_timesformer_config(model_name):
@@ -156,9 +156,9 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
     model.eval()
 
     # verify model on basic input
-    feature_extractor = VideoMAEFeatureExtractor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
+    image_processor = VideoMAEImageProcessor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
     video = prepare_video()
-    inputs = feature_extractor(video[:8], return_tensors="pt")
+    inputs = image_processor(video[:8], return_tensors="pt")
 
     outputs = model(**inputs)
     logits = outputs.logits
@@ -215,8 +215,8 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
     print("Logits ok!")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
-        feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving model and image processor to {pytorch_dump_folder_path}")
+        image_processor.save_pretrained(pytorch_dump_folder_path)
         model.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:

@@ -9,10 +9,10 @@ from .base import PIPELINE_INIT_ARGS, Pipeline
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -39,8 +39,10 @@ class Text2TextGenerationPipeline(Pipeline):
     [{'generated_text': 'question: Who created the RuPERTa-base?'}]
     ```
 
-    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
-
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial). You can pass text
+    generation parameters to this pipeline to control stopping criteria, decoding strategy, and more. Learn more about
+    text generation parameters in [Text generation strategies](../generation_strategies) and [Text
+    generation](text_generation).
 
     This Text2TextGenerationPipeline pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"text2text-generation"`.
@@ -65,9 +67,9 @@ class Text2TextGenerationPipeline(Pipeline):
         super().__init__(*args, **kwargs)
 
         self.check_model_type(
-            TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+            TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
             if self.framework == "tf"
-            else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+            else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
         )
 
     def _sanitize_parameters(
@@ -181,9 +183,11 @@ class Text2TextGenerationPipeline(Pipeline):
         elif self.framework == "tf":
             in_b, input_length = tf.shape(model_inputs["input_ids"]).numpy()
 
-        generate_kwargs["min_length"] = generate_kwargs.get("min_length", self.model.config.min_length)
-        generate_kwargs["max_length"] = generate_kwargs.get("max_length", self.model.config.max_length)
-        self.check_inputs(input_length, generate_kwargs["min_length"], generate_kwargs["max_length"])
+        self.check_inputs(
+            input_length,
+            generate_kwargs.get("min_length", self.model.config.min_length),
+            generate_kwargs.get("max_length", self.model.config.max_length),
+        )
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         out_b = output_ids.shape[0]
         if self.framework == "pt":
@@ -273,7 +277,8 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
 
         if input_length < max_length:
             logger.warning(
-                f"Your max_length is set to {max_length}, but you input_length is only {input_length}. You might "
+                f"Your max_length is set to {max_length}, but your input_length is only {input_length}. Since this is "
+                "a summarization task, where outputs shorter than the input are typically wanted, you might "
                 f"consider decreasing max_length manually, e.g. summarizer('...', max_length={input_length//2})"
             )
 

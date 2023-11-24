@@ -387,7 +387,9 @@ class FlavaTextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
         )
@@ -661,18 +663,12 @@ class FlavaEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
@@ -876,10 +872,6 @@ class FlavaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module: FlavaEncoder, value: bool = False) -> None:
-        if isinstance(module, FlavaEncoder):
-            module.gradient_checkpointing = value
 
 
 @add_start_docstrings(
@@ -1227,7 +1219,7 @@ class FlavaModel(FlavaPreTrainedModel):
 
         self.image_projection = nn.Linear(self.image_hidden_size, self.projection_dim)
         self.text_projection = nn.Linear(self.text_hidden_size, self.projection_dim)
-        self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
+        self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
 
         self.image_to_mm_projection = nn.Linear(self.image_hidden_size, self.mm_hidden_size)
         self.text_to_mm_projection = nn.Linear(self.text_hidden_size, self.mm_hidden_size)
@@ -1262,9 +1254,7 @@ class FlavaModel(FlavaPreTrainedModel):
         ...     text=["a photo of a cat", "a photo of a dog"], max_length=77, padding="max_length", return_tensors="pt"
         ... )
         >>> text_features = model.get_text_features(**inputs)
-        ```""".format(
-            _CHECKPOINT_FOR_DOC
-        )
+        ```""".format(_CHECKPOINT_FOR_DOC)
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1313,9 +1303,7 @@ class FlavaModel(FlavaPreTrainedModel):
         >>> inputs = processor(images=image, return_tensors="pt")
 
         >>> image_features = model.get_image_features(**inputs)
-        ```""".format(
-            _CHECKPOINT_FOR_DOC
-        )
+        ```""".format(_CHECKPOINT_FOR_DOC)
         image_outputs = self.image_model(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
@@ -1369,8 +1357,19 @@ class FlavaModel(FlavaPreTrainedModel):
         >>> inputs = processor(text=["a photo of a cat"], images=image, return_tensors="pt", padding=True)
 
         >>> outputs = model(**inputs)
-        >>> logits_per_image = outputs.contrastive_logits_per_image  # this is the image-text similarity score
-        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+
+        >>> image_embeddings = outputs.image_embeddings
+        >>> text_embeddings = outputs.text_embeddings
+        >>> multimodal_embeddings = outputs.multimodal_embeddings
+
+        >>> outputs.image_embeddings.shape
+        torch.Size([1, 197, 768])
+
+        >>> text_embeddings.shape
+        torch.Size([1, 7, 768])
+
+        >>> multimodal_embeddings.shape
+        torch.Size([1, 205, 768])
         ```
         """
 
@@ -1580,9 +1579,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
 
         >>> outputs = model.get_codebook_indices(**inputs)
         ```
-        """.format(
-            _CHECKPOINT_FOR_CODEBOOK_DOC
-        )
+        """.format(_CHECKPOINT_FOR_CODEBOOK_DOC)
         z_logits = self.blocks(pixel_values)
         return torch.argmax(z_logits, axis=1)
 
@@ -1617,9 +1614,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         >>> print(outputs.shape)
         (1, 196)
         ```
-        """.format(
-            _CHECKPOINT_FOR_CODEBOOK_DOC
-        )
+        """.format(_CHECKPOINT_FOR_CODEBOOK_DOC)
         if len(pixel_values.shape) != 4:
             raise ValueError(f"input shape {pixel_values.shape} is not 4d")
         if pixel_values.shape[1] != self.input_channels:
@@ -1693,8 +1688,10 @@ class FlavaGlobalContrastiveHead(nn.Module):
             world_size = torch.distributed.get_world_size()
 
             if self.global_backprop_contrastive:
-                image_embeddings_all = torch.distributed.nn.functional.all_gather_with_backprop(image_embeddings)
-                text_embeddings_all = torch.distributed.nn.functional.all_gather_with_backprop(text_embeddings)
+                # `torch.distributed.nn.functional.all_gather` does backprop on all active workers
+                # whereas `torch.distributed.all_gather` does only backpropagates on the current worker.
+                image_embeddings_all = torch.distributed.nn.functional.all_gather(image_embeddings)
+                text_embeddings_all = torch.distributed.nn.functional.all_gather(text_embeddings)
             else:
                 image_embeddings_all = [torch.zeros_like(text_embeddings) for _ in range(world_size)]
                 text_embeddings_all = [torch.zeros_like(image_embeddings) for _ in range(world_size)]
@@ -1722,7 +1719,7 @@ class FlavaGlobalContrastiveHead(nn.Module):
 )
 class FlavaForPreTraining(FlavaPreTrainedModel):
     # Those are linked to xxx.bias
-    _keys_to_ignore_on_load_missing = [
+    _tied_weights_keys = [
         "mmm_text_head.decoder.bias",
         "mmm_image_head.decoder.bias",
         "mlm_head.decoder.bias",

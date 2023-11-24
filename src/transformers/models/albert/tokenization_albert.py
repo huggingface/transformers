@@ -159,6 +159,14 @@ class AlbertTokenizer(PreTrainedTokenizer):
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
+        self.do_lower_case = do_lower_case
+        self.remove_space = remove_space
+        self.keep_accents = keep_accents
+        self.vocab_file = vocab_file
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
+
         super().__init__(
             do_lower_case=do_lower_case,
             remove_space=remove_space,
@@ -174,19 +182,11 @@ class AlbertTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self.do_lower_case = do_lower_case
-        self.remove_space = remove_space
-        self.keep_accents = keep_accents
-        self.vocab_file = vocab_file
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
-
     @property
-    def vocab_size(self):
+    def vocab_size(self) -> int:
         return len(self.sp_model)
 
-    def get_vocab(self):
+    def get_vocab(self) -> Dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
@@ -228,6 +228,8 @@ class AlbertTokenizer(PreTrainedTokenizer):
         new_pieces = []
         for piece in pieces:
             if len(piece) > 1 and piece[-1] == str(",") and piece[-2].isdigit():
+                # Logic to handle special cases see https://github.com/google-research/bert/blob/master/README.md#tokenization
+                # `9,9` -> ['▁9', ',', '9'] instead of [`_9,`, '9']
                 cur_pieces = self.sp_model.EncodeAsPieces(piece[:-1].replace(SPIECE_UNDERLINE, ""))
                 if piece[0] != SPIECE_UNDERLINE and cur_pieces[0][0] == SPIECE_UNDERLINE:
                     if len(cur_pieces[0]) == 1:

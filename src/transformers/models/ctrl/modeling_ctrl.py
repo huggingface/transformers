@@ -34,7 +34,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "CTRLConfig"
 
 CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ctrl"
+    "Salesforce/ctrl"
     # See all CTRL models at https://huggingface.co/models?filter=ctrl
 ]
 
@@ -374,8 +374,8 @@ class CTRLModel(CTRLPreTrainedModel):
         >>> from transformers import AutoTokenizer, CTRLModel
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("ctrl")
-        >>> model = CTRLModel.from_pretrained("ctrl")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
+        >>> model = CTRLModel.from_pretrained("Salesforce/ctrl")
 
         >>> # CTRL was trained with control codes as the first token
         >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
@@ -397,6 +397,7 @@ class CTRLModel(CTRLPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
             batch_size = input_ids.shape[0]
@@ -415,7 +416,7 @@ class CTRLModel(CTRLPreTrainedModel):
             past_length = past_key_values[0][0].size(-2)
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
+            position_ids = position_ids.unsqueeze(0)
 
         # Attention mask.
         if attention_mask is not None:
@@ -446,7 +447,6 @@ class CTRLModel(CTRLPreTrainedModel):
             token_type_embeds *= np.sqrt(self.d_model_size)
         else:
             token_type_embeds = 0
-        position_ids = position_ids.view(-1, input_shape[-1])
 
         if inputs_embeds is None:
             inputs_embeds = self.w(input_ids)
@@ -509,7 +509,7 @@ class CTRLModel(CTRLPreTrainedModel):
     CTRL_START_DOCSTRING,
 )
 class CTRLLMHeadModel(CTRLPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -526,9 +526,18 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         self.lm_head = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, use_cache=None, **kwargs):
-        # only last token for inputs_ids if past is defined in kwargs
-        if past_key_values:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
+        # only last tokens for inputs_ids if past is defined in kwargs
+        if past_key_values is not None:
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
 
         return {"input_ids": input_ids, "past_key_values": past_key_values, "use_cache": use_cache}
 
@@ -563,8 +572,8 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         >>> import torch
         >>> from transformers import AutoTokenizer, CTRLLMHeadModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("ctrl")
-        >>> model = CTRLLMHeadModel.from_pretrained("ctrl")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
+        >>> model = CTRLLMHeadModel.from_pretrained("Salesforce/ctrl")
 
         >>> # CTRL was trained with control codes as the first token
         >>> inputs = tokenizer("Wikipedia The llama is", return_tensors="pt")
@@ -691,8 +700,8 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> import torch
         >>> from transformers import AutoTokenizer, CTRLForSequenceClassification
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("ctrl")
-        >>> model = CTRLForSequenceClassification.from_pretrained("ctrl")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
+        >>> model = CTRLForSequenceClassification.from_pretrained("Salesforce/ctrl")
 
         >>> # CTRL was trained with control codes as the first token
         >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
@@ -712,7 +721,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> torch.manual_seed(42)  # doctest: +IGNORE_RESULT
         >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
         >>> num_labels = len(model.config.id2label)
-        >>> model = CTRLForSequenceClassification.from_pretrained("ctrl", num_labels=num_labels)
+        >>> model = CTRLForSequenceClassification.from_pretrained("Salesforce/ctrl", num_labels=num_labels)
 
         >>> labels = torch.tensor(1)
         >>> loss = model(**inputs, labels=labels).loss
@@ -726,8 +735,10 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> import torch
         >>> from transformers import AutoTokenizer, CTRLForSequenceClassification
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("ctrl")
-        >>> model = CTRLForSequenceClassification.from_pretrained("ctrl", problem_type="multi_label_classification")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
+        >>> model = CTRLForSequenceClassification.from_pretrained(
+        ...     "Salesforce/ctrl", problem_type="multi_label_classification"
+        ... )
 
         >>> # CTRL was trained with control codes as the first token
         >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
@@ -744,7 +755,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         ```python
         >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
         >>> num_labels = len(model.config.id2label)
-        >>> model = CTRLForSequenceClassification.from_pretrained("ctrl", num_labels=num_labels)
+        >>> model = CTRLForSequenceClassification.from_pretrained("Salesforce/ctrl", num_labels=num_labels)
 
         >>> num_labels = len(model.config.id2label)
         >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
@@ -785,7 +796,9 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1
+                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1).to(
+                    logits.device
+                )
             else:
                 sequence_lengths = -1
                 logger.warning(

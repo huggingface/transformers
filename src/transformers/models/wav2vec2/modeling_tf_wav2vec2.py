@@ -14,15 +14,18 @@
 # limitations under the License.
 """ TensorFlow Wav2Vec2 model."""
 
+
+from __future__ import annotations
+
 import warnings
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
+from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput, TFSequenceClassifierOutput
 from ...modeling_tf_utils import (
     TFPreTrainedModel,
     get_initializer,
@@ -84,8 +87,8 @@ class TFWav2Vec2BaseModelOutput(ModelOutput):
 
     last_hidden_state: tf.Tensor = None
     extract_features: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 def _sample_without_replacement(distribution, num_samples):
@@ -448,8 +451,10 @@ class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
     def build(self, input_shape):
         if not self.built:
             input_shape = input_shape.as_list()
-            # Conv1D output shapes are checked at build time since TF 2.7, so we need to account for padding
-            input_shape[-2] += self.explicit_padding * 2
+            # If a specific input shape is passed in, we need to modify it to account for padding
+            # Not necessary if those portions of the shape are None
+            if input_shape[-2] is not None:
+                input_shape[-2] += self.explicit_padding * 2
             super().build(input_shape)
 
             self.kernel = tf.Variable(tf.transpose(self.kernel), name="weight_v", trainable=True)
@@ -673,12 +678,12 @@ class TFWav2Vec2Attention(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        key_value_states: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        layer_head_mask: Optional[tf.Tensor] = None,
+        key_value_states: tf.Tensor | None = None,
+        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        attention_mask: tf.Tensor | None = None,
+        layer_head_mask: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+    ) -> Tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -841,7 +846,7 @@ class TFWav2Vec2EncoderLayer(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = False,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
@@ -884,7 +889,7 @@ class TFWav2Vec2EncoderLayerStableLayerNorm(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = False,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
@@ -917,7 +922,7 @@ class TFWav2Vec2Encoder(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
@@ -984,7 +989,7 @@ class TFWav2Vec2EncoderStableLayerNorm(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
@@ -1074,7 +1079,7 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
 
         return input_lengths
 
-    def _mask_hidden_states(self, hidden_states: tf.Tensor, mask_time_indices: Optional[tf.Tensor] = None):
+    def _mask_hidden_states(self, hidden_states: tf.Tensor, mask_time_indices: tf.Tensor | None = None):
         """
         Masks extracted features along time axis and/or along feature axis according to
         [SpecAugment](https://arxiv.org/abs/1904.08779).
@@ -1122,11 +1127,11 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
     def call(
         self,
         input_values: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1182,35 +1187,65 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
     main_input_name = "input_values"
 
     @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        pad_token = 0.0
-        input_values = tf.convert_to_tensor(np.random.rand(1, 16000), tf.float32)
-        dummy_inputs = {
-            "input_values": input_values,
-            "attention_mask": tf.cast(tf.not_equal(input_values, pad_token), tf.float32),
+    def input_signature(self):
+        return {
+            "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
+            "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),
         }
-        return dummy_inputs
+
+    @property
+    def dummy_inputs(self):
+        return {
+            "input_values": tf.random.uniform(shape=(1, 500), dtype=tf.float32),
+            "attention_mask": tf.ones(shape=(1, 500), dtype=tf.float32),
+        }
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         logger.warning(
             f"\n{self.__class__.__name__} has backpropagation operations that are NOT supported on CPU. If you wish "
-            "to train/fine-tine this model, you need a GPU or a TPU"
+            "to train/fine-tune this model, you need a GPU or a TPU"
         )
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(input_values=inputs, training=False)
+    def _get_feat_extract_output_lengths(self, input_lengths, add_adapter=None):
+        """
+        Computes the output length of the convolutional layers
+        """
+        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
 
-        return self.serving_output(output)
+        def _conv_out_length(input_length, kernel_size, stride):
+            return tf.math.floordiv(input_length - kernel_size, stride) + 1
+
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        if add_adapter:
+            for _ in range(self.config.num_adapter_layers):
+                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
+        return input_lengths
+
+    def _get_feature_vector_attention_mask(
+        self, feature_vector_length: int, attention_mask: tf.Tensor, add_adapter=None
+    ):
+        non_padded_lengths = tf.math.cumsum(attention_mask, axis=-1)[:, -1]
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
+        output_lengths = tf.cast(output_lengths, tf.int32)
+        batch_size = tf.shape(attention_mask)[0]
+        # check device here
+        attention_mask = tf.zeros(
+            (batch_size, feature_vector_length), dtype=attention_mask.dtype, name="attention_mask"
+        )  # these two operations makes sure that all values before the output lengths idxs are attended to
+        ## check device
+        attention_mask = tf.tensor_scatter_nd_update(
+            attention_mask,
+            indices=tf.stack([tf.range(batch_size), output_lengths - 1], axis=1),
+            updates=tf.ones([batch_size], dtype=attention_mask.dtype),
+        )
+        attention_mask = tf.reverse(attention_mask, axis=[-1])
+        attention_mask = tf.cumsum(attention_mask, axis=-1)
+        attention_mask = tf.reverse(attention_mask, axis=[-1])
+        attention_mask = tf.cast(attention_mask, tf.bool)
+        return attention_mask
 
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
@@ -1327,11 +1362,11 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
     def call(
         self,
         input_values: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1384,17 +1419,6 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
 
         return outputs
 
-    def serving_output(self, output):
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFWav2Vec2BaseModelOutput(
-            last_hidden_state=output.last_hidden_state,
-            extract_features=output.extract_features,
-            hidden_states=hidden_states,
-            attentions=attentions,
-        )
-
 
 @add_start_docstrings(
     """TFWav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
@@ -1414,7 +1438,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         not be updated during training.
         """
         warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
@@ -1433,13 +1457,13 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
     def call(
         self,
         input_values: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
-        labels: Optional[tf.Tensor] = None,
+        labels: tf.Tensor | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
@@ -1548,7 +1572,100 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        return TFCausalLMOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
+
+class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.wav2vec2 = TFWav2Vec2MainLayer(config, name="wav2vec2")
+        self.num_layers = config.num_hidden_layers + 1
+        with tf.name_scope(self._name_scope()):
+            if config.use_weighted_layer_sum:
+                self.layer_weights = self.add_weight(
+                    shape=(self.num_layers,), initializer="ones", trainable=True, name="layer_weights"
+                )
+        self.config = config
+        self.projector = tf.keras.layers.Dense(units=config.classifier_proj_size, name="projector")
+        self.classifier = tf.keras.layers.Dense(units=config.num_labels, activation=None, name="classifier")
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        self.wav2vec2.feature_extractor.trainable = False
+
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        for layer in self.wav2vec2.layers:
+            layer.trainable = False
+
+    @unpack_inputs
+    def call(
+        self,
+        input_values: tf.Tensor,
+        attention_mask: tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: tf.Tensor | None = None,
+        training: bool = False,
+    ) -> TFSequenceClassifierOutput | Tuple[tf.Tensor]:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+
+        outputs = self.wav2vec2(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        if self.config.use_weighted_layer_sum:
+            hidden_states = outputs[_HIDDEN_STATES_START_POSITION]
+            hidden_states = tf.stack(hidden_states, axis=1)
+            norm_weights = tf.nn.softmax(self.layer_weights, axis=-1)
+            hidden_states = tf.reduce_sum(hidden_states * tf.reshape(norm_weights, [-1, 1, 1]), axis=1)
+        else:
+            hidden_states = outputs[0]
+
+        hidden_states = self.projector(hidden_states)
+        if attention_mask is None:
+            pooled_output = tf.reduce_mean(hidden_states, axis=1)
+        else:
+            padding_mask = self._get_feature_vector_attention_mask(shape_list(hidden_states)[1], attention_mask)
+            padding_mask_float = tf.cast(padding_mask, hidden_states.dtype)
+            hidden_states = tf.multiply(hidden_states, tf.expand_dims(padding_mask_float, axis=-1))
+            pooled_output = tf.divide(
+                tf.reduce_sum(hidden_states, axis=1), tf.expand_dims(tf.reduce_sum(padding_mask_float, axis=1), axis=1)
+            )
+        logits = self.classifier(pooled_output)
+        loss = None
+        if labels is not None:
+            loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+            loss = loss_fn(tf.reshape(labels, [-1]), tf.reshape(logits, [-1, self.config.num_labels]))
+        if not return_dict:
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFSequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )

@@ -52,6 +52,24 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
         # model
         pass
 
+    @unittest.skip(
+        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+    )
+    def test_encode_decode_with_spaces(self):
+        pass
+
+    @unittest.skip(
+        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+    )
+    def test_added_tokens_serialization(self):
+        pass
+
+    @unittest.skip(
+        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+    )
+    def test_additional_special_tokens_serialization(self):
+        pass
+
     def test_pretrained_model_lists(self):
         # We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any
         # model
@@ -108,6 +126,54 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
 
         encoding_ids = new_tokenizer.encode("a🤗")
         self.assertEqual(encoding_ids, [64, 172, 253, 97, 245])
+
+    def test_init_from_tokenizers_model(self):
+        from tokenizers import Tokenizer
+
+        sentences = ["Hello, y'all!", "How are you 😁 ? There should not be any issue right?"]
+
+        tokenizer = Tokenizer.from_pretrained("t5-base")
+        # Enable padding
+        tokenizer.enable_padding(pad_id=0, pad_token="<pad>", length=512, pad_to_multiple_of=8)
+        self.assertEqual(
+            tokenizer.padding,
+            {
+                "length": 512,
+                "pad_to_multiple_of": 8,
+                "pad_id": 0,
+                "pad_token": "<pad>",
+                "pad_type_id": 0,
+                "direction": "right",
+            },
+        )
+        fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+        tmpdirname = tempfile.mkdtemp()
+        fast_tokenizer.save_pretrained(tmpdirname)
+        fast_from_saved = PreTrainedTokenizerFast.from_pretrained(tmpdirname)
+        for tok in [fast_tokenizer, fast_from_saved]:
+            self.assertEqual(tok.pad_token_id, 0)
+            self.assertEqual(tok.padding_side, "right")
+            self.assertEqual(tok.pad_token, "<pad>")
+            self.assertEqual(tok.init_kwargs["max_length"], 512)
+            self.assertEqual(tok.init_kwargs["pad_to_multiple_of"], 8)
+            self.assertEqual(tok(sentences, padding = True), {'input_ids': [[8774, 6, 3, 63, 31, 1748, 55, 1, 0, 0, 0, 0,0, 0, 0, 0],[ 571, 33, 25, 3, 2, 3, 58, 290, 225, 59, 36, 136, 962, 269, 58, 1]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]})  # fmt: skip
+
+        tokenizer.enable_truncation(8, stride=0, strategy="longest_first", direction="right")
+        self.assertEqual(
+            tokenizer.truncation, {"max_length": 8, "stride": 0, "strategy": "longest_first", "direction": "right"}
+        )
+        fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+        tmpdirname = tempfile.mkdtemp()
+        fast_tokenizer.save_pretrained(tmpdirname)
+        fast_from_saved = PreTrainedTokenizerFast.from_pretrained(tmpdirname)
+        for tok in [fast_tokenizer, fast_from_saved]:
+            self.assertEqual(tok.truncation_side, "right")
+            self.assertEqual(tok.init_kwargs["truncation_strategy"], "longest_first")
+            self.assertEqual(tok.init_kwargs["max_length"], 8)
+            self.assertEqual(tok.init_kwargs["stride"], 0)
+            # NOTE even if the model has a default max_length, it is not used...
+            # thus tok(sentences, truncation = True) does nothing and does not warn either
+            self.assertEqual(tok(sentences, truncation = True, max_length = 8), {'input_ids': [[8774, 6, 3, 63, 31, 1748, 55, 1],[ 571, 33, 25, 3, 2, 3, 58, 1]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0],[0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1],[1, 1, 1, 1, 1, 1, 1, 1]]})  # fmt: skip
 
 
 @require_tokenizers

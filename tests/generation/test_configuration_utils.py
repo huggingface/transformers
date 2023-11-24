@@ -14,8 +14,10 @@
 # limitations under the License.
 
 import copy
+import os
 import tempfile
 import unittest
+import warnings
 
 from huggingface_hub import HfFolder, delete_repo
 from parameterized import parameterized
@@ -93,6 +95,64 @@ class GenerationConfigTest(unittest.TestCase):
         generation_config = GenerationConfig.from_model_config(new_config)
         assert not hasattr(generation_config, "foo")  # no new kwargs should be initialized if from config
 
+    def test_kwarg_init(self):
+        """Tests that we can overwrite attributes at `from_pretrained` time."""
+        default_config = GenerationConfig()
+        self.assertEqual(default_config.temperature, 1.0)
+        self.assertEqual(default_config.do_sample, False)
+        self.assertEqual(default_config.num_beams, 1)
+
+        config = GenerationConfig(
+            do_sample=True,
+            temperature=0.7,
+            length_penalty=1.0,
+            bad_words_ids=[[1, 2, 3], [4, 5]],
+        )
+        self.assertEqual(config.temperature, 0.7)
+        self.assertEqual(config.do_sample, True)
+        self.assertEqual(config.num_beams, 1)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            loaded_config = GenerationConfig.from_pretrained(tmp_dir, temperature=1.0)
+
+        self.assertEqual(loaded_config.temperature, 1.0)
+        self.assertEqual(loaded_config.do_sample, True)
+        self.assertEqual(loaded_config.num_beams, 1)  # default value
+
+    def test_refuse_to_save(self):
+        """Tests that we refuse to save a generation config that fails validation."""
+
+        # setting the temperature alone is invalid, as we also need to set do_sample to True -> throws a warning that
+        # is caught, doesn't save, and raises a warning
+        config = GenerationConfig()
+        config.temperature = 0.5
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with warnings.catch_warnings(record=True) as captured_warnings:
+                config.save_pretrained(tmp_dir)
+            self.assertEqual(len(captured_warnings), 1)
+            self.assertTrue("Fix these issues to save the configuration." in str(captured_warnings[0].message))
+            self.assertTrue(len(os.listdir(tmp_dir)) == 0)
+
+        # greedy decoding throws an exception if we try to return multiple sequences -> throws an exception that is
+        # caught, doesn't save, and raises a warning
+        config = GenerationConfig()
+        config.num_return_sequences = 2
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with warnings.catch_warnings(record=True) as captured_warnings:
+                config.save_pretrained(tmp_dir)
+            self.assertEqual(len(captured_warnings), 1)
+            self.assertTrue("Fix these issues to save the configuration." in str(captured_warnings[0].message))
+            self.assertTrue(len(os.listdir(tmp_dir)) == 0)
+
+        # final check: no warnings thrown if it is correct, and file is saved
+        config = GenerationConfig()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with warnings.catch_warnings(record=True) as captured_warnings:
+                config.save_pretrained(tmp_dir)
+            self.assertEqual(len(captured_warnings), 0)
+            self.assertTrue(len(os.listdir(tmp_dir)) == 1)
+
 
 @is_staging_test
 class ConfigPushToHubTester(unittest.TestCase):
@@ -119,7 +179,7 @@ class ConfigPushToHubTester(unittest.TestCase):
             temperature=0.7,
             length_penalty=1.0,
         )
-        config.push_to_hub("test-generation-config", use_auth_token=self._token)
+        config.push_to_hub("test-generation-config", token=self._token)
 
         new_config = GenerationConfig.from_pretrained(f"{USER}/test-generation-config")
         for k, v in config.to_dict().items():
@@ -131,9 +191,7 @@ class ConfigPushToHubTester(unittest.TestCase):
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(
-                tmp_dir, repo_id="test-generation-config", push_to_hub=True, use_auth_token=self._token
-            )
+            config.save_pretrained(tmp_dir, repo_id="test-generation-config", push_to_hub=True, token=self._token)
 
         new_config = GenerationConfig.from_pretrained(f"{USER}/test-generation-config")
         for k, v in config.to_dict().items():
@@ -146,7 +204,7 @@ class ConfigPushToHubTester(unittest.TestCase):
             temperature=0.7,
             length_penalty=1.0,
         )
-        config.push_to_hub("valid_org/test-generation-config-org", use_auth_token=self._token)
+        config.push_to_hub("valid_org/test-generation-config-org", token=self._token)
 
         new_config = GenerationConfig.from_pretrained("valid_org/test-generation-config-org")
         for k, v in config.to_dict().items():
@@ -159,7 +217,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
             config.save_pretrained(
-                tmp_dir, repo_id="valid_org/test-generation-config-org", push_to_hub=True, use_auth_token=self._token
+                tmp_dir, repo_id="valid_org/test-generation-config-org", push_to_hub=True, token=self._token
             )
 
         new_config = GenerationConfig.from_pretrained("valid_org/test-generation-config-org")

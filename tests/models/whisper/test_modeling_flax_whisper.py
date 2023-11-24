@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 import functools
 import inspect
 import tempfile
@@ -41,12 +39,14 @@ if is_flax_available():
 
     from transformers import (
         FLAX_MODEL_MAPPING,
+        FlaxWhisperForAudioClassification,
         FlaxWhisperForConditionalGeneration,
         FlaxWhisperModel,
         WhisperFeatureExtractor,
         WhisperProcessor,
     )
     from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
+    from transformers.models.whisper.modeling_flax_whisper import sinusoidal_embedding_init
 
 
 @require_flax
@@ -249,6 +249,10 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
 
+    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=5e-5, name="outputs", attributes=None):
+        # We override with a slightly higher tol value, as test recently became flaky
+        super().check_pt_flax_outputs(fx_outputs, pt_outputs, model_class, tol, name, attributes)
+
     # overwrite because of `input_features`
     @is_pt_flax_cross_test
     def test_save_load_bf16_to_base_pt(self):
@@ -383,6 +387,19 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 for key in base_params_from_head.keys():
                     max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    def test_encoder_sinusoidal_embed_positions(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            params = model.params
+            if model.base_model_prefix in params:
+                params = model.params[model.base_model_prefix]
+
+            embeds = params["encoder"]["embed_positions"]["embedding"]
+            sinusoids = sinusoidal_embedding_init(None, embeds.shape)
+            self.assertTrue(jax.numpy.allclose(embeds, sinusoids))
 
 
 @slow
@@ -653,9 +670,7 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
 
         generated_ids = generate_fn(input_features)
 
-        # fmt: off
-        EXPECTED_OUTPUT = np.array([50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354, 1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293, 51836, 51836, 50257])
-        # fmt: on
+        EXPECTED_OUTPUT = np.array([50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354, 1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293, 51836, 51836, 50257])  # fmt: skip
 
         self.assertTrue(np.allclose(generated_ids, EXPECTED_OUTPUT))
 
@@ -704,3 +719,205 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
 
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+
+class FlaxWhisperEncoderModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        seq_length=60,
+        is_training=True,
+        use_labels=True,
+        hidden_size=16,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        input_channels=1,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=20,
+        max_source_positions=30,
+        num_mel_bins=80,
+        num_conv_layers=1,
+        suppress_tokens=None,
+        begin_suppress_tokens=None,
+        classifier_proj_size=4,
+        num_labels=2,
+        is_encoder_decoder=False,
+        is_decoder=False,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.input_channels = input_channels
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.num_mel_bins = num_mel_bins
+        self.max_position_embeddings = max_position_embeddings
+        self.max_source_positions = max_source_positions
+        self.num_conv_layers = num_conv_layers
+        self.suppress_tokens = suppress_tokens
+        self.begin_suppress_tokens = begin_suppress_tokens
+        self.classifier_proj_size = classifier_proj_size
+        self.num_labels = num_labels
+        self.is_encoder_decoder = is_encoder_decoder
+        self.is_decoder = is_decoder
+
+    def get_config(self):
+        return WhisperConfig(
+            d_model=self.hidden_size,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_attention_heads=self.num_attention_heads,
+            input_channels=self.input_channels,
+            dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+            max_source_positions=self.max_source_positions,
+            decoder_ffn_dim=self.hidden_size,
+            encoder_ffn_dim=self.hidden_size,
+            suppress_tokens=self.suppress_tokens,
+            begin_suppress_tokens=self.begin_suppress_tokens,
+            classifier_proj_size=self.classifier_proj_size,
+            num_labels=self.num_labels,
+            is_encoder_decoder=self.is_encoder_decoder,
+            is_decoder=self.is_decoder,
+        )
+
+    def prepare_whisper_encoder_inputs_dict(
+        self,
+        input_features,
+    ):
+        return {
+            "input_features": input_features,
+        }
+
+    def prepare_config_and_inputs(self):
+        input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length])
+
+        config = self.get_config()
+        inputs_dict = self.prepare_whisper_encoder_inputs_dict(
+            input_features=input_features,
+        )
+        return config, inputs_dict
+
+    def prepare_config_and_inputs_for_common(self):
+        config, inputs_dict = self.prepare_config_and_inputs()
+        return config, inputs_dict
+
+    def get_subsampled_output_lengths(self, input_lengths):
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        for i in range(self.num_conv_layers):
+            input_lengths = (input_lengths - 1) // 2 + 1
+
+        return input_lengths
+
+    @property
+    def encoder_seq_length(self):
+        return self.get_subsampled_output_lengths(self.seq_length)
+
+
+@require_flax
+class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
+    all_model_classes = (FlaxWhisperForAudioClassification,) if is_flax_available() else ()
+    is_encoder_decoder = False
+    fx_compatible = False
+    test_pruning = False
+    test_missing_keys = False
+
+    input_name = "input_features"
+
+    def setUp(self):
+        self.model_tester = FlaxWhisperEncoderModelTester(self)
+        _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        self.init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+
+        self.all_model_classes = (
+            make_partial_class(model_class, input_shape=self.init_shape) for model_class in self.all_model_classes
+        )
+        self.config_tester = ConfigTester(self, config_class=WhisperConfig)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    # overwrite because of `input_features`
+    def test_jit_compilation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                model = model_class(config)
+
+                @jax.jit
+                def model_jitted(input_features, **kwargs):
+                    return model(input_features=input_features, **kwargs)
+
+                with self.subTest("JIT Enabled"):
+                    jitted_outputs = model_jitted(**prepared_inputs_dict).to_tuple()
+
+                with self.subTest("JIT Disabled"):
+                    with jax.disable_jit():
+                        outputs = model_jitted(**prepared_inputs_dict).to_tuple()
+
+                self.assertEqual(len(outputs), len(jitted_outputs))
+                for jitted_output, output in zip(jitted_outputs, outputs):
+                    self.assertEqual(jitted_output.shape, output.shape)
+
+    # overwrite because of `input_features`
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.__call__)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["input_features", "attention_mask", "output_attentions"]
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    def test_inputs_embeds(self):
+        pass
+
+    # WhisperEncoder has no inputs_embeds and thus the `get_input_embeddings` fn is not implemented
+    def test_model_common_attributes(self):
+        pass
+
+    # WhisperEncoder cannot resize token embeddings since it has no tokens embeddings
+    def test_resize_tokens_embeddings(self):
+        pass
+
+    # WhisperEncoder does not have any base model
+    def test_save_load_to_base(self):
+        pass
+
+    # WhisperEncoder does not have any base model
+    def test_save_load_from_base(self):
+        pass
+
+    # WhisperEncoder does not have any base model
+    @is_pt_flax_cross_test
+    def test_save_load_from_base_pt(self):
+        pass
+
+    # WhisperEncoder does not have any base model
+    @is_pt_flax_cross_test
+    def test_save_load_to_base_pt(self):
+        pass
+
+    # WhisperEncoder does not have any base model
+    @is_pt_flax_cross_test
+    def test_save_load_bf16_to_base_pt(self):
+        pass

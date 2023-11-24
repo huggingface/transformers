@@ -28,7 +28,7 @@ from transformers import (
     CLIPSegTextConfig,
     CLIPSegVisionConfig,
     CLIPTokenizer,
-    ViTFeatureExtractor,
+    ViTImageProcessor,
 )
 
 
@@ -185,9 +185,9 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     if unexpected_keys != ["decoder.reduce.weight", "decoder.reduce.bias"]:
         raise ValueError(f"Unexpected keys: {unexpected_keys}")
 
-    feature_extractor = ViTFeatureExtractor(size=352)
+    image_processor = ViTImageProcessor(size=352)
     tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-    processor = CLIPSegProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+    processor = CLIPSegProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
     image = prepare_img()
     text = ["a glass", "something to fill", "wood", "a jar"]

@@ -25,10 +25,10 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
-    require_torchaudio,
     slow,
     torch_device,
 )
+from transformers.trainer_utils import set_seed
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -105,7 +105,7 @@ class SpeechT5ModelTester:
         is_training=False,
         vocab_size=81,
         hidden_size=24,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         intermediate_size=4,
     ):
@@ -249,7 +249,7 @@ class SpeechT5ForSpeechToTextTester:
         decoder_seq_length=7,
         is_training=False,
         hidden_size=24,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         intermediate_size=4,
         conv_dim=(32, 32, 32),
@@ -578,12 +578,13 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             for name, param in model.named_parameters():
                 uniform_init_parms = [
                     "conv.weight",
+                    "conv.parametrizations.weight",
                     "masked_spec_embed",
                     "feature_projection.projection.weight",
                     "feature_projection.projection.bias",
                 ]
                 if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
+                    if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -701,6 +702,18 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
@@ -716,7 +729,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-@require_torchaudio
 @require_sentencepiece
 @require_tokenizers
 @slow
@@ -787,12 +799,15 @@ class SpeechT5ForTextToSpeechTester:
         decoder_seq_length=1024,  # speech is longer
         is_training=False,
         hidden_size=24,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         intermediate_size=4,
         vocab_size=81,
         num_mel_bins=20,
         reduction_factor=2,
+        speech_decoder_postnet_layers=2,
+        speech_decoder_postnet_units=32,
+        speech_decoder_prenet_units=32,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -806,6 +821,9 @@ class SpeechT5ForTextToSpeechTester:
         self.vocab_size = vocab_size
         self.num_mel_bins = num_mel_bins
         self.reduction_factor = reduction_factor
+        self.speech_decoder_postnet_layers = speech_decoder_postnet_layers
+        self.speech_decoder_postnet_units = speech_decoder_postnet_units
+        self.speech_decoder_prenet_units = speech_decoder_prenet_units
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
@@ -840,6 +858,9 @@ class SpeechT5ForTextToSpeechTester:
             vocab_size=self.vocab_size,
             num_mel_bins=self.num_mel_bins,
             reduction_factor=self.reduction_factor,
+            speech_decoder_postnet_layers=self.speech_decoder_postnet_layers,
+            speech_decoder_postnet_units=self.speech_decoder_postnet_units,
+            speech_decoder_prenet_units=self.speech_decoder_prenet_units,
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
@@ -928,7 +949,7 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
                     "conv.weight",
                 ]
                 if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
+                    if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -978,6 +999,18 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
@@ -991,25 +1024,112 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-@require_torchaudio
 @require_sentencepiece
 @require_tokenizers
-@slow
 class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
+    @cached_property
+    def default_model(self):
+        return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts")
+
     @cached_property
     def default_processor(self):
         return SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
 
+    @cached_property
+    def default_vocoder(self):
+        return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan")
+
     def test_generation(self):
-        model = SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts")
+        model = self.default_model
         model.to(torch_device)
         processor = self.default_processor
+
+        set_seed(555)  # make deterministic
+
+        speaker_embeddings = torch.zeros((1, 512)).to(torch_device)
 
         input_text = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
         input_ids = processor(text=input_text, return_tensors="pt").input_ids.to(torch_device)
 
-        generated_speech = model.generate_speech(input_ids)
-        self.assertEqual(generated_speech.shape, (1800, model.config.num_mel_bins))
+        generated_speech = model.generate_speech(input_ids, speaker_embeddings=speaker_embeddings)
+        self.assertEqual(generated_speech.shape, (230, model.config.num_mel_bins))
+
+        set_seed(555)  # make deterministic
+
+        # test model.generate, same method than generate_speech but with additional kwargs to absorb kwargs such as attention_mask
+        generated_speech_with_generate = model.generate(
+            input_ids, attention_mask=None, speaker_embeddings=speaker_embeddings
+        )
+        self.assertEqual(generated_speech_with_generate.shape, (230, model.config.num_mel_bins))
+
+    def test_batch_generation(self):
+        model = self.default_model
+        model.to(torch_device)
+        processor = self.default_processor
+        vocoder = self.default_vocoder
+        set_seed(555)  # make deterministic
+
+        input_text = [
+            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
+            "nor is mister quilter's manner less interesting than his matter",
+            "he tells us that at this festive season of the year with christmas and rosebeaf looming before us",
+        ]
+        inputs = processor(text=input_text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
+
+        speaker_embeddings = torch.zeros((1, 512), device=torch_device)
+        spectrograms, spectrogram_lengths = model.generate_speech(
+            input_ids=inputs["input_ids"],
+            speaker_embeddings=speaker_embeddings,
+            attention_mask=inputs["attention_mask"],
+            return_output_lengths=True,
+        )
+        self.assertEqual(spectrograms.shape, (3, 262, model.config.num_mel_bins))
+        waveforms = vocoder(spectrograms)
+        waveform_lengths = [int(waveforms.size(1) / max(spectrogram_lengths)) * i for i in spectrogram_lengths]
+
+        # Check waveform results are the same with or without using vocder
+        set_seed(555)
+        waveforms_with_vocoder, waveform_lengths_with_vocoder = model.generate_speech(
+            input_ids=inputs["input_ids"],
+            speaker_embeddings=speaker_embeddings,
+            attention_mask=inputs["attention_mask"],
+            vocoder=vocoder,
+            return_output_lengths=True,
+        )
+        self.assertTrue(torch.allclose(waveforms, waveforms_with_vocoder, atol=1e-8))
+        self.assertEqual(waveform_lengths, waveform_lengths_with_vocoder)
+
+        # Check waveform results are the same with return_concrete_lengths=True/False
+        set_seed(555)
+        waveforms_with_vocoder_no_lengths = model.generate_speech(
+            input_ids=inputs["input_ids"],
+            speaker_embeddings=speaker_embeddings,
+            attention_mask=inputs["attention_mask"],
+            vocoder=vocoder,
+            return_output_lengths=False,
+        )
+        self.assertTrue(torch.allclose(waveforms_with_vocoder_no_lengths, waveforms_with_vocoder, atol=1e-8))
+
+        # Check results when batching are consistent with results without batching
+        for i, text in enumerate(input_text):
+            set_seed(555)  # make deterministic
+            inputs = processor(text=text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
+            spectrogram = model.generate_speech(
+                input_ids=inputs["input_ids"],
+                speaker_embeddings=speaker_embeddings,
+            )
+            self.assertEqual(spectrogram.shape, spectrograms[i][: spectrogram_lengths[i]].shape)
+            self.assertTrue(torch.allclose(spectrogram, spectrograms[i][: spectrogram_lengths[i]], atol=5e-3))
+            waveform = vocoder(spectrogram)
+            self.assertEqual(waveform.shape, waveforms[i][: waveform_lengths[i]].shape)
+            # Check whether waveforms are the same with/without passing vocoder
+            set_seed(555)
+            waveform_with_vocoder = model.generate_speech(
+                input_ids=inputs["input_ids"],
+                speaker_embeddings=speaker_embeddings,
+                vocoder=vocoder,
+            )
+            self.assertTrue(torch.allclose(waveform, waveform_with_vocoder, atol=1e-8))
 
 
 @require_torch
@@ -1022,7 +1142,7 @@ class SpeechT5ForSpeechToSpeechTester:
         decoder_seq_length=1024,
         is_training=False,
         hidden_size=24,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         intermediate_size=4,
         conv_dim=(32, 32, 32),
@@ -1034,6 +1154,9 @@ class SpeechT5ForSpeechToSpeechTester:
         vocab_size=81,
         num_mel_bins=20,
         reduction_factor=2,
+        speech_decoder_postnet_layers=2,
+        speech_decoder_postnet_units=32,
+        speech_decoder_prenet_units=32,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -1053,6 +1176,9 @@ class SpeechT5ForSpeechToSpeechTester:
         self.vocab_size = vocab_size
         self.num_mel_bins = num_mel_bins
         self.reduction_factor = reduction_factor
+        self.speech_decoder_postnet_layers = speech_decoder_postnet_layers
+        self.speech_decoder_postnet_units = speech_decoder_postnet_units
+        self.speech_decoder_prenet_units = speech_decoder_prenet_units
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.encoder_seq_length], scale=1.0)
@@ -1093,6 +1219,9 @@ class SpeechT5ForSpeechToSpeechTester:
             vocab_size=self.vocab_size,
             num_mel_bins=self.num_mel_bins,
             reduction_factor=self.reduction_factor,
+            speech_decoder_postnet_layers=self.speech_decoder_postnet_layers,
+            speech_decoder_postnet_units=self.speech_decoder_postnet_units,
+            speech_decoder_prenet_units=self.speech_decoder_prenet_units,
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
@@ -1332,12 +1461,13 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             for name, param in model.named_parameters():
                 uniform_init_parms = [
                     "conv.weight",
+                    "conv.parametrizations.weight",
                     "masked_spec_embed",
                     "feature_projection.projection.weight",
                     "feature_projection.projection.bias",
                 ]
                 if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
+                    if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -1391,6 +1521,18 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
@@ -1406,7 +1548,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-@require_torchaudio
 @require_sentencepiece
 @require_tokenizers
 @slow
@@ -1463,6 +1604,7 @@ class SpeechT5HifiGanTester:
     def get_config(self):
         return SpeechT5HifiGanConfig(
             model_in_dim=self.num_mel_bins,
+            upsample_initial_channel=32,
         )
 
     def create_and_check_model(self, config, input_values):

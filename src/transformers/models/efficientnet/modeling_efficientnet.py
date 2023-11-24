@@ -486,7 +486,6 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     config_class = EfficientNetConfig
     base_model_prefix = "efficientnet"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -499,10 +498,6 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, EfficientNetBlock):
-            module.gradient_checkpointing = value
 
 
 @add_start_docstrings(
@@ -588,7 +583,6 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
         # Classifier head
         self.dropout = nn.Dropout(p=config.dropout_rate)
         self.classifier = nn.Linear(config.hidden_dim, self.num_labels) if self.num_labels > 0 else nn.Identity()
-        self.classifier_act = nn.Softmax(dim=1)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -620,7 +614,6 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
-        logits = self.classifier_act(logits)
 
         loss = None
         if labels is not None:

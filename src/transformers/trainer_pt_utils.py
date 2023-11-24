@@ -35,7 +35,7 @@ from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
-from .deepspeed import is_deepspeed_zero3_enabled
+from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .tokenization_utils_base import BatchEncoding
 from .utils import is_sagemaker_mp_enabled, is_torch_tpu_available, is_training_run_on_sagemaker, logging
 
@@ -53,6 +53,13 @@ except ImportError:
     SAVE_STATE_WARNING = ""
 
 logger = logging.get_logger(__name__)
+
+
+def get_dataloader_sampler(dataloader):
+    if hasattr(dataloader, "batch_sampler") and dataloader.batch_sampler is not None:
+        return get_dataloader_sampler(dataloader.batch_sampler)
+    elif hasattr(dataloader, "sampler"):
+        return dataloader.sampler
 
 
 def atleast_1d(tensor_or_array: Union[torch.Tensor, np.ndarray]):
@@ -257,7 +264,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
             Dataset used for sampling.
         batch_size (`int`):
             The batch size used with this sampler
-        kwargs:
+        kwargs (`Dict[str, Any]`, *optional*):
             All other keyword arguments passed to `DistributedSampler`.
     """
 
@@ -838,7 +845,7 @@ class IterableDatasetShard(IterableDataset):
 
 
 def _get_learning_rate(self):
-    if self.deepspeed:
+    if self.is_deepspeed_enabled:
         # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
         # not run for the first few dozen steps while loss scale is too large, and thus during
         # that time `get_last_lr` will fail if called during that warm up stage, so work around it:
@@ -851,7 +858,10 @@ def _get_learning_rate(self):
             else:
                 raise
     else:
-        last_lr = self.lr_scheduler.get_last_lr()[0]
+        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            last_lr = self.optimizer.param_groups[0]["lr"]
+        else:
+            last_lr = self.lr_scheduler.get_last_lr()[0]
         if torch.is_tensor(last_lr):
             last_lr = last_lr.item()
     return last_lr
@@ -886,7 +896,7 @@ def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
             metrics_copy[k] = _secs2timedelta(v)
         elif k == "total_flos":
             metrics_copy[k] = f"{ int(v) >> 30 }GF"
-        elif type(metrics_copy[k]) == float:
+        elif isinstance(metrics_copy[k], float):
             metrics_copy[k] = round(v, 4)
 
     return metrics_copy
@@ -1040,7 +1050,7 @@ def get_model_param_count(model, trainable_only=False):
     if is_deepspeed_zero3_enabled():
 
         def numel(p):
-            return p.ds_numel
+            return p.ds_numel if hasattr(p, "ds_numel") else p.numel()
 
     else:
 
@@ -1084,6 +1094,14 @@ def get_module_class_from_name(module, name):
             module_class = get_module_class_from_name(child_module, name)
             if module_class is not None:
                 return module_class
+
+
+def remove_dummy_checkpoint(is_main_process, output_dir, filenames):
+    if is_main_process:
+        for filename in filenames:
+            file = os.path.join(output_dir, filename)
+            if os.path.isfile(file):
+                os.remove(file)
 
 
 if is_sagemaker_mp_enabled():
