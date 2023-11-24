@@ -1,9 +1,8 @@
-from typing import Optional
 import json
 import uuid
+from typing import Optional
 
 import requests
-
 from huggingface_hub import Discussion, HfApi, get_repo_discussions
 
 from .utils import cached_file, logging
