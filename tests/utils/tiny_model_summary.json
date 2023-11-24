@@ -2005,7 +2005,7 @@
             "EsmForMaskedLM",
             "TFEsmForMaskedLM"
         ],
-        "sha": "b56297b6cd64b9basss7c613d0cd146f1ecbea8115e"
+        "sha": "b56297b6cd64b9ba7c613d0cd146f1ecbea8115e"
     },
     "EsmForSequenceClassification": {
         "tokenizer_classes": [
