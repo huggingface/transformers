@@ -19,6 +19,8 @@
 # limitations under the License.
 """ Llava model configuration"""
 
+from ..auto import CONFIG_MAPPING
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -86,7 +88,7 @@ class LlavaVisionConfig(PretrainedConfig):
         num_hidden_layers=24,
         num_attention_heads=16,
         num_channels=3,
-        hidden_act="gelu",
+        hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=0.02,
@@ -274,6 +276,10 @@ class LlavaConfig(PretrainedConfig):
             self.vision_config = vision_config
 
         self.text_config = text_config
+
+        if isinstance(self.text_config, dict):
+            text_model_type = text_config["model_type"] if "model_type" in text_config else "llama"
+            self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         super().__init__(
             pad_token_id=pad_token_id,
