@@ -606,7 +606,7 @@ class TvpFrameDownPadPrompter(nn.Module):
 
     def forward(self, pixel_values):
         if self.visual_prompter_apply != "add":
-            visual_prompt_mask = torch.ones([self.max_img_size, self.max_img_size], dtype=pixel_values.dtype)
+            visual_prompt_mask = torch.ones([self.max_img_size, self.max_img_size], dtype=pixel_values.dtype, device=pixel_values.device)
             visual_prompt_mask[self.max_img_size - self.visual_prompt_size : self.max_img_size, :] = 0.0
             pixel_values *= visual_prompt_mask
         if self.visual_prompter_apply != "remove":
@@ -667,7 +667,7 @@ class TvpFramePadPrompter(nn.Module):
         if self.visual_prompter_apply not in ("add", "remove", "replace"):
             raise ValueError(f"Invalid visual_prompter_apply value {self.visual_prompter_apply}")
         if self.visual_prompter_apply in ("replace", "remove"):
-            visual_prompt_mask = torch.ones([self.max_img_size, self.max_img_size], dtype=pixel_values.dtype)
+            visual_prompt_mask = torch.ones([self.max_img_size, self.max_img_size], dtype=pixel_values.dtype, device=pixel_values.device)
             pixel_values *= visual_prompt_mask
         if self.visual_prompter_apply in ("replace", "add"):
             base = torch.zeros(1, self.num_frames, 3, self.base_size, self.base_size)
