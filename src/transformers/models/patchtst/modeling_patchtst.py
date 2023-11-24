@@ -256,13 +256,13 @@ def random_masking(
     if mask_ratio < 0 or mask_ratio >= 1:
         raise ValueError(f"Mask ratio {mask_ratio} has to be between 0 and 1.")
 
-    if seed is not None:
-        generator = torch.Generator(device=inputs.device).manual_seed(seed)
-    else:
-        generator = None
-
     batch_size, num_channels, sequence_length, num_features = inputs.shape
     device = inputs.device
+
+    if seed is not None:
+        generator = torch.Generator(device=device).manual_seed(seed)
+    else:
+        generator = None
 
     len_keep = int(sequence_length * (1 - mask_ratio))
 
