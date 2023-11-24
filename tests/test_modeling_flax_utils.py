@@ -16,6 +16,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import torch
 from huggingface_hub import HfFolder, delete_repo, snapshot_download
 from requests.exceptions import HTTPError
 
@@ -265,6 +266,25 @@ class FlaxModelUtilsTest(unittest.TestCase):
         self.assertTrue(check_models_equal(flax_model, safetensors_model))
 
     @require_safetensors
+    @require_torch
+    @is_pt_flax_cross_test
+    def test_safetensors_load_from_hub_from_safetensors_pt_bf16(self):
+        """
+        This test checks that we can load safetensors from a checkpoint that only has those on the Hub.
+        saved in the "pt" format.
+        """
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors")
+        model.to(torch.bfloat16)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            model.save_pretrained(tmp)
+            flax_model = FlaxBertModel.from_pretrained(tmp)
+
+        # Can load from the PyTorch-formatted checkpoint
+        safetensors_model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors-bf16")
+        self.assertTrue(check_models_equal(flax_model, safetensors_model))
+
+    @require_safetensors
     @is_pt_flax_cross_test
     def test_safetensors_load_from_local_from_safetensors_pt(self):
         """
@@ -337,3 +357,9 @@ class FlaxModelUtilsTest(unittest.TestCase):
         # This should not raise even if there are two types of sharded weights
         # This should discard the safetensors weights in favor of the msgpack sharded weights
         FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-flax-safetensors-msgpack-sharded")
+
+    @require_safetensors
+    def test_safetensors_from_pt_bf16(self):
+        # This should not raise; should be able to load bf16-serialized torch safetensors without issue
+        # and without torch.
+        FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors-bf16")
