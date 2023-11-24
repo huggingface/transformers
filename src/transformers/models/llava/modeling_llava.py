@@ -569,9 +569,9 @@ class LlavaMultiModalProjector(nn.Module):
     def __init__(self, config: LlavaConfig):
         super().__init__()
 
-        self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.hidden_size, bias=True)
+        self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
         self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
+        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
 
     def forward(self, image_features):
         hidden_states = self.linear_1(image_features)
@@ -601,19 +601,26 @@ LLAMA_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsPreTrainedModel with Idefics->Llava
 class LlavaPreTrainedModel(PreTrainedModel):
     config_class = LlavaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlavaDecoderLayer", "LlavaGatedCrossAttentionLayer"]
+    _no_split_modules = ["LlavaVisionAttention"]
 
     def _init_weights(self, module):
         # important: this ported version of Llava isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the m4 code
-        # base should be used for training from scratch and it contains the correct code.
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
+        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
+        # https://github.com/haotian-liu/LLaVA/tree/main/llava should serve for that purpose
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
+
+        if hasattr(module, "class_embedding"):
+            module.class_embedding.data.normal_(mean=0.0, std=std)
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()

@@ -236,31 +236,6 @@ class LlavaConfig(PretrainedConfig):
         vision_feature_layer=-2,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.additional_vocab_size = additional_vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.dropout = dropout
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.alpha_initializer = alpha_initializer
-        self.alphas_initializer_range = alphas_initializer_range
-        self.alpha_type = alpha_type
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-
-        self.cross_layer_interval = cross_layer_interval
-        self.qk_layer_norms = qk_layer_norms
-        self.freeze_vision_layers = freeze_vision_layers
-
-        self.freeze_text_layers = freeze_text_layers
-        self.freeze_text_module_exceptions = freeze_text_module_exceptions
-        self.freeze_vision_module_exceptions = freeze_vision_module_exceptions
-        self.freeze_lm_head = freeze_lm_head
-
-        self.use_resampler = use_resampler
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
