@@ -752,17 +752,12 @@ class LlavaVisionModel(LlavaPreTrainedModel):
 
 
 class LlavaForVisionText2Text(LlavaPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
-    _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-
         self.vision_tower = LlavaVisionModel(config.vision_config)
-
         self.multi_modal_projector = LlavaMultiModalProjector(config)
 
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -770,7 +765,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(self, value)
+        self.language_model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
@@ -986,14 +981,16 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
             # Shift so that tokens < n predict n
             if attention_mask is not None:
                 shift_attention_mask = attention_mask[..., 1:]
-                shift_logits = logits[..., :-1, :][shift_attention_mask != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask != 0].contiguous()
+                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
+                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
             else:
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = loss_fct(
+                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]

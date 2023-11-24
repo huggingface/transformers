@@ -201,32 +201,6 @@ class LlavaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        additional_vocab_size=0,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        dropout=0.0,
-        hidden_act="silu",
-        initializer_range=0.02,
-        alpha_initializer="zeros",
-        alphas_initializer_range=0.0,
-        alpha_type="float",
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        cross_layer_interval=1,
-        qk_layer_norms=False,
-        freeze_text_layers=True,
-        freeze_text_module_exceptions=[],
-        freeze_lm_head=False,
-        freeze_vision_layers=True,
-        freeze_vision_module_exceptions=[],
-        use_resampler=False,
         vision_config=None,
         text_config=None,
         ignore_index=-100,
@@ -234,6 +208,7 @@ class LlavaConfig(PretrainedConfig):
         projector_hidden_act="gelu",
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
+        vocab_size=32000,
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -241,6 +216,7 @@ class LlavaConfig(PretrainedConfig):
         self.projector_hidden_act = projector_hidden_act
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
+        self.vocab_size = vocab_size
 
         if vision_config is None:
             self.vision_config = LlavaVisionConfig()
@@ -254,11 +230,6 @@ class LlavaConfig(PretrainedConfig):
         if isinstance(self.text_config, dict):
             text_model_type = text_config["model_type"] if "model_type" in text_config else "llama"
             self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
+            self.vocab_size = self.text_config.vocab_size
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)

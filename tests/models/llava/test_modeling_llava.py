@@ -25,15 +25,15 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
     import torch.nn as nn
 
-    from transformers import LlavaVisionModel
-    from transformers.models.llava.configuration_llava import LlavaVisionConfig
+    from transformers import LlavaForVisionText2Text, LlavaVisionModel
+    from transformers.models.llava.configuration_llava import LlavaConfig, LlavaVisionConfig
     from transformers.models.llava.modeling_llava import LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST
 else:
     is_torch_greater_or_equal_than_2_0 = False
@@ -122,6 +122,92 @@ class LlavaVisionModelTester:
         return config, inputs_dict
 
 
+class LlavaVisionText2TextModelTester:
+    def __init__(
+        self,
+        parent,
+        vision_model_tester,
+        ignore_index=-100,
+        image_token_index=-200,
+        projector_hidden_act="gelu",
+        seq_length=7,
+        vision_feature_select_strategy="default",
+        vision_feature_layer=-1,
+        text_config={
+            "model_type": "llama",
+            "seq_length": 7,
+            "is_training": True,
+            "use_input_mask": True,
+            "use_token_type_ids": False,
+            "use_labels": True,
+            "vocab_size": 99,
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 37,
+            "hidden_act": "gelu",
+            "hidden_dropout_prob": 0.1,
+            "attention_probs_dropout_prob": 0.1,
+            "max_position_embeddings": 512,
+            "type_vocab_size": 16,
+            "type_sequence_label_size": 2,
+            "initializer_range": 0.02,
+            "num_labels": 3,
+            "num_choices": 4,
+            "pad_token_id": 0,
+        },
+        is_training=True,
+    ):
+        self.parent = parent
+        self.vision_model_tester = vision_model_tester
+        self.ignore_index = ignore_index
+        self.image_token_index = image_token_index
+        self.projector_hidden_act = projector_hidden_act
+        self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.vision_feature_layer = vision_feature_layer
+        self.text_config = text_config
+        self.seq_length = seq_length
+
+        self.num_hidden_layers = text_config["num_hidden_layers"]
+        self.vocab_size = text_config["vocab_size"]
+        self.hidden_size = text_config["hidden_size"]
+        self.num_attention_heads = text_config["num_attention_heads"]
+        self.is_training = is_training
+
+    def get_config(self):
+        vision_config = self.vision_model_tester.get_config()
+        return LlavaConfig(
+            vision_config=vision_config,
+            text_config=self.text_config,
+            ignore_index=self.ignore_index,
+            image_token_index=self.image_token_index,
+            projector_hidden_act=self.projector_hidden_act,
+            vision_feature_select_strategy=self.vision_feature_select_strategy,
+            vision_feature_layer=self.vision_feature_layer,
+        )
+
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor(
+            [
+                self.vision_model_tester.batch_size,
+                self.vision_model_tester.num_channels,
+                self.vision_model_tester.image_size,
+                self.vision_model_tester.image_size,
+            ]
+        )
+        config = self.get_config()
+
+        return config, pixel_values
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        input_ids = ids_tensor([self.vision_model_tester.batch_size, self.seq_length], config.text_config.vocab_size)
+
+        inputs_dict = {"pixel_values": pixel_values, "input_ids": input_ids, "labels": input_ids}
+        return config, inputs_dict
+
+
 @require_torch
 class LlavaVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
@@ -204,4 +290,38 @@ class LlavaVisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-# TODO: testing suite for LlavaForVisionText2Text
+@require_torch
+class LlavaForVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase):
+    """
+    Here we also overwrite some of the tests of test_modeling_common.py, as CLIP does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
+    """
+
+    all_model_classes = (LlavaForVisionText2Text,) if is_torch_available() else ()
+    fx_compatible = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_head_masking = False
+
+    def setUp(self):
+        self.vision_model_tester = LlavaVisionModelTester(self)
+        self.model_tester = LlavaVisionText2TextModelTester(self, self.vision_model_tester)
+        self.config_tester = ConfigTester(self, config_class=LlavaConfig, has_text_modality=False)
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
