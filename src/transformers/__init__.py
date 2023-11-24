@@ -2157,6 +2157,7 @@ else:
             "LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "LlavaForVisionText2Text",
             "LlavaPreTrainedModel",
+            "LlavaProcessor",
             "LlavaVisionModel",
         ]
     )
@@ -6156,6 +6157,7 @@ if TYPE_CHECKING:
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LlavaForVisionText2Text,
             LlavaPreTrainedModel,
+            LlavaProcessor,
             LlavaVisionModel,
         )
         from .models.longformer import (
