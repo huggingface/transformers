@@ -103,6 +103,7 @@ def create_tmp_repo(tmp_dir, models=None):
     transformers_dir.mkdir(parents=True, exist_ok=True)
     with open(transformers_dir / "__init__.py", "w") as f:
         init_lines = ["from .utils import cached_file, is_torch_available"]
+        init_lines.append("_import_structure = {}")
         init_lines.extend(
             [f"from .models.{model} import {cls}Config, {cls}Model" for model, cls in zip(models, class_names)]
         )
