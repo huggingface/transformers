@@ -22,12 +22,13 @@ from typing import Dict, Tuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+import torch
 from flax.serialization import from_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
 
 import transformers
 
-from . import is_safetensors_available
+from . import is_safetensors_available, is_torch_available
 from .utils import logging
 
 
@@ -149,6 +150,24 @@ def rename_key_and_reshape_tensor(
 def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     # convert pytorch tensor to numpy
     # numpy currently does not support bfloat16, need to go over float32 in this case to not lose precision
+
+    def numpify_state_dict(state_dict):
+        from_bin = is_torch_available() and isinstance(next(iter(state_dict.values())), torch.Tensor)
+        if from_bin:
+            bfloat16_dtype = torch.bfloat16
+        else:
+            bfloat16_dtype = "bfloat16"
+
+        state_dict = {}
+        for k, v in pt_state_dict.items():
+            if v.dtype == bfloat16_dtype:
+                state_dict[k] = v.float().numpy() if from_bin else v
+            else:
+                state_dict[k] = v.numpy() if from_bin else v
+
+        return state_dict
+
+    pt_state_dict = numpify_state_dict(pt_state_dict)
     model_prefix = flax_model.base_model_prefix
 
     # use params dict if the model contains batch norm layers

@@ -16,7 +16,6 @@ import tempfile
 import unittest
 
 import numpy as np
-import torch
 from huggingface_hub import HfFolder, delete_repo, snapshot_download
 from requests.exceptions import HTTPError
 

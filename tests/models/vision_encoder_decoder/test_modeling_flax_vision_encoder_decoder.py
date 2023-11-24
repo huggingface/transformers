@@ -429,6 +429,9 @@ class FlaxViT2GPT2EncoderDecoderModelTest(FlaxEncoderDecoderMixin, unittest.Test
             "google/vit-base-patch16-224-in21k", "gpt2"
         )
 
+    def test_pt_flax_equivalence(self):
+        super(FlaxViT2GPT2EncoderDecoderModelTest, self).test_pt_flax_equivalence()
+
 
 @require_flax
 class FlaxVisionEncoderDecoderModelTest(unittest.TestCase):
