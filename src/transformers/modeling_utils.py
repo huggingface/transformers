@@ -1252,7 +1252,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             1. An implementation specified in `config.attn_implementation`.
             2. If use_flash_attention_2 is set to `True` and `flash_attn` is available, flash attention. (`LlamaFlashAttention` for example)
             3. SDPA implementation, if available and supported by the model type.
-            4. Manual implementation otherwise.
+            4. The default model's implementation otherwise (`LlamaAttention` for example) .
         """
         # Here we use config._attn_implementation to check whether the attention implementation was explicitely set by the user.
         # The property `PretrainedConfig.attn_implementation` is never `None`, for backward compatibility.
