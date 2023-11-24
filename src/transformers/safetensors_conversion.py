@@ -8,7 +8,7 @@ from .utils import cached_file, logging
 logger = logging.get_logger(__name__)
 
 
-def previous_pr(api: "HfApi", model_id: str, pr_title: str) -> Optional["Discussion"]:
+def previous_pr(api: HfApi, model_id: str, pr_title: str) -> Optional["Discussion"]:
     try:
         main_commit = api.list_repo_commits(model_id)[0].commit_id
         discussions = api.get_repo_discussions(repo_id=model_id)
