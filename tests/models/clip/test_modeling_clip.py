@@ -21,20 +21,20 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
 import pytest
+import requests
 
 import transformers
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from transformers.testing_utils import (
     is_flax_available,
     is_pt_flax_cross_test,
+    require_flash_attn,
     require_torch,
+    require_torch_gpu,
     require_vision,
     slow,
     torch_device,
-    require_flash_attn,
-    require_torch_gpu,
 )
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -820,9 +820,7 @@ class CLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
                 pixel_values = inputs_dict["pixel_values"][:1]
-                attention_mask = torch.tensor(
-                    [[1, 1, 1, 1, 0, 0, 0]], device=dummy_input.device, dtype=torch.long
-                )
+                attention_mask = torch.tensor([[1, 1, 1, 1, 0, 0, 0]], device=dummy_input.device, dtype=torch.long)
                 outputs = model(dummy_input, pixel_values=pixel_values, output_hidden_states=True)
                 outputs_fa = model_fa(dummy_input, pixel_values=pixel_values, output_hidden_states=True)
 

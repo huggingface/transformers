@@ -16,12 +16,12 @@
 
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union, Dict
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
@@ -31,9 +31,9 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
     logging,
     replace_return_docstrings,
-    is_flash_attn_2_available,
 )
 from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 
@@ -64,6 +64,7 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     image_loss = contrastive_loss(similarity.t())
     return (caption_loss + image_loss) / 2.0
 
+
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
@@ -75,7 +76,6 @@ def _get_unpad_data(attention_mask):
         cu_seqlens,
         max_seqlen_in_batch,
     )
-
 
 
 @dataclass
@@ -731,7 +731,9 @@ class CLIPEncoder(nn.Module):
     def __init__(self, config: CLIPConfig, is_causal: bool = False):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([CLIPEncoderLayer(config, is_causal=is_causal) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [CLIPEncoderLayer(config, is_causal=is_causal) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(
