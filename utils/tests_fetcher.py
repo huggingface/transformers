@@ -366,7 +366,6 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
                     f"src.transformers.{module}.{fn}".replace(".", os.path.sep).replace(f"{os.path.sep}py", ".py")
                 )
 
-    breakpoint()
     return sorted(files)
 
 
