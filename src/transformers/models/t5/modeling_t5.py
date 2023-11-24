@@ -92,7 +92,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@torch.jit.script
+#@torch.jit.script
 def apply_rotary_pos_emb(x, cos, sin):
     # NOTE: This could probably be moved to Triton
 
@@ -102,7 +102,7 @@ def apply_rotary_pos_emb(x, cos, sin):
 
     return (x * cos) + (rotate_half(x) * sin)
 
-#from xformers, modified to allow custom position indices
+#from xformers, modified to allow custom position indices (in minibatch)
 class RotaryEmbedding(torch.nn.Module):
     """
     The rotary position embeddings from RoFormer_ (Su et. al).
@@ -149,14 +149,17 @@ class RotaryEmbedding(torch.nn.Module):
                     x.shape[seq_dimension], device=x.device, dtype=torch.float32
                 )
             else:
-                t = custom_indices.float().to(x.device) 
+                t = custom_indices.float().to(x.device)
 
-            freqs = torch.einsum("i,j->ij", t, self.inv_freq.to(x.dtype))
+            freqs = torch.einsum("...i,...j->...ij", t, self.inv_freq.to(x.dtype)) #yoel - added ellipsis to support minibatch 
             emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-
-            self._cos_cached = emb.cos()[None, None, :, :].to(x.dtype)
-            self._sin_cached = emb.sin()[None, None, :, :].to(x.dtype)
-
+            assert len(emb.shape) in [2,3], "untested/unsupported currently"
+            self._cos_cached = emb.cos().to(x.dtype)
+            self._sin_cached = emb.sin().to(x.dtype)
+            for _ in range(4-len(emb.shape)):
+                self._cos_cached = self._cos_cached[None, ...]
+                self._sin_cached = self._sin_cached[None, ...]
+            
         return self._cos_cached, self._sin_cached
 
     def forward(
@@ -616,7 +619,7 @@ class T5Attention(nn.Module):
         hidden_states,
         mask=None,
         key_value_states=None,
-        position_bias=None,
+        position_bias=None, #yoel - changed it be either None or a tuple (torch.Tensor, pos_embedding_found_in_add_bias:bool)
         past_key_value=None,
         layer_head_mask=None,
         query_length=None,
@@ -718,7 +721,10 @@ class T5Attention(nn.Module):
         # if 2==1+1:
         #     assert False, "use self.positional_embedding_injected_in_attention and figure out the content of position_ids_info_list"
         
-        pos_embedding_found_in_add_bias = False
+        if position_bias is None:
+            pos_embedding_found_in_add_bias = False
+        else:
+            position_bias, pos_embedding_found_in_add_bias = position_bias
 
         # Note: we are skipping all positional attention injection here if position_bias is not None,
         # possibly because that's how it is cached for decoder layers
@@ -727,16 +733,17 @@ class T5Attention(nn.Module):
             if position_ids_info_list:
                 
                 for position_ids, position_embedding_name in position_ids_info_list:
-                    if position_embedding_name == POSITION_EMBEDDING_T5_RELATIVE: #T5 default relative positional embedding
-                        assert position_bias is None, "TODO: add support for multiple (accumulate if already exists)"
+                    if position_embedding_name == POSITION_EMBEDDING_T5_RELATIVE: #T5 default relative positional embedding                        
                         curr_position_bias = self.compute_bias_for_position_embedding_name(position_embedding_name=position_embedding_name, position_ids=position_ids, query_length=real_seq_length, key_length=key_length, device=scores.device)
                         position_bias = curr_position_bias if position_bias is None else (position_bias+curr_position_bias)  # michal: shape don't match
+                        pos_embedding_found_in_add_bias = True
                     elif position_embedding_name == POSITION_EMBEDDING_ROTARY:
                         #TODO: make it consider the actual provided positions, and not just the default indices
                         query_states, key_states = self.rotary_op(
                             query_states.permute(0,2,1,3).reshape(B,M,H*K), 
                             key_states.permute(0,2,1,3).reshape(B,M,H*K),
-                            custom_indices=position_ids)
+                            custom_indices=position_ids
+                            )
                         query_states = query_states.reshape(B,M,H,K).permute(0,2,1,3)
                         key_states = key_states.reshape(B,M,H,K).permute(0,2,1,3)
                     else:
@@ -756,12 +763,7 @@ class T5Attention(nn.Module):
                 position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
             if mask is not None:
-                if position_bias is None:
-                    position_bias = torch.zeros(
-                        (1, self.n_heads, real_seq_length, key_length), device=query_states.device, dtype=query_states.dtype
-                    )
-                    if self.gradient_checkpointing and self.training:
-                        position_bias.requires_grad = True
+                # MICHAL see above that mask is added to position_bias. Also in length-generalization.
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
             if self.pruned_heads:
@@ -771,12 +773,14 @@ class T5Attention(nn.Module):
             else:
                 position_bias_masked = position_bias
 
-            add_to_scores = position_bias_masked
-            pos_embedding_found_in_add_bias = True
+            add_to_scores = position_bias_masked            
         else:
-            if mask is not None:  
-                # MICHAL see above that mask is added to position_bias. Also in length-generalization.
-                add_to_scores = mask  # (batch_size, n_heads, seq_length, key_length)  
+            #position_bias was provided from outside, so it was cached from an earlier layer.
+            add_to_scores = position_bias
+            
+            
+
+            
 
         if not self.memory_efficient_attention: #attention as it was originally implemented in the transformers repo                                   
             # compute scores
@@ -839,7 +843,7 @@ class T5Attention(nn.Module):
         attn_output = self.o(attn_output)
 
         present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
-        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
+        outputs = (attn_output, present_key_value_state, (position_bias,pos_embedding_found_in_add_bias))
 
         if output_attentions:
             outputs = outputs + (attn_weights,)
@@ -1413,7 +1417,7 @@ class T5Stack(T5PreTrainedModel):
                 if attention_mask is not None:
                     attention_mask = attention_mask.to(hidden_states.device)
                 if position_bias is not None:
-                    position_bias = position_bias.to(hidden_states.device)
+                    position_bias[0] = position_bias[0].to(hidden_states.device)
                 if encoder_hidden_states is not None:
                     encoder_hidden_states = encoder_hidden_states.to(hidden_states.device)
                 if encoder_extended_attention_mask is not None:
@@ -1439,7 +1443,7 @@ class T5Stack(T5PreTrainedModel):
                     create_custom_forward(layer_module),
                     hidden_states,
                     extended_attention_mask,
-                    position_bias,
+                    position_bias, #we might broke position_bias when we switched it to be a tuple of [torch.Tensor, bool] - a possible solution is to split into different parameters
                     encoder_hidden_states,
                     encoder_extended_attention_mask,
                     encoder_decoder_position_bias,
