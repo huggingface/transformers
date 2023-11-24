@@ -304,6 +304,11 @@ class TrainingArguments:
 
             This should not be activated when the different nodes use the same storage as the files will be saved with
             the same names for each node.
+        save_only_model (`bool`, *optional*, defaults to `False`):
+            When checkpointing, whether to only save the model, or also the optimizer, scheduler & rng state.
+            Note that when this is true, you won't be able to resume training from checkpoint.
+            This enables you to save storage by not storing the optimizer, scheduler & rng state.
+            You can only load the model using `from_pretrained` with this option set to `True`.
         use_cpu (`bool`, *optional*, defaults to `False`):
             Whether or not to use cpu. If set to False, we will use cuda or mps device if available.
         seed (`int`, *optional*, defaults to 42):
@@ -418,12 +423,14 @@ class TrainingArguments:
 
             - `"full_shard"`: Shard parameters, gradients and optimizer states.
             - `"shard_grad_op"`: Shard optimizer states and gradients.
+            - `"hybrid_shard"`: Apply `FULL_SHARD` within a node, and replicate parameters across nodes.
+            - `"hybrid_shard_zero2"`: Apply `SHARD_GRAD_OP` within a node, and replicate parameters across nodes.
             - `"offload"`: Offload parameters and gradients to CPUs (only compatible with `"full_shard"` and
               `"shard_grad_op"`).
             - `"auto_wrap"`: Automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`.
         fsdp_config (`str` or `dict`, *optional*):
             Config to be used with fsdp (Pytorch Distributed Parallel Training). The value is either a location of
-            deepspeed json config file (e.g., `ds_config.json`) or an already loaded json file as `dict`.
+            fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`.
 
             A List of config and its options:
                 - min_num_params (`int`, *optional*, defaults to `0`):
@@ -452,7 +459,7 @@ class TrainingArguments:
                     FSDP's limit_all_gathers (useful only when `fsdp` field is passed).
                      If `"True"`, FSDP explicitly synchronizes the CPU thread to prevent too many in-flight
                      all-gathers.
-                - use_orig_params (`bool`, *optional*, defaults to `False`)
+                - use_orig_params (`bool`, *optional*, defaults to `True`)
                     If `"True"`, allows non-uniform `requires_grad` during init, which means support for interspersed
                     frozen and trainable paramteres. Useful in cases such as parameter-efficient fine-tuning. Please
                     refer this
@@ -460,6 +467,10 @@ class TrainingArguments:
                 - sync_module_states (`bool`, *optional*, defaults to `True`)
                     If `"True"`, each individually wrapped FSDP unit will broadcast module parameters from rank 0 to
                     ensure they are the same across all ranks after initialization
+                - activation_checkpointing (`bool`, *optional*, defaults to `False`):
+                    If `"True"`, activation checkpointing is a technique to reduce memory usage by clearing activations of
+                    certain layers and recomputing them during a backward pass. Effectively, this trades extra
+                    computation time for reduced memory usage.
                 - xla (`bool`, *optional*, defaults to `False`):
                     Whether to use PyTorch/XLA Fully Sharded Data Parallel Training. This is an experimental feature
                     and its API may evolve in the future.
@@ -472,10 +483,6 @@ class TrainingArguments:
                     Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be
                     used when the xla flag is set to true, and an auto wrapping policy is specified through
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
-                - activation_checkpointing (`bool`, *optional*, defaults to `False`):
-                    If True, activation checkpointing is a technique to reduce memory usage by clearing activations of
-                    certain layers and recomputing them during a backward pass. Effectively, this trades extra
-                    computation time for reduced memory usage.
 
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
@@ -832,6 +839,17 @@ class TrainingArguments:
             "help": (
                 "When doing multi-node distributed training, whether to save models and checkpoints on each node, or"
                 " only on the main one"
+            )
+        },
+    )
+    save_only_model: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "When checkpointing, whether to only save the model, or also the optimizer, scheduler & rng state."
+                "Note that when this is true, you won't be able to resume training from checkpoint."
+                "This enables you to save storage by not storing the optimizer, scheduler & rng state."
+                "You can only load the model using from_pretrained with this option set to True."
             )
         },
     )
@@ -1670,7 +1688,7 @@ class TrainingArguments:
             os.environ[f"{prefix}BACKWARD_PREFETCH"] = prefetch_policy.upper()
             os.environ[f"{prefix}FORWARD_PREFETCH"] = self.fsdp_config.get("forward_prefect", "false")
             os.environ[f"{prefix}SYNC_MODULE_STATES"] = self.fsdp_config.get("sync_module_states", "true")
-            os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "false")
+            os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "true")
 
         if self.tpu_metrics_debug:
             warnings.warn(
