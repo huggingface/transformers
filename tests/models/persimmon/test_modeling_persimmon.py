@@ -39,6 +39,7 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
+
 if is_torch_available():
     import torch
 
@@ -111,20 +112,14 @@ class PersimmonModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor(
-                [self.batch_size, self.seq_length], self.type_vocab_size
-            )
+            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor(
-                [self.batch_size], self.type_sequence_label_size
-            )
-            token_labels = ids_tensor(
-                [self.batch_size, self.seq_length], self.num_labels
-            )
+            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
@@ -225,9 +220,7 @@ class PersimmonModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -283,17 +276,13 @@ class PersimmonModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[
-            :, -3:, random_slice_idx
-        ].detach()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(
-            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
-        )
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -311,13 +300,9 @@ class PersimmonModelTester:
 
 
 @require_torch
-class PersimmonModelTest(
-    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
-):
+class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification)
-        if is_torch_available()
-        else ()
+        (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification) if is_torch_available() else ()
     )
     pipeline_model_mapping = (
         {
@@ -331,18 +316,14 @@ class PersimmonModelTest(
         else {}
     )
 
-    all_generative_model_classes = (
-        (PersimmonForCausalLM,) if is_torch_available() else ()
-    )
+    all_generative_model_classes = (PersimmonForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Persimmon
     def setUp(self):
         self.model_tester = PersimmonModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=PersimmonConfig, hidden_size=37
-        )
+        self.config_tester = ConfigTester(self, config_class=PersimmonConfig, hidden_size=37)
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_config
     def test_config(self):
@@ -366,9 +347,7 @@ class PersimmonModelTest(
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
-        )
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
         model = PersimmonForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
@@ -385,9 +364,7 @@ class PersimmonModelTest(
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size], self.model_tester.type_sequence_label_size
-        )
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
         model = PersimmonForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
@@ -427,22 +404,16 @@ class PersimmonModelTest(
     def test_model_rope_scaling(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor(
-            [1, int(config.max_position_embeddings * 1.5)], config.vocab_size
-        )
+        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
-        set_seed(
-            42
-        )  # Fixed seed at init time so the two models get the same random weights
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         original_model = PersimmonModel(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
         original_long_output = original_model(long_input).last_hidden_state
 
-        set_seed(
-            42
-        )  # Fixed seed at init time so the two models get the same random weights
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
         scaled_model = PersimmonModel(config)
         scaled_model.to(torch_device)
@@ -453,18 +424,12 @@ class PersimmonModelTest(
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            self.assertTrue(
-                torch.allclose(original_short_output, scaled_short_output, atol=1e-5)
-            )
+            self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
         else:
-            self.assertFalse(
-                torch.allclose(original_short_output, scaled_short_output, atol=1e-5)
-            )
+            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
 
         # The output should be different for long inputs
-        self.assertFalse(
-            torch.allclose(original_long_output, scaled_long_output, atol=1e-5)
-        )
+        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
     @require_flash_attn
     @require_torch_gpu
@@ -484,9 +449,7 @@ class PersimmonModelTest(
         if dummy_input.dtype in [torch.float32, torch.bfloat16]:
             dummy_input = dummy_input.to(torch.float16)
 
-        dummy_attention_mask = inputs_dict.get(
-            "attention_mask", torch.ones_like(dummy_input)
-        )
+        dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
         # make sure we do right padding
         dummy_attention_mask[:, :-1] = 1
         dummy_attention_mask[:, -1:] = 0
@@ -552,18 +515,14 @@ class PersimmonIntegrationTest(unittest.TestCase):
             ]
         )
         # change dtype to `torch.float32` before calling `mean` to avoid `nan` values
-        torch.testing.assert_close(
-            out.cpu().to(torch.float32).mean(-1), EXPECTED_MEAN, atol=1e-4, rtol=1e-4
-        )
+        torch.testing.assert_close(out.cpu().to(torch.float32).mean(-1), EXPECTED_MEAN, atol=1e-4, rtol=1e-4)
         # fmt: off
         EXPECTED_SLICE = torch.tensor(
             [-16.9062, -16.9062, -16.9062, -16.9062, -16.8906, -16.9062, -16.9531, -16.9062, -16.9062, -16.9062, -16.9531, -16.9062, -16.9531, -16.9062, -16.9062, -16.9062, -16.9062, -16.9062, -16.9531, -16.9062, -16.9062, -16.9062, -16.9062, -16.9062, -16.9062, -16.9531, -16.9062, -16.9531, -16.9062, -16.9062],
             dtype=torch.float16
         )
         # fmt: on
-        torch.testing.assert_close(
-            out.cpu()[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5
-        )
+        torch.testing.assert_close(out.cpu()[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
         backend_empty_cache(torch_device)
         del model
@@ -575,9 +534,7 @@ class PersimmonIntegrationTest(unittest.TestCase):
     def test_model_8b_chat_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """human: Simply put, the theory of relativity states that?\n\nadept: The theory of relativity states that the laws of physics are the same for all observers, regardless of their relative motion."""
         prompt = "human: Simply put, the theory of relativity states that?\n\nadept:"
-        tokenizer = AutoTokenizer.from_pretrained(
-            "adept/persimmon-8b-chat", use_fast=False
-        )
+        tokenizer = AutoTokenizer.from_pretrained("adept/persimmon-8b-chat", use_fast=False)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
         model = PersimmonForCausalLM.from_pretrained(
             "adept/persimmon-8b-chat",
