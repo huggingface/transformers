@@ -34,6 +34,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -490,6 +491,24 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_from_base(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     def test_attention_outputs(self):
         # expected length is subsampled so need to change a bit this test
         if not self.has_attentions:
@@ -598,7 +617,9 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class SeamlessM4TModelWithTextInputTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     is_encoder_decoder = True
     fx_compatible = False
     test_missing_keys = False
@@ -618,6 +639,19 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
         else ()
     )
     all_generative_model_classes = (SeamlessM4TForTextToText,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "automatic-speech-recognition": SeamlessM4TForSpeechToText,
+            "conversational": SeamlessM4TForTextToText,
+            "feature-extraction": SeamlessM4TModel,
+            "summarization": SeamlessM4TForTextToText,
+            "text-to-audio": SeamlessM4TForTextToSpeech,
+            "text2text-generation": SeamlessM4TForTextToText,
+            "translation": SeamlessM4TForTextToText,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = SeamlessM4TModelTester(self, input_modality="text")
@@ -735,6 +769,24 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
     def test_save_load_fast_init_from_base(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
 
 @require_torch
 class SeamlessM4TGenerationTest(unittest.TestCase):
@@ -827,17 +879,23 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
         output_original_text = self.factory_generation_speech_test(model, input_text)
         output_original_speech = self.factory_generation_speech_test(model, input_speech)
 
-        model = SeamlessM4TForTextToSpeech.from_pretrained(self.tmpdirname)
-        self.update_generation(model)
-        model.to(torch_device)
-        model.eval()
+        state_dict = model.state_dict()
+
+        text_model = SeamlessM4TForTextToSpeech.from_pretrained(self.tmpdirname)
+        self.update_generation(text_model)
+        text_model.to(torch_device)
+        text_model.eval()
 
         output_text = self.factory_generation_speech_test(model, input_text)
 
-        model = SeamlessM4TForSpeechToSpeech.from_pretrained(self.tmpdirname)
-        self.update_generation(model)
-        model.to(torch_device)
-        model.eval()
+        speech_model = SeamlessM4TForSpeechToSpeech.from_pretrained(self.tmpdirname)
+        self.update_generation(speech_model)
+        speech_model.to(torch_device)
+        speech_model.eval()
+
+        for name, tensor in speech_model.state_dict().items():
+            right_tensor = state_dict.get(name)
+            self.assertEqual(tensor.tolist(), right_tensor.tolist(), f"Tensor {name}")
 
         output_speech = self.factory_generation_speech_test(model, input_speech)
 
@@ -846,8 +904,15 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
         self.assertListEqual(output_original_text[1].ravel().tolist(), output_text[1].ravel().tolist())
 
         # test same speech output from input text
-        self.assertListEqual(output_original_speech[0].ravel().tolist(), output_speech[0].ravel().tolist())
-        self.assertListEqual(output_original_speech[1].ravel().tolist(), output_speech[1].ravel().tolist())
+        # assertTrue because super long list makes this hang in case of failure
+        self.assertTrue(
+            output_original_speech[0].ravel().tolist() == output_speech[0].ravel().tolist(),
+            "Speech generated was different",
+        )
+        self.assertTrue(
+            output_original_speech[1].ravel().tolist() == output_speech[1].ravel().tolist(),
+            "Speech generated was different",
+        )
 
     def test_text_generation(self):
         config, input_speech, input_text = self.prepare_speech_and_text_input()
@@ -869,19 +934,30 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
         input_speech.pop("generate_speech")
         input_text.pop("generate_speech")
 
-        model = SeamlessM4TForTextToText.from_pretrained(self.tmpdirname)
-        self.update_generation(model)
-        model.to(torch_device)
-        model.eval()
+        state_dict = model.state_dict()
 
-        output_text = self.factory_generation_speech_test(model, input_text)
+        text_model = SeamlessM4TForTextToText.from_pretrained(self.tmpdirname)
+        self.update_generation(text_model)
+        text_model.to(torch_device)
+        text_model.eval()
 
-        model = SeamlessM4TForSpeechToText.from_pretrained(self.tmpdirname)
-        self.update_generation(model)
-        model.to(torch_device)
-        model.eval()
+        for name, tensor in text_model.state_dict().items():
+            right_tensor = state_dict.get(name)
+            self.assertEqual(tensor.tolist(), right_tensor.tolist())
 
-        output_speech = self.factory_generation_speech_test(model, input_speech)
+        output_text = self.factory_generation_speech_test(text_model, input_text)
+
+        speech_model = SeamlessM4TForSpeechToText.from_pretrained(self.tmpdirname)
+
+        for name, tensor in speech_model.state_dict().items():
+            right_tensor = state_dict.get(name)
+            self.assertEqual(tensor.tolist(), right_tensor.tolist(), f"Tensor {name}")
+
+        self.update_generation(speech_model)
+        speech_model.to(torch_device)
+        speech_model.eval()
+
+        output_speech = self.factory_generation_speech_test(speech_model, input_speech)
 
         # test same text output from input text
         self.assertListEqual(output_original_text[0].ravel().tolist(), output_text.ravel().tolist())
@@ -941,9 +1017,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
     def input_text(self):
         # corresponds to "C'est un test." with seamlessM4T_medium checkpoint
 
-        # fmt: off
-        input_ids = torch.tensor([[256057, 152, 248116, 354, 159, 7356, 248075, 3]])
-        # fmt: on
+        input_ids = torch.tensor([[256057, 152, 248116, 354, 159, 7356, 248075, 3]])  # fmt: skip
 
         input_ids = input_ids.to(torch_device)
 
@@ -989,9 +1063,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         # test text - tgt lang: eng
 
-        # fmt: off
-        expected_text_tokens = [3, 256047, 3291, 248116, 248066, 9, 7356, 248075, 3]
-        # fmt: on
+        expected_text_tokens = [3, 256047, 3291, 248116, 248066, 9, 7356, 248075, 3]  # fmt: skip
 
         # fmt: off
         expected_unit_tokens = [
@@ -1002,9 +1074,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         ]
         # fmt: on
 
-        # fmt: off
-        expected_wav_slice = [-3e-05, -0.0004, -0.00037, -0.00013, -6e-05, 0.00012, -0.00016, 0.00025, 7e-05, -3e-05]
-        # fmt: on
+        expected_wav_slice = [-3e-05, -0.0004, -0.00037, -0.00013, -6e-05, 0.00012, -0.00016, 0.00025, 7e-05, -3e-05]  # fmt: skip
 
         set_seed(0)
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="eng", return_intermediate_token_ids=True)
@@ -1021,9 +1091,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         # test text - tgt lang: swh
 
-        # fmt: off
-        expected_text_tokens = [3, 256168, 1665, 188589, 7040, 248075, 3]
-        # fmt: on
+        expected_text_tokens = [3, 256168, 1665, 188589, 7040, 248075, 3]  # fmt: skip
 
         # fmt: off
         expected_unit_tokens = [
@@ -1033,9 +1101,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         ]
         # fmt: on
 
-        # fmt: off
-        expected_wav_slice = [1e-05, -7e-05, -4e-05, -4e-05, -6e-05, -9e-05, -0.0001, -2e-05, -7e-05, -2e-05]
-        # fmt: on
+        expected_wav_slice = [1e-05, -7e-05, -4e-05, -4e-05, -6e-05, -9e-05, -0.0001, -2e-05, -7e-05, -2e-05]  # fmt: skip
 
         set_seed(0)
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="swh", return_intermediate_token_ids=True)
@@ -1051,9 +1117,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         # test audio - tgt lang: rus
 
-        # fmt: off
-        expected_text_tokens = [3, 256147, 1197, 73565, 3413, 537, 233331, 248075, 3]
-        # fmt: on
+        expected_text_tokens = [3, 256147, 1197, 73565, 3413, 537, 233331, 248075, 3]  # fmt: skip
 
         # fmt: off
         expected_unit_tokens = [
@@ -1064,9 +1128,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         ]
         # fmt: on
 
-        # fmt: off
-        expected_wav_slice = [0.00013, 0.00012, 0.00014, 3e-05, 0.0, -6e-05, -0.00018, -0.00016, -0.00021, -0.00018]
-        # fmt: on
+        expected_wav_slice = [0.00013, 0.00012, 0.00014, 3e-05, 0.0, -6e-05, -0.00018, -0.00016, -0.00021, -0.00018]  # fmt: skip
 
         set_seed(0)
         output = model.generate(**self.input_audio, num_beams=1, tgt_lang="rus", return_intermediate_token_ids=True)

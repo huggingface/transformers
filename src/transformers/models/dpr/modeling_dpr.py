@@ -30,7 +30,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..bert.modeling_bert import BertEncoder, BertModel
+from ..bert.modeling_bert import BertModel
 from .configuration_dpr import DPRConfig
 
 
@@ -163,11 +163,6 @@ class DPRPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, BertEncoder):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 class DPREncoder(DPRPreTrainedModel):

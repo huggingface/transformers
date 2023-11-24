@@ -40,18 +40,18 @@ HTML/XML-based documents, where text and markup information is jointly pre-train
 pre-trained MarkupLM significantly outperforms the existing strong baseline models on several document understanding
 tasks. The pre-trained model and code will be publicly available.*
 
-Tips:
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/markuplm).
+
+## Usage tips
+
 - In addition to `input_ids`, [`~MarkupLMModel.forward`] expects 2 additional inputs, namely `xpath_tags_seq` and `xpath_subs_seq`.
 These are the XPATH tags and subscripts respectively for each token in the input sequence.
 - One can use [`MarkupLMProcessor`] to prepare all data for the model. Refer to the [usage guide](#usage-markuplmprocessor) for more info.
-- Demo notebooks can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/MarkupLM).
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/markuplm_architecture.jpg"
 alt="drawing" width="600"/> 
 
 <small> MarkupLM architecture. Taken from the <a href="https://arxiv.org/abs/2110.08518">original paper.</a> </small>
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/markuplm).
 
 ## Usage: MarkupLMProcessor
 
@@ -197,8 +197,9 @@ all nodes and xpaths yourself, you can provide them directly to the processor. M
 dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'xpath_tags_seq', 'xpath_subs_seq'])
 ```
 
-## Documentation resources
+## Resources
 
+- [Demo notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/MarkupLM)
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
 - [Question answering task guide](../tasks/question_answering)

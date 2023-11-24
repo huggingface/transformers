@@ -54,7 +54,7 @@ Any model supported by the AutoModelForMaskedImageModeling API can be used.
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.35.0.dev0")
+check_min_version("4.36.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-pretraining/requirements.txt")
 
@@ -200,7 +200,7 @@ def parse_args():
         "--use_auth_token",
         type=bool,
         default=None,
-        help="The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`.",
+        help="The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
     )
     parser.add_argument(
         "--trust_remote_code",
@@ -385,7 +385,10 @@ def main():
     args = parse_args()
 
     if args.use_auth_token is not None:
-        warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
         if args.token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         args.token = args.use_auth_token

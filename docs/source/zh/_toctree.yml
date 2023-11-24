@@ -7,12 +7,26 @@
     title: 安装
   title: 开始使用
 - sections:
-  - local: accelerate
-    title: 加速分布式训练
-  - local: preprocessing
-    title: 预处理
   - local: pipeline_tutorial
-    title: pipeline教程
+    title: 使用pipelines进行推理
+  - local: autoclass_tutorial
+    title: 使用AutoClass编写可移植的代码
+  - local: preprocessing
+    title: 预处理数据
+  - local: training
+    title: 微调预训练模型
+  - local: run_scripts
+    title: 通过脚本训练模型
+  - local: accelerate
+    title: 使用🤗Accelerate进行分布式训练
+  - local: peft
+    title: 使用🤗 PEFT加载和训练adapters
+  - local: model_sharing
+    title: 分享您的模型
+  - local: transformers_agents
+    title: agents教程
+  - local: llm_tutorial
+    title: 使用LLMs进行生成
   title: 教程
 - sections:
   - local: fast_tokenizers
@@ -23,4 +37,42 @@
     title: 使用特定于模型的 API
   - local: custom_models
     title: 共享自定义模型
+  - local: serialization
+    title: 导出为 ONNX
+  - local: tflite
+    title: 导出为 TFLite
   title: 开发者指南
+- sections:
+  - local: performance
+    title: 综述
+  - sections:
+    - local: perf_hardware
+      title: 用于训练的定制硬件
+    - local: hpo_train
+      title: 使用Trainer API 进行超参数搜索
+    title: 高效训练技术
+  - local: big_models
+    title: 实例化大模型
+  - local: debugging
+    title: 问题定位及解决
+  - local: tf_xla
+    title: TensorFlow模型的XLA集成
+  - local: perf_torch_compile
+    title: 使用 `torch.compile()` 优化推理
+  title: 性能和可扩展性
+- sections:
+  - local: task_summary
+    title: 🤗Transformers能做什么
+  - local: tokenizer_summary
+    title: 分词器的摘要
+  title: 概念指南
+- sections:
+  - sections:
+    - local: main_classes/model
+      title: 模型
+    - local: main_classes/trainer
+      title: Trainer
+    - local: main_classes/deepspeed
+      title: DeepSpeed集成
+    title: 主要类
+  title: 应用程序接口 (API) 

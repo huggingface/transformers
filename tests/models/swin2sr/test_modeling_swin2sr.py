@@ -162,7 +162,11 @@ class Swin2SRModelTester:
 @require_torch
 class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Swin2SRModel, Swin2SRForImageSuperResolution) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": Swin2SRModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": Swin2SRModel, "image-to-image": Swin2SRForImageSuperResolution}
+        if is_torch_available()
+        else {}
+    )
 
     fx_compatible = False
     test_pruning = False
@@ -205,6 +209,18 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @unittest.skip(reason="Swin2SR does not support training yet")
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     def test_model_common_attributes(self):

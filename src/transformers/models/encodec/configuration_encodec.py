@@ -108,6 +108,7 @@ class EncodecConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "encodec"
 
     def __init__(

@@ -17,11 +17,19 @@
 
 import unittest
 
+import pytest
 from parameterized import parameterized
-from pytest import mark
 
 from transformers import LlamaConfig, is_torch_available, set_seed
-from transformers.testing_utils import require_flash_attn, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_bitsandbytes,
+    require_flash_attn,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -39,149 +47,6 @@ if is_torch_available():
         LlamaModel,
         LlamaTokenizer,
     )
-    from transformers.models.llama.modeling_llama import AttnMaskConverter
-
-
-@require_torch
-class AttentionMaskTester(unittest.TestCase):
-    def check_non_causal(self, bsz, q_len, kv_len, mask_2d, mask_4d):
-        mask_indices = (mask_2d != 1)[:, None].broadcast_to((bsz, q_len, kv_len))
-        mask_4d_values = mask_4d[:, 0][mask_indices]
-        is_inf = mask_4d_values == -float("inf")
-        is_min = mask_4d_values == torch.finfo(mask_4d.dtype).min
-        assert torch.logical_or(is_inf, is_min).all()
-
-    def check_to_4d(self, mask_converter, q_len, kv_len, additional_mask=None, bsz=3):
-        mask_2d = torch.ones((bsz, kv_len), device=torch_device, dtype=torch.long)
-
-        if additional_mask is not None:
-            for bsz_idx, seq_idx in additional_mask:
-                mask_2d[bsz_idx, seq_idx] = 0
-
-        mask_4d = mask_converter.to_4d(mask_2d, query_length=q_len, key_value_length=kv_len)
-
-        assert mask_4d.shape == (bsz, 1, q_len, kv_len)
-
-        context = mask_converter.sliding_window
-        if mask_converter.is_causal and context is None:
-            # k * (k+1) / 2 tokens are masked in triangualar masks
-            num_tokens_masked = bsz * (q_len * (q_len - 1) // 2)
-
-            if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().cpu().item() == num_tokens_masked
-            if 0 in mask_2d:
-                # at least causal mask + maybe more
-                assert (mask_4d != 0).sum().cpu().item() >= num_tokens_masked
-                self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
-        elif not mask_converter.is_causal and context is None:
-            if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().cpu().item() == 0
-            if 0 in mask_2d:
-                self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
-        elif mask_converter.is_causal and context is not None:
-            # k * (k+1) / 2 tokens are masked in triangualar masks
-            num_tokens_masked = (q_len * (q_len - 1) // 2) + self.compute_num_context_mask(kv_len, context, q_len)
-            num_tokens_masked = bsz * num_tokens_masked
-
-            if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().cpu().item() == num_tokens_masked
-            if 0 in mask_2d:
-                # at least causal mask + maybe more
-                assert (mask_4d != 0).sum().cpu().item() >= num_tokens_masked
-                self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
-
-    def check_to_causal(self, mask_converter, q_len, kv_len, bsz=3):
-        mask_4d = mask_converter.to_causal_4d(bsz, query_length=q_len, key_value_length=kv_len, device=torch_device)
-
-        if q_len == 1 and mask_converter.sliding_window is None:
-            # no causal mask if q_len is 1
-            assert mask_4d is None
-            return
-
-        context = mask_converter.sliding_window
-        if mask_converter.is_causal and context is None:
-            # k * (k+1) / 2 tokens are masked in triangualar masks
-            num_tokens_masked = bsz * (q_len * (q_len - 1) // 2)
-
-            assert (mask_4d != 0).sum().cpu().item() == num_tokens_masked
-        elif not mask_converter.is_causal and context is None:
-            assert (mask_4d != 0).sum().cpu().item() == 0
-        elif mask_converter.is_causal and context is not None:
-            # k * (k+1) / 2 tokens are masked in triangualar masks
-            num_tokens_masked = (q_len * (q_len - 1) // 2) + self.compute_num_context_mask(kv_len, context, q_len)
-            num_tokens_masked = bsz * num_tokens_masked
-
-            assert (mask_4d != 0).sum().cpu().item() == num_tokens_masked
-
-    def compute_num_context_mask(self, kv_len, context, q_len):
-        # This function computes the # of attention tokens that are added for
-        # the sliding window
-        c_mask_len = kv_len - context
-        num_mask_triangle = c_mask_len * (c_mask_len + 1) // 2
-        cut_mask_len = max(c_mask_len - q_len, 0)
-        num_cut_mask = cut_mask_len * (cut_mask_len + 1) // 2
-        return num_mask_triangle - num_cut_mask
-
-    def test_2d_to_4d_causal(self):
-        mask_converter = AttnMaskConverter(is_causal=True)
-
-        # auto-regressive use case
-        self.check_to_4d(mask_converter, q_len=1, kv_len=7)
-        # special auto-regressive case
-        self.check_to_4d(mask_converter, q_len=3, kv_len=7)
-        # non auto-regressive case
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7)
-
-        # same with extra attention masks
-        self.check_to_4d(mask_converter, q_len=1, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-        self.check_to_4d(mask_converter, q_len=3, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-
-    def test_2d_to_4d(self):
-        torch.ones((3, 7), device=torch_device, dtype=torch.long)
-        mask_converter = AttnMaskConverter(is_causal=False)
-
-        # non auto-regressive case
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7)
-
-        # same with extra attention masks
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-
-    def test_2d_to_4d_causal_sliding(self):
-        torch.ones((3, 7), device=torch_device, dtype=torch.long)
-        mask_converter = AttnMaskConverter(is_causal=True, sliding_window=5)
-
-        # auto-regressive use case
-        self.check_to_4d(mask_converter, q_len=1, kv_len=7)
-        # special auto-regressive case
-        self.check_to_4d(mask_converter, q_len=3, kv_len=7)
-        # non auto-regressive case
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7)
-
-        # same with extra attention masks
-        self.check_to_4d(mask_converter, q_len=1, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-        self.check_to_4d(mask_converter, q_len=3, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-
-    def test_causal_mask(self):
-        mask_converter = AttnMaskConverter(is_causal=True)
-
-        # auto-regressive use case
-        self.check_to_causal(mask_converter, q_len=1, kv_len=7)
-        # special auto-regressive case
-        self.check_to_causal(mask_converter, q_len=3, kv_len=7)
-        # non auto-regressive case
-        self.check_to_causal(mask_converter, q_len=7, kv_len=7)
-
-    def test_causal_mask_sliding(self):
-        mask_converter = AttnMaskConverter(is_causal=True, sliding_window=3)
-
-        # auto-regressive use case
-        self.check_to_causal(mask_converter, q_len=1, kv_len=7)
-        # special auto-regressive case
-        self.check_to_causal(mask_converter, q_len=3, kv_len=7)
-        # non auto-regressive case
-        self.check_to_causal(mask_converter, q_len=7, kv_len=7)
 
 
 class LlamaModelTester:
@@ -521,7 +386,8 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     @require_flash_attn
     @require_torch_gpu
-    @mark.flash_attn_test
+    @require_bitsandbytes
+    @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_generate_padding_right(self):
         """
@@ -567,9 +433,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         EXPECTED_MEAN = torch.tensor([[-6.6550, -4.1227, -4.9859, -3.2406, 0.8262, -3.0033, 1.2964, -3.3699]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
-        # fmt: off
-        EXPECTED_SLICE = torch.tensor([-12.8281, -7.4453, -0.4639, -8.0625, -7.2500, -8.0000, -6.4883, -7.7695, -7.8438, -7.0312, -6.2188, -7.1328, -1.8496, 1.9961, -8.6250, -6.7227, -12.8281, -6.9492, -7.0742, -7.7852, -7.5820, -7.9062, -6.9375, -7.9805, -8.3438, -8.1562, -8.0469, -7.6250, -7.7422, -7.3398,])
-        # fmt: on
+        EXPECTED_SLICE = torch.tensor([-12.8281, -7.4453, -0.4639, -8.0625, -7.2500, -8.0000, -6.4883, -7.7695, -7.8438, -7.0312, -6.2188, -7.1328, -1.8496, 1.9961, -8.6250, -6.7227, -12.8281, -6.9492, -7.0742, -7.7852, -7.5820, -7.9062, -6.9375, -7.9805, -8.3438, -8.1562, -8.0469, -7.6250, -7.7422, -7.3398,])  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
     @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
@@ -582,9 +446,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         EXPECTED_MEAN = torch.tensor([[-2.0622, -1.2794, -1.1638, -0.9788, -1.4603, -1.0238, -1.7893, -1.4411]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
-        # fmt: off
-        EXPECTED_SLICE = torch.tensor([-8.1406, -8.0547, 2.7461, -1.2344, -0.1448, -1.8262, -1.0020, -1.8154, -1.6895, -1.8516, -2.3574, -0.9277, 3.7598, 6.5742, -1.2998, -0.1177, -8.1406, -2.9688, -2.9199, -3.1699, -3.5254, -2.3555, -2.7988, -3.4141, -2.8262, -4.5195, -3.3379, -3.3164, -2.7832, -3.0273])
-        # fmt: on
+        EXPECTED_SLICE = torch.tensor([-8.1406, -8.0547, 2.7461, -1.2344, -0.1448, -1.8262, -1.0020, -1.8154, -1.6895, -1.8516, -2.3574, -0.9277, 3.7598, 6.5742, -1.2998, -0.1177, -8.1406, -2.9688, -2.9199, -3.1699, -3.5254, -2.3555, -2.7988, -3.4141, -2.8262, -4.5195, -3.3379, -3.3164, -2.7832, -3.0273])  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
     @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
@@ -597,9 +459,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         EXPECTED_MEAN = torch.tensor([[-0.8562, -1.8520, -0.7551, -0.4162, -1.5161, -1.2038, -2.4823, -2.3254]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
-        # fmt: off
-        EXPECTED_SLICE = torch.tensor([-2.2227, 4.8828, 0.9023, -0.4578, -0.7871, -0.1033, -0.6221, -0.5786, -0.7803, -1.0674, -1.2920, -0.1570, 0.8008, 2.0723, -0.9497, 0.2771, -2.2227, -0.7612, -1.4346, -1.2061, -1.6426, -0.3000, -0.7139, -1.1934, -1.8691, -1.6973, -1.5947, -1.2705, -0.3523, -0.5513])
-        # fmt: on
+        EXPECTED_SLICE = torch.tensor([-2.2227, 4.8828, 0.9023, -0.4578, -0.7871, -0.1033, -0.6221, -0.5786, -0.7803, -1.0674, -1.2920, -0.1570, 0.8008, 2.0723, -0.9497, 0.2771, -2.2227, -0.7612, -1.4346, -1.2061, -1.6426, -0.3000, -0.7139, -1.1934, -1.8691, -1.6973, -1.5947, -1.2705, -0.3523, -0.5513])  # fmt: skip
         torch.testing.assert_close(out.mean(-1), EXPECTED_SLICE, atol=1e-2, rtol=1e-2)
 
     @unittest.skip(
@@ -615,9 +475,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             [[-4.2327, -3.3360, -4.6665, -4.7631, -1.8180, -3.4170, -1.4211, -3.1810]], dtype=torch.float32
         )
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        # fmt: off
-        EXPECTED_SLICE = torch.tensor([-9.4922, -3.9551, 1.7998, -5.6758, -5.1055, -5.8984, -4.8320, -6.8086, -6.5391, -5.6172, -5.5820, -5.5352, 1.7881, 3.6289, -6.5117, -3.4785, -9.5000, -6.0352, -6.8125, -6.0195, -6.6836, -5.4727, -6.2812, -6.0391, -7.3398, -7.4297, -7.4844, -6.5820, -5.8789, -5.5312])
-        # fmt: on
+        EXPECTED_SLICE = torch.tensor([-9.4922, -3.9551, 1.7998, -5.6758, -5.1055, -5.8984, -4.8320, -6.8086, -6.5391, -5.6172, -5.5820, -5.5352, 1.7881, 3.6289, -6.5117, -3.4785, -9.5000, -6.0352, -6.8125, -6.0195, -6.6836, -5.4727, -6.2812, -6.0391, -7.3398, -7.4297, -7.4844, -6.5820, -5.8789, -5.5312])  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
     @unittest.skip("Model is curently gated")
@@ -677,7 +535,7 @@ end
 """,
     ]
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_model_7b_logits(self):
         model = LlamaForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf").to(torch_device)

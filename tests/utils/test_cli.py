@@ -43,7 +43,6 @@ class CLITest(unittest.TestCase):
         shutil.rmtree("/tmp/hf-internal-testing/tiny-random-gptj", ignore_errors=True)  # cleans potential past runs
         transformers.commands.transformers_cli.main()
 
-        # The original repo has no TF weights -- if they exist, they were created by the CLI
         self.assertTrue(os.path.exists("/tmp/hf-internal-testing/tiny-random-gptj/tf_model.h5"))
 
     @require_torch

@@ -79,8 +79,6 @@ OBJECTS_TO_IGNORE = [
     "AlbertTokenizerFast",
     "AlignTextModel",
     "AlignVisionConfig",
-    "AltCLIPTextConfig",
-    "AltCLIPVisionConfig",
     "AudioClassificationPipeline",
     "AutoformerConfig",
     "AutomaticSpeechRecognitionPipeline",
@@ -535,6 +533,8 @@ OBJECTS_TO_IGNORE = [
     "TFConvBertModel",
     "TFConvNextForImageClassification",
     "TFConvNextModel",
+    "TFConvNextV2Model",  # Parsing issue. Equivalent to PT ConvNextV2Model, see PR #25558
+    "TFConvNextV2ForImageClassification",
     "TFCvtForImageClassification",
     "TFCvtModel",
     "TFDPRReader",

@@ -270,7 +270,7 @@ which is discussed next.
 
 Implementations:
 
-- [DeepSpeed](https://www.deepspeed.ai/features/#the-zero-redundancy-optimizer) ZeRO-DP stages 1+2+3
+- [DeepSpeed](https://www.deepspeed.ai/tutorials/zero/) ZeRO-DP stages 1+2+3
 - [`Accelerate` integration](https://huggingface.co/docs/accelerate/en/usage_guides/deepspeed) 
 - [`transformers` integration](main_classes/trainer#trainer-integrations)
 
@@ -434,7 +434,7 @@ This section is based on the original much more [detailed TP overview](https://g
 by [@anton-l](https://github.com/anton-l).
 
 Alternative names:
-- DeepSpeed calls it [tensor slicing](https://www.deepspeed.ai/features/#model-parallelism)
+- DeepSpeed calls it [tensor slicing](https://www.deepspeed.ai/training/#model-parallelism)
 
 Implementations:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation, as it's very model-specific
