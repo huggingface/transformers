@@ -230,6 +230,7 @@ class AttentionMaskConverter:
            [0, 1, 1]]]]
         ```
         """
+        # fmt: on
 
         # Get the index of the first non-zero value for every sample in the batch.
         # In the above example, indices = [[2], [0], [1]]]
