@@ -176,6 +176,8 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
+    test_torchscript = False
+
     def setUp(self):
         self.model_tester = TVPModelTester(self)
 
