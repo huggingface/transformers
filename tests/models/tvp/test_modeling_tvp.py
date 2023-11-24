@@ -176,6 +176,7 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
+    # TODO: Enable this once this model gets more usage
     test_torchscript = False
 
     def setUp(self):
