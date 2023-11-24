@@ -102,13 +102,19 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         image_std=OPENAI_CLIP_STD,
     )
     processor = CogVLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
-    pixel_values = processor(images=image, return_tensors="pt").pixel_values.to("cuda")
+
+    prompt = f"Question: {query} Answer:"
+    pixel_values = processor(images=image, text=prompt, return_tensors="pt").pixel_values.to("cuda")
+
+    # for k,v in inputs.items():
+    #     print(k,v.shape)
 
     # verify pixel values
     assert torch.allclose(pixel_values, original_pixel_values.to(pixel_values.device))
 
     # TODO use processor instead
     inputs = gather_inputs(inputs, device="cuda:1", use_bfloat16=False)
+    inputs["pixel_values"] = torch.stack(inputs.pop("images")[0])
 
     with torch.no_grad():
         outputs = model.generate(**inputs, **gen_kwargs)

@@ -59,8 +59,8 @@ class CogVLMPatchEmbedding(nn.Module):
         self.cls_embedding = nn.Parameter(torch.zeros(1, config.hidden_size))
         self.position_embedding = nn.Embedding(config.num_positions, config.hidden_size)
 
-    def forward(self, images: torch.FloatTensor) -> torch.FloatTensor:
-        x = self.proj(images)
+    def forward(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+        x = self.proj(pixel_values)
         x = x.flatten(2).transpose(1, 2)
         cls_token = self.cls_embedding.expand(x.shape[0], -1, -1)
         x = torch.cat((cls_token, x), dim=1)
@@ -174,8 +174,8 @@ class CogVLMVisionModel(nn.Module):
         self.boi = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.eoi = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
 
-    def forward(self, images: torch.FloatTensor) -> torch.FloatTensor:
-        x = self.patch_embedding(images)
+    def forward(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+        x = self.patch_embedding(pixel_values)
         x = self.transformer(x)
         x = x[:, 1:]
         x = self.linear_proj(x)
@@ -491,15 +491,6 @@ class CogVLMPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-def is_empty(images_list: Optional[List[List[torch.Tensor]]]):
-    if images_list is None or len(images_list) == 0:
-        return True
-    for image_list in images_list:
-        if len(image_list):
-            return False
-    return True
-
-
 def build_position_ids(x: torch.BoolTensor, attention_mask: Optional[torch.BoolTensor] = None) -> torch.LongTensor:
     if attention_mask is not None:
         tmp = x.clone()
@@ -538,22 +529,15 @@ class CogVLMModel(CogVLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def encode_images(self, images: List[List[torch.Tensor]]) -> torch.Tensor:
-        images_list, images = images, []
+    def encode_images(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
 
-        images = []
-        for image_list in images_list:
-            for image in image_list:
-                images.append(image)
-
-        images = torch.stack(images)
-        images_features = self.vision(images)
+        images_features = self.vision(pixel_values)
         return images_features
 
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        images: List[List[torch.Tensor]] = None,
+        pixel_values: List[List[torch.Tensor]] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -571,11 +555,14 @@ class CogVLMModel(CogVLMPreTrainedModel):
         else:
             # not allow for inputs_embeds, because we want to process image feature
             assert input_ids is not None and inputs_embeds is None, f"{input_ids} {inputs_embeds}"
-            if not is_empty(images):  # multi-modality
-                assert token_type_ids is not None, "multi-modality requires `token_type_ids`!"
-                assert len(input_ids) == len(images), f"{len(input_ids)} {len(images)}"
+            if pixel_values is not None:
+                # multi-modality
+                if token_type_ids is None:
+                    raise ValueError("Multi-modality requires `token_type_ids`!")
+                if len(input_ids) != len(pixel_values):
+                    raise ValueError("Make sure to pass as many texts as images")
                 inputs_embeds = self.embed_tokens(input_ids)
-                images_features = self.encode_images(images)
+                images_features = self.encode_images(pixel_values)
                 images_features = rearrange(images_features, "b n d -> (b n) d")
                 images_features = images_features.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
                 inputs_embeds = inputs_embeds.index_put([token_type_ids == VISION_TOKEN_TYPE], images_features)
@@ -773,7 +760,7 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        images: List[List[torch.Tensor]] = None,
+        pixel_values: torch.FloatTensor = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -794,7 +781,7 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
-            images=images,
+            pixel_values=pixel_values,
             token_type_ids=token_type_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -847,7 +834,7 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         self,
         input_ids,
         token_type_ids,
-        images=None,
+        pixel_values=None,
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
@@ -872,7 +859,7 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         model_inputs.update(
             {
                 "token_type_ids": token_type_ids,
-                "images": images,
+                "pixel_values": pixel_values,
                 "position_ids": position_ids,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
