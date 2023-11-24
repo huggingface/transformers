@@ -465,7 +465,6 @@ class TFModelTesterMixin:
             "TFFunnelForPreTraining",
             "TFElectraForPreTraining",
             "TFXLMWithLMHeadModel",
-            "TFTransfoXLLMHeadModel",
         ]:
             for k in key_differences:
                 if k in ["loss", "losses"]:
