@@ -1,4 +1,8 @@
 from typing import Optional
+import json
+import uuid
+
+import requests
 
 from huggingface_hub import Discussion, HfApi, get_repo_discussions
 
@@ -22,16 +26,10 @@ def previous_pr(api: HfApi, model_id: str, pr_title: str) -> Optional["Discussio
 def spawn_conversion(token: str, private: bool, model_id: str):
     logger.info("Attempting to convert .bin model on the fly to safetensors.")
 
-    try:
-        import json
-        import uuid
+    safetensors_convert_space_url = "https://safetensors-convert.hf.space"
+    sse_url = f"{safetensors_convert_space_url}/queue/join"
+    sse_data_url = f"{safetensors_convert_space_url}/queue/data"
 
-        import requests
-    except (ImportError, ModuleNotFoundError) as e:
-        raise ValueError("Could not perform on-the-fly conversion as `requests` isn't installed.") from e
-
-    sse_url = "https://safetensors-convert.hf.space/queue/join"
-    sse_data_url = "https://safetensors-convert.hf.space/queue/data"
     hash_data = {"fn_index": 1, "session_hash": str(uuid.uuid4())}
 
     def start(_sse_connection, payload):
@@ -39,8 +37,6 @@ def spawn_conversion(token: str, private: bool, model_id: str):
             line = line.decode()
             if line.startswith("data:"):
                 resp = json.loads(line[5:])
-                print(resp)
-
                 if resp["msg"] == "queue_full":
                     raise ValueError("Queue is full! Please try again.")
                 elif resp["msg"] == "send_data":
@@ -60,7 +56,7 @@ def spawn_conversion(token: str, private: bool, model_id: str):
         try:
             start(sse_connection, data)
         except Exception as e:
-            logger.info(f"Error during conversion: {repr(e)}")
+            logger.warning(f"Error during conversion: {repr(e)}")
 
 
 def get_sha(api: HfApi, model_id: str, **kwargs):

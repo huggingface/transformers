@@ -21,6 +21,7 @@ import sys
 import tempfile
 import unittest
 import unittest.mock as mock
+import uuid
 from pathlib import Path
 
 import requests
@@ -1177,17 +1178,13 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.user = "huggingface-hub-ci"
-        cls.repo_name = f"{cls.user}/test-model-on-the-fly"
-        cls._token = os.getenv("HUGGINGFACE_PRODUCTION_USER_TOKEN", None)
+        cls.repo_name = f"{cls.user}/test-model-on-the-fly-{uuid.uuid4()}"
+        cls.token = os.getenv("HUGGINGFACE_PRODUCTION_USER_TOKEN", None)
 
-        if cls._token is None:
+        if cls.token is None:
             raise ValueError("Cannot run tests as secret isn't setup.")
 
-        HfFolder.save_token(cls._token)
-        cls.api = HfApi(token=cls._token)
-
-        if cls.api.repo_exists(cls.repo_name):
-            cls.api.delete_repo(cls.repo_name)
+        cls.api = HfApi(token=cls.token)
 
     def tearDown(self) -> None:
         self.api.delete_repo(self.repo_name)
@@ -1198,7 +1195,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         )
         initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self._token, safe_serialization=False)
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
         converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True)
 
         with self.subTest("Initial and converted models are equal"):
@@ -1217,8 +1214,8 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         )
         initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self._token, safe_serialization=False, private=True)
-        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self._token)
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, private=True)
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
 
         with self.subTest("Initial and converted models are equal"):
             for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
@@ -1236,12 +1233,12 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         )
         initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self._token, safe_serialization=False)
-        headers = {"Authorization": f"Bearer {self._token}"}
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+        headers = {"Authorization": f"Bearer {self.token}"}
         requests.put(
             f"https://huggingface.co/api/models/{self.repo_name}/settings", json={"gated": "auto"}, headers=headers
         )
-        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self._token)
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
 
         with self.subTest("Initial and converted models are equal"):
             for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
@@ -1259,7 +1256,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         )
         initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self._token, safe_serialization=False, max_shard_size="200kb")
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, max_shard_size="200kb")
         converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True)
 
         with self.subTest("Initial and converted models are equal"):
@@ -1279,9 +1276,9 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         initial_model = BertModel(config)
 
         initial_model.push_to_hub(
-            self.repo_name, token=self._token, safe_serialization=False, max_shard_size="200kb", private=True
+            self.repo_name, token=self.token, safe_serialization=False, max_shard_size="200kb", private=True
         )
-        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self._token)
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
 
         with self.subTest("Initial and converted models are equal"):
             for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
