@@ -203,8 +203,14 @@ class LlavaVisionText2TextModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.vision_model_tester.batch_size, self.seq_length], config.text_config.vocab_size)
+        attention_mask = input_ids.ne(1).to(torch_device)
 
-        inputs_dict = {"pixel_values": pixel_values, "input_ids": input_ids, "labels": input_ids}
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "input_ids": input_ids,
+            "labels": input_ids,
+            "attention_mask": attention_mask,
+        }
         return config, inputs_dict
 
 
