@@ -43,7 +43,7 @@ logger = logging.get_logger(__name__)
 # General docstring
 _CONFIG_FOR_DOC = "TextNetConfig"
 _CHECKPOINT_FOR_DOC = "Raghavan/textnet-base"
-_EXPECTED_OUTPUT_SHAPE = [1, 512, 20, 27]
+_EXPECTED_OUTPUT_SHAPE = [1, 512, 20, 20]
 
 TEXTNET_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it

@@ -26,8 +26,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import CLIPImageProcessor, TextNetBackbone, TextNetConfig, TextNetImageProcessor
-from transformers.image_utils import PILImageResampling
+from transformers import TextNetBackbone, TextNetConfig, TextNetImageProcessor
 from transformers.utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 

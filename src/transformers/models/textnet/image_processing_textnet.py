@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -39,6 +39,7 @@ from ...image_utils import (
 )
 from ...utils import TensorType, is_vision_available, logging
 
+
 logger = logging.get_logger(__name__)
 
 if is_vision_available():
@@ -57,9 +58,9 @@ class TextNetImageProcessor(BaseImageProcessor):
             Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
             the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
+        do_center_crop (`bool`, *optional*, defaults to `False`):
             Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
             `preprocess` method.
         crop_size (`Dict[str, int]` *optional*, defaults to 224):
@@ -87,25 +88,25 @@ class TextNetImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values"]
 
     def __init__(
-            self,
-            do_resize: bool = True,
-            size: Dict[str, int] = None,
-            resample: PILImageResampling = PILImageResampling.BILINEAR,
-            do_center_crop: bool = False,
-            crop_size: Dict[str, int] = None,
-            do_rescale: bool = True,
-            rescale_factor: Union[int, float] = 1 / 255,
-            do_normalize: bool = True,
-            image_mean: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_MEAN,
-            image_std: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_STD,
-            do_convert_rgb: bool = True,
-            **kwargs,
+        self,
+        do_resize: bool = True,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        do_center_crop: bool = False,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
+        image_mean: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_MEAN,
+        image_std: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_STD,
+        do_convert_rgb: bool = True,
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 224}
-        size = get_size_dict(size)
+        size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size, param_name="crop_size")
+        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
 
         self.do_resize = do_resize
         self.size = size
@@ -120,15 +121,15 @@ class TextNetImageProcessor(BaseImageProcessor):
         self.do_convert_rgb = do_convert_rgb
 
     def resize(
-            self,
-            image: np.ndarray,
-            size: Dict[str, int],
-            resample: PILImageResampling = PILImageResampling.BICUBIC,
-            data_format: Optional[Union[str, ChannelDimension]] = None,
-            input_data_format: Optional[Union[str, ChannelDimension]] = None,
-            default_to_square: bool = True,
-            # align_size_to_32_factor: bool = False,
-            **kwargs,
+        self,
+        image: np.ndarray,
+        size: Dict[str, int],
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        default_to_square: bool = True,
+        # align_size_to_32_factor: bool = False,
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image. The shortest edge of the image is resized to size["shortest_edge"], with the longest edge
@@ -150,10 +151,7 @@ class TextNetImageProcessor(BaseImageProcessor):
         if "shortest_edge" not in size:
             raise ValueError(f"The `size` parameter must contain the key `shortest_edge`. Got {size.keys()}")
         output_size = get_resize_output_image_size(
-            image,
-            size=size["shortest_edge"],
-            input_data_format=input_data_format,
-            default_to_square=default_to_square
+            image, size=size["shortest_edge"], input_data_format=input_data_format, default_to_square=default_to_square
         )
         # if align_size_to_32_factor:
         height, weight = output_size
@@ -174,25 +172,25 @@ class TextNetImageProcessor(BaseImageProcessor):
         )
 
     def preprocess(
-            self,
-            images: ImageInput,
-            do_resize: bool = None,
-            size: Dict[str, int] = None,
-            resample: PILImageResampling = None,
-            do_center_crop: bool = None,
-            crop_size: int = None,
-            do_rescale: bool = None,
-            rescale_factor: float = None,
-            do_normalize: bool = None,
-            image_mean: Optional[Union[float, List[float]]] = None,
-            image_std: Optional[Union[float, List[float]]] = None,
-            do_convert_rgb: bool = None,
-            return_tensors: Optional[Union[str, TensorType]] = None,
-            data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-            input_data_format: Optional[Union[str, ChannelDimension]] = None,
-            # align_size_to_32_factor: bool = True,
-            default_to_square: bool = True,
-            **kwargs,
+        self,
+        images: ImageInput,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        do_center_crop: bool = None,
+        crop_size: int = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_convert_rgb: bool = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        # align_size_to_32_factor: bool = True,
+        default_to_square: bool = True,
+        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -297,8 +295,13 @@ class TextNetImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format,
-                            default_to_square=default_to_square)
+                self.resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                    default_to_square=default_to_square,
+                )
                 for image in images
             ]
 
