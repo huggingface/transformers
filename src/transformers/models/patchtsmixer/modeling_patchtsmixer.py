@@ -1664,7 +1664,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         observed_mask: Optional[torch.Tensor] = None,
-        target_values: Optional[torch.Tensor] = None,
+        future_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
         return_dict: Optional[bool] = None,
@@ -1675,9 +1675,9 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
                 in `[0, 1]`:
                     - 1 for values that are **observed**,
                     - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,:
+            future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,:
                 `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
-                values of the time series, that serve as labels for the model. The `target_values` is what the
+                values of the time series, that serve as labels for the model. The `future_values` is what the
                 Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
                 required for a pretraining task.
 
@@ -1723,10 +1723,10 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
                     loc=model_output.loc[..., self.prediction_channel_indices],
                     scale=model_output.scale[..., self.prediction_channel_indices],
                 )
-                if target_values is not None and return_loss is True:
+                if future_values is not None and return_loss is True:
                     loss_val = loss(
                         distribution,
-                        target_values[..., self.prediction_channel_indices],
+                        future_values[..., self.prediction_channel_indices],
                     )
                     # take average of the loss
                     loss_val = weighted_average(loss_val)
@@ -1735,20 +1735,20 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
                     y_hat * model_output.scale[..., self.prediction_channel_indices]
                     + model_output.loc[..., self.prediction_channel_indices]
                 )
-                if target_values is not None and return_loss is True:
-                    loss_val = loss(y_hat, target_values[..., self.prediction_channel_indices])
+                if future_values is not None and return_loss is True:
+                    loss_val = loss(y_hat, future_values[..., self.prediction_channel_indices])
         else:
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(
                     y_hat, loc=model_output.loc, scale=model_output.scale
                 )
-                if target_values is not None and return_loss is True:
-                    loss_val = loss(distribution, target_values)
+                if future_values is not None and return_loss is True:
+                    loss_val = loss(distribution, future_values)
                     loss_val = weighted_average(loss_val)
             else:
                 y_hat = y_hat * model_output.scale + model_output.loc
-                if target_values is not None and return_loss is True:
-                    loss_val = loss(y_hat, target_values)
+                if future_values is not None and return_loss is True:
+                    loss_val = loss(y_hat, future_values)
 
         if self.prediction_channel_indices is not None:
             loc = model_output.loc[..., self.prediction_channel_indices]
@@ -1808,7 +1808,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
         # get model output
         outputs = self(
             past_values=past_values,
-            target_values=None,
+            future_values=None,
             observed_mask=observed_mask,
             output_hidden_states=False,
         )
@@ -1885,15 +1885,15 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        target_values: torch.Tensor = None,
+        future_values: torch.Tensor = None,
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
         return_dict: Optional[bool] = None,
     ) -> PatchTSMixerForClassificationOutput:
         r"""
-            target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
+            future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
                 `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
-                values of the time series, that serve as labels for the model. The `target_values` is what the
+                values of the time series, that serve as labels for the model. The `future_values` is what the
                 Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
                 required for a pretraining task.
 
@@ -1933,8 +1933,8 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
 
         y_hat = self.head(model_output.last_hidden_state)  # tensor [batch_size x n_labels]
 
-        if target_values is not None and return_loss is True:
-            loss_val = loss(y_hat, target_values)
+        if future_values is not None and return_loss is True:
+            loss_val = loss(y_hat, future_values)
         else:
             loss_val = None
 
@@ -2077,15 +2077,15 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        target_values: torch.Tensor = None,
+        future_values: torch.Tensor = None,
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
         return_dict: Optional[bool] = None,
     ) -> PatchTSMixerForRegressionOutput:
         r"""
-            target_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
+            future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
                 `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
-                values of the time series, that serve as labels for the model. The `target_values` is what the
+                values of the time series, that serve as labels for the model. The `future_values` is what the
                 Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
                 required for a pretraining task.
 
@@ -2129,16 +2129,16 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
 
         y_hat = self.head(model_output.last_hidden_state)  # tensor [batch_size x num_targets]
 
-        if target_values is not None and return_loss is True:
+        if future_values is not None and return_loss is True:
             if self.distribution_output:
-                if self.distribution_output == "negative_binomial" and torch.any(target_values < 0):
-                    raise Exception("target_values cannot be negative for negative_binomial distribution.")
+                if self.distribution_output == "negative_binomial" and torch.any(future_values < 0):
+                    raise Exception("future_values cannot be negative for negative_binomial distribution.")
                 distribution = self.distribution_output.distribution(y_hat)
-                loss_val = loss(distribution, target_values)
+                loss_val = loss(distribution, future_values)
                 # take average of the loss
                 loss_val = weighted_average(loss_val)
             else:
-                loss_val = loss(y_hat, target_values)
+                loss_val = loss(y_hat, future_values)
         else:
             loss_val = None
 
@@ -2181,7 +2181,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         # get model output
         outputs = self(
             past_values=past_values,
-            target_values=None,
+            future_values=None,
             output_hidden_states=False,
         )
 
