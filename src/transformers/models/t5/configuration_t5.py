@@ -138,7 +138,12 @@ class T5Config(PretrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
         
-        self.position_embedding_definitions = position_embedding_definitions or dict()
+        self.position_embedding_definitions = position_embedding_definitions
+        if self.position_embedding_definitions is None:
+            #this configuration mimics the default T5 relative positional encoding behavior
+            self.position_embedding_definitions = dict(
+                injected_in_attention=dict(t5_default_relative=None)
+            )
         self.memory_efficient_attention = memory_efficient_attention
 
         super().__init__(
