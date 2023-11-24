@@ -14,9 +14,10 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Llava model. """
 
+import inspect
 import unittest
 
-from transformers import LlavaConfig, is_torch_available, is_vision_available
+from transformers import is_torch_available, is_vision_available
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -24,17 +25,16 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
-    from transformers import LlavaForVisionText2Text, LlavaVisionModel
+    from transformers import LlavaVisionModel
     from transformers.models.llava.configuration_llava import LlavaVisionConfig
     from transformers.models.llava.modeling_llava import LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
     is_torch_greater_or_equal_than_2_0 = False
 
@@ -46,399 +46,138 @@ class LlavaVisionModelTester:
     def __init__(
         self,
         parent,
-        batch_size=1,
-        seq_length=7,
+        batch_size=12,
         image_size=30,
         patch_size=2,
         num_channels=3,
         is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=True,
-        use_labels=True,
-        vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        projection_dim=32,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
+        dropout=0.1,
+        attention_dropout=0.1,
         initializer_range=0.02,
-        alpha_initializer="ones",
-        num_labels=3,
         scope=None,
-        modality_type_vocab_size=2,
-        vision_embed_dim=32,
-        vision_patch_size=2,
-        vision_image_size=30,
-        vision_num_attention_heads=4,
-        vision_num_hidden_layers=5,
-        vision_intermediate_size=37,
-        perceiver_qk_layer_norms_perceiver=False,
-        perceiver_resampler_depth=2,
-        perceiver_resampler_head_dim=8,
-        perceiver_resampler_n_heads=2,
-        perceiver_resampler_n_latents=16,
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.seq_length = seq_length
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
-        self.alpha_initializer = alpha_initializer
-        self.num_labels = num_labels
         self.scope = scope
-        self.modality_type_vocab_size = modality_type_vocab_size
 
-        self.vision_embed_dim = vision_embed_dim
-        self.vision_patch_size = vision_patch_size
-        self.vision_image_size = vision_image_size
-        self.vision_num_attention_heads = vision_num_attention_heads
-        self.vision_num_hidden_layers = vision_num_hidden_layers
-        self.vision_intermediate_size = vision_intermediate_size
+        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        num_patches = (image_size // patch_size) ** 2
+        self.seq_length = num_patches + 1
 
-        self.vision_config = LlavaVisionConfig(
-            embed_dim=self.vision_embed_dim,
-            patch_size=self.vision_patch_size,
-            image_size=self.vision_image_size,
-            num_attention_heads=self.vision_num_attention_heads,
-            num_hidden_layers=self.vision_num_hidden_layers,
-            intermediate_size=self.vision_intermediate_size,
-        )
-
-        self.perceiver_qk_layer_norms_perceiver = perceiver_qk_layer_norms_perceiver
-        self.perceiver_resampler_depth = perceiver_resampler_depth
-        self.perceiver_resampler_head_dim = perceiver_resampler_head_dim
-        self.perceiver_resampler_n_heads = perceiver_resampler_n_heads
-        self.perceiver_resampler_n_latents = perceiver_resampler_n_latents
-
-        # we set the expected sequence length (which is used in several tests)
-        # this is equal to the seq length of the text tokens + number of image patches + 1 for the CLS token
-        self.expected_seq_len = self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
-
-    def prepare_config_and_inputs(self, num_images=1, interpolate_pos_encoding=False, image_expansion=0):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        pixel_values = floats_tensor(
-            [
-                self.batch_size,
-                num_images,
-                self.num_channels,
-                self.image_size + image_expansion,
-                self.image_size + image_expansion,
-            ]
-        )
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, num_images])
-
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         config = self.get_config()
-        return (config, input_ids, input_mask, pixel_values, image_attention_mask, interpolate_pos_encoding)
 
-    def prepare_config_and_inputs_gate_tests(self):
-        # Create a list of configs and inputs, to test 2 things:
-        # 1. For the same image, the output should be different when image_attention_mask is filled with 0s vs filled with 1s.
-        # 2. For 2 different images, the output should be the same when image_attention_mask is filled with 0s.
-
-        interpolate_pos_encoding = False
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        pixel_values = floats_tensor(
-            [
-                self.batch_size,
-                1,
-                self.num_channels,
-                self.image_size,
-                self.image_size,
-            ]
-        )
-        pixel_values_list = [
-            pixel_values.clone(),
-            pixel_values.clone(),
-            pixel_values.clone().fill_(0.6),
-            pixel_values.clone().fill_(0.3),
-        ]
-        attention_mask = None
-        if self.use_input_mask:
-            attention_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, 1])
-        image_attention_mask_list = [
-            image_attention_mask.clone().fill_(0),
-            image_attention_mask.clone().fill_(1),
-            image_attention_mask.clone().fill_(0),
-            image_attention_mask.clone().fill_(0),
-        ]
-
-        config = self.get_config()
-        inputs_list = []
-        for pixel_values, image_attention_mask in zip(pixel_values_list, image_attention_mask_list):
-            inputs_list.append(
-                {
-                    "input_ids": input_ids,
-                    "attention_mask": attention_mask,
-                    "pixel_values": pixel_values,
-                    "image_attention_mask": image_attention_mask,
-                    "interpolate_pos_encoding": interpolate_pos_encoding,
-                }
-            )
-
-        inputs_w_same_img = inputs_list[:2]
-        inputs_w_0_img_attn = inputs_list[2:]
-        return config, inputs_w_same_img, inputs_w_0_img_attn
+        return config, pixel_values
 
     def get_config(self):
-        return LlavaConfig(
+        return LlavaVisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
-            vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
+            dropout=self.dropout,
+            attention_dropout=self.attention_dropout,
             initializer_range=self.initializer_range,
-            alpha_initializer=self.alpha_initializer,
-            num_labels=self.num_labels,
-            modality_type_vocab_size=self.modality_type_vocab_size,
-            vision_config=self.vision_config,
         )
 
-    def create_and_check_model(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        pixel_values,
-        image_attention_mask,
-        interpolate_pos_encoding,
-    ):
+    def create_and_check_model(self, config, pixel_values):
         model = LlavaVisionModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            pixel_values=pixel_values,
-            image_attention_mask=image_attention_mask,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-        )
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, input_ids.shape[1], self.hidden_size)
-        )
-
-    def create_and_check_model_gen(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        pixel_values,
-        image_attention_mask,
-        interpolate_pos_encoding,
-    ):
-        model = LlavaForVisionText2Text(config)
-        model.to(torch_device)
-        model.eval()
-        model.generate(
-            input_ids,
-            attention_mask=input_mask,
-            pixel_values=pixel_values,
-            image_attention_mask=image_attention_mask,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            max_length=self.seq_length + 2,
-        )
+        with torch.no_grad():
+            result = model(pixel_values)
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = (self.image_size, self.image_size)
+        patch_size = (self.patch_size, self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            input_mask,
-            pixel_values,
-            image_attention_mask,
-            interpolate_pos_encoding,
-        ) = config_and_inputs
-        inputs_dict = {
-            "input_ids": input_ids,
-            "attention_mask": input_mask,
-            "pixel_values": pixel_values,
-            "image_attention_mask": image_attention_mask,
-            "interpolate_pos_encoding": interpolate_pos_encoding,
-        }
+        config, pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
-    def prepare_pixel_values(self):
-        return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-
-@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
-class LlavaVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (LlavaVisionModel, LlavaForVisionText2Text) if is_torch_available() else ()
+class LlavaVisionModelTest(ModelTesterMixin, unittest.TestCase):
+    """
+    Here we also overwrite some of the tests of test_modeling_common.py, as CLIP does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
+    """
+
+    all_model_classes = (LlavaVisionModel,) if is_torch_available() else ()
+    fx_compatible = False
     test_pruning = False
-    test_headmasking = False
-    test_torchscript = False
-
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-        # XXX: LlavaForVisionText2TextTest has no MODEL_FOR group yet, but it should be the same
-        # as MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, so for now manually changing to do the right thing
-        # as super won't do it
-        if return_labels:
-            inputs_dict["labels"] = torch.zeros(
-                (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
-            )
-
-        return inputs_dict
-
-    def test_model_outputs_equivalence(self):
-        try:
-            orig = self.all_model_classes
-            # LlavaVisionModel.forward doesn't have labels input arg - only LlavaForVisionText2Text does
-            self.all_model_classes = (LlavaForVisionText2Text,) if is_torch_available() else ()
-            super().test_model_outputs_equivalence()
-        finally:
-            self.all_model_classes = orig
+    test_resize_embeddings = False
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = LlavaVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlavaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=LlavaVisionConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_model_single_image(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(
-            num_images=1, interpolate_pos_encoding=False, image_expansion=0
-        )
+    @unittest.skip(reason="CLIP does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    def test_model_common_attributes(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_multiple_images(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(
-            num_images=2, interpolate_pos_encoding=False, image_expansion=0
-        )
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_with_image_pos_embeddings_interpolation_single_image(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(
-            num_images=1, interpolate_pos_encoding=True, image_expansion=2
-        )
-        self.model_tester.create_and_check_model(*config_and_inputs)
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(
-            num_images=1, interpolate_pos_encoding=True, image_expansion=0
-        )
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_with_image_pos_embeddings_interpolation_multiple_images(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(
-            num_images=2, interpolate_pos_encoding=True, image_expansion=2
-        )
-        self.model_tester.create_and_check_model(*config_and_inputs)
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(
-            num_images=2, interpolate_pos_encoding=True, image_expansion=0
-        )
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_generate_with_image_pos_embeddings_interpolation_single_image(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(
-            num_images=1, interpolate_pos_encoding=True, image_expansion=2
-        )
-        self.model_tester.create_and_check_model_gen(*config_and_inputs)
-
-    def test_generate_with_image_pos_embeddings_interpolation_multiple_images(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(
-            num_images=2, interpolate_pos_encoding=True, image_expansion=2
-        )
-        self.model_tester.create_and_check_model_gen(*config_and_inputs)
-
-    def test_cross_attention_gates(self):
-        config, inputs_w_same_img, inputs_w_0_img_attn = self.model_tester.prepare_config_and_inputs_gate_tests()
-
-        model = LlavaVisionModel(config=config).to(torch_device)
-        model.eval()
-        test_1_results = []
-        for inputs in inputs_w_same_img:
-            with torch.no_grad():
-                last_hidden_states = model(**inputs).last_hidden_state
-            last_hidden_states = model(**inputs).last_hidden_state
-            test_1_results.append(last_hidden_states)
-        self.assertNotEqual(test_1_results[0].sum().item(), test_1_results[1].sum().item())
-
-        test_2_results = []
-        for inputs in inputs_w_0_img_attn:
-            with torch.no_grad():
-                last_hidden_states = model(**inputs).last_hidden_state
-            test_2_results.append(last_hidden_states)
-        self.assertEqual(test_2_results[0].sum().item(), test_2_results[1].sum().item())
 
     def test_training(self):
-        if not self.model_tester.is_training:
-            return
-
-        for model_class in self.all_model_classes:
-            # LlavaVisionModel does not support training, users should use
-            # LlavaForVisionText2Text for this purpose
-            if model_class == LlavaVisionModel:
-                return
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.return_dict = True
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
+        pass
 
     def test_training_gradient_checkpointing(self):
-        if not self.model_tester.is_training:
-            return
-
-        for model_class in self.all_model_classes:
-            # LlavaVisionModel does not support training, users should use
-            # LlavaForVisionText2Text for this purpose
-            if model_class == LlavaVisionModel:
-                return
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.use_cache = False
-            config.return_dict = True
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.gradient_checkpointing_enable()
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
+        pass
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -452,91 +191,13 @@ class LlavaVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="""LLAVA does not support retaining the gradients of the hidden states and attention""")
-    def test_retain_grad_hidden_states_attentions(self):
-        return
+    @unittest.skip(reason="LlavaVisionModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_from_base(self):
+        pass
 
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            # LLAVA does not support outputting attention score becuase it uses SDPA under the hood
-            self.assertTrue(attentions[0] is None)
-            out_len = len(outputs)
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            self.assertEqual(out_len + 1, len(outputs))
-
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            # LLAVA does not support outputting attention score becuase it uses SDPA under the hood
-            self.assertTrue(self_attentions[0] is None)
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            seq_length = self.model_tester.seq_length
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
+    @unittest.skip(reason="LlavaVisionModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_to_base(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):
@@ -545,38 +206,4 @@ class LlavaVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             self.assertIsNotNone(model)
 
 
-@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
-@require_torch
-class LlavaForVisionText2TextTest(LlavaVisionModelTest, unittest.TestCase):
-    all_model_classes = (LlavaForVisionText2Text,) if is_torch_available() else ()
-
-    def setUp(self):
-        self.model_tester = LlavaVisionModelTester(
-            self,
-            modality_type_vocab_size=3,
-        )
-        self.config_tester = ConfigTester(self, config_class=LlavaConfig, hidden_size=37)
-
-    @unittest.skip("We only test the model that takes in multiple images")
-    def test_model(self):
-        pass
-
-    @unittest.skip("We only test the model that takes in multiple images")
-    def test_for_token_classification(self):
-        pass
-
-    @unittest.skip(reason="""LLAVA does not support retaining the gradients of the hidden states and attention""")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+# TODO: testing suite for LlavaForVisionText2Text
