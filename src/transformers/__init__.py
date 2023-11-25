@@ -2757,9 +2757,9 @@ else:
     _import_structure["models.seggpt"].extend(
         [
             "SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SegGPTModel",
-            "SegGPTForSemanticSegmentation",
             "SegGPTForInstanceSegmentation",
+            "SegGPTForSemanticSegmentation",
+            "SegGPTModel",
         ]
     )
     _import_structure["models.sew"].extend(
@@ -6628,11 +6628,10 @@ if TYPE_CHECKING:
         )
         from .models.seggpt import (
             SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-            SegGPTModel,
             SegGPTForInstanceSegmentation,
-            SegGPTForSemanticSegmentation
+            SegGPTForSemanticSegmentation,
+            SegGPTModel,
         )
-
         from .models.sew import (
             SEW_PRETRAINED_MODEL_ARCHIVE_LIST,
             SEWForCTC,

@@ -13,11 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ MGP-STR model configuration"""
-from functools import partial
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-import torch.nn as nn
+
 
 logger = logging.get_logger(__name__)
 
@@ -40,44 +39,34 @@ class SegGPTConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        image_size (`List[int]`, *optional*, defaults to `[32, 128]`):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 4):
-            The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        max_token_length (`int`, *optional*, defaults to 27):
-            The max number of output tokens.
-        num_character_labels (`int`, *optional*, defaults to 38):
-            The number of classes for character head .
-        num_bpe_labels (`int`, *optional*, defaults to 50257):
-            The number of classes for bpe head .
-        num_wordpiece_labels (`int`, *optional*, defaults to 30522):
-            The number of classes for wordpiece head .
-        hidden_size (`int`, *optional*, defaults to 768):
-            The embedding dimension.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        image_size (`List[int]`, *optional*, defaults to `[896, 448]`):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        embed_dim (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        mlp_ratio (`float`, *optional*, defaults to 4.0):
-            The ratio of mlp hidden dim to embedding dim.
+        drop_path_rate (`float`, *optional*, defaults to 0.1):
+            The stochastic depth rate.
+        window_size (`<fill_type>`, *optional*, defaults to 14): <fill_docstring>
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        distilled (`bool`, *optional*, defaults to `False`):
-            Model includes a distillation token and head as in DeiT models.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+        mlp_ratio (`float`, *optional*, defaults to 4.0):
+            The ratio of mlp hidden dim to embedding dim.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        drop_rate (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder.
-        attn_drop_rate (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            The stochastic depth rate.
-        output_a3_attentions (`bool`, *optional*, defaults to `False`):
-            Whether or not the model should returns A^3 module attentions.
+        num_hidden_layers (`int`, *optional*, defaults to 24):
+            Number of hidden layers in the Transformer encoder.
+        num_group_blocks (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
+        use_rel_pos (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        out_feature (`<fill_type>`, *optional*, defaults to `"last_feat"`): <fill_docstring>
+        decoder_embed_dim (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
+        pretrain_img_size (`<fill_type>`, *optional*, defaults to 224): <fill_docstring>
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        merge_index (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
 
     Example:
 
@@ -96,26 +85,26 @@ class SegGPTConfig(PretrainedConfig):
     model_type = "mgp-str"
 
     def __init__(
-            self,
-            num_channels=3,
-            image_size=[896, 448],
-            patch_size=16,
-            embed_dim=1024,
-            num_attention_heads=16,
-            drop_path_rate=0.1,
-            window_size=14,
-            qkv_bias=True,
-            mlp_ratio=4.,
-            layer_norm_eps=1e-6,
-            num_hidden_layers=24,
-            num_group_blocks=4,
-            use_rel_pos=True,
-            out_feature="last_feat",
-            decoder_embed_dim=64,
-            pretrain_img_size=224,
-            initializer_range=0.02,
-            merge_index=2,
-            **kwargs,
+        self,
+        num_channels=3,
+        image_size=[896, 448],
+        patch_size=16,
+        embed_dim=1024,
+        num_attention_heads=16,
+        drop_path_rate=0.1,
+        window_size=14,
+        qkv_bias=True,
+        mlp_ratio=4.0,
+        layer_norm_eps=1e-6,
+        num_hidden_layers=24,
+        num_group_blocks=4,
+        use_rel_pos=True,
+        out_feature="last_feat",
+        decoder_embed_dim=64,
+        pretrain_img_size=224,
+        initializer_range=0.02,
+        merge_index=2,
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

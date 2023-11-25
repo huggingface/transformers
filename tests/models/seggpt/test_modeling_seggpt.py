@@ -19,32 +19,31 @@ import unittest
 
 import numpy as np
 import requests
+import torch.nn.functional as F
 from PIL import Image
-from datasets import load_dataset
-from packaging import version
 
 from transformers.models.auto import get_values
-from transformers.models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES, \
-    MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES
+from transformers.models.auto.modeling_auto import (
+    MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
+    MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
+)
 from transformers.models.seggpt import SegGPTConfig
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
-import torch.nn.functional as F
+
 
 if is_torch_available():
     import torch
-    from torch import nn
 
-    from transformers import (
-        MODEL_MAPPING,
-        SegGPTModel, SegGPTImageProcessor
+    from transformers import SegGPTImageProcessor, SegGPTModel
+    from transformers.models.seggpt.modeling_seggpt import (
+        SegGPTForInstanceSegmentation,
+        SegGPTForSemanticSegmentation,
     )
-    from transformers.models.seggpt.modeling_seggpt import SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST, \
-    SegGPTForInstanceSegmentation, SegGPTForSemanticSegmentation
 
 
 # if is_vision_available():
@@ -56,30 +55,30 @@ if is_torch_available():
 
 class SegGPTModelTester:
     def __init__(
-            self,
-            parent,
-            num_channels=3,
-            image_size=[128, 64],
-            patch_size=16,
-            embed_dim=16,
-            num_heads=16,
-            drop_path_rate=0.1,
-            window_size=14,
-            qkv_bias=True,
-            mlp_ratio=4.,
-            layer_norm_eps=1e-6,
-            num_group_blocks=4,
-            num_hidden_layers = 12,
-            use_rel_pos=True,
-            out_feature="last_feat",
-            decoder_embed_dim=16,
-            pretrain_img_size=224,
-            num_labels=2,
-            type_sequence_label_size=10,
-            is_training=True,
-            use_labels=True,
-            batch_size=1,
-            num_prompts=2,
+        self,
+        parent,
+        num_channels=3,
+        image_size=[128, 64],
+        patch_size=16,
+        embed_dim=16,
+        num_heads=16,
+        drop_path_rate=0.1,
+        window_size=14,
+        qkv_bias=True,
+        mlp_ratio=4.0,
+        layer_norm_eps=1e-6,
+        num_group_blocks=4,
+        num_hidden_layers=12,
+        use_rel_pos=True,
+        out_feature="last_feat",
+        decoder_embed_dim=16,
+        pretrain_img_size=224,
+        num_labels=2,
+        type_sequence_label_size=10,
+        is_training=True,
+        use_labels=True,
+        batch_size=1,
+        num_prompts=2,
     ):
         self.parent = parent
         self.num_channels = num_channels
@@ -106,11 +105,20 @@ class SegGPTModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.num_prompts = num_prompts
 
-        self.encoder_seq_length = (((self.image_size[0] - self.patch_size)// self.patch_size ) + 1) * (((self.image_size[1] - self.patch_size)// self.patch_size ) + 1)
-        self.encoder_key_length = (((self.image_size[0] - self.patch_size)// self.patch_size ) + 1) * (((self.image_size[1] - self.patch_size)// self.patch_size ) + 1)
+        self.encoder_seq_length = (((self.image_size[0] - self.patch_size) // self.patch_size) + 1) * (
+            ((self.image_size[1] - self.patch_size) // self.patch_size) + 1
+        )
+        self.encoder_key_length = (((self.image_size[0] - self.patch_size) // self.patch_size) + 1) * (
+            ((self.image_size[1] - self.patch_size) // self.patch_size) + 1
+        )
+
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.num_prompts * self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
-        prompts = floats_tensor([self.num_prompts * self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
+        pixel_values = floats_tensor(
+            [self.num_prompts * self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]]
+        )
+        prompts = floats_tensor(
+            [self.num_prompts * self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]]
+        )
 
         labels = None
         pixel_labels = None
@@ -149,7 +157,7 @@ class SegGPTModelTester:
         model.eval()
         result = model(pixel_values, prompts)
         self.parent.assertEqual(
-            result.logits.shape, (2 * self.batch_size, self.encoder_seq_length,self.patch_size**2 * 3)
+            result.logits.shape, (2 * self.batch_size, self.encoder_seq_length, self.patch_size**2 * 3)
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -166,11 +174,7 @@ class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (SegGPTForInstanceSegmentation,SegGPTForSemanticSegmentation)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (SegGPTForInstanceSegmentation, SegGPTForSemanticSegmentation) if is_torch_available() else ()
     pipeline_model_mapping = ()
     #     {
     #         "feature-extraction": BeitModel,
@@ -264,7 +268,13 @@ class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             else:
                 self.assertListEqual(
                     list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads * self.model_tester.num_prompts * self.model_tester.num_prompts, encoder_seq_length, encoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads
+                        * self.model_tester.num_prompts
+                        * self.model_tester.num_prompts,
+                        encoder_seq_length,
+                        encoder_key_length,
+                    ],
                 )
             out_len = len(outputs)
 
@@ -335,7 +345,13 @@ class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             else:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads * self.model_tester.num_prompts * self.model_tester.num_prompts, encoder_seq_length, encoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads
+                        * self.model_tester.num_prompts
+                        * self.model_tester.num_prompts,
+                        encoder_seq_length,
+                        encoder_key_length,
+                    ],
                 )
 
     @unittest.skip(reason="SegGPT Model does not support input and output embeddings")
@@ -403,28 +419,28 @@ class BeitModelIntegrationTest(unittest.TestCase):
             image = Image.open(img_path).convert("RGB")
             input_image = np.array(image)
             size = image.size
-            image = np.array(image.resize((res, hres))) / 255.
+            image = np.array(image.resize((res, hres))) / 255.0
 
             image_batch, target_batch = [], []
             for img2_path, tgt2_path in zip(img2_paths, tgt2_paths):
                 img2 = Image.open(img2_path).convert("RGB")
                 img2 = img2.resize((res, hres))
-                img2 = np.array(img2) / 255.
+                img2 = np.array(img2) / 255.0
 
                 tgt2 = Image.open(tgt2_path).convert("RGB")
                 tgt2 = tgt2.resize((res, hres), Image.NEAREST)
-                tgt2 = np.array(tgt2) / 255.
+                tgt2 = np.array(tgt2) / 255.0
 
                 tgt = tgt2  # tgt is not available
                 tgt = np.concatenate((tgt2, tgt), axis=0)
                 img = np.concatenate((img2, image), axis=0)
 
-                assert img.shape == (2 * res, res, 3), f'{img.shape}'
+                assert img.shape == (2 * res, res, 3), f"{img.shape}"
                 # normalize by ImageNet mean and std
                 img = img - imagenet_mean
                 img = img / imagenet_std
 
-                assert tgt.shape == (2 * res, res, 3), f'{img.shape}'
+                assert tgt.shape == (2 * res, res, 3), f"{img.shape}"
                 # normalize by ImageNet mean and std
                 tgt = tgt - imagenet_mean
                 tgt = tgt / imagenet_std
@@ -438,11 +454,15 @@ class BeitModelIntegrationTest(unittest.TestCase):
             # make random mask reproducible (comment out to make it change)
             torch.manual_seed(2)
             output = run_one_image(img, tgt, model, device)
-            output = F.interpolate(
-                output[None, ...].permute(0, 3, 1, 2),
-                size=[size[1], size[0]],
-                mode='nearest',
-            ).permute(0, 2, 3, 1)[0].numpy()
+            output = (
+                F.interpolate(
+                    output[None, ...].permute(0, 3, 1, 2),
+                    size=[size[1], size[0]],
+                    mode="nearest",
+                )
+                .permute(0, 2, 3, 1)[0]
+                .numpy()
+            )
             output = Image.fromarray((input_image * (0.6 * output / 255 + 0.4)).astype(np.uint8))
             output.save(out_path)
 
@@ -451,44 +471,56 @@ class BeitModelIntegrationTest(unittest.TestCase):
             imagenet_std = np.array([0.229, 0.224, 0.225])
             x = torch.tensor(img)
             # make it a batch-like
-            x = torch.einsum('nhwc->nchw', x)
+            x = torch.einsum("nhwc->nchw", x)
 
             tgt = torch.tensor(tgt)
             # make it a batch-like
-            tgt = torch.einsum('nhwc->nchw', tgt)
+            tgt = torch.einsum("nhwc->nchw", tgt)
 
             _, y, mask = model(x.float().to(device), tgt.float().to(device))
             y = model.unpatchify(y)
-            y = torch.einsum('nchw->nhwc', y).detach().cpu()
+            y = torch.einsum("nchw->nhwc", y).detach().cpu()
 
-            output = y[0, y.shape[1] // 2:, :, :]
+            output = y[0, y.shape[1] // 2 :, :, :]
             output = torch.clip((output * imagenet_std + imagenet_mean) * 255, 0, 255)
             return output
 
-        image = Image.open("/Users/eaxxkra/Projects/myplay/Painter/SegGPT/SegGPT_inference/examples/hmbb_3.jpg")
+        Image.open("/Users/eaxxkra/Projects/myplay/Painter/SegGPT/SegGPT_inference/examples/hmbb_3.jpg")
 
-        prompts = ['/Users/eaxxkra/Projects/myplay/Painter/SegGPT/SegGPT_inference/examples/hmbb_1.jpg',
-                   '/Users/eaxxkra/Projects/myplay/Painter/SegGPT/SegGPT_inference/examples/hmbb_2.jpg']
-        targets = ['/Users/eaxxkra/Projects/myplay/Painter/SegGPT/SegGPT_inference/examples/hmbb_1_target.png',
-                   '/Users/eaxxkra/Projects/myplay/Painter/SegGPT/SegGPT_inference/examples/hmbb_2_target.png']
+        prompts = [
+            "/Users/eaxxkra/Projects/myplay/Painter/SegGPT/SegGPT_inference/examples/hmbb_1.jpg",
+            "/Users/eaxxkra/Projects/myplay/Painter/SegGPT/SegGPT_inference/examples/hmbb_2.jpg",
+        ]
+        targets = [
+            "/Users/eaxxkra/Projects/myplay/Painter/SegGPT/SegGPT_inference/examples/hmbb_1_target.png",
+            "/Users/eaxxkra/Projects/myplay/Painter/SegGPT/SegGPT_inference/examples/hmbb_2_target.png",
+        ]
 
-        prompt_images = [Image.open(a) for a in prompts]
-        target_images = [Image.open(a) for a in targets]
+        [Image.open(a) for a in prompts]
+        [Image.open(a) for a in targets]
 
-        processor = SegGPTImageProcessor(size={"shortest_edge": 448})
+        SegGPTImageProcessor(size={"shortest_edge": 448})
         # batch = processor.pre_process_semantic_segmenation(image,prompt_images,target_images,return_tensors='pt')
 
-        inference_image(model, 'cpu',
-                        "/Users/eaxxkra/Projects/myplay/Painter/SegGPT/SegGPT_inference/examples/hmbb_3.jpg",
-                        prompts, targets, './output_hmbb_3.png')
+        inference_image(
+            model,
+            "cpu",
+            "/Users/eaxxkra/Projects/myplay/Painter/SegGPT/SegGPT_inference/examples/hmbb_3.jpg",
+            prompts,
+            targets,
+            "./output_hmbb_3.png",
+        )
 
     # @slow
     def test_post_processing_semantic_segmentation(self):
-
-        prompts = ['https://huggingface.co/datasets/Raghavan/seggpt_samples/resolve/main/hmbb_1.jpg',
-                   'https://huggingface.co/datasets/Raghavan/seggpt_samples/resolve/main/hmbb_2.jpg']
-        targets = ['https://huggingface.co/datasets/Raghavan/seggpt_samples/resolve/main/hmbb_1_target.png',
-                   'https://huggingface.co/datasets/Raghavan/seggpt_samples/resolve/main/hmbb_2_target.png']
+        prompts = [
+            "https://huggingface.co/datasets/Raghavan/seggpt_samples/resolve/main/hmbb_1.jpg",
+            "https://huggingface.co/datasets/Raghavan/seggpt_samples/resolve/main/hmbb_2.jpg",
+        ]
+        targets = [
+            "https://huggingface.co/datasets/Raghavan/seggpt_samples/resolve/main/hmbb_1_target.png",
+            "https://huggingface.co/datasets/Raghavan/seggpt_samples/resolve/main/hmbb_2_target.png",
+        ]
 
         def prepare_img(image_url):
             im = Image.open(requests.get(image_url, stream=True).raw)
@@ -500,7 +532,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         target_images = [prepare_img(a) for a in targets]
 
         processor = SegGPTImageProcessor(size={"shortest_edge": 448})
-        inputs = processor.pre_process_semantic_segmenation(image, prompt_images, target_images, return_tensors='pt')
+        inputs = processor.pre_process_semantic_segmenation(image, prompt_images, target_images, return_tensors="pt")
 
         model = SegGPTForInstanceSegmentation.from_pretrained("Raghavan/seggpt_semantic_segmentation")
 

@@ -21,6 +21,7 @@ from ...utils import (
     is_vision_available,
 )
 
+
 _import_structure = {"configuration_seggpt": ["SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegGPTConfig"]}
 
 try:
@@ -63,9 +64,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_seggpt import (
             SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SegGPTModel,
+            SegGPTForInstanceSegmentation,
             SegGPTForSemanticSegmentation,
-            SegGPTForInstanceSegmentation
+            SegGPTModel,
         )
 
 else:

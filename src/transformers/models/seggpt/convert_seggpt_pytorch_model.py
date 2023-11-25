@@ -14,17 +14,14 @@
 # limitations under the License.
 
 import argparse
-import copy
-import json
 import logging
-import re
 from collections import OrderedDict
 
-import requests
 import torch
 
-from transformers import CLIPImageProcessor, SegGPTModel, SegGPTForInstanceSegmentation, SegGPTImageProcessor
+from transformers import SegGPTForInstanceSegmentation, SegGPTImageProcessor
 from transformers.models.seggpt import SegGPTConfig
+
 
 tiny_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_tiny.config"
 small_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_small.config"
@@ -40,7 +37,7 @@ encoder_keys = [
     "group_blocks",
     "type_token_ins",
     "norm.bias",
-    "norm.weight"
+    "norm.weight",
 ]
 
 decoder_keys = [
@@ -55,12 +52,11 @@ decoder_keys = [
 ]
 
 
-
 def convert_textnet_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     config = SegGPTConfig()
     model = SegGPTForInstanceSegmentation(config)
 
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_path, map_location=torch.device("cpu"))['model']
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_path, map_location=torch.device("cpu"))["model"]
     state_dict_changed = OrderedDict()
     num_group_blocks = config.num_group_blocks
     num_blocks_in_group = config.num_blocks_in_group
@@ -69,7 +65,7 @@ def convert_textnet_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     for ix in range(0, num_blocks_in_group * num_group_blocks):
         group_to_assign = ix // num_blocks_in_group
         block_id_in_group = ix % num_blocks_in_group
-        rename_keys_for_blocks[f'blocks.{ix}'] = f'group_blocks.{group_to_assign}.blocks.{block_id_in_group}'
+        rename_keys_for_blocks[f"blocks.{ix}"] = f"group_blocks.{group_to_assign}.blocks.{block_id_in_group}"
 
     for key in state_dict:
         new_key = key

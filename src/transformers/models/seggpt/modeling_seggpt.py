@@ -1,5 +1,6 @@
+import math
+import warnings
 from dataclasses import dataclass
-from functools import partial
 from typing import Optional, Tuple
 
 import torch
@@ -10,16 +11,11 @@ import torch.nn.functional as F
 # import fvcore.nn.weight_init as weight_init
 # from detectron2.layers import get_norm
 # from fairscale.nn.checkpoint import checkpoint_wrapper
-from torch.nn import LayerNorm
-
-import torch
-import math
-import warnings
-
 from transformers import PreTrainedModel
 from transformers.modeling_outputs import BaseModelOutput
 from transformers.models.seggpt.configuration_seggpt import SegGPTConfig
 from transformers.utils import ModelOutput
+
 
 SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = {
     "microsoft/beit-base-patch16-224-pt22k": (
@@ -31,10 +27,10 @@ SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = {
 
 class LayerNorm2D(nn.Module):
     """
-    A LayerNorm variant, popularized by Transformers, that performs point-wise mean and
-    variance normalization over the channel dimension for inputs that have shape
-    (batch_size, channels, height, width).
-    https://github.com/facebookresearch/ConvNeXt/blob/d1fa8f6fef0a165b27399986cc2bdacc92777e40/models/convnext.py#L119  # noqa B950
+    A LayerNorm variant, popularized by Transformers, that performs point-wise mean and variance normalization over the
+    channel dimension for inputs that have shape (batch_size, channels, height, width).
+    https://github.com/facebookresearch/ConvNeXt/blob/d1fa8f6fef0a165b27399986cc2bdacc92777e40/models/convnext.py#L119
+    # noqa B950
     """
 
     def __init__(self, normalized_shape, eps=1e-6):
@@ -50,53 +46,6 @@ class LayerNorm2D(nn.Module):
         x = (x - u) / torch.sqrt(s + self.eps)
         x = self.weight[:, None, None] * x + self.bias[:, None, None]
         return x
-
-
-# def window_unpartition(windows, window_size, pad_hw, hw):
-#     """
-#     Window unpartition into original sequences and removing padding.
-#     Args:
-#         x (tensor): input tokens with [B * num_windows, window_size, window_size, C].
-#         window_size (int): window size.
-#         pad_hw (Tuple): padded height and width (Hp, Wp).
-#         hw (Tuple): original height and width (H, W) before padding.
-#
-#     Returns:
-#         x: unpartitioned sequences with [B, H, W, C].
-#     """
-#     Hp, Wp = pad_hw
-#     H, W = hw
-#     B = windows.shape[0] // (Hp * Wp // window_size // window_size)
-#     x = windows.view(B, Hp // window_size, Wp // window_size, window_size, window_size, -1)
-#     x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, Hp, Wp, -1)
-#
-#     if Hp > H or Wp > W:
-#         x = x[:, :H, :W, :].contiguous()
-#     return x
-
-
-# def window_partition(x, window_size):
-#     """
-#     Partition into non-overlapping windows with padding if needed.
-#     Args:
-#         x (tensor): input tokens with [B, H, W, C].
-#         window_size (int): window size.
-#
-#     Returns:
-#         windows: windows after partition with [B * num_windows, window_size, window_size, C].
-#         (Hp, Wp): padded height and width before partition
-#     """
-#     B, H, W, C = x.shape
-#
-#     pad_h = (window_size - H % window_size) % window_size
-#     pad_w = (window_size - W % window_size) % window_size
-#     if pad_h > 0 or pad_w > 0:
-#         x = F.pad(x, (0, 0, 0, pad_w, 0, pad_h))
-#     Hp, Wp = H + pad_h, W + pad_w
-#
-#     x = x.view(B, Hp // window_size, window_size, Wp // window_size, window_size, C)
-#     windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
-#     return windows, (Hp, Wp)
 
 
 def get_abs_pos(abs_pos, hw):
@@ -165,15 +114,14 @@ def get_rel_pos(q_size, k_size, rel_pos):
 
 def add_decomposed_rel_pos(attn, q, rel_pos_h, rel_pos_w, q_size, k_size):
     """
-    Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
-    https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py   # noqa B950
     Args:
-        attn (Tensor): attention map.
-        q (Tensor): query q in the attention layer with shape (B, q_h * q_w, C).
-        rel_pos_h (Tensor): relative position embeddings (Lh, C) for height axis.
-        rel_pos_w (Tensor): relative position embeddings (Lw, C) for width axis.
-        q_size (Tuple): spatial sequence size of query q with (q_h, q_w).
-        k_size (Tuple): spatial sequence size of key k with (k_h, k_w).
+    Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
+    https://github.com/facebookresearch/mvit/blob/19786631e330df9f3622e5402b4a419a263a2c80/mvit/models/attention.py #
+    noqa B950
+        attn (Tensor): attention map. q (Tensor): query q in the attention layer with shape (B, q_h * q_w, C).
+        rel_pos_h (Tensor): relative position embeddings (Lh, C) for height axis. rel_pos_w (Tensor): relative position
+        embeddings (Lw, C) for width axis. q_size (Tuple): spatial sequence size of query q with (q_h, q_w). k_size
+        (Tuple): spatial sequence size of key k with (k_h, k_w).
 
     Returns:
         attn (Tensor): attention map with added relative positional embeddings.
@@ -188,9 +136,9 @@ def add_decomposed_rel_pos(attn, q, rel_pos_h, rel_pos_w, q_size, k_size):
     rel_h = torch.einsum("bhwc,hkc->bhwk", r_q, Rh)
     rel_w = torch.einsum("bhwc,wkc->bhwk", r_q, Rw)
 
-    attn = (
-            attn.view(B, q_h, q_w, k_h, k_w) + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
-    ).view(B, q_h * q_w, k_h * k_w)
+    attn = (attn.view(B, q_h, q_w, k_h, k_w) + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]).view(
+        B, q_h * q_w, k_h * k_w
+    )
 
     return attn
 
@@ -200,8 +148,7 @@ class SegGPTPatchEmbed(nn.Module):
     Image to Patch Embedding.
     """
 
-    def __init__(
-            self, config):
+    def __init__(self, config):
         """
         Args:
             kernel_size (Tuple): kernel size of the projection layer.
@@ -213,8 +160,11 @@ class SegGPTPatchEmbed(nn.Module):
         super().__init__()
 
         self.proj = nn.Conv2d(
-            config.num_channels, config.embed_dim, kernel_size=(config.patch_size, config.patch_size),
-            stride=(config.patch_size, config.patch_size), padding=(0, 0)
+            config.num_channels,
+            config.embed_dim,
+            kernel_size=(config.patch_size, config.patch_size),
+            stride=(config.patch_size, config.patch_size),
+            padding=(0, 0),
         )
 
     def forward(self, x):
@@ -243,17 +193,16 @@ class SegGPTMlp(nn.Module):
         return hidden_states
 
 
-def drop_path(x, drop_prob: float = 0., training: bool = False):
+def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
+    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however, the original name is
+    misleading as 'Drop Connect' is a different form of dropout in a separate paper... See discussion:
+    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
+    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
 
     """
-    if drop_prob == 0. or not training:
+    if drop_prob == 0.0 or not training:
         return x
     keep_prob = 1 - drop_prob
     shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
@@ -264,8 +213,7 @@ def drop_path(x, drop_prob: float = 0., training: bool = False):
 
 
 class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
-    """
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob=None):
         super(DropPath, self).__init__()
@@ -280,12 +228,14 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
     def norm_cdf(x):
         # Computes standard normal cumulative distribution function
-        return (1. + math.erf(x / math.sqrt(2.))) / 2.
+        return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
 
     if (mean < a - 2 * std) or (mean > b + 2 * std):
-        warnings.warn("mean is more than 2 std from [a, b] in nn.init.trunc_normal_. "
-                      "The distribution of values may be incorrect.",
-                      stacklevel=2)
+        warnings.warn(
+            "mean is more than 2 std from [a, b] in nn.init.trunc_normal_. "
+            "The distribution of values may be incorrect.",
+            stacklevel=2,
+        )
 
     with torch.no_grad():
         # Values are generated by using a truncated uniform distribution and
@@ -303,7 +253,7 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
         tensor.erfinv_()
 
         # Transform to proper mean, std
-        tensor.mul_(std * math.sqrt(2.))
+        tensor.mul_(std * math.sqrt(2.0))
         tensor.add_(mean)
 
         # Clamp to ensure it's in the proper range
@@ -311,23 +261,17 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
         return tensor
 
 
-def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
+def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     # type: (Tensor, float, float, float, float) -> Tensor
     r"""Fills the input Tensor with values drawn from a truncated
-    normal distribution. The values are effectively drawn from the
-    normal distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`
-    with values outside :math:`[a, b]` redrawn until they are within
-    the bounds. The method used for generating the random values works
-    best when :math:`a \leq \text{mean} \leq b`.
     Args:
-        tensor: an n-dimensional `torch.Tensor`
-        mean: the mean of the normal distribution
-        std: the standard deviation of the normal distribution
-        a: the minimum cutoff value
-        b: the maximum cutoff value
+    normal distribution. The values are effectively drawn from the normal distribution :math:`\mathcal{N}(\text{mean},
+    \text{std}^2)` with values outside :math:`[a, b]` redrawn until they are within the bounds. The method used for
+    generating the random values works best when :math:`a \leq \text{mean} \leq b`.
+        tensor: an n-dimensional `torch.Tensor` mean: the mean of the normal distribution std: the standard deviation
+        of the normal distribution a: the minimum cutoff value b: the maximum cutoff value
     Examples:
-        >>> w = torch.empty(3, 5)
-        >>> nn.init.trunc_normal_(w)
+        >>> w = torch.empty(3, 5) >>> nn.init.trunc_normal_(w)
     """
     return _no_grad_trunc_normal_(tensor, mean, std, a, b)
 
@@ -336,15 +280,14 @@ class SegGPTAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
     def __init__(
-            self,
-            config,
+        self,
+        config,
     ):
         super().__init__()
         self.num_heads = config.num_attention_heads
         head_dim = config.embed_dim // config.num_attention_heads
-        self.scale = head_dim ** -0.5
-        input_size = (config.image_size[0] // config.patch_size,
-                      config.image_size[1] // config.patch_size)
+        self.scale = head_dim**-0.5
+        input_size = (config.image_size[0] // config.patch_size, config.image_size[1] // config.patch_size)
         self.qkv = nn.Linear(config.embed_dim, config.embed_dim * 3, bias=config.qkv_bias)
         self.proj = nn.Linear(config.embed_dim, config.embed_dim)
 
@@ -357,8 +300,11 @@ class SegGPTAttention(nn.Module):
             # trunc_normal_(self.rel_pos_h, std=0.02)
             # trunc_normal_(self.rel_pos_w, std=0.02)
 
-    def forward(self, hidden_states,
-                output_attentions: Optional[bool] = False, ):
+    def forward(
+        self,
+        hidden_states,
+        output_attentions: Optional[bool] = False,
+    ):
         B, H, W, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
         qkv = self.qkv(hidden_states).reshape(B, H * W, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
@@ -384,9 +330,9 @@ class SegGPTBlock(nn.Module):
     """Transformer blocks with support of window attention and residual propagation blocks"""
 
     def __init__(
-            self,
-            config,
-            block_depth,
+        self,
+        config,
+        block_depth,
     ):
         super().__init__()
         self.norm1 = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
@@ -404,10 +350,11 @@ class SegGPTBlock(nn.Module):
 
         # self.window_size = config.window_size
 
-    def forward(self,
-                hidden_state,
-                output_attentions: Optional[bool] = None,
-                ):
+    def forward(
+        self,
+        hidden_state,
+        output_attentions: Optional[bool] = None,
+    ):
         shortcut = hidden_state
         hidden_state = self.norm1(hidden_state)
 
@@ -430,7 +377,9 @@ class SegGPTBlock(nn.Module):
         hidden_state = hidden_state + drop_path(self.mlp(self.norm2(hidden_state)), drop_prob=self.drop_path_rate)
 
         if self.swap_img_tgts:
-            hidden_state = (hidden_state[:hidden_state.shape[0] // 2] + hidden_state[hidden_state.shape[0] // 2:]) * 0.5
+            hidden_state = (
+                hidden_state[: hidden_state.shape[0] // 2] + hidden_state[hidden_state.shape[0] // 2 :]
+            ) * 0.5
 
         if output_attentions:
             return hidden_state, attention_output
@@ -439,7 +388,6 @@ class SegGPTBlock(nn.Module):
 
 
 class SegGPTBlockGroup(nn.Module):
-
     def __init__(self, config, depth):
         super().__init__()
         blocks = []
@@ -451,13 +399,13 @@ class SegGPTBlockGroup(nn.Module):
 
         self.blocks = nn.ModuleList(blocks)
 
-    def forward(self,
-                hidden_state,
-                output_attentions: Optional[bool] = None,
-                output_hidden_states: Optional[bool] = None,
-                return_dict: Optional[bool] = None,
-                ):
-
+    def forward(
+        self,
+        hidden_state,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
         hidden_states = []
         attention_outputs = []
         for block in self.blocks:
@@ -473,20 +421,16 @@ class SegGPTBlockGroup(nn.Module):
             return outputs + (attention_outputs,) if output_attentions else outputs
 
         return BaseModelOutput(
-            last_hidden_state=hidden_state,
-            hidden_states=hidden_states,
-            attentions=attention_outputs
+            last_hidden_state=hidden_state, hidden_states=hidden_states, attentions=attention_outputs
         )
 
 
 class SegGPTEncoder(nn.Module):
-
     def __init__(self, config):
         super().__init__()
         self.patch_size = config.patch_size
         self.patch_embed = SegGPTPatchEmbed(config)
-        self.num_patches = (config.image_size[0] // config.patch_size) * (
-                config.image_size[1] // config.patch_size)
+        self.num_patches = (config.image_size[0] // config.patch_size) * (config.image_size[1] // config.patch_size)
 
         self.mask_token = nn.Parameter(torch.zeros(1, 1, 1, config.embed_dim))
         self.segment_token_x = nn.Parameter(torch.zeros(1, 1, 1, config.embed_dim))
@@ -497,19 +441,16 @@ class SegGPTEncoder(nn.Module):
 
         # Initialize absolute positional embedding with pretrain image size.
         num_patches = (config.pretrain_img_size // config.patch_size) * (config.pretrain_img_size // config.patch_size)
-        num_positions = (num_patches + 1)
+        num_positions = num_patches + 1
         self.pos_embed = nn.Parameter(torch.zeros(1, num_positions, config.embed_dim), requires_grad=True)
 
         # stochastic depth decay rule
         depth = config.num_group_blocks * config.num_blocks_in_group
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, depth)]
+        [x.item() for x in torch.linspace(0, config.drop_path_rate, depth)]
 
         self.group_blocks = nn.ModuleList()
         for i in range(config.num_group_blocks):
-            block = SegGPTBlockGroup(
-                config,
-                depth=i
-            )
+            block = SegGPTBlockGroup(config, depth=i)
             self.group_blocks.append(block)
 
         self._out_feature_channels = {config.out_feature: config.embed_dim}
@@ -520,23 +461,25 @@ class SegGPTEncoder(nn.Module):
             trunc_normal_(self.pos_embed, std=0.02)
         self.norm = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
 
-    def forward(self, imgs, tgts, seg_type=None,
-                output_attentions: Optional[bool] = None,
-                output_hidden_states: Optional[bool] = None,
-                return_dict: Optional[bool] = None,
-                ):
-
+    def forward(
+        self,
+        imgs,
+        tgts,
+        seg_type=None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
         # embed patches
         x = self.patch_embed(imgs)
         y = self.patch_embed(tgts)
         batch_size, Hp, Wp, _ = x.size()
-        seq_len = Hp * Wp
 
         mask_token = self.mask_token.expand(batch_size, Hp, Wp, -1)
         # replace the masked visual tokens by mask_token
 
         bool_masked_pos = torch.zeros(self.num_patches)
-        bool_masked_pos[self.num_patches // 2:] = 1
+        bool_masked_pos[self.num_patches // 2 :] = 1
         bool_masked_pos = bool_masked_pos.unsqueeze(dim=0).flatten(1).to(torch.bool)
 
         w = bool_masked_pos.unsqueeze(-1).type_as(mask_token).reshape(-1, Hp, Wp, 1)
@@ -546,12 +489,8 @@ class SegGPTEncoder(nn.Module):
         x = x + self.segment_token_x
         y = y + self.segment_token_y
         if self.pos_embed is not None:
-            x = x + get_abs_pos(
-                self.pos_embed, (x.shape[1], x.shape[2])
-            )
-            y = y + get_abs_pos(
-                self.pos_embed, (y.shape[1], y.shape[2])
-            )
+            x = x + get_abs_pos(self.pos_embed, (x.shape[1], x.shape[2]))
+            y = y + get_abs_pos(self.pos_embed, (y.shape[1], y.shape[2]))
 
         # add type tokens for cls and ins
         type_emb = torch.zeros(batch_size, 1, 1, self.type_token_cls.shape[-1]).to(x.device)
@@ -561,15 +500,17 @@ class SegGPTEncoder(nn.Module):
         x = x + type_emb
         y = y + type_emb
         hidden_state = torch.cat((x, y), dim=0)
-        merge_idx = 2
         # apply Transformer blocks
         last_hidden_states = []
         all_hidden_states = [hidden_state]
         all_attention_outputs = []
         for idx, block_group in enumerate(self.group_blocks):
-            group_block_outputs = block_group(hidden_state, output_attentions=output_attentions,
-                                              output_hidden_states=output_hidden_states,
-                                              return_dict=return_dict)
+            group_block_outputs = block_group(
+                hidden_state,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
             hidden_state = group_block_outputs[0]
             if output_hidden_states:
                 all_hidden_states.extend(group_block_outputs[1])
@@ -585,9 +526,7 @@ class SegGPTEncoder(nn.Module):
             return outputs + (all_attention_outputs,) if output_attentions else outputs
 
         return BaseModelOutput(
-            last_hidden_state=last_hidden_state,
-            hidden_states=all_hidden_states,
-            attentions=all_attention_outputs
+            last_hidden_state=last_hidden_state, hidden_states=all_hidden_states, attentions=all_attention_outputs
         )
 
 
@@ -596,10 +535,16 @@ class SegGPTDecoder(nn.Module):
         super().__init__()
         self.patch_size = config.patch_size
         self.decoder_embed_dim = config.decoder_embed_dim
-        self.decoder_embed = nn.Linear(config.embed_dim * 4, config.patch_size ** 2 * config.decoder_embed_dim,
-                                       bias=True)  # decoder to patch
+        self.decoder_embed = nn.Linear(
+            config.embed_dim * 4, config.patch_size**2 * config.decoder_embed_dim, bias=True
+        )  # decoder to patch
         self.decoder_pred = nn.Sequential(
-            nn.Conv2d(config.decoder_embed_dim, config.decoder_embed_dim, kernel_size=3, padding=1, ),
+            nn.Conv2d(
+                config.decoder_embed_dim,
+                config.decoder_embed_dim,
+                kernel_size=3,
+                padding=1,
+            ),
             LayerNorm2D(config.decoder_embed_dim),
             nn.GELU(),
             nn.Conv2d(config.decoder_embed_dim, 3, kernel_size=1, bias=True),  # decoder to patch
@@ -610,7 +555,7 @@ class SegGPTDecoder(nn.Module):
         p = self.patch_size
         h, w = hidden_states.shape[1], hidden_states.shape[2]
         hidden_states = hidden_states.reshape(shape=(hidden_states.shape[0], h, w, p, p, self.decoder_embed_dim))
-        hidden_states = torch.einsum('nhwpqc->nchpwq', hidden_states)
+        hidden_states = torch.einsum("nhwpqc->nchpwq", hidden_states)
         hidden_states = hidden_states.reshape(shape=(hidden_states.shape[0], -1, h * p, w * p))
 
         hidden_states = self.decoder_pred(hidden_states)  # Bx3xHxW
@@ -676,26 +621,21 @@ class SegGPTModelOutput(ModelOutput):
 
 
 class SegGPTModel(SegGPTPretrainedModel):
-    def __init__(
-            self, config
-    ):
+    def __init__(self, config):
         super().__init__(config)
 
         # --------------------------------------------------------------------------
         self.encoder = SegGPTEncoder(config)
 
         self.decoder = SegGPTDecoder(config)
-        self.num_patches = (config.image_size[0] // config.patch_size) * (
-                config.image_size[1] // config.patch_size)
+        self.num_patches = (config.image_size[0] // config.patch_size) * (config.image_size[1] // config.patch_size)
 
         self.apply(self._init_weights)
         self.patch_size = config.patch_size
 
-
     def patchify(self, imgs):
         """
-        imgs: (N, 3, H, W)
-        x: (N, L, patch_size**2 *3)
+        imgs: (N, 3, H, W) x: (N, L, patch_size**2 *3)
         """
         p = self.patch_size
         assert imgs.shape[2] == 2 * imgs.shape[3] and imgs.shape[2] % p == 0
@@ -703,22 +643,21 @@ class SegGPTModel(SegGPTPretrainedModel):
         w = imgs.shape[3] // p
         h = w * 2
         x = imgs.reshape(shape=(imgs.shape[0], 3, h, p, w, p))
-        x = torch.einsum('nchpwq->nhwpqc', x)
-        x = x.reshape(shape=(imgs.shape[0], h * w, p ** 2 * 3))
+        x = torch.einsum("nchpwq->nhwpqc", x)
+        x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * 3))
         return x
 
     def unpatchify(self, x):
         """
-        x: (N, L, patch_size**2 *3)
-        imgs: (N, 3, H, W)
+        x: (N, L, patch_size**2 *3) imgs: (N, 3, H, W)
         """
         p = self.patch_size
-        w = int((x.shape[1] * 0.5) ** .5)
+        w = int((x.shape[1] * 0.5) ** 0.5)
         h = w * 2
         assert h * w == x.shape[1]
 
         x = x.reshape(shape=(x.shape[0], h, w, p, p, 3))
-        x = torch.einsum('nhwpqc->nchpwq', x)
+        x = torch.einsum("nhwpqc->nchpwq", x)
         imgs = x.reshape(shape=(x.shape[0], 3, h * p, w * p))
         return imgs
 
@@ -727,7 +666,7 @@ class SegGPTModel(SegGPTPretrainedModel):
         p = self.patch_size
         h, w = x.shape[1], x.shape[2]
         x = x.reshape(shape=(x.shape[0], h, w, p, p, self.decoder_embed_dim))
-        x = torch.einsum('nhwpqc->nchpwq', x)
+        x = torch.einsum("nhwpqc->nchpwq", x)
         x = x.reshape(shape=(x.shape[0], -1, h * p, w * p))
 
         x = self.decoder_pred(x)  # Bx3xHxW
@@ -735,16 +674,13 @@ class SegGPTModel(SegGPTPretrainedModel):
 
     def loss(self, pred, tgts):
         """
-        tgts: [N, 3, H, W]
-        pred: [N, 3, H, W]
-        mask: [N, L], 0 is keep, 1 is remove,
-        valid: [N, 3, H, W]
+        tgts: [N, 3, H, W] pred: [N, 3, H, W] mask: [N, L], 0 is keep, 1 is remove, valid: [N, 3, H, W]
         """
 
         bool_masked_pos = torch.zeros(self.num_patches)
-        bool_masked_pos[self.num_patches // 2:] = 1
+        bool_masked_pos[self.num_patches // 2 :] = 1
         bool_masked_pos = bool_masked_pos.unsqueeze(dim=0).flatten(1).to(torch.bool)
-        bool_masked_pos = bool_masked_pos[:, :, None].repeat(1, 1,self.patch_size ** 2 * 3)
+        bool_masked_pos = bool_masked_pos[:, :, None].repeat(1, 1, self.patch_size**2 * 3)
 
         mask = self.unpatchify(bool_masked_pos)
         to_expand = tgts.shape[0] // mask.shape[0]
@@ -755,15 +691,15 @@ class SegGPTModel(SegGPTPretrainedModel):
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
         return loss
 
-    def forward(self,
-                pixel_values,
-                prompt_pixel_values,
-                seg_type=None,
-                output_attentions: Optional[bool] = None,
-                output_hidden_states: Optional[bool] = None,
-                return_dict: Optional[bool] = None,
-                ):
-
+    def forward(
+        self,
+        pixel_values,
+        prompt_pixel_values,
+        seg_type=None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
         # bool_masked_pos = torch.zeros(self.encoder.num_patches)
         # bool_masked_pos[self.encoder.num_patches // 2:] = 1
         # bool_masked_pos = bool_masked_pos.unsqueeze(dim=0)
@@ -774,8 +710,14 @@ class SegGPTModel(SegGPTPretrainedModel):
         #         imgs.device)
         # else:
 
-        encoder_outputs = self.encoder(pixel_values, prompt_pixel_values, seg_type, output_attentions=output_attentions,
-                                       output_hidden_states=output_hidden_states, return_dict=return_dict)
+        encoder_outputs = self.encoder(
+            pixel_values,
+            prompt_pixel_values,
+            seg_type,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         decoder_output = self.decoder(encoder_outputs[0])
         logits = self.patchify(decoder_output)  # [N, L, p*p*3]
@@ -796,48 +738,52 @@ class SegGPTModel(SegGPTPretrainedModel):
 
 
 class SegGPTForInstanceSegmentation(SegGPTPretrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
         self.seggpt_model = SegGPTModel(config)
 
-    def forward(self,
-                pixel_values,
-                prompt_pixel_values,
-                output_attentions: Optional[bool] = None,
-                output_hidden_states: Optional[bool] = None,
-                return_dict: Optional[bool] = None,
-                ):
-
+    def forward(
+        self,
+        pixel_values,
+        prompt_pixel_values,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         seg_type = torch.ones([prompt_pixel_values.shape[0], 1])
-        return self.seggpt_model(pixel_values, prompt_pixel_values, seg_type, output_attentions, output_hidden_states,
-                                 return_dict)
+        return self.seggpt_model(
+            pixel_values, prompt_pixel_values, seg_type, output_attentions, output_hidden_states, return_dict
+        )
 
 
 class SegGPTForSemanticSegmentation(SegGPTPretrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
         self.seggpt_model = SegGPTModel(config)
 
-    def forward(self,
-                pixel_values,
-                prompt_pixel_values,
-                output_attentions: Optional[bool] = None,
-                output_hidden_states: Optional[bool] = None,
-                return_dict: Optional[bool] = None,
-                ):
+    def forward(
+        self,
+        pixel_values,
+        prompt_pixel_values,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         seg_type = torch.zeros([prompt_pixel_values.shape[0], 1])
-        return self.seggpt_model(pixel_values, prompt_pixel_values, seg_type, output_attentions, output_hidden_states,
-                                 return_dict)
+        return self.seggpt_model(
+            pixel_values, prompt_pixel_values, seg_type, output_attentions, output_hidden_states, return_dict
+        )

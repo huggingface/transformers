@@ -26,8 +26,6 @@ from ...image_transforms import (
     to_channel_dimension_format,
 )
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -37,7 +35,8 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_vision_available, logging, IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+from ...utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, TensorType, is_vision_available, logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -57,9 +56,9 @@ class SegGPTImageProcessor(BaseImageProcessor):
             Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
             the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.NEAREST`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
+        do_center_crop (`bool`, *optional*, defaults to `False`):
             Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
             `preprocess` method.
         crop_size (`Dict[str, int]` *optional*, defaults to 224):
@@ -87,19 +86,19 @@ class SegGPTImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values"]
 
     def __init__(
-            self,
-            do_resize: bool = True,
-            size: Dict[str, int] = None,
-            resample: PILImageResampling = PILImageResampling.BICUBIC,
-            do_center_crop: bool = False,
-            crop_size: Dict[str, int] = None,
-            do_rescale: bool = True,
-            rescale_factor: Union[int, float] = 1 / 255,
-            do_normalize: bool = True,
-            image_mean: Optional[Union[float, List[float]]] = None,
-            image_std: Optional[Union[float, List[float]]] = None,
-            do_convert_rgb: bool = True,
-            **kwargs,
+        self,
+        do_resize: bool = True,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        do_center_crop: bool = False,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_convert_rgb: bool = True,
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"shor,test_edge": 224}
@@ -120,13 +119,13 @@ class SegGPTImageProcessor(BaseImageProcessor):
         self.do_convert_rgb = do_convert_rgb
 
     def resize(
-            self,
-            image: np.ndarray,
-            size: Dict[str, int],
-            resample: PILImageResampling = PILImageResampling.NEAREST,
-            data_format: Optional[Union[str, ChannelDimension]] = None,
-            input_data_format: Optional[Union[str, ChannelDimension]] = None,
-            **kwargs,
+        self,
+        image: np.ndarray,
+        size: Dict[str, int],
+        resample: PILImageResampling = PILImageResampling.NEAREST,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image. The shortest edge of the image is resized to size["shortest_edge"], with the longest edge
@@ -163,23 +162,23 @@ class SegGPTImageProcessor(BaseImageProcessor):
         )
 
     def preprocess(
-            self,
-            images: ImageInput,
-            do_resize: bool = None,
-            size: Dict[str, int] = None,
-            resample: PILImageResampling = None,
-            do_center_crop: bool = None,
-            crop_size: int = None,
-            do_rescale: bool = None,
-            rescale_factor: float = None,
-            do_normalize: bool = None,
-            image_mean: Optional[Union[float, List[float]]] = None,
-            image_std: Optional[Union[float, List[float]]] = None,
-            do_convert_rgb: bool = None,
-            return_tensors: Optional[Union[str, TensorType]] = None,
-            data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-            input_data_format: Optional[Union[str, ChannelDimension]] = None,
-            **kwargs,
+        self,
+        images: ImageInput,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        do_center_crop: bool = None,
+        crop_size: int = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_convert_rgb: bool = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -314,14 +313,13 @@ class SegGPTImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def pre_process_semantic_segmenation(self, image, prompt_images, target_images, return_tensors=None):
-        image_pixel_values = self.preprocess(image)['pixel_values']
-        prompt_pixel_values = self.preprocess(prompt_images)['pixel_values']
-        target_pixel_values = self.preprocess(target_images)['pixel_values']
+        image_pixel_values = self.preprocess(image)["pixel_values"]
+        prompt_pixel_values = self.preprocess(prompt_images)["pixel_values"]
+        target_pixel_values = self.preprocess(target_images)["pixel_values"]
 
         image_batch, target_batch = [], []
 
         for image_pixel_value in image_pixel_values:
-
             for prompt, target in zip(prompt_pixel_values, target_pixel_values):
                 tgt = np.concatenate((target, target), axis=1)
                 img = np.concatenate((prompt, image_pixel_value), axis=1)
@@ -329,6 +327,6 @@ class SegGPTImageProcessor(BaseImageProcessor):
                 image_batch.append(img)
                 target_batch.append(tgt)
 
-        data = {'pixel_values': np.stack(image_batch, axis=0), 'prompt_pixel_values': np.stack(target_batch, axis=0)}
+        data = {"pixel_values": np.stack(image_batch, axis=0), "prompt_pixel_values": np.stack(target_batch, axis=0)}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
