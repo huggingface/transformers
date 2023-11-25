@@ -29,7 +29,7 @@ from transformers.activations import ACT2FN
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from transformers.utils.logging import get_logger
 
-from .configuration_cogvlm import CogVLMConfig, CogVLMVisionConfig
+from .configuration_cogvlm import CogVLMConfig
 
 # TODO remove following dependencies
 from .util import FastRotaryEmbedding
@@ -530,7 +530,6 @@ class CogVLMModel(CogVLMPreTrainedModel):
         self.post_init()
 
     def encode_images(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-
         images_features = self.vision(pixel_values)
         return images_features
 

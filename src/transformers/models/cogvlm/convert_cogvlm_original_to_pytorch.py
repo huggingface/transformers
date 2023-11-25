@@ -59,7 +59,6 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     inputs = original_model.build_conversation_input_ids(
         tokenizer, query=query, history=[], images=[image]
     )  # chat mode
-    original_pixel_values = inputs["images"][0]
 
     def gather_inputs(inputs, device, use_bfloat16=True):
         dtype = torch.bfloat16 if use_bfloat16 else torch.float32
@@ -70,7 +69,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
             "images": [[inputs["images"][0].to(device).to(dtype)]],
         }
         return inputs
-    
+
     original_inputs = gather_inputs(inputs, device="cuda")
     gen_kwargs = {"max_length": 2048, "do_sample": False}
 
@@ -101,20 +100,17 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         image_mean=OPENAI_CLIP_MEAN,
         image_std=OPENAI_CLIP_STD,
     )
-    processor = CogVLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    patch_size = original_model.config.vision_config["patch_size"]
+    processor = CogVLMProcessor(image_processor=image_processor, tokenizer=tokenizer, image_size=image_size, patch_size=patch_size)
+
+    original_inputs = gather_inputs(inputs, device="cuda:1", use_bfloat16=False)
+    original_inputs["pixel_values"] = torch.stack(original_inputs.pop("images")[0])
 
     prompt = f"Question: {query} Answer:"
-    pixel_values = processor(images=image, text=prompt, return_tensors="pt").pixel_values.to("cuda")
+    inputs = processor(images=image, text=prompt, return_tensors="pt").to("cuda:1")
 
-    # for k,v in inputs.items():
-    #     print(k,v.shape)
-
-    # verify pixel values
-    assert torch.allclose(pixel_values, original_pixel_values.to(pixel_values.device))
-
-    # TODO use processor instead
-    inputs = gather_inputs(inputs, device="cuda:1", use_bfloat16=False)
-    inputs["pixel_values"] = torch.stack(inputs.pop("images")[0])
+    for k,v in inputs.items():
+        assert torch.allclose(v, original_inputs[k].to(v.device))
 
     with torch.no_grad():
         outputs = model.generate(**inputs, **gen_kwargs)

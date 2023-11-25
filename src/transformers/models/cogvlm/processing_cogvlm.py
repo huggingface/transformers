@@ -18,10 +18,15 @@ Processor class for CogVLM.
 
 from typing import List, Optional, Union
 
+from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
+
+
+LANGUAGE_TOKEN_TYPE = 0
+VISION_TOKEN_TYPE = 1
 
 
 class CogVLMProcessor(ProcessorMixin):
@@ -42,65 +47,47 @@ class CogVLMProcessor(ProcessorMixin):
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = "LlamaTokenizer"
 
-    def __init__(self, image_processor, tokenizer):
-        tokenizer.return_token_type_ids = False
+    def __init__(self, image_processor, tokenizer, image_size, patch_size):
         super().__init__(image_processor, tokenizer)
-        self.current_processor = self.image_processor
+        self.image_size = image_size
+        self.patch_size = patch_size
 
     def __call__(
         self,
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        add_special_tokens: bool = True,
+        add_special_tokens: bool = False,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = True,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
-        return_token_type_ids: bool = False,
+        return_token_type_ids: bool = True,
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
-    ) -> BatchEncoding:
+    ) -> BatchFeature:
         """
         This method uses [`CLIPImageProcessor.__call__`] method to prepare image(s) for the model, and
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
         """
-        if images is None and text is None:
-            raise ValueError("You have to specify either images or text.")
 
-        # Get only text
-        if images is None:
-            self.current_processor = self.tokenizer
-            text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
-            return text_encoding
+        input_ids = [self.tokenizer.bos_token_id]
+        token_type_ids = [LANGUAGE_TOKEN_TYPE]
+        pixel_values = None
 
-        # add pixel_values
-        encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
+        if images is not None:
+            num_vision_tokens = (self.image_size // self.patch_size) * (self.image_size // self.patch_size) + 2
+            input_ids += [self.tokenizer.pad_token_id] * num_vision_tokens
+            token_type_ids += [VISION_TOKEN_TYPE] * num_vision_tokens
+            pixel_values = self.image_processor(images, return_tensors=return_tensors).pixel_values
 
         if text is not None:
             text_encoding = self.tokenizer(
@@ -112,22 +99,34 @@ class CogVLMProcessor(ProcessorMixin):
                 stride=stride,
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_attention_mask=return_attention_mask,
+                # TODO support the following 3 flags
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
+                return_token_type_ids=None,
                 return_length=return_length,
                 verbose=verbose,
-                return_tensors=return_tensors,
+                return_tensors=None,
                 **kwargs,
             )
-        else:
-            text_encoding = None
+            text_ids = text_encoding.input_ids
+            input_ids += text_ids
+            token_type_ids += [LANGUAGE_TOKEN_TYPE] * len(text_ids)
 
-        if text_encoding is not None:
-            encoding_image_processor.update(text_encoding)
+        data = {}
+        data["input_ids"] = [input_ids]
+        if return_token_type_ids:
+            data["token_type_ids"] = [token_type_ids]
+        if return_attention_mask:
+            attention_mask = [1] * len(input_ids)
+            data["attention_mask"] = [attention_mask]
 
-        return encoding_image_processor
+        result = BatchFeature(data=data, tensor_type=return_tensors)
+
+        if pixel_values is not None:
+            result["pixel_values"] = pixel_values
+
+        return result
 
     def batch_decode(self, *args, **kwargs):
         """
