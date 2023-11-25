@@ -28,6 +28,7 @@ from ...activations_tf import get_tf_activation
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PretrainedConfig
 from ...modeling_tf_utils import shape_list
+from ...tf_utils import invert_attention_mask
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -432,7 +433,7 @@ class TFIdeficsDecoupledLinear(tf.keras.layers.Layer):
         return cls(**config)
 
 
-def _make_causal_mask(self, input_ids_shape, dtype, past_key_values_length=0):
+def _make_causal_mask(input_ids_shape, dtype, past_key_values_length=0):
     """
     Make causal mask used for bi-directional self-attention.
     """
@@ -1252,7 +1253,7 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         # Make image_attention_mask compatible with hidden states
         text_seq_len = shape_list(image_attention_mask)[1]
         image_attention_mask = tf.expand_dims(image_attention_mask, -1)
-        image_attention_mask = tf.repeat(image_attention_mask, repeats=[1, 1, 1, image_seq_len])
+        image_attention_mask = tf.repeat(image_attention_mask, repeats=image_seq_len)
         image_attention_mask = tf.reshape(image_attention_mask, (batch_size, text_seq_len, num_images * image_seq_len))
 
         if image_hidden_states is not None:
@@ -1260,7 +1261,7 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
             image_hidden_shape = (image_batch_size, image_sequence_length)
             if image_attention_mask is None:
                 image_attention_mask = tf.ones(image_hidden_shape, dtype=tf.int32)
-            image_attention_mask = self.invert_attention_mask(image_attention_mask)
+            image_attention_mask = invert_attention_mask(image_attention_mask)
         else:
             image_attention_mask = None
 
@@ -1287,7 +1288,7 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
 
-        for idx, decoder_layer in enumerate(self.layers):
+        for idx, decoder_layer in enumerate(self.decoder_layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
