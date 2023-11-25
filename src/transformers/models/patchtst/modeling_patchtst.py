@@ -843,23 +843,23 @@ class PatchTSTModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, num_channels, height, width)`. Hidden-states of
             the model at the output of each layer plus the optional initial embedding outputs.
-        patch_input (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
-            Patched input to the Transformer
         mask: (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches)`, *optional*)
             Bool masked tensor indicating which patches are masked
         loc: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*)
             Mean of the input data (batch_size, sequence_length, num_channels) over the sequence_length
         scale: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*)
             Std of the input data (batch_size, sequence_length, num_channels) over the sequence_length
+        patch_input (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
+            Patched input to the Transformer
     """
 
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    patch_input: torch.FloatTensor = None
     mask: torch.FloatTensor = None
     loc: torch.FloatTensor = None
     scale: torch.FloatTensor = None
+    patch_input: torch.FloatTensor = None
 
 
 @dataclass
@@ -1281,17 +1281,17 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
 
         if not return_dict:
             outputs = (encoder_output.last_hidden_state, encoder_output.hidden_states, encoder_output.attentions)
-            outputs = outputs + (patched_values, mask, loc, scale)
+            outputs = outputs + (mask, loc, scale, patched_values)
             return tuple(v for v in outputs if v is not None)
 
         return PatchTSTModelOutput(
             last_hidden_state=encoder_output.last_hidden_state,
             hidden_states=encoder_output.hidden_states,
             attentions=encoder_output.attentions,
-            patch_input=patched_values,
             mask=mask,
             loc=loc,
             scale=scale,
+            patch_input=patched_values
         )
 
 
@@ -1433,11 +1433,14 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
 
         encoder_states = model_output.hidden_states
         if not return_dict:
-            outputs = (x_hat,) + model_output[1:]
+            outputs = (x_hat,) + model_output[1:-4]
             outputs = (masked_loss,) + outputs if masked_loss is not None else outputs
             return outputs
         return PatchTSTForPretrainingOutput(
-            loss=masked_loss, prediction_output=x_hat, hidden_states=encoder_states, attentions=model_output.attentions
+            loss=masked_loss,
+            prediction_output=x_hat,
+            hidden_states=encoder_states,
+            attentions=model_output.attentions
         )
 
 
@@ -1568,7 +1571,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
             loss_val = loss(y_hat, target_values)
 
         if not return_dict:
-            outputs = (y_hat,) + model_output[1:]
+            outputs = (y_hat,) + model_output[1:-3]
             outputs = (loss_val,) + outputs if loss_val is not None else outputs
             return outputs
         return PatchTSTForClassificationOutput(
@@ -1812,7 +1815,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         scale = model_output.scale
 
         if not return_dict:
-            outputs = (y_hat_out,) + model_output[1:]
+            outputs = (y_hat_out,) + model_output[1:-1]
             outputs = (loss_val,) + outputs if loss_val is not None else outputs
             return outputs
         return PatchTSTForPredictionOutput(
@@ -2035,7 +2038,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
                 loss = loss(y_hat, target_values)
 
         if not return_dict:
-            outputs = (y_hat,) + model_output[1:]
+            outputs = (y_hat,) + model_output[1:-3]
             outputs = (loss,) + outputs if loss is not None else outputs
             return outputs
         return PatchTSTForRegressionOutput(
