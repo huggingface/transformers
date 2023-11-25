@@ -119,7 +119,8 @@ BEIT3_FOR_VISUAL_REASONING_INPUTS_DOCSTRING = r"""
             [What are input IDs?](../glossary#input-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, 2,num_channels, height, width)`):
             Pixel values. Pixel values can be obtained by combining two images after preprocessing using
-             [`AutoImageProcessor`]. See [`BeitImageProcessor.__call__`] for details.
+             [`AutoImageProcessor`]. See [`BeitImageProcessor.__call__`] for details. Use torch.cat with two images,
+             with dim=1.
         attention_mask (`torch.LongTensor` of shape `({0})`):
             Padding mask for input tokens , of same shape as `input_ids`
             - 1 indicates the token is **not masked**,
@@ -448,6 +449,12 @@ class Beit3VisionEmbedding(nn.Module):
 
 
 class Beit3MultiheadAttention(nn.Module):
+    """
+    Multi-headed attention from 'Attention Is All You Need' paper.
+
+    Here, we add layer norm (as explained in the Beit3 paper).
+    """
+
     def __init__(self, config):
         super().__init__()
         self.embed_dim = config.hidden_size
