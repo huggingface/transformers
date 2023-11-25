@@ -19,9 +19,9 @@ import warnings
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import torch
-import xformers.ops as xops
 from torch import nn
 from torch.nn import CrossEntropyLoss
+import torch.nn.functional as F
 
 from transformers import PreTrainedModel
 from transformers.activations import ACT2FN
@@ -77,27 +77,37 @@ class CogVLMAttention(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.output_dropout = torch.nn.Dropout(config.dropout_prob)
 
-    def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:
-        B, L, _ = x.shape
-        qkv = self.query_key_value(x)
-        qkv = qkv.reshape(B, L, 3, self.num_heads, -1).permute(2, 0, 1, 3, 4)  # 3, B, L, H, D
-        q, k, v = qkv[0], qkv[1], qkv[2]
+    def attention(self, q, k, v, attn_bias=None):
+        # scale = 1.0 / q.shape[-1] ** 0.5
+        q = q * self.scale
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
+        attn = q @ k.transpose(-2, -1)
+        if attn_bias is not None:
+            attn = attn + attn_bias
+        attn = attn.softmax(-1)
+        attn = attn @ v
+        return attn.transpose(1, 2)
 
-        out = xops.memory_efficient_attention(
-            q,
-            k,
-            v,
-            scale=self.scale,
-        )
-        output = self.dense(out.view(B, L, -1))
+    def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:
+        batch_size, sequence_length, _ = x.shape
+        qkv = self.query_key_value(x)
+        # reshape to (3, batch_size, sequence_length, num_heads, head_dim)
+        qkv = qkv.reshape(batch_size, sequence_length, 3, self.num_heads, -1).permute(2, 0, 1, 3, 4)
+        queries, keys, values = qkv[0], qkv[1], qkv[2]
+
+        attention_output = self.attention(queries, keys, values)
+
+        output = self.dense(attention_output.reshape(batch_size, sequence_length, -1))
         output = self.output_dropout(output)
         return output
 
-    def attention(self, q, k, v):
-        attn_weights = torch.matmul(q * self.scale, k.transpose(-2, -1))
-        attn_weights = attn_weights.softmax(dim=-1)
-        output = torch.matmul(attn_weights, v)
-        return output
+    # def attention(self, q, k, v):
+    #     attn_weights = torch.matmul(q * self.scale, k.transpose(-2, -1))
+    #     attn_weights = attn_weights.softmax(dim=-1)
+    #     output = torch.matmul(attn_weights, v)
+    #     return output
 
 
 class CogVLMVisionMLP(nn.Module):
