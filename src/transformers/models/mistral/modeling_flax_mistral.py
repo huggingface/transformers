@@ -696,7 +696,9 @@ class FlaxMistralModel(FlaxMistralPreTrainedModel):
     module_class = FlaxMistralModule
 
 
-append_call_sample_docstring(FlaxMistralModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPast, _CONFIG_FOR_DOC)
+append_call_sample_docstring(
+    FlaxMistralModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPast, _CONFIG_FOR_DOC, revision="/refs/pr/26943"
+)
 
 
 class FlaxMistralForCausalLMModule(nn.Module):
@@ -794,7 +796,11 @@ class FlaxMistralForCausalLM(FlaxMistralPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxMistralForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutputWithCrossAttentions, _CONFIG_FOR_DOC
+    FlaxMistralForCausalLM,
+    _CHECKPOINT_FOR_DOC,
+    FlaxCausalLMOutputWithCrossAttentions,
+    _CONFIG_FOR_DOC,
+    revision="/refs/pr/26943",
 )
 
 
@@ -874,5 +880,9 @@ class FlaxMistralForSequenceClassification(FlaxMistralPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxMistralForSequenceClassification, _CHECKPOINT_FOR_DOC, FlaxSequenceClassifierOutput, _CONFIG_FOR_DOC
+    FlaxMistralForSequenceClassification,
+    _CHECKPOINT_FOR_DOC,
+    FlaxSequenceClassifierOutput,
+    _CONFIG_FOR_DOC,
+    revision="/refs/pr/26943",
 )
