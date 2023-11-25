@@ -393,6 +393,7 @@ class SegGPTBlock(nn.Module):
         self.attn = SegGPTAttention(
             config,
         )
+        self.depth = block_depth
         self.reshape_mean = config.merge_index >= block_depth
         self.swap_img_tgts = config.merge_index == block_depth
         dpr_values = torch.linspace(0, config.drop_path_rate, config.num_blocks_in_group * config.num_group_blocks)
@@ -460,7 +461,7 @@ class SegGPTBlockGroup(nn.Module):
         hidden_states = [hidden_state]
         attention_outputs = []
         for block in self.blocks:
-            hidden_state = block(hidden_state,output_attentions=output_attentions)
+            hidden_state = block(hidden_state, output_attentions=output_attentions)
             if output_attentions:
                 hidden_state, attention = hidden_state
                 attention_outputs.append(attention)
@@ -560,14 +561,14 @@ class SegGPTEncoder(nn.Module):
 
         x = x + type_emb
         y = y + type_emb
-        x = torch.cat((x, y), dim=0)
+        hidden_state = torch.cat((x, y), dim=0)
         merge_idx = 2
         # apply Transformer blocks
         last_hidden_states = []
         all_hidden_states = []
         all_attention_outputs = []
         for idx, block_group in enumerate(self.group_blocks):
-            group_block_outputs = block_group(x, output_attentions=output_attentions,
+            group_block_outputs = block_group(hidden_state, output_attentions=output_attentions,
                                               output_hidden_states=output_hidden_states,
                                               return_dict=return_dict)
             hidden_state = group_block_outputs[0]
@@ -586,8 +587,8 @@ class SegGPTEncoder(nn.Module):
 
         return BaseModelOutput(
             last_hidden_state=last_hidden_state,
-            hidden_states=output_hidden_states,
-            attentions=output_attentions
+            hidden_states=all_hidden_states,
+            attentions=all_attention_outputs
         )
 
 
@@ -737,7 +738,6 @@ class SegGPTModel(SegGPTPretrainedModel):
         return imgs
 
     def forward_decoder(self, x):
-        x = torch.cat(x, dim=-1)
         x = self.decoder_embed(x)  # BxhxwxC
         p = self.patch_size
         h, w = x.shape[1], x.shape[2]
@@ -758,8 +758,8 @@ class SegGPTModel(SegGPTPretrainedModel):
 
         bool_masked_pos = torch.zeros(self.num_patches)
         bool_masked_pos[self.num_patches // 2:] = 1
-        bool_masked_pos = bool_masked_pos.unsqueeze(dim=0).flatten(1).to(torch.bool).repeat(1, 1,
-                                                                                            self.patch_size ** 2 * 3)
+        bool_masked_pos = bool_masked_pos.unsqueeze(dim=0).flatten(1).to(torch.bool)
+        bool_masked_pos = bool_masked_pos[:, :, None].repeat(1, 1,self.patch_size ** 2 * 3)
 
         mask = self.unpatchify(bool_masked_pos)
         to_expand = tgts.shape[0] // mask.shape[0]
@@ -792,13 +792,14 @@ class SegGPTModel(SegGPTPretrainedModel):
         encoder_outputs = self.encoder(pixel_values, prompt_pixel_values, seg_type, output_attentions=output_attentions,
                                        output_hidden_states=output_hidden_states, return_dict=return_dict)
 
-        logits = self.patchify(self.decoder(encoder_outputs[0]))  # [N, L, p*p*3]
-        loss = self.loss(logits, prompt_pixel_values)
+        decoder_output = self.decoder(encoder_outputs[0])
+        logits = self.patchify(decoder_output)  # [N, L, p*p*3]
+        loss = self.loss(decoder_output, prompt_pixel_values)
 
         if not return_dict:
             outputs = (loss, logits, encoder_outputs[0])
-            outputs = outputs + (encoder_outputs[1]) if output_hidden_states else outputs
-            return outputs + (encoder_outputs[2]) if output_attentions else outputs
+            outputs = outputs + (encoder_outputs[1],) if output_hidden_states else outputs
+            return outputs + (encoder_outputs[-1],) if output_attentions else outputs
 
         return SegGPTModelOutput(
             loss=loss,
@@ -823,8 +824,14 @@ class SegGPTForInstanceSegmentation(SegGPTPretrainedModel):
                 output_hidden_states: Optional[bool] = None,
                 return_dict: Optional[bool] = None,
                 ):
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+
+
         seg_type = torch.ones([prompt_pixel_values.shape[0], 1])
-        return self.seggpt_model(pixel_values, prompt_pixel_values,seg_type, output_attentions, output_hidden_states,
+        return self.seggpt_model(pixel_values, prompt_pixel_values, seg_type, output_attentions, output_hidden_states,
                                  return_dict)
 
 
@@ -842,6 +849,10 @@ class SegGPTForSemanticSegmentation(SegGPTPretrainedModel):
                 output_hidden_states: Optional[bool] = None,
                 return_dict: Optional[bool] = None,
                 ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+
         seg_type = torch.zeros([prompt_pixel_values.shape[0], 1])
-        return self.seggpt_model(pixel_values, prompt_pixel_values, seg_type,output_attentions, output_hidden_states,
+        return self.seggpt_model(pixel_values, prompt_pixel_values, seg_type, output_attentions, output_hidden_states,
                                  return_dict, seg_type)

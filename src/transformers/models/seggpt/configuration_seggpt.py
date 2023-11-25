@@ -137,3 +137,4 @@ class SegGPTConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.pretrain_img_size=pretrain_img_size
         self.merge_index = merge_index
+        self.is_encoder_decoder = True
