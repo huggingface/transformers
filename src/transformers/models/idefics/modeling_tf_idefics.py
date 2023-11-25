@@ -534,13 +534,13 @@ def rotate_half(x):
     return tf.concat((-x2, x1), axis=-1)
 
 
-def apply_rotary_pos_emb(self, q, k, cos, sin, position_ids):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     cos = tf.gather(cos, position_ids)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
     sin = tf.gather(sin, position_ids)
     cos = tf.expand_dims(cos, 1)
     sin = tf.expand_dims(sin, 1)
-    q_embed = (q * cos) + (self.rotate_half(q) * sin)
-    k_embed = (k * cos) + (self.rotate_half(k) * sin)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
 
@@ -691,7 +691,7 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
         attn_output = tf.keras.layers.Attention(
             use_scale=True,
             dropout=self.dropout,
-        )([query_states, value_states, key_states], mask=attention_mask)
+        )([query_states, value_states, key_states])
 
         if attn_output.shape != (bsz, self.num_heads, q_len, self.head_dim):
             raise ValueError(
@@ -706,7 +706,7 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
         attn_weights = None
         if output_attentions:
             logger.warning_once(
-                "attn_weights are not extracted in scaled_dot_product_attention. The model returns None instead"
+                "attn_weights are not extracted in tf.keras.layers.Attention. The model returns None instead"
             )
 
         return attn_output, attn_weights, past_key_value
@@ -772,14 +772,14 @@ class TFIdeficsDecoderLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
             use_cache=use_cache,
         )
-        hidden_states = tf.nn.dropout(hidden_states, rate=self.dropout, training=training)
+        hidden_states = tf.nn.dropout(hidden_states, rate=self.dropout)
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = tf.nn.dropout(hidden_states, rate=self.dropout, training=training)
+        hidden_states = tf.nn.dropout(hidden_states, rate=self.dropout)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
