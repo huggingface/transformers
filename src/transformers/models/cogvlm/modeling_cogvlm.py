@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
-import torch.nn.functional as F
 
 from transformers import PreTrainedModel
 from transformers.activations import ACT2FN
@@ -52,11 +51,13 @@ COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class CogVLMPatchEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
+
+        self.num_patches = (config.image_size // config.patch_size) ** 2 + 1
         self.proj = nn.Conv2d(
             config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
         )
         self.cls_embedding = nn.Parameter(torch.zeros(1, config.hidden_size))
-        self.position_embedding = nn.Embedding(config.num_positions, config.hidden_size)
+        self.position_embedding = nn.Embedding(self.num_patches, config.hidden_size)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
         x = self.proj(pixel_values)
@@ -70,15 +71,15 @@ class CogVLMPatchEmbedding(nn.Module):
 class CogVLMAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.num_heads = config.num_heads
-        head_dim = config.hidden_size // config.num_heads
+        self.num_heads = config.num_attention_heads
+        head_dim = config.hidden_size // config.num_attention_heads
         self.scale = head_dim**-0.5
         self.query_key_value = nn.Linear(config.hidden_size, config.hidden_size * 3)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.output_dropout = torch.nn.Dropout(config.dropout_prob)
 
+    # thanks to https://github.com/facebookresearch/xformers/issues/922#issuecomment-1808329588
     def attention(self, q, k, v, attn_bias=None):
-        # scale = 1.0 / q.shape[-1] ** 0.5
         q = q * self.scale
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
@@ -102,12 +103,6 @@ class CogVLMAttention(nn.Module):
         output = self.dense(attention_output.reshape(batch_size, sequence_length, -1))
         output = self.output_dropout(output)
         return output
-
-    # def attention(self, q, k, v):
-    #     attn_weights = torch.matmul(q * self.scale, k.transpose(-2, -1))
-    #     attn_weights = attn_weights.softmax(dim=-1)
-    #     output = torch.matmul(attn_weights, v)
-    #     return output
 
 
 class CogVLMVisionMLP(nn.Module):
@@ -194,6 +189,7 @@ class CogVLMVisionModel(nn.Module):
         return x
 
 
+# TODO replace by new attention mask utilities
 def _make_causal_mask(
     input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
 ):
@@ -211,6 +207,7 @@ def _make_causal_mask(
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
+# TODO replace by new attention mask utilities
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.

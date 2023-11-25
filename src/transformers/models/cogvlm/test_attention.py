@@ -1,6 +1,5 @@
 import torch
 import xformers.ops as xops
-import torch.nn.functional as F
 
 
 torch.manual_seed(0)
@@ -15,6 +14,7 @@ xops_outputs = xops.memory_efficient_attention(queries, keys, values, scale=scal
 
 # xops_outputs = F.scaled_dot_product_attention(queries, keys, values, scale=scale)
 
+
 def equiv_fn(q, k, v, attn_bias=None):
     scale = 1.0 / q.shape[-1] ** 0.5
     q = q * scale
@@ -28,6 +28,7 @@ def equiv_fn(q, k, v, attn_bias=None):
     attn = attn @ v
     return attn.transpose(1, 2)
 
+
 # reshape hidden_states
 # attn = self.reshape_batch_dim_to_heads(attn)
 
@@ -40,5 +41,3 @@ print("First values of xops_outputs:", xops_outputs[0, 0, :3, :3])
 print("First values of outputs:", outputs[0, 0, :3, :3])
 
 assert torch.allclose(xops_outputs, outputs, atol=1e-5)
-
-

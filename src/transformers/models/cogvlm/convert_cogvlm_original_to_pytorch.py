@@ -49,6 +49,8 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     )
     original_model.to("cuda:0")
 
+    print("Original config:", original_model.config)
+
     # verify chat example
     query = "Describe this image"
     image = Image.open(

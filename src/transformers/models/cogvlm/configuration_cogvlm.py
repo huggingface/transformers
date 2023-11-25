@@ -39,11 +39,17 @@ class CogVLMVisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 1408):
+        image_size (`int`, *optional*, defaults to 490):
+            The size (resolution) of each image.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of channels in each image.
+        patch_size (`int`, *optional*, defaults to 14):
+            The size (resolution) of each patch.
+        hidden_size (`int`, *optional*, defaults to 1792):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 6144):
+        intermediate_size (`int`, *optional*, defaults to 15360):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 39):
+        num_hidden_layers (`int`, *optional*, defaults to 63):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -59,6 +65,8 @@ class CogVLMVisionConfig(PretrainedConfig):
             The epsilon used for layernorm layers.
         initializer_range (`float`, *optional*, defaults to 1e-10):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
 
     Example:
 
@@ -79,16 +87,17 @@ class CogVLMVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        image_size=224,
+        image_size=490,
         num_channels=3,
         patch_size=14,
-        hidden_size=1408,
-        intermediate_size=6144,
-        num_hidden_layers=39,
+        hidden_size=1792,
+        intermediate_size=15360,
+        num_hidden_layers=63,
         num_attention_heads=16,
         hidden_act="gelu",
         layer_norm_eps=1e-6,
         initializer_range=1e-10,
+        dropout_prob=0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -103,6 +112,7 @@ class CogVLMVisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.dropout_prob = dropout_prob
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
