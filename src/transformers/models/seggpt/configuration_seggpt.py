@@ -21,8 +21,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/beit-base-patch16-224-pt22k": (
-        "https://huggingface.co/microsoft/beit-base-patch16-224-pt22k/resolve/main/config.json"
+    "Raghavan/seggpt_semantic_segmentation": (
+        "https://huggingface.co/Raghavan/seggpt_semantic_segmentation/raw/main/config.json"
     ),
     # See all BEiT models at https://huggingface.co/models?filter=beit
 }

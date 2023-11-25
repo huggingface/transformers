@@ -17,12 +17,9 @@ from transformers.models.seggpt.configuration_seggpt import SegGPTConfig
 from transformers.utils import ModelOutput
 
 
-SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = {
-    "microsoft/beit-base-patch16-224-pt22k": (
-        "https://huggingface.co/microsoft/beit-base-patch16-224-pt22k/resolve/main/config.json"
-    ),
-    # See all BEiT models at https://huggingface.co/models?filter=beit
-}
+SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "Raghavan/seggpt_semantic_segmentation",
+]
 
 
 class LayerNorm2D(nn.Module):
