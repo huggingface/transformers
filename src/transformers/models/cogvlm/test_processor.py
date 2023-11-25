@@ -1,6 +1,8 @@
-from transformers import CogVLMProcessor, LlamaTokenizer, CLIPImageProcessor
-from PIL import Image
 import requests
+from PIL import Image
+
+from transformers import CLIPImageProcessor, CogVLMProcessor, LlamaTokenizer
+
 
 image_processor = CLIPImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
@@ -14,5 +16,5 @@ text = "how are you?"
 
 batch = processor(text=text, images=image, return_tensors="pt")
 
-for k,v in batch.items():
-    print(k,v.shape)
+for k, v in batch.items():
+    print(k, v.shape)

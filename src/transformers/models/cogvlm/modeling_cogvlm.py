@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import xformers.ops as xops
-from einops import rearrange
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -562,7 +561,7 @@ class CogVLMModel(CogVLMPreTrainedModel):
                     raise ValueError("Make sure to pass as many texts as images")
                 inputs_embeds = self.embed_tokens(input_ids)
                 images_features = self.encode_images(pixel_values)
-                images_features = rearrange(images_features, "b n d -> (b n) d")
+                images_features = images_features.reshape(-1, images_features.shape[-1])
                 images_features = images_features.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
                 inputs_embeds = inputs_embeds.index_put([token_type_ids == VISION_TOKEN_TYPE], images_features)
             else:  # single-modality

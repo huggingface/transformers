@@ -76,13 +76,11 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     with torch.no_grad():
         outputs = original_model.generate(**original_inputs, **gen_kwargs)
         outputs = outputs[:, original_inputs["input_ids"].shape[1] :]
-        print(tokenizer.decode(outputs[0]))
+        print("Original outputs:", tokenizer.decode(outputs[0]))
 
     # load HF model
     # rename in_channels to num_channels for sake of consistency
     original_model.config.vision_config["num_channels"] = original_model.config.vision_config.pop("in_channels")
-
-    print("Original config:", original_model.config)
 
     config = CogVLMConfig(**original_model.config.to_dict())
     model = CogVLMForCausalLM(config)
@@ -101,7 +99,9 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         image_std=OPENAI_CLIP_STD,
     )
     patch_size = original_model.config.vision_config["patch_size"]
-    processor = CogVLMProcessor(image_processor=image_processor, tokenizer=tokenizer, image_size=image_size, patch_size=patch_size)
+    processor = CogVLMProcessor(
+        image_processor=image_processor, tokenizer=tokenizer, image_size=image_size, patch_size=patch_size
+    )
 
     original_inputs = gather_inputs(inputs, device="cuda:1", use_bfloat16=False)
     original_inputs["pixel_values"] = torch.stack(original_inputs.pop("images")[0])
@@ -109,7 +109,8 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     prompt = f"Question: {query} Answer:"
     inputs = processor(images=image, text=prompt, return_tensors="pt").to("cuda:1")
 
-    for k,v in inputs.items():
+    # verify inputs
+    for k, v in inputs.items():
         assert torch.allclose(v, original_inputs[k].to(v.device))
 
     with torch.no_grad():
