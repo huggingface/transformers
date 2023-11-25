@@ -54,38 +54,21 @@ class TextNetModelTester:
         stem_kernel_size=3,
         stem_stride=2,
         stem_in_channels=3,
-        stem_out_channels=64,
-        # use_bn=True,
+        stem_out_channels=32,
         stem_act_func="relu",
         dropout_rate=0,
         ops_order="weight_bn_act",
         conv_layer_kernel_sizes=[
-            [
-                [3, 3],
-            ],
-            [
-                [3, 3],
-            ],
-            [
-                [3, 3],
-            ],
-            [
-                [3, 3],
-            ],
+            [[3, 3]],
+            [[3, 3]],
+            [[3, 3]],
+            [[3, 3]],
         ],
         conv_layer_strides=[
-            [
-                2,
-            ],
-            [
-                2,
-            ],
-            [
-                2,
-            ],
-            [
-                2,
-            ],
+            [2],
+            [2],
+            [2],
+            [2],
         ],
         out_features=["stage1", "stage2", "stage3", "stage4"],
         out_indices=[1, 2, 3, 4],
@@ -96,14 +79,13 @@ class TextNetModelTester:
         use_labels=True,
         hidden_act="relu",
         num_labels=3,
-        hidden_sizes=[64, 64, 64, 64, 64],
+        hidden_sizes=[32, 32, 32, 32, 32],
     ):
         self.parent = parent
         self.stem_kernel_size = stem_kernel_size
         self.stem_stride = stem_stride
         self.stem_in_channels = stem_in_channels
         self.stem_out_channels = stem_out_channels
-        # self.use_bn = use_bn
         self.act_func = stem_act_func
         self.dropout_rate = dropout_rate
         self.ops_order = ops_order
@@ -200,7 +182,9 @@ class TextNetModelTester:
         self.parent.assertEqual(len(result.feature_maps), 1)
         scale_h = self.image_size[0] // 32
         scale_w = self.image_size[1] // 32
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, 64, scale_h, scale_w])
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[0], scale_h, scale_w]
+        )
 
         # verify channels
         self.parent.assertEqual(len(model.channels), 1)
@@ -213,6 +197,7 @@ class TextNetModelTester:
         return config, inputs_dict
 
 
+# copied from tests.test_modeling_bit.BitBackboneTest with Bit -> TextNet
 @require_torch
 class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TextNetModel, TextNetForImageClassification, TextNetBackbone) if is_torch_available() else ()
@@ -325,18 +310,6 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             self.assertIsNotNone(model)
 
 
-# copied from tests.test_modeling_bit
-@require_torch
-class TextNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
-    all_model_classes = (TextNetBackbone,) if is_torch_available() else ()
-    config_class = TextNetConfig
-
-    has_attentions = False
-
-    def setUp(self):
-        self.model_tester = TextNetModelTester(self)
-
-
 @require_torch
 @require_vision
 class TextNetModelIntegrationTest(unittest.TestCase):
@@ -354,3 +327,15 @@ class TextNetModelIntegrationTest(unittest.TestCase):
         # forward pass
         output = model(pixel_values=torch.tensor(inputs["pixel_values"]))
         self.assertEqual(output.logits.shape, torch.Size([1, 2]))
+
+
+# copied from tests.test_modeling_bit.BitBackboneTest with Bit -> TextNet
+@require_torch
+class TextNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
+    all_model_classes = (TextNetBackbone,) if is_torch_available() else ()
+    config_class = TextNetConfig
+
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = TextNetModelTester(self)

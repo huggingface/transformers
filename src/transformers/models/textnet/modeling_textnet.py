@@ -165,9 +165,6 @@ class TextNetRepConvLayer(nn.Module):
         )
 
     def forward(self, hidden_states):
-        if hasattr(self, "fused_conv"):
-            self.__delattr__("fused_conv")
-
         main_outputs = self.main_conv(hidden_states)
         main_outputs = self.main_batch_norm(main_outputs)
 
@@ -348,12 +345,14 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         >>> from transformers import TextNetForImageClassification,TextNetImageProcessor
         >>> from PIL import Image
         >>> import requests
+
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
+
         >>> processor = TextNetImageProcessor.from_pretrained("Raghavan/textnet-base")
         >>> model = TextNetForImageClassification.from_pretrained("Raghavan/textnet-base")
-        >>> inputs = processor(images=image, return_tensors="pt",size={"shortest_edge": 640},default_to_square=True)
-        >>> # forward pass
+
+        >>> inputs = processor(images=image, return_tensors="pt", size={"shortest_edge": 640}, default_to_square=True)
         >>> outputs = model(**inputs)
         >>> outputs.logits.shape
         torch.Size([1, 2])
@@ -445,8 +444,9 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
         hidden_states = outputs.hidden_states if return_dict else outputs[2]
 
         feature_maps = ()
-        for idx in self.out_indices:
-            feature_maps += (hidden_states[idx],)
+        for idx, stage in enumerate(self.stage_names):
+            if stage in self.out_features:
+                feature_maps += (hidden_states[idx],)
 
         if not return_dict:
             output = (feature_maps,)

@@ -141,9 +141,7 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
         config = prepare_config(base_config_url, size)
 
     model = TextNetBackbone(config)
-    textnet_image_processor = TextNetImageProcessor(
-        size={"shortest_edge": size},
-    )
+    textnet_image_processor = TextNetImageProcessor(size={"shortest_edge": size})
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)["ema"]
     state_dict_changed = OrderedDict()
     for key in state_dict:
@@ -176,10 +174,10 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
     scale = short_size * 1.0 / min(h, w)
     h = int(h * scale + 0.5)
     w = int(w * scale + 0.5)
-    # if h % 32 != 0:
-    #     h = h + (32 - h % 32)
-    # if w % 32 != 0:
-    #     w = w + (32 - w % 32)
+    if h % 32 != 0:
+        h = h + (32 - h % 32)
+    if w % 32 != 0:
+        w = w + (32 - w % 32)
 
     transformations = transforms.Compose(
         [
