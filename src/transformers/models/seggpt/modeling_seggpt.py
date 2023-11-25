@@ -458,7 +458,7 @@ class SegGPTBlockGroup(nn.Module):
                 return_dict: Optional[bool] = None,
                 ):
 
-        hidden_states = [hidden_state]
+        hidden_states = []
         attention_outputs = []
         for block in self.blocks:
             hidden_state = block(hidden_state, output_attentions=output_attentions)
@@ -484,8 +484,7 @@ class SegGPTEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.patch_size = config.patch_size
-        self.patch_embed = SegGPTPatchEmbed(config,
-                                            )
+        self.patch_embed = SegGPTPatchEmbed(config)
         self.num_patches = (config.image_size[0] // config.patch_size) * (
                 config.image_size[1] // config.patch_size)
 
@@ -565,7 +564,7 @@ class SegGPTEncoder(nn.Module):
         merge_idx = 2
         # apply Transformer blocks
         last_hidden_states = []
-        all_hidden_states = []
+        all_hidden_states = [hidden_state]
         all_attention_outputs = []
         for idx, block_group in enumerate(self.group_blocks):
             group_block_outputs = block_group(hidden_state, output_attentions=output_attentions,
@@ -606,17 +605,16 @@ class SegGPTDecoder(nn.Module):
             nn.Conv2d(config.decoder_embed_dim, 3, kernel_size=1, bias=True),  # decoder to patch
         )
 
-    def forward(self, x):
-        # x = torch.cat(x, dim=-1)
-        x = self.decoder_embed(x)  # BxhxwxC
+    def forward(self, hidden_states):
+        hidden_states = self.decoder_embed(hidden_states)  # BxhxwxC
         p = self.patch_size
-        h, w = x.shape[1], x.shape[2]
-        x = x.reshape(shape=(x.shape[0], h, w, p, p, self.decoder_embed_dim))
-        x = torch.einsum('nhwpqc->nchpwq', x)
-        x = x.reshape(shape=(x.shape[0], -1, h * p, w * p))
+        h, w = hidden_states.shape[1], hidden_states.shape[2]
+        hidden_states = hidden_states.reshape(shape=(hidden_states.shape[0], h, w, p, p, self.decoder_embed_dim))
+        hidden_states = torch.einsum('nhwpqc->nchpwq', hidden_states)
+        hidden_states = hidden_states.reshape(shape=(hidden_states.shape[0], -1, h * p, w * p))
 
-        x = self.decoder_pred(x)  # Bx3xHxW
-        return x
+        hidden_states = self.decoder_pred(hidden_states)  # Bx3xHxW
+        return hidden_states
 
 
 class SegGPTPretrainedModel(PreTrainedModel):
@@ -634,6 +632,13 @@ class SegGPTPretrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, SegGPTEncoder):
+            factor = self.config.initializer_range
+            nn.init.normal_(module.segment_token_x, mean=0.0, std=0.5 * factor)
+            nn.init.normal_(module.segment_token_y, mean=0.0, std=0.5 * factor)
+            nn.init.normal_(module.type_token_cls, mean=0.0, std=0.5 * factor)
+            nn.init.normal_(module.type_token_ins, mean=0.0, std=0.5 * factor)
+            nn.init.normal_(module.pos_embed, mean=0.0, std=0.5 * factor)
 
 
 @dataclass
@@ -651,13 +656,13 @@ class SegGPTModelOutput(ModelOutput):
             The computed loss, returned when labels are present.
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction of the decoder.
-        encoder_last_hidden_state (`torch.FloatTensor`):
+        last_hidden_state (`torch.FloatTensor`):
             Last hidden states (final feature map) of the last stage of the encoder model .
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the encoder
             model at the output of each stage.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights from Detr's decoder after the attention softmax, used to compute the
             weighted average in the self-attention heads.
@@ -665,9 +670,9 @@ class SegGPTModelOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class SegGPTModel(SegGPTPretrainedModel):
@@ -679,33 +684,13 @@ class SegGPTModel(SegGPTPretrainedModel):
         # --------------------------------------------------------------------------
         self.encoder = SegGPTEncoder(config)
 
-        # --------------------------------------------------------------------------
-
-        # --------------------------------------------------------------------------
         self.decoder = SegGPTDecoder(config)
         self.num_patches = (config.image_size[0] // config.patch_size) * (
                 config.image_size[1] // config.patch_size)
-        # --------------------------------------------------------------------------
-        # torch.nn.init.normal_(self.mask_token, std=.02)
-        # torch.nn.init.normal_(self.segment_token_x, std=.02)
-        # torch.nn.init.normal_(self.segment_token_y, std=.02)
-        # torch.nn.init.normal_(self.type_token_cls, std=.02)
-        # torch.nn.init.normal_(self.type_token_ins, std=.02)
+
         self.apply(self._init_weights)
         self.patch_size = config.patch_size
 
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=0.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-
-    @torch.jit.ignore
-    def no_weight_decay(self):
-        return {'pos_embed', 'cls_token'}
 
     def patchify(self, imgs):
         """
@@ -804,9 +789,9 @@ class SegGPTModel(SegGPTPretrainedModel):
         return SegGPTModelOutput(
             loss=loss,
             logits=logits,
-            encoder_last_hidden_state=encoder_outputs[0],
-            encoder_hidden_states=encoder_outputs[1] if output_hidden_states else None,
-            encoder_attentions=encoder_outputs[2] if output_attentions else None,
+            last_hidden_state=encoder_outputs[0],
+            hidden_states=encoder_outputs[1] if output_hidden_states else None,
+            attentions=encoder_outputs[-1] if output_attentions else None,
         )
 
 
@@ -838,7 +823,7 @@ class SegGPTForInstanceSegmentation(SegGPTPretrainedModel):
 class SegGPTForSemanticSegmentation(SegGPTPretrainedModel):
 
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
 
         self.seggpt_model = SegGPTModel(config)
 
@@ -855,4 +840,4 @@ class SegGPTForSemanticSegmentation(SegGPTPretrainedModel):
 
         seg_type = torch.zeros([prompt_pixel_values.shape[0], 1])
         return self.seggpt_model(pixel_values, prompt_pixel_values, seg_type, output_attentions, output_hidden_states,
-                                 return_dict, seg_type)
+                                 return_dict)

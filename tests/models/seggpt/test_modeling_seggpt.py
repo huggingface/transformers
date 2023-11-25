@@ -24,6 +24,8 @@ from datasets import load_dataset
 from packaging import version
 
 from transformers.models.auto import get_values
+from transformers.models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES, \
+    MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES
 from transformers.models.seggpt import SegGPTConfig
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
@@ -57,9 +59,9 @@ class SegGPTModelTester:
             self,
             parent,
             num_channels=3,
-            image_size=[896, 448],
+            image_size=[128, 64],
             patch_size=16,
-            embed_dim=1024,
+            embed_dim=16,
             num_heads=16,
             drop_path_rate=0.1,
             window_size=14,
@@ -67,16 +69,17 @@ class SegGPTModelTester:
             mlp_ratio=4.,
             layer_norm_eps=1e-6,
             num_group_blocks=4,
-            num_blocks_in_group=6,
+            num_hidden_layers = 12,
             use_rel_pos=True,
             out_feature="last_feat",
-            decoder_embed_dim=64,
+            decoder_embed_dim=16,
             pretrain_img_size=224,
             num_labels=2,
             type_sequence_label_size=10,
             is_training=True,
             use_labels=True,
             batch_size=1,
+            num_prompts=2,
     ):
         self.parent = parent
         self.num_channels = num_channels
@@ -90,7 +93,7 @@ class SegGPTModelTester:
         self.mlp_ratio = mlp_ratio
         self.layer_norm_eps = layer_norm_eps
         self.num_group_blocks = num_group_blocks
-        self.num_blocks_in_group = num_blocks_in_group
+        self.num_hidden_layers = num_hidden_layers
         self.use_rel_pos = use_rel_pos
         self.out_feature = out_feature
         self.decoder_embed_dim = decoder_embed_dim
@@ -101,11 +104,13 @@ class SegGPTModelTester:
         self.is_training = is_training
         self.batch_size = batch_size
         self.type_sequence_label_size = type_sequence_label_size
-        self.num_hidden_layers = self.num_group_blocks * self.num_blocks_in_group
+        self.num_prompts = num_prompts
 
+        self.encoder_seq_length = (((self.image_size[0] - self.patch_size)// self.patch_size ) + 1) * (((self.image_size[1] - self.patch_size)// self.patch_size ) + 1)
+        self.encoder_key_length = (((self.image_size[0] - self.patch_size)// self.patch_size ) + 1) * (((self.image_size[1] - self.patch_size)// self.patch_size ) + 1)
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([2 * self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
-        prompts = floats_tensor([2 * self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
+        pixel_values = floats_tensor([self.num_prompts * self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
+        prompts = floats_tensor([self.num_prompts * self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
 
         labels = None
         pixel_labels = None
@@ -119,36 +124,32 @@ class SegGPTModelTester:
 
     def get_config(self):
         return SegGPTConfig(
-            # num_channels=self.num_channels,
-            # image_size=self.image_size,
-            # patch_size=self.patch_size,
-            # embed_dim=self.embed_dim,
-            # num_heads=self.num_attention_heads,
-            # drop_path_rate=self.drop_path_rate,
-            # window_size=self.window_size,
-            # qkv_bias=self.qkv_bias,
-            # mlp_ratio=self.mlp_ratio,
-            # layer_norm_eps=self.layer_norm_eps,
-            # num_group_blocks=self.num_group_blocks,
-            # num_blocks_in_group=self.num_blocks_in_group,
-            # use_rel_pos=self.use_rel_pos,
-            # out_feature=self.out_feature,
-            # decoder_embed_dim=self.decoder_embed_dim,
-            # pretrain_img_size=self.pretrain_img_size,
+            num_channels=self.num_channels,
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            embed_dim=self.embed_dim,
+            num_heads=self.num_attention_heads,
+            num_hidden_layers=self.num_hidden_layers,
+            drop_path_rate=self.drop_path_rate,
+            window_size=self.window_size,
+            qkv_bias=self.qkv_bias,
+            mlp_ratio=self.mlp_ratio,
+            layer_norm_eps=self.layer_norm_eps,
+            num_group_blocks=self.num_group_blocks,
+            use_rel_pos=self.use_rel_pos,
+            out_feature=self.out_feature,
+            decoder_embed_dim=self.decoder_embed_dim,
+            pretrain_img_size=self.pretrain_img_size,
         )
 
     def create_and_check_for_semantic_segmentation(self, config, pixel_values, prompts, labels, pixel_labels):
         config.num_labels = self.num_labels
-        model = SegGPTModel(config)
+        model = SegGPTForSemanticSegmentation(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, prompts)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
-        )
-        result = model(pixel_values, labels=pixel_labels)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
+            result.logits.shape, (2 * self.batch_size, self.encoder_seq_length,self.patch_size**2 * 3)
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -159,7 +160,7 @@ class SegGPTModelTester:
 
 
 @require_torch
-class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as BEiT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -200,15 +201,6 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    def test_model_common_attributes(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -224,6 +216,159 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_semantic_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
+
+    def test_attention_outputs(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model does not output attentions")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        chunk_length = getattr(self.model_tester, "chunk_length", None)
+        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
+            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            if chunk_length is not None:
+                self.assertListEqual(
+                    list(attentions[0].shape[-4:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                )
+            else:
+                self.assertListEqual(
+                    list(attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads * self.model_tester.num_prompts * self.model_tester.num_prompts, encoder_seq_length, encoder_key_length],
+                )
+            out_len = len(outputs)
+
+            if self.is_encoder_decoder:
+                correct_outlen = 5
+
+                # loss is at first position
+                if "labels" in inputs_dict:
+                    correct_outlen += 1  # loss is added to beginning
+                # Question Answering model returns start_logits and end_logits
+                if model_class.__name__ in [
+                    *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES),
+                ]:
+                    correct_outlen += 1  # start_logits and end_logits instead of only 1 output
+                if "past_key_values" in outputs:
+                    correct_outlen += 1  # past_key_values have been returned
+
+                self.assertEqual(out_len, correct_outlen)
+
+                # decoder attentions
+                decoder_attentions = outputs.decoder_attentions
+                self.assertIsInstance(decoder_attentions, (list, tuple))
+                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(decoder_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                )
+
+                # cross attentions
+                cross_attentions = outputs.cross_attentions
+                self.assertIsInstance(cross_attentions, (list, tuple))
+                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(cross_attentions[0].shape[-3:]),
+                    [
+                        self.model_tester.num_attention_heads,
+                        decoder_seq_length,
+                        encoder_key_length,
+                    ],
+                )
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if hasattr(self.model_tester, "num_hidden_states_types"):
+                added_hidden_states = self.model_tester.num_hidden_states_types
+            elif self.is_encoder_decoder:
+                added_hidden_states = 2
+            else:
+                added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            if chunk_length is not None:
+                self.assertListEqual(
+                    list(self_attentions[0].shape[-4:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                )
+            else:
+                self.assertListEqual(
+                    list(self_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads * self.model_tester.num_prompts * self.model_tester.num_prompts, encoder_seq_length, encoder_key_length],
+                )
+
+    @unittest.skip(reason="SegGPT Model does not support input and output embeddings")
+    def test_model_common_attributes(self):
+        pass
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
 
     # @slow
     # def test_model_from_pretrained(self):
@@ -359,7 +504,10 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         model = SegGPTForInstanceSegmentation.from_pretrained("Raghavan/seggpt_semantic_segmentation")
 
-        loss, output,_ = model(**inputs)
+        output = model(**inputs)
+
+        loss = output.loss
+        logits = output.logits
 
         self.assertEqual(0.1255, round(float(loss.detach().numpy()), 4))
-        np.array_equal([-2.1193, -2.0402, -1.8096, -2.1195], output.detach().numpy()[1, 2, 6:10])
+        np.array_equal([-2.1193, -2.0402, -1.8096, -2.1195], logits.detach().numpy()[1, 2, 6:10])

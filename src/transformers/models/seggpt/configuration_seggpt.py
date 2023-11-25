@@ -28,6 +28,7 @@ SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # See all BEiT models at https://huggingface.co/models?filter=beit
 }
 
+
 class SegGPTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MgpstrModel`]. It is used to instantiate an
@@ -106,8 +107,8 @@ class SegGPTConfig(PretrainedConfig):
             qkv_bias=True,
             mlp_ratio=4.,
             layer_norm_eps=1e-6,
+            num_hidden_layers=24,
             num_group_blocks=4,
-            num_blocks_in_group=6,
             use_rel_pos=True,
             out_feature="last_feat",
             decoder_embed_dim=64,
@@ -124,7 +125,7 @@ class SegGPTConfig(PretrainedConfig):
         self.embed_dim = embed_dim
         # self.depth = depth
         self.num_group_blocks = num_group_blocks
-        self.num_blocks_in_group = num_blocks_in_group
+        self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.drop_path_rate = drop_path_rate
         self.window_size = window_size
@@ -135,6 +136,7 @@ class SegGPTConfig(PretrainedConfig):
         self.out_feature = out_feature
         self.decoder_embed_dim = decoder_embed_dim
         self.initializer_range = initializer_range
-        self.pretrain_img_size=pretrain_img_size
+        self.pretrain_img_size = pretrain_img_size
         self.merge_index = merge_index
-        self.is_encoder_decoder = True
+        # self.is_encoder_decoder = False
+        self.num_blocks_in_group = self.num_hidden_layers // num_group_blocks
