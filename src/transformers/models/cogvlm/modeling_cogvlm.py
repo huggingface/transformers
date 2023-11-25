@@ -570,6 +570,14 @@ class CogVLMModel(CogVLMPreTrainedModel):
                 images_features = self.encode_images(pixel_values)
                 images_features = images_features.reshape(-1, images_features.shape[-1])
                 images_features = images_features.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
+                print("Shape of input_ids:", input_ids.shape)
+                print("Shape of attention_mask:", attention_mask.shape)
+                print("Shape of token type ids:", token_type_ids.shape)
+                print("Shape of pixel_values:", pixel_values.shape)
+                
+                print("Shape of image features:", images_features.shape)
+                print("Shape of inputs_embeds:", inputs_embeds.shape)
+                print([token_type_ids == VISION_TOKEN_TYPE][0].shape)
                 inputs_embeds = inputs_embeds.index_put([token_type_ids == VISION_TOKEN_TYPE], images_features)
             else:  # single-modality
                 if token_type_ids is None:

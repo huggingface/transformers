@@ -84,7 +84,7 @@ class CogVLMProcessor(ProcessorMixin):
         pixel_values = None
 
         if images is not None:
-            num_vision_tokens = (self.image_size // self.patch_size) * (self.image_size // self.patch_size) + 2
+            num_vision_tokens = (self.image_size // self.patch_size)**2 + 2
             input_ids += [self.tokenizer.pad_token_id] * num_vision_tokens
             token_type_ids += [VISION_TOKEN_TYPE] * num_vision_tokens
             pixel_values = self.image_processor(images, return_tensors=return_tensors).pixel_values

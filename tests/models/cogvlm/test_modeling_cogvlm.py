@@ -58,8 +58,8 @@ class CogVLMModelTester:
                 parent,
                 num_channels=3,
                 image_size=32,
-                patch_size=16,
-                batch_size=13,
+                patch_size=2,
+                batch_size=1,
                 text_seq_length=7,
                 is_training=True,
                 use_input_mask=True,
@@ -70,8 +70,6 @@ class CogVLMModelTester:
                 num_attention_heads=4,
                 intermediate_size=37,
                 hidden_act="gelu",
-                hidden_dropout_prob=0.1,
-                attention_probs_dropout_prob=0.1,
                 max_position_embeddings=512,
                 initializer_range=0.02,
                 num_labels=3,
@@ -91,30 +89,36 @@ class CogVLMModelTester:
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.parent = parent
         self.is_training = is_training
 
-        self.seq_length = self.text_seq_length + self.image_size // self.patch_size ** 2 + 2
+        self.vision_seq_length = (self.image_size // self.patch_size) ** 2 + 2
+        self.seq_length = self.text_seq_length + self.vision_seq_length
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.text_seq_length], self.vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).to(torch_device)
+        token_type_ids = torch.cat(
+            [
+                            torch.zeros(self.batch_size, self.text_seq_length, dtype=torch.long),
+                            torch.ones(self.batch_size, self.vision_seq_length, dtype=torch.long),
+            ],
+            dim=1,
+        ).to(torch_device)
 
         attention_mask = None
         if self.use_input_mask:
-            attention_mask = random_attention_mask([self.batch_size, self.text_seq_length])
+            attention_mask = random_attention_mask([self.batch_size, self.seq_length]).to(torch_device)
 
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size]).to(torch_device)
 
-        labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+        labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels).to(torch_device) if self.use_labels else None
 
         config = self.get_config()
 
-        return config, input_ids, attention_mask, pixel_values, labels
+        return config, input_ids, attention_mask, token_type_ids, pixel_values, labels
     
     def get_vision_config(self):
         return CogVLMVisionConfig(
@@ -126,10 +130,7 @@ class CogVLMModelTester:
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
-            max_position_embeddings=self.max_position_embeddings,
         )
 
     def get_config(self):
@@ -140,21 +141,16 @@ class CogVLMModelTester:
             hidden_size=self.hidden_size,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
+            max_position_embeddings=self.max_position_embeddings,
+            vocab_size=self.vocab_size,
         )
 
-    def create_and_check_for_causal_lm(self, config, input_ids, attention_mask, pixel_values, labels):
+    def create_and_check_for_causal_lm(self, config, input_ids, attention_mask, token_type_ids, pixel_values, labels):
         model = CogVLMForCausalLM(config).to(torch_device).eval()
         with torch.no_grad():
-            result = model(pixel_values, input_ids, attention_mask)
+            result = model(pixel_values=pixel_values, input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
 
-        self.parent.assertEqual(
-            result.logits.shape,
-            (
-                self.batch_size,
-                self.seq_length,
-                self.vocab_size,
-            ),
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -162,6 +158,7 @@ class CogVLMModelTester:
             config,
             input_ids,
             attention_mask,
+            token_type_ids,
             pixel_values,
             labels,
         ) = config_and_inputs
@@ -169,6 +166,7 @@ class CogVLMModelTester:
             "pixel_values": pixel_values,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "token_type_ids": token_type_ids,
             "labels": labels,
         }
         return config, inputs_dict
