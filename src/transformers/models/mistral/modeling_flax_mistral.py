@@ -697,7 +697,7 @@ class FlaxMistralModel(FlaxMistralPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxMistralModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPast, _CONFIG_FOR_DOC, revision="/refs/pr/26943"
+    FlaxMistralModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPast, _CONFIG_FOR_DOC, revision="refs/pr/95"
 )
 
 
@@ -800,7 +800,7 @@ append_call_sample_docstring(
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
-    revision="/refs/pr/26943",
+    revision="refs/pr/95",
 )
 
 
@@ -884,5 +884,5 @@ append_call_sample_docstring(
     _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
-    revision="/refs/pr/26943",
+    revision="refs/pr/95",
 )
