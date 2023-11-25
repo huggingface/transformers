@@ -44,7 +44,7 @@ from .configuration_mistral import MistralConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MistralConfig"
-_CHECKPOINT_FOR_DOC = "ksmcg/Mistral-7B-v0.1"
+_CHECKPOINT_FOR_DOC = "mistralai/Mistral-7B-v0.1"
 
 MISTRAL_START_DOCSTRING = r"""
 
