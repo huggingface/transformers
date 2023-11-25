@@ -37,6 +37,7 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     space_between_special_tokens = True
     test_rust_tokenizer = True
     test_sentencepiece_ignore_case = True
+    pre_trained_model_path = "google/rembert"
 
     def setUp(self):
         super().setUp()
@@ -159,3 +160,6 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert encoded_pair == [tokenizer.cls_token_id] + text + [tokenizer.sep_token_id] + text_2 + [
             tokenizer.sep_token_id
         ]
+
+    def test_added_tokens_serialization(self):
+        pass
