@@ -195,6 +195,11 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
 
     assert torch.allclose(original_pixel_values, pixel_values)
 
+    with torch.no_grad():
+        output = model(pixel_values)
+
+    assert np.allclose(output["feature_maps"][-1][0][0][0][-2:].detach().numpy(), np.array([4.0259, 17.4911]))
+
     model.save_pretrained(pytorch_dump_folder_path)
     textnet_image_processor.save_pretrained(pytorch_dump_folder_path)
     logging.info("The converted weights are save here : " + pytorch_dump_folder_path)
