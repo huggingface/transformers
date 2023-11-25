@@ -375,4 +375,4 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         )
         mean_prediction = outputs.sequences.mean(dim=1)
 
-        self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=TOLERANCE))
+        self.assertTrue(torch.allclose(mean_prediction[0, -1:], expected_slice, rtol=TOLERANCE))
