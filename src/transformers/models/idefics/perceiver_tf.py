@@ -87,7 +87,7 @@ class TFIdeficsPerceiverResampler(tf.keras.layers.Layer):
             ]
             for _ in range(depth)
         ]
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12)
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
 
     def call(self, context: tf.Tensor) -> tf.Tensor:
         """Resample arbitrary length context & *compress* down to self.n_latents latent embeddings"""

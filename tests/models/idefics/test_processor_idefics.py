@@ -132,7 +132,7 @@ class IdeficsProcessorTest(TestCasePlus):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor, return_tensors="pt")
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -145,15 +145,15 @@ class IdeficsProcessorTest(TestCasePlus):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer(padding_side="right")
 
-        processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor, return_tensors="pt")
 
         predicted_tokens = [
             "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk>",
             "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>",
         ]
         prompts = [[prompt] for prompt in self.prepare_prompts()[2]]
-        max_length = processor(prompts, padding="max_length", truncation=True, max_length=20)
-        longest = processor(prompts, padding="longest", truncation=True, max_length=30)
+        max_length = processor(prompts, padding="max_length", truncation=True, max_length=20, return_tensors="pt")
+        longest = processor(prompts, padding="longest", truncation=True, max_length=30, return_tensors="pt")
         decoded_max_length = processor.tokenizer.decode(max_length["input_ids"][-1])
         decoded_longest = processor.tokenizer.decode(longest["input_ids"][-1])
         self.assertEqual(decoded_max_length, predicted_tokens[1])
@@ -166,7 +166,7 @@ class IdeficsProcessorTest(TestCasePlus):
         processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
         prompts = self.prepare_prompts()
 
-        inputs = processor(prompts)
+        inputs = processor(prompts=prompts, return_tensors="pt")
 
         # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
         self.assertSetEqual(set(inputs.keys()), set(self.input_keys))
