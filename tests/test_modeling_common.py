@@ -429,9 +429,10 @@ class ModelTesterMixin:
     def test_fast_init_context_manager(self):
         # TODO ESMFold and some other work have calls to torch.nn.init which should not be skipped
         # Only weights that have "_is_hf_initialized" have to be skipped?
+        from transformers import set_seed
         from transformers.modeling_utils import no_init_weights
         from transformers.utils.generic import ContextManagers
-        from transformers import set_seed
+
         # 1. Create a dummy class. Should have buffers as well? To make sure we test __init__
         class MyClass(nn.Module):
             def __init__(self):
@@ -444,7 +445,12 @@ class ModelTesterMixin:
         set_seed(0)
         init_instance = MyClass()
         torch.testing.assert_allclose(no_init_instance.linear.bias, torch.zeros(10))
-        torch.testing.assert_allclose(init_instance.linear.bias, torch.tensor(([ 0.2975,  0.2131, -0.1379, -0.0796, -0.3012, -0.0057, -0.2381, -0.2439,-0.0174,  0.0475])), rtol=1e-3, atol=1e-4)
+        torch.testing.assert_allclose(
+            init_instance.linear.bias,
+            torch.tensor(([0.2975, 0.2131, -0.1379, -0.0796, -0.3012, -0.0057, -0.2381, -0.2439, -0.0174, 0.0475])),
+            rtol=1e-3,
+            atol=1e-4,
+        )
 
         # 2. Make sure torch.init function still work as expected
 
