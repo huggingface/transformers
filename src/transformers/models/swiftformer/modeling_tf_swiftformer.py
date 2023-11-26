@@ -547,12 +547,13 @@ TFSWIFTFORMER_INPUTS_DOCSTRING = r"""
         pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
-
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        training (`bool`, *optional*, defaults to `False`):
+            Whether or not to run the model in training mode.
 """
 
 
@@ -631,28 +632,6 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithNoAttention, Tuple[tf.Tensor]]:
-        r"""
-        encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
-            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`). Set to `False` during training, `True` during generation.
-        training (`bool`, *optional*, defaults to `False`):
-            Whether or not to run the model in training mode.
-        """
         outputs = self.swiftformer(
             pixel_values=pixel_values,
             output_hidden_states=output_hidden_states,
