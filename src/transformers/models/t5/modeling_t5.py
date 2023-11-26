@@ -635,6 +635,10 @@ class T5Attention(nn.Module):
         # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
         batch_size, seq_length = hidden_states.shape[:2]
 
+
+        #print('REMOVE THIS !!!! DEBUG !!!!! DISABLED DROPOUT FOR DEBUGGING !!!!!!\n'*4)
+        #self.dropout = 0.0
+
         real_seq_length = seq_length
 
         if past_key_value is not None:
@@ -763,6 +767,15 @@ class T5Attention(nn.Module):
                 position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
             if mask is not None:
+                
+                #the if below is for the case of NO pos encoding injected here (some code duplication with above - FIXME)
+                if position_bias is None: # if it's STILL None (so no one requested POSITION_EMBEDDING_T5_RELATIVE)
+                    position_bias = torch.zeros(
+                        (1, self.n_heads, real_seq_length, key_length), device=query_states.device, dtype=query_states.dtype
+                    )
+                    if self.gradient_checkpointing and self.training:
+                        position_bias.requires_grad = True
+
                 # MICHAL see above that mask is added to position_bias. Also in length-generalization.
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
@@ -845,7 +858,9 @@ class T5Attention(nn.Module):
             attn_output = attn_output.reshape(B, M, H*K)     
        
             
-
+        #print('debug=', attn_output[0,247:252,3], '\nmask=', mask[0,...,247:252])
+        
+        
         attn_output = self.o(attn_output)
 
         present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
@@ -1334,7 +1349,7 @@ class T5Stack(T5PreTrainedModel):
         #     position_ids_info_list_for_relative_embeddings.append( (None, POSITION_EMBEDDING_ROTARY))
 
         positional_indices_for_pos_emb_injection_in_attention = []
-        print("TODO: take care of defaults when no pos embedding related configs are defined by a user (default to T5 default behavior of using relative pos embedding)")
+        #print("TODO: take care of defaults when no pos embedding related configs are defined by a user (default to T5 default behavior of using relative pos embedding)")
 
         for position_ids, position_embedding_names  in position_ids_dict.values(): #orig
             position_embedding_name = position_embedding_names[0]  # till collate if fixed, we move a list of identical embedding names of batch_size
