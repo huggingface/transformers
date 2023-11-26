@@ -163,9 +163,10 @@ def no_init_weights(_enable=True):
     old_init_weights = _init_weights
     if _enable:
         _init_weights = False
-        def _skip_init(**kwargs):
+        def _skip_init(*args,**kwargs):
             pass
-        nn.Module.reset_parameters = _skip_init
+
+        torch.nn.init.kaiming_uniform_ = _skip_init
     try:
         yield
     finally:
