@@ -182,14 +182,14 @@ class CogVLMVisionMLP(nn.Module):
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.fc1(x)
-        x = self.activation_fn(x)
-        x = self.fc2(x)
-        return x
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.fc1(hidden_state)
+        hidden_state = self.activation_fn(hidden_state)
+        hidden_state = self.fc2(hidden_state)
+        return hidden_state
 
 
-class CogVLMTransformerLayer(nn.Module):
+class CogVLMVisionTransformerLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -207,10 +207,10 @@ class CogVLMTransformerLayer(nn.Module):
         return output
 
 
-class CogVLMTransformer(nn.Module):
+class CogVLMVisionTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layers = nn.ModuleList([CogVLMTransformerLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([CogVLMVisionTransformerLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(self, hidden_states):
         for layer_module in self.layers:
@@ -229,12 +229,12 @@ class CogVLMGLU(nn.Module):
         self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
         self.dense_4h_to_h = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
-    def forward(self, x):
-        x = self.linear_proj(x)
-        x = self.act1(self.norm1(x))
-        x = self.act2(self.gate_proj(x)) * self.dense_h_to_4h(x)
-        x = self.dense_4h_to_h(x)
-        return x
+    def forward(self, hidden_state):
+        hidden_state = self.linear_proj(hidden_state)
+        hidden_state = self.act1(self.norm1(hidden_state))
+        hidden_state = self.act2(self.gate_proj(hidden_state)) * self.dense_h_to_4h(hidden_state)
+        hidden_state = self.dense_4h_to_h(hidden_state)
+        return hidden_state
 
 
 class CogVLMVisionModel(nn.Module):
@@ -242,20 +242,21 @@ class CogVLMVisionModel(nn.Module):
         super().__init__()
 
         self.patch_embedding = CogVLMPatchEmbedding(config.vision_config)
-        self.transformer = CogVLMTransformer(config.vision_config)
+        self.transformer = CogVLMVisionTransformer(config.vision_config)
         self.linear_proj = CogVLMGLU(config, in_features=config.vision_config.hidden_size)
+        # parameters for beginning of image (boi) and end of image (eoi)
         self.boi = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.eoi = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
-        x = self.patch_embedding(pixel_values)
-        x = self.transformer(x)
-        x = x[:, 1:]
-        x = self.linear_proj(x)
-        boi = self.boi.expand(x.shape[0], -1, -1)
-        eoi = self.eoi.expand(x.shape[0], -1, -1)
-        x = torch.cat((boi, x, eoi), dim=1)
-        return x
+        hidden_state = self.patch_embedding(pixel_values)
+        hidden_state = self.transformer(hidden_state)
+        hidden_state = hidden_state[:, 1:]
+        hidden_state = self.linear_proj(hidden_state)
+        beginning_of_image_features = self.boi.expand(hidden_state.shape[0], -1, -1)
+        end_of_image_features = self.eoi.expand(hidden_state.shape[0], -1, -1)
+        hidden_state = torch.cat((beginning_of_image_features, hidden_state, end_of_image_features), dim=1)
+        return hidden_state
 
 
 # TODO replace by new attention mask utilities
@@ -315,8 +316,8 @@ class CogVLMMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+    def forward(self, hidden_state):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
         return down_proj
 
 
@@ -375,42 +376,6 @@ def attention_fn(
         return context_layer, attention_scores
 
 
-class CogVLMRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
-        super().__init__()
-
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-        # Build here to make `torch.jit.trace` work.
-        self._set_cos_sin_cache(
-            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
-        )
-
-    def _set_cos_sin_cache(self, seq_len, device, dtype):
-        self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
-
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
-
-    def forward(self, x, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
-
-        return (
-            self.cos_cached[:seq_len].to(dtype=x.dtype),
-            self.sin_cached[:seq_len].to(dtype=x.dtype),
-        )
-
-
 class CogVLMVisionExpertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -420,7 +385,6 @@ class CogVLMVisionExpertAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads
         self.max_position_embeddings = config.max_position_embeddings
 
-        # self.rotary_emb = CogVLMRotaryEmbedding(self.hidden_size // self.num_heads)
         self.rotary_emb = FastRotaryEmbedding(dim=self.head_dim, pos_idx_in_fp32=False)
         self.vision_expert_query_key_value = nn.Linear(self.hidden_size, self.hidden_size * 3, bias=False)
         self.vision_expert_dense = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
@@ -428,7 +392,8 @@ class CogVLMVisionExpertAttention(nn.Module):
         self.language_expert_dense = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
     def _transpose_for_scores(self, tensor):
-        """Transpose a 3D tensor [B, L, H*HD] into a 4D tensor with size [B H L HD]."""
+        """Transpose a 3D tensor [batch_size, sequence_length, num_head*head_dim] into a 4D tensor with size
+        [batch_size, num_heads, seq_length, head_dim]."""
         new_tensor_shape = tensor.size()[:-1] + (self.num_heads, self.head_dim)
         tensor = tensor.view(*new_tensor_shape)
         return tensor.permute(0, 2, 1, 3)
@@ -453,9 +418,9 @@ class CogVLMVisionExpertAttention(nn.Module):
         mixed_raw_layer[language_token_mask] = self.language_expert_query_key_value(hidden_states[language_token_mask])
 
         query_states, key_states, value_states = torch.split(mixed_raw_layer, self.hidden_size, dim=-1)
-        query_states = self._transpose_for_scores(query_states)  # B, H, L, HD
-        key_states = self._transpose_for_scores(key_states)  # B, H, L, HD
-        value_states = self._transpose_for_scores(value_states)  # B, H, L, HD
+        query_states = self._transpose_for_scores(query_states)
+        key_states = self._transpose_for_scores(key_states)
+        value_states = self._transpose_for_scores(value_states)
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
@@ -546,14 +511,14 @@ class CogVLMDecoderLayer(nn.Module):
         if use_cache:
             outputs += (present_key_value,)
 
-        return outputs  # type: ignore
+        return outputs
 
 
 class CogVLMPreTrainedModel(PreTrainedModel):
     config_class = CogVLMConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = False
-    _no_split_modules = ["CogVLMDecoderLayer", "CogVLMTransformerLayer"]
+    _no_split_modules = ["CogVLMDecoderLayer", "CogVLMVisionTransformerLayer"]
     _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
