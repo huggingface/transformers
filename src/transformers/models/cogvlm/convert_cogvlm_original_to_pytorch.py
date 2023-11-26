@@ -111,8 +111,8 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     prompt = f"Question: {query} Answer:"
     inputs = processor(images=image, text=prompt, return_tensors="pt").to("cuda:1")
 
-    for k,v in inputs.items():
-        print(k,v.shape)
+    for k, v in inputs.items():
+        print(k, v.shape)
 
     # verify inputs
     for k, v in inputs.items():

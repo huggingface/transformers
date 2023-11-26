@@ -31,7 +31,6 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -53,27 +52,27 @@ if is_vision_available():
 
 
 class CogVLMModelTester:
-    def __init__(self,
-                parent,
-                num_channels=3,
-                image_size=32,
-                patch_size=2,
-                batch_size=1,
-                text_seq_length=7,
-                is_training=True,
-                use_input_mask=True,
-                use_labels=True,
-                vocab_size=99,
-                hidden_size=32,
-                num_hidden_layers=2,
-                num_attention_heads=4,
-                intermediate_size=37,
-                hidden_act="gelu",
-                max_position_embeddings=512,
-                initializer_range=0.02,
-                num_labels=3,
-            ):
-        
+    def __init__(
+        self,
+        parent,
+        num_channels=3,
+        image_size=32,
+        patch_size=2,
+        batch_size=1,
+        text_seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_act="gelu",
+        max_position_embeddings=512,
+        initializer_range=0.02,
+        num_labels=3,
+    ):
         self.num_channels = num_channels
         self.image_size = image_size
         self.patch_size = patch_size
@@ -101,8 +100,8 @@ class CogVLMModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).to(torch_device)
         token_type_ids = torch.cat(
             [
-                            torch.zeros(self.batch_size, self.text_seq_length, dtype=torch.long),
-                            torch.ones(self.batch_size, self.vision_seq_length, dtype=torch.long),
+                torch.zeros(self.batch_size, self.text_seq_length, dtype=torch.long),
+                torch.ones(self.batch_size, self.vision_seq_length, dtype=torch.long),
             ],
             dim=1,
         ).to(torch_device)
@@ -111,14 +110,20 @@ class CogVLMModelTester:
         if self.use_input_mask:
             attention_mask = random_attention_mask([self.batch_size, self.seq_length]).to(torch_device)
 
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size]).to(torch_device)
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size]).to(
+            torch_device
+        )
 
-        labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels).to(torch_device) if self.use_labels else None
+        labels = (
+            ids_tensor([self.batch_size, self.seq_length], self.num_labels).to(torch_device)
+            if self.use_labels
+            else None
+        )
 
         config = self.get_config()
 
         return config, input_ids, attention_mask, token_type_ids, pixel_values, labels
-    
+
     def get_vision_config(self):
         return CogVLMVisionConfig(
             image_size=self.image_size,
@@ -147,7 +152,12 @@ class CogVLMModelTester:
     def create_and_check_for_causal_lm(self, config, input_ids, attention_mask, token_type_ids, pixel_values, labels):
         model = CogVLMForCausalLM(config).to(torch_device).eval()
         with torch.no_grad():
-            result = model(pixel_values=pixel_values, input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+            result = model(
+                pixel_values=pixel_values,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+            )
 
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
@@ -174,9 +184,7 @@ class CogVLMModelTester:
 class CogVLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CogVLMForCausalLM, CogVLMModel) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": CogVLMModel, "image-to-text": CogVLMForCausalLM}
-        if is_torch_available()
-        else {}
+        {"feature-extraction": CogVLMModel, "image-to-text": CogVLMForCausalLM} if is_torch_available() else {}
     )
 
     fx_compatible = False

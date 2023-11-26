@@ -26,6 +26,7 @@ from transformers import PreTrainedModel
 from transformers.activations import ACT2FN
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from transformers.utils.logging import get_logger
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 
 from .configuration_cogvlm import CogVLMConfig
 
@@ -41,11 +42,79 @@ logger = get_logger(__name__)
 LANGUAGE_TOKEN_TYPE = 0
 VISION_TOKEN_TYPE = 1
 
+_CONFIG_FOR_DOC = "CogVLMConfig"
+
 
 COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "THUDM/cogvlm-chat-hf",
     # See all CogVLM models at https://huggingface.co/models?filter=cogvlm
 ]
+
+
+COGVLM_START_DOCSTRING = r"""
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`CogVLMConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+COGVLM_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `({0})`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
 class CogVLMPatchEmbedding(nn.Module):
@@ -421,7 +490,11 @@ class CogVLMVisionExpertAttention(nn.Module):
         attn_output[vision_token_mask] = self.vision_expert_dense(context_layer[vision_token_mask])
         attn_output[language_token_mask] = self.language_expert_dense(context_layer[language_token_mask])
 
-        return (attn_output, attention_probs, past_key_value) if output_attentions else (attn_output, None, past_key_value)
+        return (
+            (attn_output, attention_probs, past_key_value)
+            if output_attentions
+            else (attn_output, None, past_key_value)
+        )
 
 
 class CogVLMDecoderLayer(nn.Module):
@@ -728,6 +801,12 @@ class CogVLMModel(CogVLMPreTrainedModel):
         return combined_attention_mask
 
 
+@add_start_docstrings(
+    """
+    CogVLM model with a language modeling head on top (a linear layer on top of the hidden states).
+    """,
+    COGVLM_START_DOCSTRING,
+)
 class CogVLMForCausalLM(CogVLMPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -758,6 +837,8 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
     def get_decoder(self):
         return self.model
 
+    @add_start_docstrings_to_model_forward(COGVLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -773,6 +854,37 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
+        r"""
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored,
+                the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import CogVLMProcessor, CogVLMForCausalLM
+        >>> import torch
+        >>> import requests
+        >>> from PIL import Image
+
+        >>> processor = CogVLMProcessor.from_pretrained("bert-base-uncased")
+        >>> model = CogVLMForCausalLM.from_pretrained("bert-base-uncased")
+
+        >>> # load image
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> prompt = "The dog is"
+        
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
+        >>> outputs = model.generate(**inputs)
+
+        >>> generated_text = processor.batch_decode(outputs, skip_special_tokens=True)
+        ```
+        """
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
