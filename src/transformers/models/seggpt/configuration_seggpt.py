@@ -50,7 +50,6 @@ class SegGPTConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             The stochastic depth rate.
-        window_size (`<fill_type>`, *optional*, defaults to 14): <fill_docstring>
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
