@@ -1321,7 +1321,7 @@ class PatchTSTMaskPretrainHead(nn.Module):
 
 
 @add_start_docstrings(
-    "The PatchTST for pretrain Model.",
+    "The PatchTST for pretrain model.",
     PATCHTST_START_DOCSTRING,
 )
 class PatchTSTForPretraining(PatchTSTPreTrainedModel):
@@ -1479,7 +1479,7 @@ class PatchTSTClassificationHead(nn.Module):
 
 
 @add_start_docstrings(
-    "The PatchTST for classification Model.",
+    "The PatchTST for classification model.",
     PATCHTST_START_DOCSTRING,
 )
 class PatchTSTForClassification(PatchTSTPreTrainedModel):
@@ -1674,7 +1674,7 @@ class PatchTSTPredictionHead(nn.Module):
 
 
 @add_start_docstrings(
-    "The PatchTST for prediction Model.",
+    "The PatchTST for prediction model.",
     PATCHTST_START_DOCSTRING,
 )
 class PatchTSTForPrediction(PatchTSTPreTrainedModel):
@@ -1927,6 +1927,10 @@ class PatchTSTRegressionHead(nn.Module):
         return output
 
 
+@add_start_docstrings(
+    "The PatchTST for regression model.",
+    PATCHTST_START_DOCSTRING,
+)
 class PatchTSTForRegression(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
