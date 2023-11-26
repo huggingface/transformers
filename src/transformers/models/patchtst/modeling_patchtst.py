@@ -757,9 +757,8 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
             `BaseModelOutput`
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+
 
         # Input embedding
         patch_input = self.embedder(patch_input)
@@ -1258,9 +1257,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
 
         if past_observed_mask is None:
             past_observed_mask = torch.ones_like(past_values)
