@@ -26,8 +26,8 @@ from transformers import PreTrainedModel
 from transformers.activations import ACT2FN
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from transformers.utils.logging import get_logger
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .configuration_cogvlm import CogVLMConfig
 
 # TODO remove following dependencies
@@ -76,6 +76,11 @@ COGVLM_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
+
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`CLIPImageProcessor.__call__`] for details.
+
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -96,11 +101,6 @@ COGVLM_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
 
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
@@ -129,12 +129,12 @@ class CogVLMPatchEmbedding(nn.Module):
         self.position_embedding = nn.Embedding(self.num_patches, config.hidden_size)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
-        x = self.proj(pixel_values)
-        x = x.flatten(2).transpose(1, 2)
-        cls_token = self.cls_embedding.expand(x.shape[0], -1, -1)
-        x = torch.cat((cls_token, x), dim=1)
-        x += self.position_embedding.weight.unsqueeze(0)
-        return x
+        embeddings = self.proj(pixel_values)
+        embeddings = embeddings.flatten(2).transpose(1, 2)
+        cls_token = self.cls_embedding.expand(embeddings.shape[0], -1, -1)
+        embeddings = torch.cat((cls_token, embeddings), dim=1)
+        embeddings += self.position_embedding.weight.unsqueeze(0)
+        return embeddings
 
 
 class CogVLMAttention(nn.Module):
@@ -148,21 +148,21 @@ class CogVLMAttention(nn.Module):
         self.output_dropout = torch.nn.Dropout(config.dropout_prob)
 
     # thanks to https://github.com/facebookresearch/xformers/issues/922#issuecomment-1808329588
-    def attention(self, q, k, v, attn_bias=None):
-        q = q * self.scale
-        q = q.transpose(1, 2)
-        k = k.transpose(1, 2)
-        v = v.transpose(1, 2)
-        attn = q @ k.transpose(-2, -1)
-        if attn_bias is not None:
-            attn = attn + attn_bias
-        attn = attn.softmax(-1)
-        attn = attn @ v
-        return attn.transpose(1, 2)
+    def attention(self, queries, keys, values, attention_bias=None):
+        queries = queries * self.scale
+        queries = queries.transpose(1, 2)
+        keys = keys.transpose(1, 2)
+        values = values.transpose(1, 2)
+        attention_scores = queries @ keys.transpose(-2, -1)
+        if attention_bias is not None:
+            attention_scores = attention_scores + attention_bias
+        attention_probs = attention_scores.softmax(-1)
+        attention_output = attention_probs @ values
+        return attention_output.transpose(1, 2)
 
-    def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:
-        batch_size, sequence_length, _ = x.shape
-        qkv = self.query_key_value(x)
+    def forward(self, hidden_state: torch.FloatTensor) -> torch.FloatTensor:
+        batch_size, sequence_length, _ = hidden_state.shape
+        qkv = self.query_key_value(hidden_state)
         # reshape to (3, batch_size, sequence_length, num_heads, head_dim)
         qkv = qkv.reshape(batch_size, sequence_length, 3, self.num_heads, -1).permute(2, 0, 1, 3, 4)
         queries, keys, values = qkv[0], qkv[1], qkv[2]
@@ -590,6 +590,12 @@ def build_position_ids(x: torch.BoolTensor, attention_mask: Optional[torch.BoolT
     return y
 
 
+@add_start_docstrings(
+    """
+    CogVLM model without any head on top, just outputting raw hidden states.
+    """,
+    COGVLM_START_DOCSTRING,
+)
 class CogVLMModel(CogVLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -610,6 +616,8 @@ class CogVLMModel(CogVLMPreTrainedModel):
         images_features = self.vision(pixel_values)
         return images_features
 
+    @add_start_docstrings_to_model_forward(COGVLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=BaseModelOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -624,6 +632,41 @@ class CogVLMModel(CogVLMPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+        r"""
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored,
+                the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import CogVLMProcessor, CogVLMModel
+        >>> import torch
+        >>> import requests
+        >>> from PIL import Image
+
+        >>> processor = CogVLMProcessor.from_pretrained("THUDM/cogvlm-chat-hf")
+        >>> model = CogVLMModel.from_pretrained("THUDM/cogvlm-chat-hf")
+
+        >>> # load image
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> query = "Describe this image"
+
+        >>> prompt = f"Question: {query} Answer:"
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
+
+        >>> # forward pass
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> last_hidden_state = outputs.last_hidden_state
+        ```
+        """
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -870,14 +913,15 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         >>> import requests
         >>> from PIL import Image
 
-        >>> processor = CogVLMProcessor.from_pretrained("bert-base-uncased")
-        >>> model = CogVLMForCausalLM.from_pretrained("bert-base-uncased")
+        >>> processor = CogVLMProcessor.from_pretrained("THUDM/cogvlm-chat-hf")
+        >>> model = CogVLMForCausalLM.from_pretrained("THUDM/cogvlm-chat-hf")
 
         >>> # load image
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> prompt = "The dog is"
-        
+        >>> query = "Describe this image"
+
+        >>> prompt = f"Question: {query} Answer:"
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
         >>> outputs = model.generate(**inputs)
 
