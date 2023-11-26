@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 import requests
-import torch.nn.functional as F
 from PIL import Image
 
 from transformers.models.auto import get_values
@@ -38,7 +37,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-
+    import torch.nn.functional as F
+    
     from transformers import SegGPTImageProcessor
     from transformers.models.seggpt.modeling_seggpt import (
         SegGPTForInstanceSegmentation,

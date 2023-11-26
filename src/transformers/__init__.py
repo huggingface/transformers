@@ -6628,7 +6628,7 @@ if TYPE_CHECKING:
             SegformerPreTrainedModel,
         )
         from .models.seggpt import (
-            SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+            SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             SegGPTForInstanceSegmentation,
             SegGPTForSemanticSegmentation,
             SegGPTModel,
