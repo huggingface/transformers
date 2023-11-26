@@ -161,19 +161,27 @@ def no_init_weights(_enable=True):
     """
     global _init_weights
     old_init_weights = _init_weights
+    original_inits = {}
+
     if _enable:
         _init_weights = False
 
         def _skip_init(*args, **kwargs):
             pass
 
-        # let's skip every single torch.mm.init function, save them to restore them afterwards?
-        torch.nn.init.kaiming_uniform_ = _skip_init
-        torch.nn.init.normal_ = _skip_init
+        # Save the original initialization functions
+        for name, init_func in vars(torch.nn.init).items():
+            if callable(init_func):
+                original_inits[name] = init_func
+            setattr(torch.nn.init, name, _skip_init)
     try:
         yield
     finally:
         _init_weights = old_init_weights
+        if _enable:
+            # Restore the original initialization functions
+            for name, init_func in original_inits.items():
+                setattr(torch.nn.init, name, init_func)
 
 
 def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
