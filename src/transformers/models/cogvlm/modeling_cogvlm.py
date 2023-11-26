@@ -290,9 +290,10 @@ def attention_fn(
         warnings.warn("It's recommended to use torch2.0 or higher.")
     if int(torch.__version__.split(".")[0]) >= 2 and scaling_attention_score and (is_full or is_low_triangle):
         dropout_p = 0.0 if attention_dropout is None or not attention_dropout.training else attention_dropout.p
-        return torch.nn.functional.scaled_dot_product_attention(
+        context_layer = torch.nn.functional.scaled_dot_product_attention(
             query_layer, key_layer, value_layer, attn_mask=None, dropout_p=dropout_p, is_causal=not is_full
         )
+        return context_layer, None
     else:
         if scaling_attention_score:
             query_layer = query_layer / math.sqrt(query_layer.shape[-1])
@@ -302,7 +303,7 @@ def attention_fn(
         if attention_dropout is not None:
             attention_scores = attention_dropout(attention_scores)
         context_layer = torch.matmul(attention_scores, value_layer)
-        return context_layer
+        return context_layer, attention_scores
 
 
 class CogVLMRotaryEmbedding(nn.Module):
@@ -401,7 +402,7 @@ class CogVLMVisionExpertAttention(nn.Module):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        context_layer = attention_fn(
+        context_layer, attention_probs = attention_fn(
             query_layer=query_states,
             key_layer=key_states,
             value_layer=value_states,
@@ -420,10 +421,7 @@ class CogVLMVisionExpertAttention(nn.Module):
         attn_output[vision_token_mask] = self.vision_expert_dense(context_layer[vision_token_mask])
         attn_output[language_token_mask] = self.language_expert_dense(context_layer[language_token_mask])
 
-        if output_attentions:
-            warnings.warn("output_attentions is not implemented.")
-
-        return attn_output, None, past_key_value
+        return (attn_output, attention_probs, past_key_value) if output_attentions else (attn_output, None, past_key_value)
 
 
 class CogVLMDecoderLayer(nn.Module):
@@ -731,7 +729,7 @@ class CogVLMModel(CogVLMPreTrainedModel):
 
 
 class CogVLMForCausalLM(CogVLMPreTrainedModel):
-    _auto_class = "AutoModelForCausalLM"
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
