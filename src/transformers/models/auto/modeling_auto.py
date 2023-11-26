@@ -539,6 +539,7 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "MobileViTForSemanticSegmentation"),
         ("mobilevitv2", "MobileViTV2ForSemanticSegmentation"),
         ("segformer", "SegformerForSemanticSegmentation"),
+        ("seggpt", "SegGPTForSemanticSegmentation"),
         ("upernet", "UperNetForSemanticSegmentation"),
     ]
 )
@@ -548,6 +549,7 @@ MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         # Model for Instance Segmentation mapping
         # MaskFormerForInstanceSegmentation can be removed from this mapping in v5
         ("maskformer", "MaskFormerForInstanceSegmentation"),
+        ("seggpt", "SegGPTForInstanceSegmentation"),
     ]
 )
 

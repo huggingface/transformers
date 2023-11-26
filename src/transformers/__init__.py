@@ -2760,6 +2760,7 @@ else:
             "SegGPTForInstanceSegmentation",
             "SegGPTForSemanticSegmentation",
             "SegGPTModel",
+            "SegGPTPreTrainedModel",
         ]
     )
     _import_structure["models.sew"].extend(
@@ -6631,6 +6632,7 @@ if TYPE_CHECKING:
             SegGPTForInstanceSegmentation,
             SegGPTForSemanticSegmentation,
             SegGPTModel,
+            SegGPTPreTrainedModel,
         )
         from .models.sew import (
             SEW_PRETRAINED_MODEL_ARCHIVE_LIST,

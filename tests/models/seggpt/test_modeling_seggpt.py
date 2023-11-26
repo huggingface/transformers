@@ -39,10 +39,11 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import SegGPTImageProcessor, SegGPTModel
+    from transformers import SegGPTImageProcessor
     from transformers.models.seggpt.modeling_seggpt import (
         SegGPTForInstanceSegmentation,
         SegGPTForSemanticSegmentation,
+        SegGPTModel,
     )
 
 
@@ -174,7 +175,9 @@ class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (SegGPTForInstanceSegmentation, SegGPTForSemanticSegmentation) if is_torch_available() else ()
+    all_model_classes = (
+        (SegGPTForInstanceSegmentation, SegGPTForSemanticSegmentation, SegGPTModel) if is_torch_available() else ()
+    )
     pipeline_model_mapping = ()
     #     {
     #         "feature-extraction": BeitModel,
@@ -401,7 +404,7 @@ class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 @require_torch
 @require_vision
-class BeitModelIntegrationTest(unittest.TestCase):
+class SegGPTModelIntegrationTest(unittest.TestCase):
     # @cached_property
     # def default_image_processor(self):
     #     return SegGPTForSemanticSegmentation.from_pretrained("microsoft/beit-base-patch16-224") if is_vision_available() else None
@@ -511,7 +514,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
             "./output_hmbb_3.png",
         )
 
-    # @slow
+    @slow
     def test_post_processing_semantic_segmentation(self):
         prompts = [
             "https://huggingface.co/datasets/Raghavan/seggpt_samples/resolve/main/hmbb_1.jpg",

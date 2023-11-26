@@ -43,6 +43,7 @@ else:
         "SegGPTForSemanticSegmentation",
         "SegGPTForInstanceSegmentation",
         "SegGPTModel",
+        "SegGPTPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -67,6 +68,7 @@ if TYPE_CHECKING:
             SegGPTForInstanceSegmentation,
             SegGPTForSemanticSegmentation,
             SegGPTModel,
+            SegGPTPreTrainedModel,
         )
 
 else:

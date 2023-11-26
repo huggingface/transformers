@@ -559,7 +559,7 @@ class SegGPTDecoder(nn.Module):
         return hidden_states
 
 
-class SegGPTPretrainedModel(PreTrainedModel):
+class SegGPTPreTrainedModel(PreTrainedModel):
     config_class = SegGPTConfig
     base_model_prefix = "segGPT"
     main_input_name = "pixel_values"
@@ -617,7 +617,7 @@ class SegGPTModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class SegGPTModel(SegGPTPretrainedModel):
+class SegGPTModel(SegGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -697,15 +697,11 @@ class SegGPTModel(SegGPTPretrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        # bool_masked_pos = torch.zeros(self.encoder.num_patches)
-        # bool_masked_pos[self.encoder.num_patches // 2:] = 1
-        # bool_masked_pos = bool_masked_pos.unsqueeze(dim=0)
-        # bool_masked_pos = bool_masked_pos.flatten(1).to(torch.bool)
-
-        # if bool_masked_pos is None:
-        #     bool_masked_pos = torch.zeros((imgs.shape[0], self.patch_embed.num_patches), dtype=torch.bool).to(
-        #         imgs.device)
-        # else:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         encoder_outputs = self.encoder(
             pixel_values,
@@ -734,7 +730,7 @@ class SegGPTModel(SegGPTPretrainedModel):
         )
 
 
-class SegGPTForInstanceSegmentation(SegGPTPretrainedModel):
+class SegGPTForInstanceSegmentation(SegGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -760,7 +756,7 @@ class SegGPTForInstanceSegmentation(SegGPTPretrainedModel):
         )
 
 
-class SegGPTForSemanticSegmentation(SegGPTPretrainedModel):
+class SegGPTForSemanticSegmentation(SegGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 

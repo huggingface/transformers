@@ -185,6 +185,7 @@ from . import (
     sam,
     seamless_m4t,
     segformer,
+    seggpt,
     sew,
     sew_d,
     speech_encoder_decoder,

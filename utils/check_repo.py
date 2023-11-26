@@ -285,6 +285,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BarkSemanticModel",
     "MusicgenModel",
     "MusicgenForConditionalGeneration",
+    "SegGPTModel",
     "SpeechT5ForSpeechToSpeech",
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
