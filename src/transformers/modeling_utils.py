@@ -171,6 +171,7 @@ def no_init_weights(_enable=True):
 
         # Save the original initialization functions
         for name, init_func in vars(torch.nn.init).items():
+            # maybe keep a list of function names to keep?
             if callable(init_func) and not name.startswith("_"):
                 original_inits[name] = init_func
                 setattr(torch.nn.init, name, _skip_init)

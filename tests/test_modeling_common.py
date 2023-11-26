@@ -426,6 +426,30 @@ class ModelTesterMixin:
                         max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
+    def test_fast_init_context_manager(self):
+        # TODO ESMFold and some other work have calls to torch.nn.init which should not be skipped
+        # Only weights that have "_is_hf_initialized" have to be skipped?
+        from transformers.modeling_utils import no_init_weights
+        from transformers.utils.generic import ContextManagers
+        from transformers import set_seed
+        # 1. Create a dummy class. Should have buffers as well? To make sure we test __init__
+        class MyClass(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(10, 10, True)
+
+        # 1. Make sure a linear layer's reset params is properly skipped:
+        with ContextManagers([no_init_weights(True)]):
+            no_init_instance = MyClass()
+        set_seed(0)
+        init_instance = MyClass()
+        torch.testing.assert_allclose(no_init_instance.linear.bias, torch.zeros(10))
+        torch.testing.assert_allclose(init_instance.linear.bias, torch.tensor(([ 0.2975,  0.2131, -0.1379, -0.0796, -0.3012, -0.0057, -0.2381, -0.2439,-0.0174,  0.0475])), rtol=1e-3, atol=1e-4)
+
+        # 2. Make sure torch.init function still work as expected
+
+        # 3. Make sure weights that have the "_is_hf_initialized" skipped but not the ones that have something else?
+
     def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
