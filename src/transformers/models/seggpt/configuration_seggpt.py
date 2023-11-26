@@ -92,7 +92,6 @@ class SegGPTConfig(PretrainedConfig):
         embed_dim=1024,
         num_attention_heads=16,
         drop_path_rate=0.1,
-        window_size=14,
         qkv_bias=True,
         mlp_ratio=4.0,
         layer_norm_eps=1e-6,
@@ -117,7 +116,6 @@ class SegGPTConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.drop_path_rate = drop_path_rate
-        self.window_size = window_size
         self.qkv_bias = qkv_bias
         self.mlp_ratio = mlp_ratio
         self.layer_norm_eps = layer_norm_eps
@@ -127,5 +125,3 @@ class SegGPTConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.pretrain_img_size = pretrain_img_size
         self.merge_index = merge_index
-        # self.is_encoder_decoder = False
-        self.num_blocks_in_group = self.num_hidden_layers // num_group_blocks

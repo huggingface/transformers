@@ -319,7 +319,7 @@ class SegGPTBlock(nn.Module):
         self.depth = block_depth
         self.reshape_mean = config.merge_index >= block_depth
         self.swap_img_tgts = config.merge_index == block_depth
-        dpr_values = torch.linspace(0, config.drop_path_rate, config.num_blocks_in_group * config.num_group_blocks)
+        dpr_values = torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)
         self.drop_path_rate = dpr_values[block_depth]
         self.norm2 = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
         self.mlp = SegGPTMlp(config)
@@ -365,8 +365,8 @@ class SegGPTBlockGroup(nn.Module):
     def __init__(self, config, depth):
         super().__init__()
         blocks = []
-
-        for i in range(config.num_blocks_in_group):
+        num_blocks_in_group = config.num_hidden_layers // config.num_group_blocks
+        for i in range(num_blocks_in_group):
             block_depth = config.num_blocks_in_group * depth + i
 
             blocks.append(SegGPTBlock(config, block_depth))
@@ -419,8 +419,8 @@ class SegGPTEncoder(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, num_positions, config.embed_dim), requires_grad=True)
 
         # stochastic depth decay rule
-        depth = config.num_group_blocks * config.num_blocks_in_group
-        [x.item() for x in torch.linspace(0, config.drop_path_rate, depth)]
+
+        [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
 
         self.group_blocks = nn.ModuleList()
         for i in range(config.num_group_blocks):
