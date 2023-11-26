@@ -482,12 +482,12 @@ class CogVLMPreTrainedModel(PreTrainedModel):
     config_class = CogVLMConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = False
-    _no_split_modules = ["CogVLMDecoderLayer"]
+    _no_split_modules = ["CogVLMDecoderLayer", "CogVLMTransformerLayer"]
     _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -553,7 +553,12 @@ class CogVLMModel(CogVLMPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        """take care of image_encode, token_type_ids, position_ids and (attention_mask = None is fine)"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if past_key_values is not None:
             pass  # generate mode with past_key_values. the image features are already mapped
@@ -570,14 +575,6 @@ class CogVLMModel(CogVLMPreTrainedModel):
                 images_features = self.encode_images(pixel_values)
                 images_features = images_features.reshape(-1, images_features.shape[-1])
                 images_features = images_features.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
-                print("Shape of input_ids:", input_ids.shape)
-                print("Shape of attention_mask:", attention_mask.shape)
-                print("Shape of token type ids:", token_type_ids.shape)
-                print("Shape of pixel_values:", pixel_values.shape)
-                
-                print("Shape of image features:", images_features.shape)
-                print("Shape of inputs_embeds:", inputs_embeds.shape)
-                print([token_type_ids == VISION_TOKEN_TYPE][0].shape)
                 inputs_embeds = inputs_embeds.index_put([token_type_ids == VISION_TOKEN_TYPE], images_features)
             else:  # single-modality
                 if token_type_ids is None:
@@ -620,13 +617,6 @@ class CogVLMModel(CogVLMPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         """largely copy from llama forward and adapt for cogvlm with `token_type_ids`"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
@@ -785,10 +775,6 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)

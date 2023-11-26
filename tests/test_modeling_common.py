@@ -507,6 +507,7 @@ class ModelTesterMixin:
             self.assertLessEqual(max_diff, 1e-5)
 
         for model_class in self.all_model_classes:
+            print("Model class:", )
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -604,6 +605,7 @@ class ModelTesterMixin:
             ]:
                 continue
 
+            print("Model class:", model_class)
             model = model_class(config)
             model.to(torch_device)
             model.train()

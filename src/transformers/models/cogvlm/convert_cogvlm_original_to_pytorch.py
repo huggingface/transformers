@@ -78,7 +78,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     with torch.no_grad():
         outputs = original_model.generate(**original_inputs, **gen_kwargs)
         outputs = outputs[:, original_inputs["input_ids"].shape[1] :]
-        print("Original outputs:", tokenizer.decode(outputs[0]))
+        original_generated_text = tokenizer.decode(outputs[0])
 
     # load HF model
     # rename in_channels to num_channels for sake of consistency
@@ -121,8 +121,9 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     with torch.no_grad():
         outputs = model.generate(**inputs, **gen_kwargs)
         outputs = outputs[:, inputs["input_ids"].shape[1] :]
-        print("HF outputs:", tokenizer.decode(outputs[0]))
+        generated_text = tokenizer.decode(outputs[0])
 
+    assert original_generated_text == generated_text
     # with torch.no_grad():
     #      original_logits = original_model({"image": original_pixel_values, "text_input": [""]}).logits
     #      logits = model(pixel_values, input_ids).logits

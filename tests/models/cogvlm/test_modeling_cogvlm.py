@@ -15,8 +15,7 @@
 """ Testing suite for the PyTorch CogVLM model. """
 
 
-import inspect
-import tempfile
+import copy
 import unittest
 
 import requests
@@ -160,14 +159,13 @@ class CogVLMModelTester:
             attention_mask,
             token_type_ids,
             pixel_values,
-            labels,
+            _,
         ) = config_and_inputs
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "token_type_ids": token_type_ids,
-            "labels": labels,
         }
         return config, inputs_dict
 
@@ -189,6 +187,16 @@ class CogVLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CogVLMModelTester(self)
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
+        if return_labels:
+            if model_class.__name__ == "CogVLMForCausalLM":
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+
+        return inputs_dict
 
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

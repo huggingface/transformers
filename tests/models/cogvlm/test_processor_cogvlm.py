@@ -25,7 +25,7 @@ from transformers.utils import is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, CogVLMImageProcessor, CogVLMProcessor, PreTrainedTokenizerFast, yes
+    from transformers import AutoProcessor, CLIPImageProcessor, CogVLMProcessor, PreTrainedTokenizerFast, yes
 
 
 @require_vision
@@ -33,7 +33,7 @@ class CogVLMProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = CogVLMImageProcessor()
+        image_processor = CLIPImageProcessor()
         tokenizer = yes.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
 
         processor = CogVLMProcessor(image_processor, tokenizer)
@@ -75,7 +75,7 @@ class CogVLMProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, CogVLMImageProcessor)
+        self.assertIsInstance(processor.image_processor, CLIPImageProcessor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
