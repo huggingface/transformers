@@ -479,13 +479,13 @@ def main():
         logger.info("Training new model from scratch")
         model = AutoModelForCausalLM.from_config(config, trust_remote_code=args.trust_remote_code)
 
-        # Add the new FIM tokens to the tokenizer and resize model's vocab embeddings
-        special_tokens = [args.fim_prefix_token, args.fim_middle_token, args.fim_suffix_token]
-        if args.truncate_or_pad:
-            special_tokens.append(args.fim_pad_token)
+    # Add the new FIM tokens to the tokenizer and resize model's vocab embeddings
+    special_tokens = [args.fim_prefix_token, args.fim_middle_token, args.fim_suffix_token]
+    if args.truncate_or_pad:
+        special_tokens.append(args.fim_pad_token)
 
-        tokenizer.add_tokens(special_tokens)
-        model.resize_token_embeddings(len(tokenizer))
+    tokenizer.add_tokens(special_tokens)
+    model.resize_token_embeddings(len(tokenizer))
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.

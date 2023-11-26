@@ -505,18 +505,20 @@ def main():
             torch_dtype=torch_dtype,
             low_cpu_mem_usage=model_args.low_cpu_mem_usage,
         )
+
     else:
         model = AutoModelForCausalLM.from_config(config, trust_remote_code=model_args.trust_remote_code)
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
 
-        # Add the new FIM tokens to the tokenizer and resize model's vocab embeddings
-        special_tokens = [data_args.fim_prefix_token, data_args.fim_middle_token, data_args.fim_suffix_token]
-        if data_args.truncate_or_pad:
-            special_tokens.append(data_args.fim_pad_token)
+    # Add the new FIM tokens to the tokenizer and resize model's vocab embeddings
+    special_tokens = [data_args.fim_prefix_token, data_args.fim_middle_token, data_args.fim_suffix_token]
+    if data_args.truncate_or_pad:
+        special_tokens.append(data_args.fim_pad_token)
 
-        tokenizer.add_tokens(special_tokens)
-        model.resize_token_embeddings(len(tokenizer))
+    tokenizer.add_tokens(special_tokens)
+    model.resize_token_embeddings(len(tokenizer))
+    print("Added special tokens!")
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.

@@ -119,6 +119,9 @@ python run_fim_no_trainer.py \
     --output_dir /tmp/test-clm
 ```
 
+<!-- **Few things to consider when running `run_fim.py` and `run_fim_no_trainer.py`**:
+1. If you are -->
+
 ### RoBERTa/BERT/DistilBERT and masked language modeling
 
 The following example fine-tunes RoBERTa on WikiText-2. Here too, we're using the raw WikiText-2. The loss is different
