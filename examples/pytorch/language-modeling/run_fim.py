@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for causal language modeling using Fill-in-the middle (FIM) objective on a text file or a dataset.
+Fine-tuning the library models for causal language modeling using 
+Fill-in-the middle (FIM) objective on a text file or a dataset.
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
 https://huggingface.co/models?filter=text-generation
@@ -32,8 +33,8 @@ from typing import Optional
 
 import datasets
 import evaluate
-import torch
 import numpy as np
+import torch
 from datasets import load_dataset
 
 import transformers
@@ -319,7 +320,7 @@ def main():
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_clm", model_args, data_args)
+    send_example_telemetry("run_fim", model_args, data_args)
 
     # Setup logging
     logging.basicConfig(
@@ -537,7 +538,7 @@ def main():
     def tokenize_function(examples):
         with CaptureLogger(tok_logger) as cl:
             output = tokenizer(examples[text_column_name])
-        # clm input could be much much longer than block_size
+        # clm-fim input could be much much longer than block_size
         if "Token indices sequence length is longer than the" in cl.out:
             tok_logger.warning(
                 "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
@@ -658,7 +659,7 @@ def main():
     # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
     # https://huggingface.co/docs/datasets/process#map
 
-    # FIM transformation is only supposed to be applied before group_texts processing otherwise some sentences will
+    # FIM transformations are only supposed to be applied before group_texts processing otherwise some sentences will
     # have 3-4 more tokens than others due to probabilistic addition of FIM-specific tokens which will raise errors
     with training_args.main_process_first(desc="processing texts together"):
         if not data_args.streaming:
@@ -667,7 +668,7 @@ def main():
                 batched=True,
                 num_proc=data_args.preprocessing_num_workers,
                 load_from_cache_file=not data_args.overwrite_cache,
-                desc=f"Performing FIM transformation",
+                desc="Performing FIM transformation",
             )
             lm_datasets = fim_datasets.map(
                 group_texts,
