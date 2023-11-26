@@ -351,7 +351,7 @@ class MistralFlashAttention2(MistralAttention):
 
         use_sliding_windows = (
             _flash_supports_window_size
-            and hasattr(self.config, "sliding_window") is not None
+            and getattr(self.config, "sliding_window", None) is not None
             and kv_seq_len > self.config.sliding_window
         )
 
@@ -363,7 +363,7 @@ class MistralFlashAttention2(MistralAttention):
 
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
-            if hasattr(self.config, "sliding_window") and kv_seq_len > self.config.sliding_window:
+            if getattr(self.config, "sliding_window", None) is not None and kv_seq_len > self.config.sliding_window:
                 slicing_tokens = kv_seq_len - self.config.sliding_window
 
                 past_key = past_key_value[0]
