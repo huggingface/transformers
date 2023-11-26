@@ -138,7 +138,7 @@ class CogVLMPatchEmbedding(nn.Module):
         return embeddings
 
 
-class CogVLMAttention(nn.Module):
+class CogVLMVisionAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_heads = config.num_attention_heads
@@ -194,7 +194,7 @@ class CogVLMVisionTransformerLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = CogVLMAttention(config)
+        self.attention = CogVLMVisionAttention(config)
         self.mlp = CogVLMVisionMLP(config)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -219,7 +219,7 @@ class CogVLMVisionTransformer(nn.Module):
         return hidden_states
 
 
-class CogVLMGLU(nn.Module):
+class CogVLMVisionGLU(nn.Module):
     def __init__(self, config, in_features):
         super().__init__()
         self.linear_proj = nn.Linear(in_features, config.hidden_size, bias=False)
@@ -244,7 +244,7 @@ class CogVLMVisionModel(nn.Module):
 
         self.patch_embedding = CogVLMPatchEmbedding(config.vision_config)
         self.transformer = CogVLMVisionTransformer(config.vision_config)
-        self.linear_proj = CogVLMGLU(config, in_features=config.vision_config.hidden_size)
+        self.linear_proj = CogVLMVisionGLU(config, in_features=config.vision_config.hidden_size)
         # parameters for beginning of image (boi) and end of image (eoi)
         self.boi = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.eoi = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
