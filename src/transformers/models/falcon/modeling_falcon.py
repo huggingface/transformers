@@ -564,6 +564,12 @@ class FalconFlashAttention2(FalconAttention):
 
         past_key_value = (key_layer, value_layer) if use_cache else None
 
+        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
+        # to be able to avoid many of these transpose/reshape/view.
+        query_layer = query_layer.transpose(1, 2)
+        key_layer = key_layer.transpose(1, 2)
+        value_layer = value_layer.transpose(1, 2)
+
         if alibi is not None:
             raise ValueError("`alibi` is not supported when `use_flash_attn` is True")
 

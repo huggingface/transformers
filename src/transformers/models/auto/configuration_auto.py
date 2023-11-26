@@ -214,9 +214,11 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("transfo-xl", "TransfoXLConfig"),
         ("trocr", "TrOCRConfig"),
         ("tvlt", "TvltConfig"),
+        ("tvp", "TvpConfig"),
         ("umt5", "UMT5Config"),
         ("unispeech", "UniSpeechConfig"),
         ("unispeech-sat", "UniSpeechSatConfig"),
+        ("univnet", "UnivNetConfig"),
         ("upernet", "UperNetConfig"),
         ("van", "VanConfig"),
         ("videomae", "VideoMAEConfig"),
@@ -420,8 +422,10 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("timesformer", "TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("transfo-xl", "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("tvlt", "TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("tvp", "TVP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("unispeech", "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("unispeech-sat", "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("univnet", "UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("van", "VAN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("videomae", "VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -660,10 +664,12 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("transfo-xl", "Transformer-XL"),
         ("trocr", "TrOCR"),
         ("tvlt", "TVLT"),
+        ("tvp", "TVP"),
         ("ul2", "UL2"),
         ("umt5", "UMT5"),
         ("unispeech", "UniSpeech"),
         ("unispeech-sat", "UniSpeechSat"),
+        ("univnet", "UnivNet"),
         ("upernet", "UPerNet"),
         ("van", "VAN"),
         ("videomae", "VideoMAE"),
@@ -700,6 +706,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
     ]
 )
 
+# This is tied to the processing `-` -> `_` in `model_type_to_module_name`. For example, instead of putting
+# `transfo-xl` (as in `CONFIG_MAPPING_NAMES`), we should use `transfo_xl`.
 DEPRECATED_MODELS = [
     "bort",
     "mctct",
@@ -708,6 +716,7 @@ DEPRECATED_MODELS = [
     "retribert",
     "tapex",
     "trajectory_transformer",
+    "transfo_xl",
     "van",
 ]
 
