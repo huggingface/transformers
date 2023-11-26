@@ -163,6 +163,9 @@ def no_init_weights(_enable=True):
     old_init_weights = _init_weights
     if _enable:
         _init_weights = False
+        def _skip_init(**kwargs):
+            pass
+        nn.Module.reset_parameters = _skip_init
     try:
         yield
     finally:
@@ -1387,7 +1390,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def _init_weights(self, module):
         """
-        Initialize the weights. This method should be overridden by derived class.
+        Initialize the weights. This method should be overridden by derived class and is
+        the only initialization method that will be called when loading a checkpoint
+        using `from_pretrained`.
         """
         pass
 
@@ -3273,6 +3278,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             config = cls._check_and_enable_flash_attn_2(config, torch_dtype=torch_dtype, device_map=device_map)
 
         with ContextManagers(init_contexts):
+            # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
         # make sure we use the model's config since the __init__ call might have copied it
