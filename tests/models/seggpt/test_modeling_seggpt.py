@@ -38,20 +38,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
     import torch.nn.functional as F
-    
+
     from transformers import SegGPTImageProcessor
     from transformers.models.seggpt.modeling_seggpt import (
         SegGPTForInstanceSegmentation,
         SegGPTForSemanticSegmentation,
         SegGPTModel,
     )
-
-
-# if is_vision_available():
-#     import PIL
-#     from PIL import Image
-#
-#     from transformers import BeitImageProcessor
 
 
 class SegGPTModelTester:
@@ -514,7 +507,7 @@ class SegGPTModelIntegrationTest(unittest.TestCase):
             "./output_hmbb_3.png",
         )
 
-    @slow
+    # @slow
     def test_post_processing_semantic_segmentation(self):
         prompts = [
             "https://huggingface.co/datasets/Raghavan/seggpt_samples/resolve/main/hmbb_1.jpg",

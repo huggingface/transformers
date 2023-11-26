@@ -7158,7 +7158,7 @@ class SegformerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP = None
+SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class SegGPTForInstanceSegmentation(metaclass=DummyObject):
