@@ -51,6 +51,7 @@ from .configuration_t5 import T5Config
 try:
     from xformers import ops as xops
     from xformers.ops.fmha import attn_bias as xattn
+    from xformers.ops import fmha
     #from xformers.components.positional_embedding.rotary import RotaryEmbedding
 except ImportError:
     print('Could not import xformers! please install it https://github.com/facebookresearch/xformers    one method tested to work was to install it with "pip3 install -U xformers --index-url https://download.pytorch.org/whl/cu118"')
@@ -820,18 +821,23 @@ class T5Attention(nn.Module):
 
         attn_bias_for_xformers = None
         
+
+
         if self.memory_efficient_attention: #memory efficient attention            
             # if position_ids_info_list and self.memory_efficient_attention:
             #     raise Exception("We don't currently support combination of memory_efficient_attention and standard relative attention. See: https://github.com/facebookresearch/xformers/issues/925   Note: we can reconsider this and still allow usage of a custom add_bias tensor case, which is not as optimized as FLASHv2 version, but still may be useful.")
-            
+                        
             if (mask.shape[1]==1) and (mask.shape[2]==1): #non-causal case
                 original_max_seq_len = mask.shape[-1] ##it is also found in real_seq_length, possibly switch to it
                 actual_lengths = mask[:,0,0,:].argmin(1).tolist() #creates a cpu-gpu sync... we can probably get this information in the forward instead of reverse engineering it ...
-                if not pos_embedding_found_in_add_bias: #we can express the the attention bias as xformers AttentionBias class, which would enabled Flash V2 (assuming additional conditions are met as well)
+                if not pos_embedding_found_in_add_bias: 
+                    #we can express the the attention bias as xformers AttentionBias class, which would enabled Flash V2 (assuming additional conditions are met as well)
+                    #the reason that we're also requiring FLASH support here is because we've seen unexplained divergence when using v100 (full precision) and combined with AttentionBias type of add_bias.
+
                     if isinstance(position_bias, xattn.AttentionBias):
                         attn_bias_for_xformers = position_bias
                     else:
-                        attn_bias_for_xformers = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=actual_lengths)
+                        attn_bias_for_xformers = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=actual_lengths)                        
                     query_states = _compress_to_single_unpadded_sample(query_states, actual_lengths)
                     key_states = _compress_to_single_unpadded_sample(key_states, actual_lengths)
                     value_states = _compress_to_single_unpadded_sample(value_states, actual_lengths)
@@ -842,8 +848,7 @@ class T5Attention(nn.Module):
             else:
                 raise Exception("not supporting causal attention yet")
 
-
-            attn_output = xops.memory_efficient_attention(
+            memory_efficient_attention_kwargs = dict(
                 query=query_states.permute(0,2,1,3), # -> BHMK -> BMHK
                 key=key_states.permute(0,2,1,3), # -> BHMK -> BMHK
                 value=value_states.permute(0,2,1,3), # -> BHMK -> BMHK
@@ -851,6 +856,17 @@ class T5Attention(nn.Module):
                 #attn_bias=position_bias_masked.contiguous().to(query_states.dtype), #do we really need it to be contiguous on A100+mixed precision+FLASHv2??
                 attn_bias=attn_bias_for_xformers,
                 scale = 1.0,
+            )
+
+            flash_not_supported_reasons =  fmha.flash.FwOp.not_supported_reasons(fmha.Inputs(**memory_efficient_attention_kwargs))
+
+
+            if (torch.cuda.get_device_capability('cuda') < (8, 0)) and isinstance(attn_bias_for_xformers, xattn.AttentionBias):
+                raise Exception('This setting was shown to be unstable convergance wise. Either meet the requirements for FLASH in xformers (mainly A100 or better and using half precision) or use t5_default_relative')
+                      
+            attn_output = xops.memory_efficient_attention(
+                **memory_efficient_attention_kwargs,
+                op = None, #(fmha.flash.FwOp, fmha.flash.BwOp, ) #allowing only FLASH, because I've seen issues with convergance when using v100 + providing AttentionBias attn_bias. It will crash if conditions aren't met. Consider checking A100 instead.
             )
 
             if not pos_embedding_found_in_add_bias:
