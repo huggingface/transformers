@@ -216,6 +216,11 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 </tf>
 </frameworkcontent>
 
+<Tip>
+Some pipelines like `text-generation` and `fill-mask` support passing these parameters to the tokenizer as `tokenizer_kwargs`,
+e.g. `text_generation_pipeline('lorem ipsum...'*1000, tokenizer_kwargs={'truncation': True, 'max_length': 512})`
+</Tip>
+
 ## Audio
 
 For audio tasks, you'll need a [feature extractor](main_classes/feature_extractor) to prepare your dataset for the model. The feature extractor is designed to extract features from raw audio data, and convert them into tensors.
