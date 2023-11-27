@@ -40,7 +40,11 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+)
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -81,7 +85,9 @@ def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    cu_seqlens = F.pad(
+        torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0)
+    )
     return (
         indices,
         cu_seqlens,
@@ -101,7 +107,12 @@ def create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
 
 
 def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
-    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
+    position_enc = np.array(
+        [
+            [pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)]
+            for pos in range(n_pos)
+        ]
+    )
     out.requires_grad = False
     out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
     out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
@@ -111,20 +122,30 @@ def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
 class Embeddings(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.dim)
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.dim, padding_idx=config.pad_token_id
+        )
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.dim
+        )
         if config.sinusoidal_pos_embds:
             create_sinusoidal_embeddings(
-                n_pos=config.max_position_embeddings, dim=config.dim, out=self.position_embeddings.weight
+                n_pos=config.max_position_embeddings,
+                dim=config.dim,
+                out=self.position_embeddings.weight,
             )
 
         self.LayerNorm = nn.LayerNorm(config.dim, eps=1e-12)
         self.dropout = nn.Dropout(config.dropout)
         self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+            "position_ids",
+            torch.arange(config.max_position_embeddings).expand((1, -1)),
+            persistent=False,
         )
 
-    def forward(self, input_ids: torch.Tensor, input_embeds: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self, input_ids: torch.Tensor, input_embeds: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """
         Parameters:
             input_ids (torch.Tensor):
@@ -147,10 +168,16 @@ class Embeddings(nn.Module):
         if hasattr(self, "position_ids"):
             position_ids = self.position_ids[:, :seq_length]
         else:
-            position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
-            position_ids = position_ids.unsqueeze(0).expand_as(input_ids)  # (bs, max_seq_length)
+            position_ids = torch.arange(
+                seq_length, dtype=torch.long, device=input_ids.device
+            )  # (max_seq_length)
+            position_ids = position_ids.unsqueeze(0).expand_as(
+                input_ids
+            )  # (bs, max_seq_length)
 
-        position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
+        position_embeddings = self.position_embeddings(
+            position_ids
+        )  # (bs, max_seq_length, dim)
 
         embeddings = input_embeds + position_embeddings  # (bs, max_seq_length, dim)
         embeddings = self.LayerNorm(embeddings)  # (bs, max_seq_length, dim)
@@ -171,7 +198,9 @@ class MultiHeadSelfAttention(nn.Module):
         # Have an even number of multi heads that divide the dimensions
         if self.dim % self.n_heads != 0:
             # Raise value errors for even multi-head attention nodes
-            raise ValueError(f"self.n_heads: {self.n_heads} must divide self.dim: {self.dim} evenly")
+            raise ValueError(
+                f"self.n_heads: {self.n_heads} must divide self.dim: {self.dim} evenly"
+            )
 
         self.q_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.k_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
@@ -232,7 +261,9 @@ class MultiHeadSelfAttention(nn.Module):
 
         def unshape(x: torch.Tensor) -> torch.Tensor:
             """group heads"""
-            return x.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * dim_per_head)
+            return (
+                x.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * dim_per_head)
+            )
 
         q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
         k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
@@ -240,12 +271,16 @@ class MultiHeadSelfAttention(nn.Module):
 
         q = q / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
         scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, q_length, k_length)
-        mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, n_heads, q_length, k_length)
+        mask = (
+            (mask == 0).view(mask_reshp).expand_as(scores)
+        )  # (bs, n_heads, q_length, k_length)
         scores = scores.masked_fill(
             mask, torch.tensor(torch.finfo(scores.dtype).min)
         )  # (bs, n_heads, q_length, k_length)
 
-        weights = nn.functional.softmax(scores, dim=-1)  # (bs, n_heads, q_length, k_length)
+        weights = nn.functional.softmax(
+            scores, dim=-1
+        )  # (bs, n_heads, q_length, k_length)
         weights = self.dropout(weights)  # (bs, n_heads, q_length, k_length)
 
         # Mask heads if we want to
@@ -332,7 +367,9 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
             query_states, key_states, value_states, mask, q_length, dropout=attn_dropout
         )
 
-        attn_weights_reshaped = attn_weights.reshape(batch_size, q_length, self.n_heads * dim_per_head)
+        attn_weights_reshaped = attn_weights.reshape(
+            batch_size, q_length, self.n_heads * dim_per_head
+        )
         attn_output = self.out_lin(attn_weights_reshaped)
 
         if output_attentions:
@@ -342,7 +379,14 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward with causal=True->causal=False
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+        self,
+        query_states,
+        key_states,
+        value_states,
+        attention_mask,
+        query_length,
+        dropout=0.0,
+        softmax_scale=None,
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -366,7 +410,14 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+            (
+                query_states,
+                key_states,
+                value_states,
+                indices_q,
+                cu_seq_lens,
+                max_seq_lens,
+            ) = self._upad_input(
                 query_states, key_states, value_states, attention_mask, query_length
             )
 
@@ -386,28 +437,40 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
                 causal=self.is_causal,
             )
 
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+            attn_output = pad_input(
+                attn_output_unpad, indices_q, batch_size, query_length
+            )
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=self.is_causal
+                query_states,
+                key_states,
+                value_states,
+                dropout,
+                softmax_scale=softmax_scale,
+                causal=self.is_causal,
             )
 
         return attn_output
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input with num_heads->n_heads
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+    def _upad_input(
+        self, query_layer, key_layer, value_layer, attention_mask, query_length
+    ):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
         key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
+            indices_k,
         )
         value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
+            indices_k,
         )
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.n_heads, head_dim), indices_k
+                query_layer.reshape(batch_size * kv_seq_len, self.n_heads, head_dim),
+                indices_k,
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -422,7 +485,9 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
         else:
             # The -q_len: slice assumes left padding.
             attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(
+                query_layer, attention_mask
+            )
 
         return (
             query_layer,
@@ -444,9 +509,10 @@ class FFN(nn.Module):
         self.lin2 = nn.Linear(in_features=config.hidden_dim, out_features=config.dim)
         self.dropout = nn.Dropout(p=config.dropout)
 
-
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        return apply_chunking_to_forward(self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, input)
+        return apply_chunking_to_forward(
+            self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, input
+        )
 
     def ff_chunk(self, input: torch.Tensor) -> torch.Tensor:
         x = self.lin1(input)
@@ -462,7 +528,9 @@ class TransformerBlock(nn.Module):
 
         # Have an even number of Configure multi-heads
         if config.dim % config.n_heads != 0:
-            raise ValueError(f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly")
+            raise ValueError(
+                f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly"
+            )
 
         self.attention = (
             MultiHeadSelfAttention(config)
@@ -500,17 +568,24 @@ class TransformerBlock(nn.Module):
             output_attentions=output_attentions,
         )
         if output_attentions:
-            sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
+            (
+                sa_output,
+                sa_weights,
+            ) = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attentions` or `output_hidden_states` cases returning tuples
             if type(sa_output) != tuple:
-                raise TypeError(f"sa_output must be a tuple but it is {type(sa_output)} type")
+                raise TypeError(
+                    f"sa_output must be a tuple but it is {type(sa_output)} type"
+                )
 
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + x)  # (bs, seq_length, dim)
 
         # Feed Forward Network
         ffn_output = self.ffn(sa_output)  # (bs, seq_length, dim)
-        ffn_output: torch.Tensor = self.output_layer_norm(ffn_output + sa_output)  # (bs, seq_length, dim)
+        ffn_output: torch.Tensor = self.output_layer_norm(
+            ffn_output + sa_output
+        )  # (bs, seq_length, dim)
 
         output = (ffn_output,)
         if output_attentions:
@@ -522,7 +597,9 @@ class Transformer(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
         self.n_layers = config.n_layers
-        self.layer = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
+        self.layer = nn.ModuleList(
+            [TransformerBlock(config) for _ in range(config.n_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -576,22 +653,32 @@ class Transformer(nn.Module):
 
             if output_attentions:
                 if len(layer_outputs) != 2:
-                    raise ValueError(f"The length of the layer_outputs should be 2, but it is {len(layer_outputs)}")
+                    raise ValueError(
+                        f"The length of the layer_outputs should be 2, but it is {len(layer_outputs)}"
+                    )
 
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
             else:
                 if len(layer_outputs) != 1:
-                    raise ValueError(f"The length of the layer_outputs should be 1, but it is {len(layer_outputs)}")
+                    raise ValueError(
+                        f"The length of the layer_outputs should be 1, but it is {len(layer_outputs)}"
+                    )
 
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_state,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_state, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_state, all_hidden_states, all_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
-            last_hidden_state=hidden_state, hidden_states=all_hidden_states, attentions=all_attentions
+            last_hidden_state=hidden_state,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
 
@@ -710,29 +797,39 @@ class DistilBertModel(DistilBertPreTrainedModel):
                 size will add correct vectors at the end following the position encoding algorithm, whereas reducing
                 the size will remove vectors from the end.
         """
-        num_position_embeds_diff = new_num_position_embeddings - self.config.max_position_embeddings
+        num_position_embeds_diff = (
+            new_num_position_embeddings - self.config.max_position_embeddings
+        )
 
         # no resizing needs to be done if the length stays the same
         if num_position_embeds_diff == 0:
             return
 
-        logger.info(f"Setting `config.max_position_embeddings={new_num_position_embeddings}`...")
+        logger.info(
+            f"Setting `config.max_position_embeddings={new_num_position_embeddings}`..."
+        )
         self.config.max_position_embeddings = new_num_position_embeddings
 
-        old_position_embeddings_weight = self.embeddings.position_embeddings.weight.clone()
+        old_position_embeddings_weight = (
+            self.embeddings.position_embeddings.weight.clone()
+        )
 
-        self.embeddings.position_embeddings = nn.Embedding(self.config.max_position_embeddings, self.config.dim)
+        self.embeddings.position_embeddings = nn.Embedding(
+            self.config.max_position_embeddings, self.config.dim
+        )
 
         if self.config.sinusoidal_pos_embds:
             create_sinusoidal_embeddings(
-                n_pos=self.config.max_position_embeddings, dim=self.config.dim, out=self.position_embeddings.weight
+                n_pos=self.config.max_position_embeddings,
+                dim=self.config.dim,
+                out=self.position_embeddings.weight,
             )
         else:
             with torch.no_grad():
                 if num_position_embeds_diff > 0:
-                    self.embeddings.position_embeddings.weight[:-num_position_embeds_diff] = nn.Parameter(
-                        old_position_embeddings_weight
-                    )
+                    self.embeddings.position_embeddings.weight[
+                        :-num_position_embeds_diff
+                    ] = nn.Parameter(old_position_embeddings_weight)
                 else:
                     self.embeddings.position_embeddings.weight = nn.Parameter(
                         old_position_embeddings_weight[:num_position_embeds_diff]
@@ -754,7 +851,9 @@ class DistilBertModel(DistilBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.transformer.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices"))
+    @add_start_docstrings_to_model_forward(
+        DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
@@ -770,14 +869,24 @@ class DistilBertModel(DistilBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
@@ -794,10 +903,16 @@ class DistilBertModel(DistilBertPreTrainedModel):
         embeddings = self.embeddings(input_ids, inputs_embeds)  # (bs, seq_length, dim)
 
         if getattr(self.config, "_flash_attn_2_enabled", False):
-            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+            attention_mask = (
+                attention_mask
+                if (attention_mask is not None and 0 in attention_mask)
+                else None
+            )
         else:
             if attention_mask is None:
-                attention_mask = torch.ones(input_shape, device=device)  # (bs, seq_length)
+                attention_mask = torch.ones(
+                    input_shape, device=device
+                )  # (bs, seq_length)
 
         return self.transformer(
             x=embeddings,
@@ -857,7 +972,9 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddings: nn.Module):
         self.vocab_projector = new_embeddings
 
-    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices"))
+    @add_start_docstrings_to_model_forward(
+        DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
@@ -880,7 +997,9 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         dlbrt_output = self.distilbert(
             input_ids=input_ids,
@@ -894,12 +1013,18 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         hidden_states = dlbrt_output[0]  # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)  # (bs, seq_length, dim)
         prediction_logits = self.activation(prediction_logits)  # (bs, seq_length, dim)
-        prediction_logits = self.vocab_layer_norm(prediction_logits)  # (bs, seq_length, dim)
-        prediction_logits = self.vocab_projector(prediction_logits)  # (bs, seq_length, vocab_size)
+        prediction_logits = self.vocab_layer_norm(
+            prediction_logits
+        )  # (bs, seq_length, dim)
+        prediction_logits = self.vocab_projector(
+            prediction_logits
+        )  # (bs, seq_length, vocab_size)
 
         mlm_loss = None
         if labels is not None:
-            mlm_loss = self.mlm_loss_fct(prediction_logits.view(-1, prediction_logits.size(-1)), labels.view(-1))
+            mlm_loss = self.mlm_loss_fct(
+                prediction_logits.view(-1, prediction_logits.size(-1)), labels.view(-1)
+            )
 
         if not return_dict:
             output = (prediction_logits,) + dlbrt_output[1:]
@@ -954,7 +1079,9 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         """
         self.distilbert.resize_position_embeddings(new_num_position_embeddings)
 
-    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
@@ -977,7 +1104,9 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         distilbert_output = self.distilbert(
             input_ids=input_ids,
@@ -1000,7 +1129,9 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1044,7 +1175,9 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         self.distilbert = DistilBertModel(config)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
         if config.num_labels != 2:
-            raise ValueError(f"config.num_labels should be 2, but it is {config.num_labels}")
+            raise ValueError(
+                f"config.num_labels should be 2, but it is {config.num_labels}"
+            )
 
         self.dropout = nn.Dropout(config.qa_dropout)
 
@@ -1071,7 +1204,9 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         """
         self.distilbert.resize_position_embeddings(new_num_position_embeddings)
 
-    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices"))
+    @add_start_docstrings_to_model_forward(
+        DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
@@ -1099,7 +1234,9 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         distilbert_output = self.distilbert(
             input_ids=input_ids,
@@ -1208,7 +1345,9 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.distilbert(
             input_ids,
@@ -1284,7 +1423,9 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(
         DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
-    @replace_return_docstrings(output_type=MultipleChoiceModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=MultipleChoiceModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1325,11 +1466,21 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         >>> loss = outputs.loss
         >>> logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+        num_choices = (
+            input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        )
 
-        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
+        input_ids = (
+            input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        )
+        attention_mask = (
+            attention_mask.view(-1, attention_mask.size(-1))
+            if attention_mask is not None
+            else None
+        )
         inputs_embeds = (
             inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
             if inputs_embeds is not None
