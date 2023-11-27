@@ -2,13 +2,18 @@ FROM rocm/deepspeed:rocm5.7_ubuntu20.04_py3.9_pytorch_2.0.1_DeepSpeed
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
+ARG PYTORCH='2.0.1'
+ARG ROCM='5.7'
 
-# ARG PYTORCH='2.0.1'
-# ARG ROCM='5.7'
+RUN apt update && \
+    apt install -y --no-install-recommends libaio-dev && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
 ARG REF=main
+WORKDIR /
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
