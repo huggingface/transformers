@@ -164,7 +164,7 @@ class NllbTokenizer(PreTrainedTokenizer):
         # fairseq  | '<s>'   | '<pad>' | '</s>' | '<unk>' | 'an' | '▁n' | '▁m' | '▁t' | '▁k' | '▁a'
         # spm      | '<unk>' | '<s>'   | '</s>' | 'an'    | '▁n' | '▁m' | '▁t' | '▁k' | '▁a' | '▁s'
         # unk token needs to be in the vocab with correct index
-        self._added_tokens_decoder = {0:bos_token , 1: pad_token, 2: eos_token, 3: unk_token}
+        self._added_tokens_decoder = {0: bos_token, 1: pad_token, 2: eos_token, 3: unk_token}
         # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
         self.fairseq_offset = 1
 
