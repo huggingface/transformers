@@ -669,8 +669,8 @@ class PatchTSMixerForPredictionHead(nn.Module):
 
         Args:
             hidden_features (`torch.Tensor` of shape `(batch_size, num_patch, d_model)` in `flatten` mode
-                or `(batch_size, n_vars, num_patch, d_model)` in `common_channel`/`mix_channel` mode.): Input
-                hidden features.
+                or `(batch_size, n_vars, num_patch, d_model)` in `common_channel`/`mix_channel` mode.): Input hidden
+                features.
 
         Returns:
             `torch.Tensor` of shape `(batch_size, prediction_length, nvars)`.
@@ -718,9 +718,7 @@ class PatchTSMixerLinearHead(nn.Module):
             mul_factor = 1
         self.distribution_output = distribution_output
         if distribution_output is None:
-            self.projection = nn.Linear(
-                config.d_model * config.num_input_channels * mul_factor, config.num_targets
-            )
+            self.projection = nn.Linear(config.d_model * config.num_input_channels * mul_factor, config.num_targets)
         else:
             self.projection = distribution_output.get_parameter_projection(
                 config.d_model * config.num_input_channels * mul_factor
@@ -737,8 +735,8 @@ class PatchTSMixerLinearHead(nn.Module):
         """
         Args:
             hidden_features (`torch.Tensor` of shape `(batch_size x num_patch x d_model)` in `flatten` mode
-                or `(batch_size x n_vars x num_patch x d_model)` in `common_channel`/`mix_channel` mode.): Input
-                hidden features.
+                or `(batch_size x n_vars x num_patch x d_model)` in `common_channel`/`mix_channel` mode.): Input hidden
+                features.
 
         Returns:
             `torch.Tensor` of shape `(batch_size x num_targets)`.
@@ -811,8 +809,8 @@ class PatchTSMixerPretrainHead(nn.Module):
         """
         Args:
             hidden_features (`torch.Tensor` of shape `(batch_size x num_patch x d_model)` in `flatten` mode
-                or `(batch_size x n_vars x num_patch x d_model)` in `common_channel`/`mix_channel` mode.): Input
-                hidden features.
+                or `(batch_size x n_vars x num_patch x d_model)` in `common_channel`/`mix_channel` mode.): Input hidden
+                features.
 
         Returns:
             `torch.Tensor` of shape `(batch_size x n_vars x num_patch x patch_length)`.
@@ -1875,9 +1873,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         )
         self.use_return_dict = config.use_return_dict
         if config.scaling in ["std", "mean", True]:
-            self.inject_scale = InjectScalerStatistics4D(
-                d_model=config.d_model, num_patches=config.num_patches
-            )
+            self.inject_scale = InjectScalerStatistics4D(d_model=config.d_model, num_patches=config.num_patches)
         else:
             self.inject_scale = None
 
@@ -2062,9 +2058,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
         if config.scaling in ["std", "mean", True]:
-            self.inject_scale = InjectScalerStatistics4D(
-                d_model=config.d_model, num_patches=config.num_patches
-            )
+            self.inject_scale = InjectScalerStatistics4D(d_model=config.d_model, num_patches=config.num_patches)
         else:
             self.inject_scale = None
 

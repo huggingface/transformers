@@ -159,7 +159,6 @@ from . import (
     owlv2,
     owlvit,
     patchtsmixer,
-    patchtst,
     pegasus,
     pegasus_x,
     perceiver,

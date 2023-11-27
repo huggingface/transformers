@@ -208,70 +208,71 @@ class AutoformerFeatureEmbedder(nn.Module):
         )
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeriesTransformer->Autoformer,TimeSeries->Autoformer
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeries->Autoformer
 class AutoformerStdScaler(nn.Module):
     """
-    Standardize features by calculating the mean and scaling along the first dimension, and then normalizes it by
-    subtracting from the mean and dividing by the standard deviation.
+    Standardize features by calculating the mean and scaling along some given dimension `dim`, and then normalizes it
+    by subtracting from the mean and dividing by the standard deviation.
+
+    Args:
+        dim (`int`):
+            Dimension along which to calculate the mean and standard deviation.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        minimum_scale (`float`, *optional*, defaults to 1e-5):
+            Default scale that is used for elements that are constantly zero along dimension `dim`.
     """
 
-    def __init__(self, config: AutoformerConfig):
+    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-5):
         super().__init__()
-        self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
-        self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
-        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
+        if not dim > 0:
+            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
+        self.dim = dim
+        self.keepdim = keepdim
+        self.minimum_scale = minimum_scale
 
-    def forward(
-        self, data: torch.Tensor, observed_indicator: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Parameters:
-            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
-                input for Batch norm calculation
-            observed_indicator (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
-                Calculating the scale on the observed indicator.
-        Returns:
-            tuple of `torch.Tensor` of shapes
-                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
-                `(batch_size, 1, num_input_channels)`)
-        """
-        denominator = observed_indicator.sum(self.dim, keepdim=self.keepdim)
+    @torch.no_grad()
+    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        denominator = weights.sum(self.dim, keepdim=self.keepdim)
         denominator = denominator.clamp_min(1.0)
-        loc = (data * observed_indicator).sum(self.dim, keepdim=self.keepdim) / denominator
+        loc = (data * weights).sum(self.dim, keepdim=self.keepdim) / denominator
 
-        variance = (((data - loc) * observed_indicator) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
+        variance = (((data - loc) * weights) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
         scale = torch.sqrt(variance + self.minimum_scale)
         return (data - loc) / scale, loc, scale
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeriesTransformer->Autoformer,TimeSeries->Autoformer
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeries->Autoformer
 class AutoformerMeanScaler(nn.Module):
     """
-    Computes a scaling factor as the weighted average absolute value along the first dimension, and scales the data
+    Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
     accordingly.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        default_scale (`float`, *optional*, defaults to `None`):
+            Default scale that is used for elements that are constantly zero. If `None`, we use the scale of the batch.
+        minimum_scale (`float`, *optional*, defaults to 1e-10):
+            Default minimum possible scale that is used for any item.
     """
 
-    def __init__(self, config: AutoformerConfig):
+    def __init__(
+        self, dim: int = -1, keepdim: bool = True, default_scale: Optional[float] = None, minimum_scale: float = 1e-10
+    ):
         super().__init__()
-        self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
-        self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
-        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
-        self.default_scale = config.default_scale if hasattr(config, "default_scale") else None
+        self.dim = dim
+        self.keepdim = keepdim
+        self.minimum_scale = minimum_scale
+        self.default_scale = default_scale
 
+    @torch.no_grad()
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Parameters:
-            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
-                input for Batch norm calculation
-            observed_indicator (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
-                Calculating the scale on the observed indicator.
-        Returns:
-            tuple of `torch.Tensor` of shapes
-                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
-                `(batch_size, 1, num_input_channels)`)
-        """
+        # shape: (N, [C], T=1)
         ts_sum = (data * observed_indicator).abs().sum(self.dim, keepdim=True)
         num_observed = observed_indicator.sum(self.dim, keepdim=True)
 
@@ -299,29 +300,26 @@ class AutoformerMeanScaler(nn.Module):
         return scaled_data, torch.zeros_like(scale), scale
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeriesTransformer->Autoformer,TimeSeries->Autoformer
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeries->Autoformer
 class AutoformerNOPScaler(nn.Module):
     """
-    Assigns a scaling factor equal to 1 along the first dimension, and therefore applies no scaling to the input data.
+    Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
     """
 
-    def __init__(self, config: AutoformerConfig):
+    def __init__(self, dim: int, keepdim: bool = False):
         super().__init__()
-        self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
-        self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
+        self.dim = dim
+        self.keepdim = keepdim
 
     def forward(
-        self, data: torch.Tensor, observed_indicator: torch.Tensor = None
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Parameters:
-            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
-                input for Batch norm calculation
-        Returns:
-            tuple of `torch.Tensor` of shapes
-                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
-                `(batch_size, 1, num_input_channels)`)
-        """
         scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
         loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
         return data, loc, scale
@@ -1435,11 +1433,11 @@ class AutoformerModel(AutoformerPreTrainedModel):
         super().__init__(config)
 
         if config.scaling == "mean" or config.scaling is True:
-            self.scaler = AutoformerMeanScaler(config)
+            self.scaler = AutoformerMeanScaler(dim=1, keepdim=True)
         elif config.scaling == "std":
-            self.scaler = AutoformerStdScaler(config)
+            self.scaler = AutoformerStdScaler(dim=1, keepdim=True)
         else:
-            self.scaler = AutoformerNOPScaler(config)
+            self.scaler = AutoformerNOPScaler(dim=1, keepdim=True)
 
         if config.num_static_categorical_features > 0:
             self.embedder = AutoformerFeatureEmbedder(
