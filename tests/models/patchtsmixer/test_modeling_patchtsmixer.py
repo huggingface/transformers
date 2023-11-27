@@ -78,7 +78,7 @@ class PatchTSMixerModelTester:
         norm_mlp="LayerNorm",
         swin_hier: int = 0,
         # masking related
-        mask_type: str = "random",
+        mask_type: str = "forecast",
         random_mask_ratio=0.5,
         mask_patches: list = [2, 3],
         forecast_mask_ratios: list = [1, 1],
@@ -93,7 +93,7 @@ class PatchTSMixerModelTester:
         prediction_length: int = 16,
         out_channels: int = None,
         # Classification/regression related
-        num_labels: int = 3,
+        # num_labels: int = 3,
         num_targets: int = 3,
         output_range: list = None,
         head_aggregation: str = None,
@@ -135,7 +135,7 @@ class PatchTSMixerModelTester:
         self.prediction_length = prediction_length
         self.out_channels = out_channels
         # classification/regression related
-        self.num_labels = num_labels
+        # self.num_labels = num_labels
         self.num_targets = num_targets
         self.output_range = output_range
         self.head_aggregation = head_aggregation
@@ -174,7 +174,7 @@ class PatchTSMixerModelTester:
             masked_loss=self.masked_loss,
             prediction_length=self.prediction_length,
             out_channels=self.out_channels,
-            num_labels=self.num_labels,
+            # num_labels=self.num_labels,
             num_targets=self.num_targets,
             output_range=self.output_range,
             head_aggregation=self.head_aggregation,
@@ -259,7 +259,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         # if classification model:
         if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
-            labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_labels, rng=rng)
+            labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_targets, rng=rng)
             # inputs_dict["labels"] = labels
             inputs_dict["future_values"] = labels
             # inputs_dict.pop("future_values")
@@ -524,7 +524,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             head_dropout=0.2,
             prediction_length=64,
             out_channels=None,
-            num_labels=3,
+            # num_labels=3,
             num_targets=3,
             output_range=None,
             head_aggregation=None,
@@ -594,10 +594,10 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
         cls.correct_classification_output = torch.rand(
             batch_size,
-            cls.params["num_labels"],
+            cls.params["num_targets"],
         )
 
-        cls.correct_classification_classes = torch.randint(0, cls.params["num_labels"], (batch_size,))
+        cls.correct_classification_classes = torch.randint(0, cls.params["num_targets"], (batch_size,))
 
     def test_patchtsmixer_encoder(self):
         config = PatchTSMixerConfig(**self.__class__.params)
