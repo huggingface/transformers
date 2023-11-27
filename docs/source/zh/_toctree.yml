@@ -45,10 +45,20 @@
 - sections:
   - local: performance
     title: 综述
+  - sections:
+    - local: perf_hardware
+      title: 用于训练的定制硬件
+    - local: hpo_train
+      title: 使用Trainer API 进行超参数搜索
+    title: 高效训练技术
   - local: big_models
     title: 实例化大模型
   - local: debugging
     title: 问题定位及解决
+  - local: tf_xla
+    title: TensorFlow模型的XLA集成
+  - local: perf_torch_compile
+    title: 使用 `torch.compile()` 优化推理
   title: 性能和可扩展性
 - sections:
   - local: task_summary
@@ -56,3 +66,13 @@
   - local: tokenizer_summary
     title: 分词器的摘要
   title: 概念指南
+- sections:
+  - sections:
+    - local: main_classes/model
+      title: 模型
+    - local: main_classes/trainer
+      title: Trainer
+    - local: main_classes/deepspeed
+      title: DeepSpeed集成
+    title: 主要类
+  title: 应用程序接口 (API) 

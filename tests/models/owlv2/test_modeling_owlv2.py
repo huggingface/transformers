@@ -141,8 +141,8 @@ class Owlv2VisionModelTester:
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTVisionModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
 class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as OWLV2 does not use input_ids,
-    inputs_embeds, attention_mask and seq_length.
+    Here we also overwrite some of the tests of test_modeling_common.py, as OWLV2 does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
     """
 
     all_model_classes = (Owlv2VisionModel,) if is_torch_available() else ()

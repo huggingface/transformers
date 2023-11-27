@@ -51,7 +51,7 @@ MPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "mosaicml/mpt-7b-8k-chat",
     "mosaicml/mpt-30b",
     "mosaicml/mpt-30b-instruct",
-    "mosaicml/mpt-30b-chat"
+    "mosaicml/mpt-30b-chat",
     # See all MPT models at https://huggingface.co/models?filter=mpt
 ]
 

@@ -714,9 +714,9 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
         processor = ChineseCLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
-        inputs = processor(text=["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"], images=image, padding=True, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = processor(
+            text=["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"], images=image, padding=True, return_tensors="pt"
+        ).to(torch_device)
 
         # forward pass
         with torch.no_grad():
