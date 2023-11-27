@@ -101,10 +101,10 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
     ```python
     >>> from transformers import PvtV2Model, PvtV2Config
 
-    >>> # Initializing a pvt_v2-b0 style configuration
+    >>> # Initializing a pvt_v2_b0 style configuration
     >>> configuration = PvtV2Config()
 
-    >>> # Initializing a model from the Xrenya/pvt-tiny-224 style configuration
+    >>> # Initializing a model from the FoamoftheSea/pvt_v2_b0 style configuration
     >>> model = PvtV2Model(configuration)
 
     >>> # Accessing the model configuration
@@ -132,7 +132,6 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         drop_path_rate: float = 0.0,
         layer_norm_eps: float = 1e-6,
         qkv_bias: bool = True,
-        num_labels: int = 1000,
         attn_reduce: str = "spatialreduction",
         out_features=None,
         out_indices=None,
@@ -169,7 +168,6 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         self.initializer_range = initializer_range
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
-        self.num_labels = num_labels if self.id2label is None else len(self.id2label)
         self.qkv_bias = qkv_bias
         self.attn_reduce = attn_reduce
         self.stage_names = [f"stage{idx}" for idx in range(1, len(depths) + 1)]
