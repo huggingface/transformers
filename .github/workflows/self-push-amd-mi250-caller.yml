@@ -8,12 +8,7 @@ on:
   push:
     branches:
       - run_amd_push_ci_caller*
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/**"
-      - "templates/**"
-      - "utils/**"
+
 
 jobs:
   run_amd_ci:
@@ -23,3 +18,6 @@ jobs:
     with:
       gpu_flavor: mi250
     secrets: inherit
+
+
+    if: (cancelled() != true) &&   (   (github.event_name == 'push') &&    (   github.ref_name == 'main' || startsWith(github.ref_name, 'run_amd_push_ci_caller')    )           )

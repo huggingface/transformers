@@ -8,12 +8,7 @@ on:
   push:
     branches:
       - run_amd_push_ci_caller*
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/**"
-      - "templates/**"
-      - "utils/**"
+
 
 jobs:
   run_amd_ci:
