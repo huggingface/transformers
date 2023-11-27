@@ -18,7 +18,7 @@ from collections import OrderedDict
 import torch
 from packaging import version
 from torch import Tensor, nn
-
+from torch.nn import functional as F
 from .utils import logging
 
 
@@ -43,7 +43,7 @@ class PytorchGELUTanh(nn.Module):
             )
 
     def forward(self, input: Tensor) -> Tensor:
-        return nn.functional.gelu(input, approximate="tanh")
+        return F.gelu(input, approximate="tanh")
 
 
 class NewGELUActivation(nn.Module):
@@ -69,7 +69,7 @@ class GELUActivation(nn.Module):
         if use_gelu_python:
             self.act = self._gelu_python
         else:
-            self.act = nn.functional.gelu
+            self.act = F.gelu
 
     def _gelu_python(self, input: Tensor) -> Tensor:
         return input * 0.5 * (1.0 + torch.erf(input / math.sqrt(2.0)))
@@ -148,10 +148,10 @@ class MishActivation(nn.Module):
         if version.parse(torch.__version__) < version.parse("1.9.0"):
             self.act = self._mish_python
         else:
-            self.act = nn.functional.mish
+            self.act = F.mish
 
     def _mish_python(self, input: Tensor) -> Tensor:
-        return input * torch.tanh(nn.functional.softplus(input))
+        return input * torch.tanh(F.softplus(input))
 
     def forward(self, input: Tensor) -> Tensor:
         return self.act(input)
@@ -185,7 +185,7 @@ class ReLUSquaredActivation(nn.Module):
     """
 
     def forward(self, input):
-        relu_applied = nn.functional.relu(input)
+        relu_applied = F.relu(input)
         squared = torch.square(relu_applied)
         return squared
 
@@ -222,6 +222,7 @@ ACT2FN = ClassInstantier(ACT2CLS)
 
 
 def get_activation(activation_string):
+    activation_string = activation_string.lower().replace(" ","")
     if activation_string in ACT2FN:
         return ACT2FN[activation_string]
     else:

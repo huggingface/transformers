@@ -856,12 +856,13 @@ class ConvBertGeneratorPredictions(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dense = nn.Linear(config.hidden_size, config.embedding_size)
+        self.gelu_act = get_activation("gelu")
+        self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
 
     def forward(self, generator_hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         hidden_states = self.dense(generator_hidden_states)
-        hidden_states = get_activation("gelu")(hidden_states)
+        hidden_states = self.gelu_act(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
 
         return hidden_states
