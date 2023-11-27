@@ -2145,8 +2145,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             return outputs
 
-        condition_on_previous_tokens = condition_on_previous_tokens or getattr(self.generation_config, "condition_on_previous_tokens", False)
-        self.generation_config.condition_on_previous_tokens = condition_on_previous_tokens
+        condition_on_previous_tokens = condition_on_previous_tokens if condition_on_previous_tokens is not None else getattr(self.generation_config, "condition_on_previous_tokens", False)
 
         # 6. Else we're in longform mode which is more complex. We need to chunk the audio input depending on when the model generated
         # timestamp tokens
@@ -2225,10 +2224,31 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 cut_off_length = self.config.max_target_positions // 2 - 1
                 active_segments = [current_segments[i] for i in new_cur_to_prev_index_map]
                 decoder_input_ids = self._pad_to_max_length(active_segments, self.generation_config.pad_token_id, padding="left")
-                decoder_input_ids = torch.cat([decoder_input_ids[:, -cut_off_length:], torch.ones((cur_bsz, 1), device=decoder_input_ids.device, dtype=torch.long) * self.config.decoder_start_token_id], dim=-1)
+
+                prev_start_of_text = 50360  # TODO(Patrick): Need to put in generation_config
+                one_tensor = torch.ones((cur_bsz, 1), device=decoder_input_ids.device, dtype=torch.long)
+
+                decoder_input_ids = torch.cat([prev_start_of_text * one_tensor, decoder_input_ids[:, -cut_off_length:], self.config.decoder_start_token_id * one_tensor], dim=-1)
 
                 timestamp_processor = [proc for proc in logits_processor if isinstance(proc, WhisperTimeStampLogitsProcessor)][0]
                 timestamp_processor.set_begin_index(decoder_input_ids.shape[-1])
+
+                passed_max_length = kwargs.get("max_length", None)
+                passed_max_new_tokens = kwargs.get("max_new_tokens", None)
+                max_length_config = getattr(self.generation_config, "max_length", None)
+                max_new_tokens_config = getattr(self.generation_config, "max_new_tokens", None)
+
+                # Make sure we don't get larger than `max_length`
+                if passed_max_length is not None and passed_max_new_tokens is None:
+                    kwargs["max_length"] = max(kwargs["max_length"] + cut_off_length + 1, self.config.max_target_positions)
+                    logger.info(f"Increase max_length from {passed_max_length} to {kwargs['max_length']} since input is conditioned on previous segment.")
+                elif max_length_config is not None and passed_max_new_tokens is None and max_new_tokens_config is None:
+                    kwargs["max_length"] = max(self.generation_config.max_length + cut_off_length + 1, self.config.max_target_positions)
+                    logger.info(f"Increase max_length from {max_length_config} to {kwargs['max_length']} since input is conditioned on previous segment.")
+                elif passed_max_new_tokens is not None and passed_max_new_tokens + cut_off_length + 2 > self.config.max_target_positions:
+                    kwargs["max_new_tokens"] = self.config.max_target_positions - cut_off_length - 2
+                elif passed_max_new_tokens is None and max_new_tokens_config is not None and max_new_tokens_config + cut_off_length + 2 > self.config.max_target_positions:
+                    kwargs["max_new_tokens"] = self.config.max_target_positions - cut_off_length - 2
 
             # 6.6 Batch generate current chunk
             seek_outputs = super().generate(
@@ -2281,7 +2301,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     time_offset=time_offset,
                     timestamp_begin=timestamp_begin,
                     seek_num_frames=seek_num_frames,
-                    cur_bsz=cur_bsz,
                     time_precision=time_precision,
                     input_stride=input_stride,
                     prev_idx=prev_i,
@@ -2328,7 +2347,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         time_offset,
         timestamp_begin,
         seek_num_frames,
-        cur_bsz,
         time_precision,
         input_stride,
         prev_idx,
@@ -2337,7 +2355,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         # find the predicted "end of segment" predictions of Whisper
         # "end of segment" predictions occur whenever Whisper predicts a timestamp token
         timestamp_tokens: torch.Tensor = seek_sequence.ge(timestamp_begin)
-        single_timestamp_ending = timestamp_tokens[-2:].tolist() == cur_bsz * [[False, True]]
+        single_timestamp_ending = timestamp_tokens[-2:].tolist() == [False, True]
         timestamp_segment_indices = torch.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
 
         # If whisper predicted a "end of segment" via a timestep token, let's go ever each
