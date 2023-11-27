@@ -79,7 +79,6 @@ class ProcessorTesterMixin:
 
     def test_save_load_pretrained_additional_features(self):
         tokenizer_slow = self.get_tokenizer()
-        tokenizer_fast = self.get_fast_tokenizer()
         image_processor = self.get_image_processor()
 
         processor = self.processor_class(tokenizer=tokenizer_slow, image_processor=image_processor)
