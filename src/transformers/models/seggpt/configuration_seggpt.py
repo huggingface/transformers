@@ -45,7 +45,8 @@ class SegGPTConfig(PretrainedConfig):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
-        embed_dim (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
+        embed_dim (`int`, *optional*, defaults to 1024):
+            Dimensionality of encoder patch embedding.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
@@ -58,14 +59,18 @@ class SegGPTConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        num_group_blocks (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
-        use_rel_pos (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        out_feature (`<fill_type>`, *optional*, defaults to `"last_feat"`): <fill_docstring>
-        decoder_embed_dim (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
-        pretrain_img_size (`<fill_type>`, *optional*, defaults to 224): <fill_docstring>
+        num_group_blocks (`int`, *optional*, defaults to 4):
+            Number of group blocks. A Group block contains n transformer blocks.
+        use_rel_pos (`bool`, *optional*, defaults to `True`):
+            Whether to use relative position embedding.
+        decoder_embed_dim (`int`, *optional*, defaults to 64):
+            Dimensionality of decoder patch embedding.
+        pretrain_img_size (`int`, *optional*, defaults to 224):
+            Pretrained image size.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        merge_index (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        merge_index (`int`, *optional*, defaults to 2):
+            Depth index where hidden states of image and prompt are swapped.
 
     Example:
 
@@ -81,7 +86,7 @@ class SegGPTConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "mgp-str"
+    model_type = "seggpt"
 
     def __init__(
         self,
@@ -97,7 +102,6 @@ class SegGPTConfig(PretrainedConfig):
         num_hidden_layers=24,
         num_group_blocks=4,
         use_rel_pos=True,
-        out_feature="last_feat",
         decoder_embed_dim=64,
         pretrain_img_size=224,
         initializer_range=0.02,
@@ -110,7 +114,6 @@ class SegGPTConfig(PretrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.embed_dim = embed_dim
-        # self.depth = depth
         self.num_group_blocks = num_group_blocks
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -119,7 +122,6 @@ class SegGPTConfig(PretrainedConfig):
         self.mlp_ratio = mlp_ratio
         self.layer_norm_eps = layer_norm_eps
         self.use_rel_pos = use_rel_pos
-        self.out_feature = out_feature
         self.decoder_embed_dim = decoder_embed_dim
         self.initializer_range = initializer_range
         self.pretrain_img_size = pretrain_img_size

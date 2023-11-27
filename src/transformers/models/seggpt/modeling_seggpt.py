@@ -367,7 +367,7 @@ class SegGPTBlockGroup(nn.Module):
         blocks = []
         num_blocks_in_group = config.num_hidden_layers // config.num_group_blocks
         for i in range(num_blocks_in_group):
-            block_depth = config.num_blocks_in_group * depth + i
+            block_depth = num_blocks_in_group * depth + i
 
             blocks.append(SegGPTBlock(config, block_depth))
 
@@ -426,10 +426,6 @@ class SegGPTEncoder(nn.Module):
         for i in range(config.num_group_blocks):
             block = SegGPTBlockGroup(config, depth=i)
             self.group_blocks.append(block)
-
-        self._out_feature_channels = {config.out_feature: config.embed_dim}
-        self._out_feature_strides = {config.out_feature: config.patch_size}
-        self._out_features = [config.out_feature]
 
         self.norm = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
 
