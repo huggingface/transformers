@@ -16,6 +16,7 @@
 
 import inspect
 import unittest
+from typing import Dict, List, Tuple
 
 import numpy as np
 import requests
@@ -382,17 +383,65 @@ class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # @slow
-    # def test_model_from_pretrained(self):
-    #     for model_name in BEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-    #         model = BeitModel.from_pretrained(model_name)
-    #         self.assertIsNotNone(model)
+    @unittest.skip(reason="SegGPT does not support training yet")
+    def test_training(self):
+        pass
 
+    def test_model_outputs_equivalence(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-# We will verify our results on an image of cute cats
-# def prepare_img():
-#     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-#     return image
+        def set_nan_tensor_to_zero(t):
+            t[t != t] = 0
+            return t
+
+        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+            with torch.no_grad():
+                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+
+                def recursive_check(tuple_object, dict_object):
+                    if isinstance(tuple_object, (List, Tuple)):
+                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif isinstance(tuple_object, Dict):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object.values(), dict_object.values()
+                        ):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif tuple_object is None:
+                        return
+                    else:
+                        self.assertTrue(
+                            torch.allclose(
+                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                            ),
+                            msg=(
+                                "Tuple and dict output are not equal. Difference:"
+                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
+                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
+                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
+                            ),
+                        )
+
+                recursive_check(tuple_output, dict_output)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+            if self.has_attentions:
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
 
 
 @require_torch
@@ -402,6 +451,7 @@ class SegGPTModelIntegrationTest(unittest.TestCase):
     # def default_image_processor(self):
     #     return SegGPTForSemanticSegmentation.from_pretrained("microsoft/beit-base-patch16-224") if is_vision_available() else None
 
+    # Note : Will be removed, keeping the original inference for reference.
     @slow
     def test_post_processing_semantic_segmentation_original(self):
         model = SegGPTModel.from_pretrained("Raghavan/seggpt_semantic_segmentation")
@@ -507,7 +557,7 @@ class SegGPTModelIntegrationTest(unittest.TestCase):
             "./output_hmbb_3.png",
         )
 
-    # @slow
+    @slow
     def test_post_processing_semantic_segmentation(self):
         prompts = [
             "https://huggingface.co/datasets/Raghavan/seggpt_samples/resolve/main/hmbb_1.jpg",
@@ -534,8 +584,6 @@ class SegGPTModelIntegrationTest(unittest.TestCase):
 
         output = model(**inputs)
 
-        loss = output.loss
         logits = output.logits
 
-        self.assertEqual(0.1255, round(float(loss.detach().numpy()), 4))
         np.array_equal([-2.1193, -2.0402, -1.8096, -2.1195], logits.detach().numpy()[1, 2, 6:10])

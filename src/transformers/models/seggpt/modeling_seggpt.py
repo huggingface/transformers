@@ -565,8 +565,6 @@ class SegGPTModelOutput(ModelOutput):
     [`~MaskFormerImageProcessor] for details regarding usage.
 
     Args:
-        loss (`torch.Tensor`, *optional*):
-            The computed loss, returned when labels are present.
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction of the decoder.
         last_hidden_state (`torch.FloatTensor`):
@@ -581,7 +579,6 @@ class SegGPTModelOutput(ModelOutput):
             weighted average in the self-attention heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -640,25 +637,6 @@ class SegGPTModel(SegGPTPreTrainedModel):
         x = self.decoder_pred(x)  # Bx3xHxW
         return x
 
-    def loss(self, pred, tgts):
-        """
-        tgts: [N, 3, H, W] pred: [N, 3, H, W] mask: [N, L], 0 is keep, 1 is remove, valid: [N, 3, H, W]
-        """
-
-        bool_masked_pos = torch.zeros(self.num_patches)
-        bool_masked_pos[self.num_patches // 2 :] = 1
-        bool_masked_pos = bool_masked_pos.unsqueeze(dim=0).flatten(1).to(torch.bool)
-        bool_masked_pos = bool_masked_pos[:, :, None].repeat(1, 1, self.patch_size**2 * 3)
-
-        mask = self.unpatchify(bool_masked_pos)
-        to_expand = tgts.shape[0] // mask.shape[0]
-        mask = mask.repeat(to_expand, 1, 1, 1)
-
-        target = tgts
-        loss = F.smooth_l1_loss(pred, target, reduction="none", beta=0.01)
-        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
-        return loss
-
     def forward(
         self,
         pixel_values,
@@ -685,15 +663,16 @@ class SegGPTModel(SegGPTPreTrainedModel):
 
         decoder_output = self.decoder(encoder_outputs[0])
         logits = self.patchify(decoder_output)  # [N, L, p*p*3]
-        loss = self.loss(decoder_output, prompt_pixel_values)
 
         if not return_dict:
-            outputs = (loss, logits, encoder_outputs[0])
+            outputs = (
+                logits,
+                encoder_outputs[0],
+            )
             outputs = outputs + (encoder_outputs[1],) if output_hidden_states else outputs
             return outputs + (encoder_outputs[-1],) if output_attentions else outputs
 
         return SegGPTModelOutput(
-            loss=loss,
             logits=logits,
             last_hidden_state=encoder_outputs[0],
             hidden_states=encoder_outputs[1] if output_hidden_states else None,
