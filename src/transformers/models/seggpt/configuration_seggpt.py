@@ -31,7 +31,6 @@ SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class SegGPTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SegGPTModel`]. It is used to instantiate an SegGPT
@@ -113,9 +112,11 @@ class SegGPTConfig(PretrainedConfig):
         mlp_ratio=4.0,
         drop_path_rate=0.1,
         pretrain_img_size=224,
-        decoder_embed_dim=64,
+        decoder_hidden_size=64,
         use_rel_pos=True,
         merge_index=2,
+        embedding_type="instance",
+        encoder_output_indicies=[5, 11, 17, 23],
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -136,9 +137,15 @@ class SegGPTConfig(PretrainedConfig):
         self.mlp_ratio = mlp_ratio
         self.drop_path_rate = drop_path_rate
         self.pretrain_img_size = pretrain_img_size
-        self.decoder_embed_dim = decoder_embed_dim
+        self.decoder_hidden_size = decoder_hidden_size
         self.use_rel_pos = use_rel_pos
+        self.embedding_type = embedding_type
+        if merge_index > min(encoder_output_indicies):
+            raise ValueError(
+                f"Merge index must be less than the minimum encoder output index, but got {merge_index=} and {encoder_output_indicies=}"
+            )
         self.merge_index = merge_index
+        self.encoder_output_inidices = encoder_output_indicies
 
 
 class SegGPTOnnxConfig(OnnxConfig):

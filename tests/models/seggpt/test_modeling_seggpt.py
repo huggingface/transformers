@@ -147,13 +147,7 @@ class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            SegGPTModel,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (SegGPTModel,) if is_torch_available() else ()
     fx_compatible = False
 
     test_pruning = False

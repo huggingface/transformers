@@ -24,7 +24,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import SegGPTConfig, ViTImageProcessor, SegGPTModel
+from transformers import SegGPTConfig, SegGPTModel, ViTImageProcessor
 from transformers.utils import logging
 
 
@@ -172,7 +172,7 @@ def convert_seggpt_checkpoint(model_name, pytorch_dump_folder_path, base_model=T
     if base_model:
         model = SegGPTModel(config, add_pooling_layer=False).eval()
     else:
-    model.load_state_dict(state_dict)
+        model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by ViTImageProcessor
     image_processor = ViTImageProcessor()

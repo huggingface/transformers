@@ -20,7 +20,9 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_seggpt": ["SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegGPTConfig", "SegGPTOnnxConfig"]}
+_import_structure = {
+    "configuration_seggpt": ["SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegGPTConfig", "SegGPTOnnxConfig"]
+}
 
 try:
     if not is_torch_available():

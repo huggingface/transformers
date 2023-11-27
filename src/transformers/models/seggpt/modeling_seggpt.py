@@ -17,28 +17,25 @@
 
 import collections.abc
 import math
-from typing import Dict, List, Optional, Set, Tuple, Union
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss, functional as F
+from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    ImageClassifierOutput,
-    MaskedImageModelingOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_seggpt import SegGPTConfig
 
@@ -63,17 +60,38 @@ SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+@dataclass
+class SegGPTModelOutput(BaseModelOutput):
+    """
+    Output type of [`SegGPTModelOutput`].
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`Tuple[torch.FloatTensor]`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape `(batch_size, patch_height, patch_width, hidden_size)`.
+        attentions (`Tuple[torch.FloatTensor]`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape
+            `(batch_size, num_heads, seq_len, seq_len)`.
+        intermidiate_features (`Tuple[torch.FloatTensor]`, `optional`, returned when ``config.encoder_output_indicies`` is set):
+            Tuple of `torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`.
+            Each element in the Tuple corresponds to the output of the layer specified in ``config.encoder_output_indicies``.
+            Additionaly, each feature passes through a LayerNorm.
+    """
+
+    intermidiate_features: Optional[Tuple[torch.FloatTensor]] = None
+
 
 class SegGPTEmbeddings(nn.Module):
     """
-    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
+    Construct the embeddings from patch, position embeddings for input and prompt.
     """
 
-    def __init__(self, config: SegGPTConfig, use_mask_token: bool = False, embedding_type: Optional[str] = None) -> None:
+    def __init__(self, config: SegGPTConfig) -> None:
         super().__init__()
-        self.embedding_type = embedding_type if embedding_type is not None else "instance"
+        self.embedding_type = config.embedding_type
 
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.segment_token_input = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.segment_token_prompt = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         # token for seg types
@@ -86,71 +104,51 @@ class SegGPTEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
-
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
-        """
-
-        num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
-        if num_patches == num_positions and height == width:
-            return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
+    def interpolate_pos_encoding(self, height: int, width: int) -> torch.Tensor:
         patch_pos_embed = self.position_embeddings[:, 1:]
-        dim = embeddings.shape[-1]
-        h0 = height // self.config.patch_size
-        w0 = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h0, w0 = h0 + 0.1, w0 + 0.1
-        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
-            mode="bicubic",
-            align_corners=False,
-        )
-        assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+        num_patches = patch_pos_embed.shape[1]
+        pretrain_patch_size = int(math.sqrt(num_patches))
+        assert pretrain_patch_size * pretrain_patch_size == num_patches
+
+        if pretrain_patch_size != height or pretrain_patch_size != width:
+            patch_pos_embed = F.interpolate(
+                patch_pos_embed.reshape(1, pretrain_patch_size, pretrain_patch_size, -1).permute(0, 3, 1, 2),
+                size=(height, width),
+                mode="bicubic",
+                align_corners=False,
+            )
+
+            return patch_pos_embed.permute(0, 2, 3, 1)
+        else:
+            return patch_pos_embed.reshape(1, height, width, -1)
 
     def forward(
         self,
         pixel_values: torch.Tensor,
         prompt_pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: bool = True,
     ) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
+        input_embeddings = self.patch_embeddings(pixel_values)
+        prompt_embeddings = self.patch_embeddings(prompt_pixel_values)
 
-        input_embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-        prompt_embeddings = self.patch_embeddings(prompt_pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        batch_size, num_channels, patch_height, patch_width = input_embeddings.shape
 
         if bool_masked_pos is not None:
-            seq_length = prompt_embeddings.shape[1]
-            mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
-            # replace the masked visual tokens by mask_tokens
-            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
-            prompt_embeddings = prompt_embeddings * (1.0 - mask) + mask_tokens * mask
+            mask_token = self.mask_token.expand(batch_size, patch_height, patch_width, -1)
+            # replace the masked visual tokens by mask_token
+            w = bool_masked_pos.unsqueeze(-1).type_as(mask_token).reshape(-1, patch_height, patch_width, 1)
+            prompt_embeddings = prompt_embeddings * (1 - w) + mask_token * w
 
         # add positional encoding to each token
-        if interpolate_pos_encoding:
-            pos = self.interpolate_pos_encoding(input_embeddings, height, width)
-        else:
-            pos = self.position_embeddings
+        pos_embed = self.interpolate_pos_encoding(patch_height, patch_width)
 
         # add segment token
         input_embeddings = input_embeddings + self.segment_token_input
         prompt_embeddings = prompt_embeddings + self.segment_token_prompt
 
         # add position embedding skipping CLS
-        input_embeddings = input_embeddings + pos[:, 1:] 
-        prompt_embeddings = prompt_embeddings + pos[:, 1:] 
+        input_embeddings = input_embeddings + pos_embed[:, 1:]
+        prompt_embeddings = prompt_embeddings + pos_embed[:, 1:]
 
         # add type embedding to each token
         if self.embedding_type == "semantic":
@@ -159,7 +157,7 @@ class SegGPTEmbeddings(nn.Module):
             type_embedding = self.type_token_instance
         else:
             raise ValueError(f"Unknown embedding type {self.embedding_type}")
-        
+
         input_embeddings = input_embeddings + type_embedding
         prompt_embeddings = prompt_embeddings + type_embedding
 
@@ -203,12 +201,14 @@ class SegGPTPatchEmbeddings(nn.Module):
         embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
         return embeddings
 
+
 # Modified from transformers.models.sam.modeling_sam.SamVisionAttention
 class SegGPTAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
     def __init__(self, config):
         super().__init__()
+        image_size, patch_size = config.image_size, config.patch_size
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
 
@@ -339,15 +339,16 @@ class SegGPTAttention(nn.Module):
 
         return outputs
 
+
 class SegGPTMlp(nn.Module):
     def __init__(self, config):
         super().__init__()
-        out_features = config.embed_dim
-        hidden_features = int(config.embed_dim * config.mlp_ratio)
-        self.fc1 = nn.Linear(config.embed_dim, hidden_features)
+        out_features = config.hidden_size
+        hidden_features = int(config.hidden_size * config.mlp_ratio)
+        self.fc1 = nn.Linear(config.hidden_size, hidden_features)
         self.act = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(0)
+        self.drop = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
@@ -357,17 +358,53 @@ class SegGPTMlp(nn.Module):
         hidden_states = self.drop(hidden_states)
         return hidden_states
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->SegGPT
+
+# Copied from transformers.models.beit.modeling_beit.drop_path
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
+    """
+    if drop_prob == 0.0 or not training:
+        return input
+    keep_prob = 1 - drop_prob
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor.floor_()  # binarize
+    output = input.div(keep_prob) * random_tensor
+    return output
+
+
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->SegGPT
+class SegGPTDropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
+
+
 class SegGPTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: SegGPTConfig) -> None:
+    def __init__(self, config: SegGPTConfig, drop_path_rate: float) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.attention = SegGPTAttention(config)
-        self.intermediate = SegGPTIntermediate(config)
-        self.output = SegGPTOutput(config)
+        self.mlp = SegGPTMlp(config)
+        self.drop_path = SegGPTDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -379,63 +416,66 @@ class SegGPTLayer(nn.Module):
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in SegGPT, layernorm is applied before self-attention
-            head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
-        hidden_states = attention_output + hidden_states
+        hidden_states = self.drop_path(attention_output) + hidden_states
+        residual = hidden_states
 
-        # in SegGPT, layernorm is also applied after self-attention
-        layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
+        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + self.drop_path(hidden_states)
 
-        # second residual connection is done here
-        layer_output = self.output(layer_output, hidden_states)
-
-        outputs = (layer_output,) + outputs
+        outputs = (hidden_states,) + outputs
 
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->SegGPT
 class SegGPTEncoder(nn.Module):
     def __init__(self, config: SegGPTConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([SegGPTLayer(config) for _ in range(config.num_hidden_layers)])
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
+        self.layer = nn.ModuleList([SegGPTLayer(config, dpr[i]) for i in range(config.num_hidden_layers)])
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
+        intermediate_features = []
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     hidden_states,
-                    layer_head_mask,
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(hidden_states, output_attentions)
 
             hidden_states = layer_outputs[0]
+
+            if i == self.config.merge_index:
+                hidden_states = (
+                    hidden_states[: hidden_states.shape[0] // 2] + hidden_states[hidden_states.shape[0] // 2 :]
+                ) * 0.5
+
+            if i in self.config.encoder_output_indicies:
+                intermediate_features.append(self.layernorm(hidden_states))
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -444,15 +484,19 @@ class SegGPTEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions, intermediate_features]
+                if v is not None
+            )
+        return SegGPTModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
+            intermediate_features=intermediate_features,
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->SegGPT,vit->seggpt
 class SegGPTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -467,29 +511,43 @@ class SegGPTPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
+        std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
-            ).to(module.weight.dtype)
+            module.weight.data = nn.init.trunc_normal_(module.weight.data.to(torch.float32), mean=0.0, std=std).to(
+                module.weight.dtype
+            )
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, SegGPTAttention):
+            module.rel_pos_h.data = nn.init.trunc_normal_(
+                module.rel_pos_h.data.to(torch.float32),
+                mean=0.0,
+                std=std,
+            ).to(module.rel_pos_h.dtype)
+
+            module.rel_pos_w.data = nn.init.trunc_normal_(
+                module.rel_pos_w.data.to(torch.float32),
+                mean=0.0,
+                std=std,
+            ).to(module.rel_pos_w.dtype)
+
         elif isinstance(module, SegGPTEmbeddings):
             module.position_embeddings.data = nn.init.trunc_normal_(
                 module.position_embeddings.data.to(torch.float32),
                 mean=0.0,
-                std=self.config.initializer_range,
+                std=std,
             ).to(module.position_embeddings.dtype)
 
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.cls_token.dtype)
+            torch.nn.init.normal_(module.mask_token, std=std)
+            torch.nn.init.normal_(module.segment_token_input, std=std)
+            torch.nn.init.normal_(module.segment_token_prompt, std=std)
+            torch.nn.init.normal_(module.type_token_semantic, std=std)
+            torch.nn.init.normal_(module.type_token_instance, std=std)
 
 
 SEGGPT_START_DOCSTRING = r"""
@@ -509,11 +567,9 @@ SEGGPT_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
 
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
+        prompt_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Prompt pixel values. Prompt pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`ViTImageProcessor.__call__`] for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -532,17 +588,13 @@ SEGGPT_INPUTS_DOCSTRING = r"""
     "The bare SegGPT Model transformer outputting raw hidden-states without any specific head on top.",
     SEGGPT_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->SEGGPT,ViT->SegGPT
 class SegGPTModel(SegGPTPreTrainedModel):
-    def __init__(self, config: SegGPTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
+    def __init__(self, config: SegGPTConfig):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = SegGPTEmbeddings(config, use_mask_token=use_mask_token)
+        self.embeddings = SegGPTEmbeddings(config)
         self.encoder = SegGPTEncoder(config)
-
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = SegGPTPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -569,11 +621,10 @@ class SegGPTModel(SegGPTPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
+        prompt_pixel_values: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
@@ -588,57 +639,80 @@ class SegGPTModel(SegGPTPreTrainedModel):
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        if prompt_pixel_values is None:
+            raise ValueError("You have to specify prompt_pixel_values")
 
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
         expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
         if pixel_values.dtype != expected_dtype:
             pixel_values = pixel_values.to(expected_dtype)
 
-        embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
-        )
+        if prompt_pixel_values.dtype != expected_dtype:
+            prompt_pixel_values = prompt_pixel_values.to(expected_dtype)
+
+        embedding_output = self.embeddings(pixel_values, prompt_pixel_values, bool_masked_pos=bool_masked_pos)
 
         encoder_outputs = self.encoder(
             embedding_output,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        if not return_dict:
-            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
-            return head_outputs + encoder_outputs[1:]
+        return encoder_outputs
 
-        return BaseModelOutputWithPooling(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+
+class SegGPTDecoderHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.conv = (
+            nn.Conv2d(
+                config.decoder_hidden_size,
+                config.decoder_hidden_size,
+                kernel_size=3,
+                padding=1,
+            ),
+        )
+        self.layernorm = nn.GroupNorm(num_groups=1, num_channels=config.decoder_hidden_size, eps=config.layer_norm_eps)
+        self.act_fct = ACT2FN[config.hidden_act]
+        self.head = (nn.Conv2d(self.decoder_embed_dim, 3, kernel_size=1, bias=True),)  # decoder to patch
+
+    def forward(self, hidden_states: torch.FloatTensor):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.layernorm(hidden_states)
+        hidden_states = self.act_fct(hidden_states)
+        hidden_states = self.head(hidden_states)
+        return hidden_states
+
+
+class SegGPTDecoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.decoder_embed = nn.Linear(
+            config.hidden_size * len(config.encoder_output_indicies),
+            config.patch_size**2 * config.decoder_hidden_size,
+            bias=True,
+        )
+        self.decoder_pred = SegGPTDecoderHead(config)
+        self.patch_size = config.patch_size
+        self.decoder_hidden_size = config.decoder_hidden_size
+        self.config = config
+
+    def _reshape_hidden_states(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+        batch_size, patch_height, patch_width, _ = hidden_states.shape
+        hidden_states = hidden_states.reshape(
+            batch_size, patch_height, patch_width, self.patch_size, self.patch_size, self.decoder_hidden_size
+        )
+        hidden_states = torch.einsum("nhwpqc->nchpwq", hidden_states)
+        hidden_states = hidden_states.reshape(
+            shape=(batch_size, -1, patch_height * self.patch_size, patch_width * self.patch_size)
         )
 
+        return hidden_states
 
-# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->SegGPT
-class SegGPTPooler(nn.Module):
-    def __init__(self, config: SegGPTConfig):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
+    def forward(self, hidden_states: torch.FloatTensor):
+        hidden_states = self.decoder_embed(hidden_states)
+        hidden_states = self._reshape_hidden_states(hidden_states)
+        hidden_states = self.decoder_pred(hidden_states)
 
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
+        return hidden_states
