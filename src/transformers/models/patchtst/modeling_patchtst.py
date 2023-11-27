@@ -319,7 +319,7 @@ def forecast_masking(
 
     for patch_length, ratio in zip(num_forecast_mask_patches, forecast_mask_ratios):
         if patch_length <= 0 or patch_length >= sequence_length:
-            raise ValueError(f"masked_patch_len {patch_length} should be greater than 0 and less than total patches.")
+            raise ValueError(f"num_forecast_mask_patches {patch_length} should be greater than 0 and less than total patches.")
         temp_len = int(batch_size * ratio / total_ratio)
         t_list.append([patch_length, ratio, temp_len])
         total_length += temp_len
