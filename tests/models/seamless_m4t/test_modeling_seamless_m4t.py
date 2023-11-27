@@ -34,6 +34,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -616,7 +617,9 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class SeamlessM4TModelWithTextInputTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     is_encoder_decoder = True
     fx_compatible = False
     test_missing_keys = False
@@ -636,6 +639,19 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
         else ()
     )
     all_generative_model_classes = (SeamlessM4TForTextToText,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "automatic-speech-recognition": SeamlessM4TForSpeechToText,
+            "conversational": SeamlessM4TForTextToText,
+            "feature-extraction": SeamlessM4TModel,
+            "summarization": SeamlessM4TForTextToText,
+            "text-to-audio": SeamlessM4TForTextToSpeech,
+            "text2text-generation": SeamlessM4TForTextToText,
+            "translation": SeamlessM4TForTextToText,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = SeamlessM4TModelTester(self, input_modality="text")

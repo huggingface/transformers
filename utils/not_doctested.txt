@@ -496,6 +496,11 @@ src/transformers/models/deprecated/tapex/tokenization_tapex.py
 src/transformers/models/deprecated/trajectory_transformer/configuration_trajectory_transformer.py
 src/transformers/models/deprecated/trajectory_transformer/convert_trajectory_transformer_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/deprecated/trajectory_transformer/modeling_trajectory_transformer.py
+src/transformers/models/deprecated/transfo_xl/convert_transfo_xl_original_tf_checkpoint_to_pytorch.py
+src/transformers/models/deprecated/transfo_xl/modeling_tf_transfo_xl.py
+src/transformers/models/deprecated/transfo_xl/modeling_tf_transfo_xl_utilities.py
+src/transformers/models/deprecated/transfo_xl/modeling_transfo_xl.py
+src/transformers/models/deprecated/transfo_xl/modeling_transfo_xl_utilities.py
 src/transformers/models/deprecated/van/configuration_van.py
 src/transformers/models/deprecated/van/convert_van_to_pytorch.py
 src/transformers/models/deprecated/van/modeling_van.py
@@ -818,11 +823,6 @@ src/transformers/models/tapas/modeling_tf_tapas.py
 src/transformers/models/timesformer/convert_timesformer_to_pytorch.py
 src/transformers/models/timm_backbone/configuration_timm_backbone.py
 src/transformers/models/timm_backbone/modeling_timm_backbone.py
-src/transformers/models/transfo_xl/convert_transfo_xl_original_tf_checkpoint_to_pytorch.py
-src/transformers/models/transfo_xl/modeling_tf_transfo_xl.py
-src/transformers/models/transfo_xl/modeling_tf_transfo_xl_utilities.py
-src/transformers/models/transfo_xl/modeling_transfo_xl.py
-src/transformers/models/transfo_xl/modeling_transfo_xl_utilities.py
 src/transformers/models/trocr/convert_trocr_unilm_to_pytorch.py
 src/transformers/models/tvlt/configuration_tvlt.py
 src/transformers/models/tvlt/modeling_tvlt.py
