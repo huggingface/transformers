@@ -903,6 +903,9 @@ if __name__ == "__main__":
     elif ci_event.startswith("Push CI (AMD) - "):
         flavor = ci_event.replace("Push CI (AMD) - ", "")
         job_name_prefix = f"AMD {flavor}"
+    elif ci_event.startswith("Scheduled CI (AMD) - "):
+        flavor = ci_event.replace("Scheduled CI (AMD) - ", "")
+        job_name_prefix = f"AMD {flavor}"
 
     for model in model_results.keys():
         for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
