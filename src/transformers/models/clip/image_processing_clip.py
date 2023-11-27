@@ -121,6 +121,10 @@ class CLIPImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
 
+        # for backwards compatibility of KOSMOS-2
+        if "use_square_size" in kwargs:
+            self.size = {"height": size["shortest_edge"], "width": size["shortest_edge"]}
+
     def resize(
         self,
         image: np.ndarray,
