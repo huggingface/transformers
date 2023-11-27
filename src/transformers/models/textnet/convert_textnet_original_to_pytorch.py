@@ -24,10 +24,8 @@ import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
-from torchvision import transforms
 
 from transformers import TextNetBackbone, TextNetConfig, TextNetImageProcessor
-from transformers.utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
 tiny_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_tiny.config"
@@ -118,9 +116,9 @@ def prepare_config(size_config_url, size):
 
 
 def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_dump_folder_path):
-    filepath = hf_hub_download(repo_id="Raghavan/fast_model_config_files", filename="fast_model_configs.json")
+    config_filepath = hf_hub_download(repo_id="Raghavan/fast_model_config_files", filename="fast_model_configs.json")
 
-    with open(filepath) as f:
+    with open(config_filepath) as f:
         content = json.loads(f.read())
 
     size = content[checkpoint_config_filename]["short_size"]
@@ -158,31 +156,10 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-    # originpreprocess image
-
-    img = np.array(image)
-    short_size = size
-    h, w = img.shape[0:2]
-    scale = short_size * 1.0 / min(h, w)
-    h = int(h * scale + 0.5)
-    w = int(w * scale + 0.5)
-    if h % 32 != 0:
-        h = h + (32 - h % 32)
-    if w % 32 != 0:
-        w = w + (32 - w % 32)
-
-    transformations = transforms.Compose(
-        [
-            transforms.Resize((h, w), interpolation=transforms.InterpolationMode.BILINEAR),
-            transforms.ToTensor(),
-            transforms.Normalize(
-                mean=IMAGENET_DEFAULT_MEAN,  # these are RGB mean+std values
-                std=IMAGENET_DEFAULT_STD,  # across a large photo dataset.
-            ),
-        ]
+    original_pixel_values_filepath = hf_hub_download(
+        repo_id="Raghavan/fast_model_samples", filename="original_processed_pixel_values.npy", repo_type="dataset"
     )
-
-    original_pixel_values = transformations(image).unsqueeze(0)  # insert batch dimension
+    original_pixel_values = torch.from_numpy(np.load(original_pixel_values_filepath))
     pixel_values = textnet_image_processor(image, return_tensors="pt").pixel_values
 
     assert torch.allclose(original_pixel_values, pixel_values)
