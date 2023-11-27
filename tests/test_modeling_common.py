@@ -52,6 +52,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
     MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES,
+    MODEL_FOR_PRETRAINING_MAPPING_NAMES,
     MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
@@ -59,6 +60,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
+    MODEL_WITH_LM_HEAD_MAPPING_NAMES,
 )
 from transformers.testing_utils import (
     CaptureLogger,
@@ -530,18 +532,29 @@ class ModelTesterMixin:
             arg_names = [*signature.parameters.keys()]
 
             if model.config.is_encoder_decoder:
-                expected_arg_names = [
-                    "input_ids",
-                    "attention_mask",
-                    "decoder_input_ids",
-                    "decoder_attention_mask",
-                ]
+                if model_class.__name__ in [
+                    *get_values(MODEL_WITH_LM_HEAD_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_PRETRAINING_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
+                ]:
+                    expected_arg_names = [
+                        "input_ids",
+                        "attention_mask",
+                        "decoder_input_ids",
+                        "decoder_attention_mask",
+                    ]
                 expected_arg_names.extend(
                     ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
                     if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
                     else ["encoder_outputs"]
                 )
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            elif model_class.__name__ in [*get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)] and self.has_attentions:
+                expected_arg_names = ["pixel_values", "output_hidden_states", "output_attentions", "return_dict"]
+                self.assertListEqual(arg_names, expected_arg_names)
+            elif model_class.__name__ in [*get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)] and not self.has_attentions:
+                expected_arg_names = ["pixel_values", "output_hidden_states", "return_dict"]
+                self.assertListEqual(arg_names, expected_arg_names)
             else:
                 expected_arg_names = [model.main_input_name]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
