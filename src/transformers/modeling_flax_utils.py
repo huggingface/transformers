@@ -1267,13 +1267,14 @@ def overwrite_call_docstring(model_class, docstring):
     model_class.__call__ = add_start_docstrings_to_model_forward(docstring)(model_class.__call__)
 
 
-def append_call_sample_docstring(model_class, checkpoint, output_type, config_class, mask=None):
+def append_call_sample_docstring(model_class, checkpoint, output_type, config_class, mask=None, revision=None):
     model_class.__call__ = copy_func(model_class.__call__)
     model_class.__call__ = add_code_sample_docstrings(
         checkpoint=checkpoint,
         output_type=output_type,
         config_class=config_class,
         model_cls=model_class.__name__,
+        revision=revision,
     )(model_class.__call__)
 
 
