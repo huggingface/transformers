@@ -1243,7 +1243,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         ... )
         >>> batch = torch.load(file)
 
-        >>> model = PatchTSTModel.from_pretrained("huggingface/patchtst-etth1-pretrain")
+        >>> model = PatchTSTModel.from_pretrained("namctin/patchtst_etth1_pretrain")
 
         >>> # during training, one provides both past and future values
         >>> outputs = model(
@@ -1541,7 +1541,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         ...     stride = 12,
         ...     use_cls_token = True,
         ... )
-        >>> model = PatchTSTForClassification.from_pretrained("huggingface/patchtst-etth1-pretrain", config=config)
+        >>> model = PatchTSTForClassification.from_pretrained("namctin/patchtst_etth1_pretrain", config=config)
 
         >>> # during inference, one only provides past values
         >>> past_values = torch.randn(20, 512, 2)
@@ -1756,7 +1756,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         ...     use_cls_token = True,
         ...     prediction_length = 96,
         ... )
-        >>> model = PatchTSTForPrediction.from_pretrained("huggingface/patchtst-etth1-pretrain", config=config)
+        >>> model = PatchTSTForPrediction.from_pretrained(""namctin/patchtst_etth1_forecast", config=config)
 
         >>> # during training, one provides both past and future values
         >>> outputs = model(
@@ -2002,7 +2002,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         ...     stride = 12,
         ...     use_cls_token = True,
         ... )
-        >>> model = PatchTSTForRegression.from_pretrained("huggingface/patchtst-etth1-pretrain", config=config)
+        >>> model = PatchTSTForRegression.from_pretrained("namctin/patchtst_etth1_regression", config=config)
 
         >>> # during inference, one only provides past values, the model generates future values
         >>> past_values = torch.randn(20, 512, 6)
