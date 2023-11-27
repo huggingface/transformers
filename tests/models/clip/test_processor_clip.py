@@ -14,27 +14,18 @@
 
 import json
 import os
-import shutil
 import tempfile
 import unittest
 
-import numpy as np
-import pytest
-
-from transformers import CLIPTokenizer, CLIPTokenizerFast
 from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+from transformers.utils import IMAGE_PROCESSOR_NAME
 
-
-if is_vision_available():
-    from PIL import Image
-
-    from transformers import CLIPImageProcessor, CLIPProcessor
+from ...test_processing_common import ProcessorTesterMixin
 
 
 @require_vision
-class CLIPProcessorTest(unittest.TestCase):
+class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -62,139 +53,3 @@ class CLIPProcessorTest(unittest.TestCase):
         self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
         with open(self.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
-
-    def get_tokenizer(self, **kwargs):
-        return CLIPTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_rust_tokenizer(self, **kwargs):
-        return CLIPTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_image_processor(self, **kwargs):
-        return CLIPImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
-
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
-
-    def test_save_load_pretrained_default(self):
-        tokenizer_slow = self.get_tokenizer()
-        tokenizer_fast = self.get_rust_tokenizer()
-        image_processor = self.get_image_processor()
-
-        processor_slow = CLIPProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
-        processor_slow.save_pretrained(self.tmpdirname)
-        processor_slow = CLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
-
-        processor_fast = CLIPProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
-        processor_fast.save_pretrained(self.tmpdirname)
-        processor_fast = CLIPProcessor.from_pretrained(self.tmpdirname)
-
-        self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
-        self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
-        self.assertEqual(tokenizer_slow.get_vocab(), tokenizer_fast.get_vocab())
-        self.assertIsInstance(processor_slow.tokenizer, CLIPTokenizer)
-        self.assertIsInstance(processor_fast.tokenizer, CLIPTokenizerFast)
-
-        self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertIsInstance(processor_slow.image_processor, CLIPImageProcessor)
-        self.assertIsInstance(processor_fast.image_processor, CLIPImageProcessor)
-
-    def test_save_load_pretrained_additional_features(self):
-        processor = CLIPProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
-        processor.save_pretrained(self.tmpdirname)
-
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
-
-        processor = CLIPProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
-
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, CLIPTokenizerFast)
-
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, CLIPImageProcessor)
-
-    def test_image_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = CLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        image_input = self.prepare_image_inputs()
-
-        input_image_proc = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
-
-        for key in input_image_proc.keys():
-            self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    def test_tokenizer(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = CLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-
-        encoded_processor = processor(text=input_str)
-
-        encoded_tok = tokenizer(input_str)
-
-        for key in encoded_tok.keys():
-            self.assertListEqual(encoded_tok[key], encoded_processor[key])
-
-    def test_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = CLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"])
-
-        # test if it raises when no input is passed
-        with pytest.raises(ValueError):
-            processor()
-
-    def test_tokenizer_decode(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = CLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
-
-        decoded_processor = processor.batch_decode(predicted_ids)
-        decoded_tok = tokenizer.batch_decode(predicted_ids)
-
-        self.assertListEqual(decoded_tok, decoded_processor)
-
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = CLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
