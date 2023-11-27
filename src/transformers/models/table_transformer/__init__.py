@@ -26,14 +26,6 @@ _import_structure = {
 }
 
 try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["image_processing_table_transformer"] = ["TableTransformerImageProcessor"]
-
-try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -53,14 +45,6 @@ if TYPE_CHECKING:
         TableTransformerConfig,
         TableTransformerOnnxConfig,
     )
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .image_processing_table_transformer import TableTransformerImageProcessor
 
     try:
         if not is_torch_available():
