@@ -56,7 +56,7 @@ class TextGenerationPipeline(Pipeline):
      ```python
      >>> from transformers import pipeline
      >>> generator = pipeline("text-generation", model="bert-base-cased")
-     >>> tokenizer_kwargs = {"truncation": True, "max-length": 512}
+     >>> tokenizer_kwargs = {"truncation": True, "max_length": 512}
      >>> generator(
      ...     "This is a long generation prompt." * 100,
      ...     tokenizer_kwargs=tokenizer_kwargs,
