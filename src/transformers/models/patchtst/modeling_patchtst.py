@@ -1990,14 +1990,6 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         >>> from transformers import PatchTSTConfig, PatchTSTForRegression
 
         >>> # Regression task with 6 input channels and regress 2 targets
-        >>> config = PatchTSTConfig(
-        ...     num_input_channels=6,
-        ...     num_targets=2,
-        ...     context_length=512,
-        ...     patch_length = 12,
-        ...     stride = 12,
-        ...     use_cls_token = True,
-        ... )
         >>> model = PatchTSTForRegression.from_pretrained("namctin/patchtst_etth1_regression")
 
         >>> # during inference, one only provides past values, the model outputs future values
