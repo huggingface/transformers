@@ -14,29 +14,29 @@
 # limitations under the License.
 
 
-import pytest
 import shutil
 
 import numpy as np
+import pytest
 from PIL import Image
 
-from transformers.testing_utils import require_torch
 from transformers import AutoProcessor
+from transformers.testing_utils import require_torch
 
 
 @require_torch
 class ProcessorTesterMixin:
     processor_class = None
-    
+
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-    
+
     def get_fast_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-    
+
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
@@ -50,7 +50,7 @@ class ProcessorTesterMixin:
         image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
 
         return image_inputs
-    
+
     def test_save_load_pretrained_default(self):
         tokenizer_slow = self.get_tokenizer()
         tokenizer_fast = self.get_fast_tokenizer()
@@ -95,7 +95,7 @@ class ProcessorTesterMixin:
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, image_processor)
-    
+
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
