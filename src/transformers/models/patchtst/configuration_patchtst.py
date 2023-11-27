@@ -170,7 +170,7 @@ class PatchTSTConfig(PretrainedConfig):
         channel_attention: bool = False,
         ffn_dim: int = 512,
         norm_type: str = "batchnorm",
-        norm_eps: float = 1e-5,
+        norm_eps: float = 1e-05,
         attention_dropout: float = 0.0,
         dropout: float = 0.0,
         positional_dropout: float = 0.0,
