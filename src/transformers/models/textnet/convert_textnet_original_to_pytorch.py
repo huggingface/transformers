@@ -118,24 +118,16 @@ def prepare_config(size_config_url, size):
 
 
 def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_dump_folder_path):
-    filepath = hf_hub_download(repo_id="Raghavan/fast_model_config_files", filename=checkpoint_config_filename)
+    filepath = hf_hub_download(repo_id="Raghavan/fast_model_config_files", filename="fast_model_configs.json")
 
     with open(filepath) as f:
-        content = f.read()
-    namespace = {}
+        content = json.loads(f.read())
 
-    exec(content, namespace)
+    size = content[checkpoint_config_filename]["short_size"]
 
-    model_config = namespace.get("model")
-    data_config = namespace.get("data")
-    size = 640
-    if "train" in data_config:
-        if "short_size" in data_config["train"]:
-            size = data_config["train"]["short_size"]
-
-    if "tiny" in model_config["backbone"]["config"]:
+    if "tiny" in content[checkpoint_config_filename]["config"]:
         config = prepare_config(tiny_config_url, size)
-    elif "small" in model_config["backbone"]["config"]:
+    elif "small" in content[checkpoint_config_filename]["config"]:
         config = prepare_config(small_config_url, size)
     else:
         config = prepare_config(base_config_url, size)
