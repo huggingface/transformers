@@ -164,11 +164,11 @@ class PatchTSTConfig(PretrainedConfig):
         patch_stride: int = 1,
         # Transformer architecture configuration
         num_hidden_layers: int = 3,
-        d_model: int = 64,
+        d_model: int = 128,
         num_attention_heads: int = 4,
         share_embedding: bool = True,
         channel_attention: bool = False,
-        ffn_dim: int = 256,
+        ffn_dim: int = 512,
         norm_type: str = "batchnorm",
         norm_eps: float = 1e-5,
         attention_dropout: float = 0.0,

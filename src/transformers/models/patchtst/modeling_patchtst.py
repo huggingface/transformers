@@ -1955,7 +1955,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        target_values: torch.Tensor,
+        target_values: torch.Tensor = None,
         past_observed_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -2002,7 +2002,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
 
         >>> # during inference, one only provides past values, the model outputs future values
         >>> past_values = torch.randn(20, 512, 6)
-        >>> outputs = model(past_values)
+        >>> outputs = model(past_values=past_values)
         >>> regression_outputs = outputs.regression_outputs
         ```"""
 
