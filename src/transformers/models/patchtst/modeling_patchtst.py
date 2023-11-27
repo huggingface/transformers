@@ -1401,10 +1401,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         >>> model = PatchTSTForPretraining(config)
 
         >>> # during training, one provides both past and future values
-        >>> outputs = model(
-        ...     past_values=batch["past_values"],
-        ...     future_values=batch["future_values"],
-        ... )
+        >>> outputs = model(past_values=batch["past_values"])
 
         >>> loss = outputs.loss
         >>> loss.backward()
@@ -1758,7 +1755,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         ...     use_cls_token = True,
         ...     prediction_length = 96,
         ... )
-        >>> model = PatchTSTForPrediction.from_pretrained("namctin/patchtst_etth1_forecast", config=config)
+        >>> model = PatchTSTForPrediction.from_pretrained("namctin/patchtst_etth1_forecast")
 
         >>> # during training, one provides both past and future values
         >>> outputs = model(
@@ -2004,7 +2001,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         ...     stride = 12,
         ...     use_cls_token = True,
         ... )
-        >>> model = PatchTSTForRegression.from_pretrained("namctin/patchtst_etth1_regression" #, config=config)
+        >>> model = PatchTSTForRegression.from_pretrained("namctin/patchtst_etth1_regression")
 
         >>> # during inference, one only provides past values, the model generates future values
         >>> past_values = torch.randn(20, 512, 6)
