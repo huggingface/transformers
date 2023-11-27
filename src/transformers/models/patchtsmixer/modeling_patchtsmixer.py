@@ -108,22 +108,22 @@ class PatchTSMixerBatchNorm(nn.Module):
     """
     Parameters:
     Compute batch normalization
-        num_features (`int`): model dimension
+        d_model (`int`): model dimension
     """
 
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
-        self.batchnorm = nn.BatchNorm1d(config.num_features, eps=config.norm_eps)
+        self.batchnorm = nn.BatchNorm1d(config.d_model, eps=config.norm_eps)
 
     def forward(self, inputs: torch.Tensor):
         """
         Parameters:
-            inputs (`torch.Tensor` of shape `(batch_size, sequence_length, num_features)`):
+            inputs (`torch.Tensor` of shape `(batch_size, sequence_length, d_model)`):
                 input for Batch norm calculation
         Returns:
-            `torch.Tensor` of shape `(batch_size, sequence_length, num_features)`
+            `torch.Tensor` of shape `(batch_size, sequence_length, d_model)`
         """
-        output = inputs.transpose(1, 2)  # output: (batch_size, num_features, sequence_length)
+        output = inputs.transpose(1, 2)  # output: (batch_size, d_model, sequence_length)
         output = self.batchnorm(output)
         return output.transpose(1, 2)
 
@@ -135,21 +135,21 @@ class PatchTSMixerPositionalEncoding(nn.Module):
 
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
-        # positional encoding: [num_patches x num_features]
+        # positional encoding: [num_patches x d_model]
         if config.use_positional_encoding:
             self.position_enc = self._init_pe(config)
         else:
-            self.position_enc = nn.Parameter(torch.zeros(config.num_patches, config.num_features))
+            self.position_enc = nn.Parameter(torch.zeros(config.num_patches, config.d_model))
 
     @staticmethod
     def _init_pe(config: PatchTSMixerConfig) -> nn.Parameter:
         # Positional encoding
         if config.positional_encoding_type == "random":
-            position_enc = nn.Parameter(torch.randn(config.num_patches, config.num_features), requires_grad=True)
+            position_enc = nn.Parameter(torch.randn(config.num_patches, config.d_model), requires_grad=True)
         elif config.positional_encoding_type == "sincos":
-            position_enc = torch.zeros(config.num_patches, config.num_features)
+            position_enc = torch.zeros(config.num_patches, config.d_model)
             position = torch.arange(0, config.num_patches).unsqueeze(1)
-            div_term = torch.exp(torch.arange(0, config.num_features, 2) * -(math.log(10000.0) / config.num_features))
+            div_term = torch.exp(torch.arange(0, config.d_model, 2) * -(math.log(10000.0) / config.d_model))
             position_enc[:, 0::2] = torch.sin(position * div_term)
             position_enc[:, 1::2] = torch.cos(position * div_term)
             position_enc = position_enc - position_enc.mean()
@@ -162,7 +162,7 @@ class PatchTSMixerPositionalEncoding(nn.Module):
         return position_enc
 
     def forward(self, patch_input: torch.Tensor):
-        # hidden_state: [bs x num_channels x num_patches x num_features]
+        # hidden_state: [bs x num_channels x num_patches x d_model]
         hidden_state = patch_input + self.position_enc
         return hidden_state
 
@@ -183,15 +183,15 @@ class PatchTSMixerNormLayer(nn.Module):
         if "batch" in config.norm_mlp.lower():
             self.norm = PatchTSMixerBatchNorm(config)
         else:
-            self.norm = nn.LayerNorm(config.num_features, eps=config.norm_eps)
+            self.norm = nn.LayerNorm(config.d_model, eps=config.norm_eps)
 
     def forward(self, inputs: torch.Tensor):
         """
         Args:
-            inputs (`torch.Tensor` of shape `((batch_size, num_channels, num_patches, num_features))`):
+            inputs (`torch.Tensor` of shape `((batch_size, num_channels, num_patches, d_model))`):
                 Input to the normalization layer.
         Returns:
-            `torch.Tensor` of shape `((batch_size, num_channels, num_patches, num_features))`
+            `torch.Tensor` of shape `((batch_size, num_channels, num_patches, d_model))`
         """
         if "batch" in self.norm_mlp.lower():
             # reshape the data
@@ -202,9 +202,9 @@ class PatchTSMixerNormLayer(nn.Module):
                     inputs.shape[2],
                     inputs.shape[3],
                 ),
-            )  # inputs_reshaped: [batch_size*num_channels, num_patches, num_features]
+            )  # inputs_reshaped: [batch_size*num_channels, num_patches, d_model]
 
-            # inputs_reshaped: [batch_size*num_channels, num_patches, num_features]
+            # inputs_reshaped: [batch_size*num_channels, num_patches, d_model]
             inputs_reshaped = self.norm(inputs_reshaped)
 
             # put back data to the original shape
@@ -228,7 +228,7 @@ class PatchTSMixerMLP(nn.Module):
     def forward(self, inputs: torch.Tensor):
         """
         Args:
-            inputs (`torch.Tensor` of shape `((batch_size, num_channels, num_patches, num_features))`):
+            inputs (`torch.Tensor` of shape `((batch_size, num_channels, num_patches, d_model))`):
                 Input to the MLP layer.
         Returns:
             `torch.Tensor` of the same shape as `inputs`
@@ -266,7 +266,7 @@ class PatchTSMixerChannelFeatureMixerBlock(nn.Module):
     def forward(self, inputs: torch.Tensor):
         """
         Args:
-            inputs (`torch.Tensor` of shape `((batch_size, num_channels, num_patches, num_features))`):
+            inputs (`torch.Tensor` of shape `((batch_size, num_channels, num_patches, d_model))`):
                 input to the MLP layer
         Returns:
             `torch.Tensor` of the same shape as `inputs`
@@ -469,7 +469,7 @@ class PatchMixerBlock(nn.Module):
 
         if config.self_attn:
             self.self_attn_layer = PatchTSMixerAttention(
-                embed_dim=config.num_features,
+                embed_dim=config.d_model,
                 num_heads=config.self_attn_heads,
                 dropout=config.dropout,
             )
@@ -488,11 +488,11 @@ class PatchMixerBlock(nn.Module):
         hidden_state = self.norm(hidden_state)
 
         if self.self_attn:
-            batch_size, n_vars, num_patches, num_features = hidden_state.shape
-            hidden_state_reshaped = hidden_state.reshape(batch_size * n_vars, num_patches, num_features)
+            batch_size, n_vars, num_patches, d_model = hidden_state.shape
+            hidden_state_reshaped = hidden_state.reshape(batch_size * n_vars, num_patches, d_model)
 
             x_attn, _, _ = self.self_attn_layer(hidden_state_reshaped, output_attentions=False)
-            x_attn = x_attn.reshape(batch_size, n_vars, num_patches, num_features)
+            x_attn = x_attn.reshape(batch_size, n_vars, num_patches, d_model)
 
         # Transpose so that num_patches is the last dimension
         hidden_state = hidden_state.transpose(2, 3)
@@ -528,18 +528,18 @@ class FeatureMixerBlock(nn.Module):
         self.gated_attn = config.gated_attn
 
         self.mlp = PatchTSMixerMLP(
-            in_features=config.num_features,
-            out_features=config.num_features,
+            in_features=config.d_model,
+            out_features=config.d_model,
             config=config,
         )
 
         if config.gated_attn:
-            self.gating_block = PatchTSMixerGatedAttention(in_size=config.num_features, out_size=config.num_features)
+            self.gating_block = PatchTSMixerGatedAttention(in_size=config.d_model, out_size=config.d_model)
 
     def forward(self, hidden: torch.Tensor):
         """
         Args:
-            hidden (`torch.Tensor` of shape `(batch_size, num_patches, num_features)`):
+            hidden (`torch.Tensor` of shape `(batch_size, num_patches, d_model)`):
                 Input tensor to the layer.
 
         Returns:
@@ -580,7 +580,7 @@ class PatchTSMixerLayer(nn.Module):
     def forward(self, hidden: torch.Tensor):
         """
         Args:
-            hidden (`torch.Tensor` of shape `(batch_size, num_patches, num_features)`):
+            hidden (`torch.Tensor` of shape `(batch_size, num_patches, d_model)`):
                 Input tensor to the layer.
 
         Returns:
@@ -590,7 +590,7 @@ class PatchTSMixerLayer(nn.Module):
             hidden = self.channel_feature_mixer(hidden)
 
         hidden = self.patch_mixer(hidden)
-        hidden = self.feature_mixer(hidden)  # hidden: (batch_size, num_patches, num_features)
+        hidden = self.feature_mixer(hidden)  # hidden: (batch_size, num_patches, d_model)
         return hidden
 
 
@@ -656,10 +656,10 @@ class PatchTSMixerForPredictionHead(nn.Module):
 
         self.dropout_layer = nn.Dropout(config.head_dropout)
         if distribution_output is None:
-            self.base_forecast_block = nn.Linear((config.num_patches * config.num_features), config.prediction_length)
+            self.base_forecast_block = nn.Linear((config.num_patches * config.d_model), config.prediction_length)
         else:
             self.base_forecast_block = distribution_output.get_parameter_projection(
-                config.num_patches * config.num_features
+                config.num_patches * config.d_model
             )
 
         self.flatten = nn.Flatten(start_dim=-2)
@@ -668,8 +668,8 @@ class PatchTSMixerForPredictionHead(nn.Module):
         """
 
         Args:
-            hidden_features (`torch.Tensor` of shape `(batch_size, num_patch, num_features)` in `flatten` mode
-                or `(batch_size, n_vars, num_patch, num_features)` in `common_channel`/`mix_channel` mode.): Input
+            hidden_features (`torch.Tensor` of shape `(batch_size, num_patch, d_model)` in `flatten` mode
+                or `(batch_size, n_vars, num_patch, d_model)` in `common_channel`/`mix_channel` mode.): Input
                 hidden features.
 
         Returns:
@@ -677,8 +677,8 @@ class PatchTSMixerForPredictionHead(nn.Module):
 
         """
 
-        hidden_features = self.flatten(hidden_features)  # [batch_size x n_vars x num_patch * num_features]
-        hidden_features = self.dropout_layer(hidden_features)  # [batch_size x n_vars x num_patch * num_features]
+        hidden_features = self.flatten(hidden_features)  # [batch_size x n_vars x num_patch * d_model]
+        hidden_features = self.dropout_layer(hidden_features)  # [batch_size x n_vars x num_patch * d_model]
         forecast = self.base_forecast_block(hidden_features)  # [batch_size x n_vars x prediction_length]
         if isinstance(forecast, tuple):
             forecast = tuple(z.transpose(-1, -2) for z in forecast)
@@ -719,11 +719,11 @@ class PatchTSMixerLinearHead(nn.Module):
         self.distribution_output = distribution_output
         if distribution_output is None:
             self.projection = nn.Linear(
-                config.num_features * config.num_input_channels * mul_factor, config.num_targets
+                config.d_model * config.num_input_channels * mul_factor, config.num_targets
             )
         else:
             self.projection = distribution_output.get_parameter_projection(
-                config.num_features * config.num_input_channels * mul_factor
+                config.d_model * config.num_input_channels * mul_factor
             )
 
         if config.head_aggregation is None:
@@ -736,24 +736,24 @@ class PatchTSMixerLinearHead(nn.Module):
     def forward(self, hidden_features):
         """
         Args:
-            hidden_features (`torch.Tensor` of shape `(batch_size x num_patch x num_features)` in `flatten` mode
-                or `(batch_size x n_vars x num_patch x num_features)` in `common_channel`/`mix_channel` mode.): Input
+            hidden_features (`torch.Tensor` of shape `(batch_size x num_patch x d_model)` in `flatten` mode
+                or `(batch_size x n_vars x num_patch x d_model)` in `common_channel`/`mix_channel` mode.): Input
                 hidden features.
 
         Returns:
             `torch.Tensor` of shape `(batch_size x num_targets)`.
         """
 
-        # batch_size x num_features x num_patch or batch_size x n_vars x num_features x num_patch
+        # batch_size x d_model x num_patch or batch_size x n_vars x d_model x num_patch
         hidden_features = hidden_features.transpose(-1, -2)
         if self.head_aggregation == "use_last":
-            # batch_size x num_features (flatten) or # batch_size x n_vars x num_features (common_channel)
+            # batch_size x d_model (flatten) or # batch_size x n_vars x d_model (common_channel)
             hidden_features = hidden_features[..., -1]
         elif self.head_aggregation == "max_pool":
-            # batch_size x n_vars x num_features or batch_size x num_features
+            # batch_size x n_vars x d_model or batch_size x d_model
             hidden_features = hidden_features.max(dim=-1).values
         elif self.head_aggregation == "avg_pool":
-            # batch_size x n_vars x num_features or batch_size x num_features
+            # batch_size x n_vars x d_model or batch_size x d_model
             hidden_features = hidden_features.mean(dim=-1)
 
         if self.flatten:
@@ -805,13 +805,13 @@ class PatchTSMixerPretrainHead(nn.Module):
         super().__init__()
 
         self.dropout_layer = nn.Dropout(config.head_dropout)
-        self.base_pt_block = nn.Linear(config.num_features, config.patch_length)
+        self.base_pt_block = nn.Linear(config.d_model, config.patch_length)
 
     def forward(self, hidden_features):
         """
         Args:
-            hidden_features (`torch.Tensor` of shape `(batch_size x num_patch x num_features)` in `flatten` mode
-                or `(batch_size x n_vars x num_patch x num_features)` in `common_channel`/`mix_channel` mode.): Input
+            hidden_features (`torch.Tensor` of shape `(batch_size x num_patch x d_model)` in `flatten` mode
+                or `(batch_size x n_vars x num_patch x d_model)` in `common_channel`/`mix_channel` mode.): Input
                 hidden features.
 
         Returns:
@@ -835,7 +835,7 @@ def random_masking(
     """random_masking: Mask the input considering the control variables.
 
     Args:
-        inputs (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, num_features)`):
+        inputs (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`):
             The input tensor to mask.
         mask_ratio (`float`):
             Mask ratio.
@@ -856,7 +856,7 @@ def random_masking(
     if seed_number:
         set_seed(seed_number)
 
-    batch_size, num_channels, sequence_length, num_features = inputs.shape
+    batch_size, num_channels, sequence_length, d_model = inputs.shape
     device = inputs.device
 
     len_keep = int(sequence_length * (1 - mask_ratio))
@@ -877,7 +877,7 @@ def random_masking(
     ids_restore = torch.argsort(ids_shuffle, dim=-1)  # ids_restore: [bs x num_channels x L]
 
     mask = torch.gather(mask, dim=-1, index=ids_restore)
-    mask = mask.unsqueeze(-1).repeat(1, 1, 1, num_features)  # mask: [bs x num_channels x num_patches x patch_length]
+    mask = mask.unsqueeze(-1).repeat(1, 1, 1, d_model)  # mask: [bs x num_channels x num_patches x patch_length]
     if unmasked_channel_indices is not None:
         mask[:, unmasked_channel_indices, :, :] = 0
 
@@ -888,26 +888,31 @@ def random_masking(
 # Copied from transformers.models.patchtst.modeling_patchtst.forecast_masking
 def forecast_masking(
     inputs: torch.Tensor,
-    num_forecast_mask_patches: Union[list, int],
+    forecast_mask_patches: list,
+    forecast_mask_ratios: list = None,
     unmasked_channel_indices: list = None,
     mask_value: int = 0,
     seed_number: Optional[int] = None,
 ):
-    """Forecast masking that masks the last K patches where K is from the num_forecast_mask_patches.
-    If num_forecast_mask_patches is a list, samples in the batch will be randomly masked by numbers defined in the
-    list.
+    """Forecast masking that masks the last K patches where K is from the forecast_mask_patches list.
+    For every batch, distribute the patch lengths based on forecast_mask_ratios and ignore masks for column indices
+    mentioned in unmasked_channel_indices.
 
     Parameters:
         inputs (`torch.Tensor`):
-            Input of shape `(bs, num_channels, num_patch, patch_len)`
-        num_forecast_mask_patches (`list`):
-            Number of patches to be masked at the end of each batch sample. e.g. 4 or [3, 5].
+            Input of shape `(bs, num_channels, num_patch, patch_len)` or `(bs, tsg1, tag2, num_channels, num_patch,
+            patch_len)`
+        forecast_mask_patches (`list`):
+            List of patch lengths to mask at the end of the data e.g. [2, 4].
+        forecast_mask_ratios (`list`, *optional*):
+            List of weights to use for each patch length. For example if forecast_mask_patches is [5,4] and
+            forecast_mask_ratios is [1,1], then equal weights to both patch lengths.
         unmasked_channel_indices (`list`, *optional*):
-            Indices of channels that are not masked.
+            Control Variable channel indices. These channels will not be masked.
         mask_value (`int`, *optional*, defaults to 0):
-            Values in the masked patches will be filled by `mask_value`.
+            Value to use for masking.
         seed_number (`int`, *optional*):
-            Set the random seed number.
+            Value to set for the random seed.
 
     Returns:
         `tuple(torch.Tensor)`: inputs_mask, masked input, same shape as inputs Tensor and Mask tensor of shape `(bs,
@@ -916,20 +921,19 @@ def forecast_masking(
     if seed_number:
         set_seed(seed_number)
 
-    if isinstance(num_forecast_mask_patches, int):
-        num_forecast_mask_patches = [num_forecast_mask_patches]
-    forecast_mask_ratios = [1 for _ in num_forecast_mask_patches]
+    if forecast_mask_ratios is None:
+        forecast_mask_ratios = [1 for _ in forecast_mask_patches]
 
-    batch_size, num_channels, sequence_length, num_features = inputs.shape
+    batch_size, num_channels, sequence_length, d_model = inputs.shape
     mask = torch.zeros(batch_size, num_channels, sequence_length, device=inputs.device)
 
     t_list = []
     total_length = 0
     total_ratio = sum(forecast_mask_ratios)
 
-    for patch_length, ratio in zip(num_forecast_mask_patches, forecast_mask_ratios):
+    for patch_length, ratio in zip(forecast_mask_patches, forecast_mask_ratios):
         if patch_length <= 0 or patch_length >= sequence_length:
-            raise ValueError(f"masked_patch_len {patch_length} should be greater than 0 and less than total patches.")
+            raise Exception("masked_patch_len should be greater than 0 and less than total patches.")
         temp_len = int(batch_size * ratio / total_ratio)
         t_list.append([patch_length, ratio, temp_len])
         total_length += temp_len
@@ -950,7 +954,7 @@ def forecast_masking(
     perm = torch.randperm(mask.shape[0])
     mask = mask[perm]
 
-    mask = mask.unsqueeze(-1).repeat(1, 1, 1, num_features)  # mask: [bs x num_channels x num_patch x patch_len]
+    mask = mask.unsqueeze(-1).repeat(1, 1, 1, d_model)  # mask: [bs x num_channels x num_patch x patch_len]
     if unmasked_channel_indices is not None:
         mask[:, unmasked_channel_indices, :, :] = 0
 
@@ -1028,7 +1032,7 @@ class PatchTSMixerMasking(nn.Module):
         self.random_mask_ratio = config.random_mask_ratio
         self.channel_consistent_masking = config.channel_consistent_masking
         self.mask_type = config.mask_type
-        self.num_forecast_mask_patches = config.num_forecast_mask_patches
+        self.forecast_mask_patches = config.forecast_mask_patches
         self.forecast_mask_ratios = config.forecast_mask_ratios
         self.unmasked_channel_indices = config.unmasked_channel_indices
         self.mask_value = config.mask_value
@@ -1062,7 +1066,8 @@ class PatchTSMixerMasking(nn.Module):
         elif self.mask_type == "forecast":
             masked_input, mask = forecast_masking(
                 inputs=patch_input,
-                num_forecast_mask_patches=self.num_forecast_mask_patches,
+                forecast_mask_patches=self.forecast_mask_patches,
+                forecast_mask_ratios=self.forecast_mask_ratios,
                 unmasked_channel_indices=self.unmasked_channel_indices,
                 mask_value=self.mask_value,
                 seed_number=self.seed_number,
@@ -1200,7 +1205,7 @@ class PatchTSMixerEncoderOutput(ModelOutput):
     Base class for `PatchTSMixerEncoderOutput`, with potential hidden states.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, num_features)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, d_model)`):
             Hidden-state at the output of the last layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Hidden-states of the model at the output of each layer.
@@ -1224,7 +1229,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
 
         self.use_return_dict = config.use_return_dict
 
-        self.patcher = nn.Linear(config.patch_length, config.num_features)
+        self.patcher = nn.Linear(config.patch_length, config.d_model)
         self.positional_encoder = PatchTSMixerPositionalEncoding(config=config)
         self.mlp_mixer_encoder = PatchTSMixerBlock(config=config)
 
@@ -1257,12 +1262,12 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, n_vars, num_patches, num_features)`
+            `torch.FloatTensor` of shape `(batch_size, n_vars, num_patches, d_model)`
         """
 
         return_dict = return_dict if return_dict is not None else self.use_return_dict
 
-        # flatten [bs x num_patch x num_features]. common_channel/mix_channel: [bs x n_vars x num_patch x num_features]
+        # flatten [bs x num_patch x d_model]. common_channel/mix_channel: [bs x n_vars x num_patch x d_model]
         patches = self.patcher(past_values)
 
         # add positional encoder
@@ -1288,7 +1293,7 @@ class PatchTSMixerModelOutput(ModelOutput):
     Base class for model's outputs, with potential hidden states.
 
     Args:
-        last_hidden_state (`torch.FloatTensor`  of shape `(batch_size, num_channels, num_patches, num_features)`):
+        last_hidden_state (`torch.FloatTensor`  of shape `(batch_size, num_channels, num_patches, d_model)`):
             Hidden-state at the output of the last layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Hidden-states of the model at the output of each layer.
@@ -1416,7 +1421,7 @@ class PatchTSMixerForMaskPreTrainingOutput(ModelOutput):
             Prediction output from the pretrain head.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Hidden-states of the model at the output of each layer.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, num_features)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
             Backbone embeddings before passing through the head.
         loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
             Total loss
@@ -1490,7 +1495,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
             observed_mask=observed_mask,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-        )  # x.last_hidden_state: [batch_size x nvars x num_patch x num_features]
+        )  # x.last_hidden_state: [batch_size x nvars x num_patch x d_model]
         if isinstance(model_output, tuple):
             model_output = PatchTSMixerModelOutput(*model_output)
 
@@ -1518,7 +1523,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
 
         return PatchTSMixerForMaskPreTrainingOutput(
             prediction_logits=x_hat,  # tensor [batch_size x nvars x num_patch x patch_length]
-            last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x num_features]
+            last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x d_model]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
         )
@@ -1532,7 +1537,7 @@ class PatchTSMixerForPredictionOutput(ModelOutput):
     Args:
         prediction_logits (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_input_channels)`):
             Prediction output from the forecast head.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, num_features)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
             Backbone embeddings before passing through the head.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
@@ -1707,7 +1712,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
             observed_mask=observed_mask,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-        )  # model_output: [batch_size x nvars x num_patch x num_features]
+        )  # model_output: [batch_size x nvars x num_patch x d_model]
         if isinstance(model_output, tuple):
             model_output = PatchTSMixerModelOutput(*model_output)
 
@@ -1772,7 +1777,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
 
         return PatchTSMixerForPredictionOutput(
             prediction_logits=y_hat,  # tensor [batch_size x prediction_length x num_input_channels]
-            last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x num_features]
+            last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x d_model]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
             loc=loc,
@@ -1835,7 +1840,7 @@ class PatchTSMixerForClassificationOutput(ModelOutput):
     Args:
         prediction_logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
             Prediction output from the classfication head.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, num_features)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
             Backbone embeddings before passing through the head.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
@@ -1871,7 +1876,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         self.use_return_dict = config.use_return_dict
         if config.scaling in ["std", "mean", True]:
             self.inject_scale = InjectScalerStatistics4D(
-                num_features=config.num_features, num_patches=config.num_patches
+                d_model=config.d_model, num_patches=config.num_patches
             )
         else:
             self.inject_scale = None
@@ -1920,7 +1925,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
             past_values,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-        )  # x: [batch_size x nvars x num_patch x num_features]
+        )  # x: [batch_size x nvars x num_patch x d_model]
         if isinstance(model_output, tuple):
             model_output = PatchTSMixerModelOutput(*model_output)
 
@@ -1929,7 +1934,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
                 model_output.last_hidden_state,
                 loc=model_output.loc,
                 scale=model_output.scale,
-            )  # x: [batch_size x nvars x num_patch x num_features]
+            )  # x: [batch_size x nvars x num_patch x d_model]
 
         y_hat = self.head(model_output.last_hidden_state)  # tensor [batch_size x n_labels]
 
@@ -1951,7 +1956,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
 
         return PatchTSMixerForClassificationOutput(
             prediction_logits=y_hat,  # tensor [batch_size x n_labels]
-            last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x num_features]
+            last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x d_model]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
         )
@@ -1965,7 +1970,7 @@ class PatchTSMixerForRegressionOutput(ModelOutput):
     Args:
         prediction_logits (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
             Prediction output from the regression head.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, num_features)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
             Backbone embeddings before passing through the head.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
@@ -1980,11 +1985,11 @@ class PatchTSMixerForRegressionOutput(ModelOutput):
 
 
 class InjectScalerStatistics4D(nn.Module):
-    def __init__(self, num_features: int, num_patches: int, expansion: int = 2):
+    def __init__(self, d_model: int, num_patches: int, expansion: int = 2):
         super().__init__()
 
-        self.inverse_trans_expansion = nn.Linear(num_features + 2, expansion * num_features)
-        self.inverse_trans_compression = nn.Linear(expansion * num_features, num_features)
+        self.inverse_trans_expansion = nn.Linear(d_model + 2, expansion * d_model)
+        self.inverse_trans_compression = nn.Linear(expansion * d_model, d_model)
         self.map_scale_expansion = nn.Linear(2, 2 * expansion)
         self.map_scale_compression = nn.Linear(2 * expansion, 2)
         self.num_patches = num_patches
@@ -1992,11 +1997,11 @@ class InjectScalerStatistics4D(nn.Module):
     def forward(self, inputs: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor):
         """
         Args:
-            inputs (`torch.Tensor` of shape `(batch_size, num_input_channels, num_patch, num_features)`)
+            inputs (`torch.Tensor` of shape `(batch_size, num_input_channels, num_patch, d_model)`)
             loc (`torch.Tensor` of shape `(batch_size, 1, num_input_channels)`)
             scale (`torch.Tensor` of shape `(batch_size, 1, num_input_channels)`)
         Returns:
-            `torch.Tensor` of shape `(batch_size, num_input_channels, num_patch, num_features)`
+            `torch.Tensor` of shape `(batch_size, num_input_channels, num_patch, d_model)`
         """
 
         mean = loc.transpose(-1, -2)  # [batch_size x n_channels x 1 ]
@@ -2012,9 +2017,9 @@ class InjectScalerStatistics4D(nn.Module):
         concat_stats = self.map_scale_expansion(concat_stats)  # [batch_size x n_channels x num_patch x (2*expansion)]
         concat_stats = self.map_scale_compression(concat_stats)  # [batch_size x n_channels x num_patch x 2]
 
-        inputs = torch.cat([inputs, concat_stats], dim=-1)  # [batch_size x channels x num_patch x num_features+2]
-        inputs = self.inverse_trans_expansion(inputs)  # [batch_size x channels x num_patch x (expansion*num_features)]
-        inputs = self.inverse_trans_compression(inputs)  # [batch_size x channels x num_patch x num_features]
+        inputs = torch.cat([inputs, concat_stats], dim=-1)  # [batch_size x channels x num_patch x d_model+2]
+        inputs = self.inverse_trans_expansion(inputs)  # [batch_size x channels x num_patch x (expansion*d_model)]
+        inputs = self.inverse_trans_compression(inputs)  # [batch_size x channels x num_patch x d_model]
 
         return inputs
 
@@ -2058,7 +2063,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
 
         if config.scaling in ["std", "mean", True]:
             self.inject_scale = InjectScalerStatistics4D(
-                num_features=config.num_features, num_patches=config.num_patches
+                d_model=config.d_model, num_patches=config.num_patches
             )
         else:
             self.inject_scale = None
@@ -2116,7 +2121,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             past_values,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-        )  # model_output: [batch_size x nvars x num_patch x num_features]
+        )  # model_output: [batch_size x nvars x num_patch x d_model]
         if isinstance(model_output, tuple):
             model_output = PatchTSMixerModelOutput(*model_output)
 
@@ -2125,7 +2130,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
                 model_output.last_hidden_state,
                 loc=model_output.loc,
                 scale=model_output.scale,
-            )  # x: [batch_size x nvars x num_patch x num_features]
+            )  # x: [batch_size x nvars x num_patch x d_model]
 
         y_hat = self.head(model_output.last_hidden_state)  # tensor [batch_size x num_targets]
 
@@ -2155,7 +2160,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
 
         return PatchTSMixerForRegressionOutput(
             prediction_logits=y_hat,  # tensor [batch_size x num_targets]
-            last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x num_features]
+            last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x d_model]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
         )

@@ -49,7 +49,7 @@ class PatchTSMixerConfig(PretrainedConfig):
             non-overlapping patches.
         num_parallel_samples (`int`, *optional*, defaults to 100):
             The number of samples to generate in parallel for probabilistic forecast.
-        num_features (`int`, *optional*, defaults to 8):
+        d_model (`int`, *optional*, defaults to 8):
             Hidden dimension of the model. Recommended to set it as a multiple of patch_length (i.e. 2-5X of
             patch_len). Larger value indicates more complex model.
         expansion_factor (`int`, *optional*, defaults to 2):
@@ -150,7 +150,7 @@ class PatchTSMixerConfig(PretrainedConfig):
     ```"""
     model_type = "patchtsmixer"
     attribute_map = {
-        "hidden_size": "num_features",
+        "hidden_size": "d_model",
         "num_hidden_layers": "num_layers",
     }
 
@@ -163,7 +163,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         patch_stride: int = 8,
         num_parallel_samples: int = 100,
         # General model configuration
-        num_features: int = 8,
+        d_model: int = 8,
         expansion_factor: int = 2,
         num_layers: int = 3,
         dropout: float = 0.2,
@@ -205,7 +205,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.context_length = context_length
         self.patch_length = patch_len
         self.patch_stride = patch_stride
-        self.num_features = num_features
+        self.d_model = d_model
         self.expansion_factor = expansion_factor
         self.num_layers = num_layers
         self.dropout = dropout

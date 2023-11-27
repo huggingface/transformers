@@ -67,7 +67,7 @@ class PatchTSMixerModelTester:
         patch_length: int = 8,
         num_input_channels: int = 3,
         patch_stride: int = 8,
-        # num_features: int = 128,
+        # d_model: int = 128,
         hidden_size: int = 8,
         # num_layers: int = 8,
         num_hidden_layers: int = 2,
@@ -108,7 +108,7 @@ class PatchTSMixerModelTester:
         self.context_length = context_length
         self.patch_length = patch_length
         self.patch_stride = patch_stride
-        # self.num_features = num_features
+        # self.d_model = d_model
         self.hidden_size = hidden_size
         self.expansion_factor = expansion_factor
         # self.num_layers = num_layers
@@ -152,8 +152,8 @@ class PatchTSMixerModelTester:
             context_length=self.context_length,
             patch_length=self.patch_length,
             patch_stride=self.patch_stride,
-            # num_features = self.num_features,
-            num_features=self.hidden_size,
+            # d_model = self.d_model,
+            d_model=self.hidden_size,
             expansion_factor=self.expansion_factor,
             # num_layers = self.num_layers,
             num_layers=self.num_hidden_layers,
@@ -507,7 +507,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             patch_length=8,
             num_input_channels=3,
             patch_stride=8,
-            num_features=4,
+            d_model=4,
             expansion_factor=2,
             num_layers=3,
             dropout=0.2,
@@ -563,13 +563,13 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             batch_size,
             cls.params["num_input_channels"],
             cls.num_patches,
-            cls.params["num_features"],
+            cls.params["d_model"],
         )
 
         cls.flat_enc_output = torch.rand(
             batch_size,
             cls.num_patches,
-            cls.params["num_features"],
+            cls.params["d_model"],
         )
 
         cls.correct_pred_output = torch.rand(
