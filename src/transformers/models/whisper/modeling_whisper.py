@@ -15,7 +15,6 @@
 """ PyTorch Whisper model."""
 
 import math
-from pickle import decode_long
 import warnings
 from typing import Optional, Tuple, Union
 
@@ -2145,7 +2144,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             return outputs
 
-        condition_on_previous_tokens = condition_on_previous_tokens if condition_on_previous_tokens is not None else getattr(self.generation_config, "condition_on_previous_tokens", False)
+        condition_on_previous_tokens = (
+            condition_on_previous_tokens
+            if condition_on_previous_tokens is not None
+            else getattr(self.generation_config, "condition_on_previous_tokens", False)
+        )
 
         # 6. Else we're in longform mode which is more complex. We need to chunk the audio input depending on when the model generated
         # timestamp tokens
@@ -2223,14 +2226,25 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 # according to https://github.com/openai/whisper/blob/e58f28804528831904c3b6f2c0e473f346223433/whisper/decoding.py#L609
                 cut_off_length = self.config.max_target_positions // 2 - 1
                 active_segments = [current_segments[i] for i in new_cur_to_prev_index_map]
-                decoder_input_ids = self._pad_to_max_length(active_segments, self.generation_config.pad_token_id, padding="left")
+                decoder_input_ids = self._pad_to_max_length(
+                    active_segments, self.generation_config.pad_token_id, padding="left"
+                )
 
                 prev_start_of_text = 50360  # TODO(Patrick): Need to put in generation_config
                 one_tensor = torch.ones((cur_bsz, 1), device=decoder_input_ids.device, dtype=torch.long)
 
-                decoder_input_ids = torch.cat([prev_start_of_text * one_tensor, decoder_input_ids[:, -cut_off_length:], self.config.decoder_start_token_id * one_tensor], dim=-1)
+                decoder_input_ids = torch.cat(
+                    [
+                        prev_start_of_text * one_tensor,
+                        decoder_input_ids[:, -cut_off_length:],
+                        self.config.decoder_start_token_id * one_tensor,
+                    ],
+                    dim=-1,
+                )
 
-                timestamp_processor = [proc for proc in logits_processor if isinstance(proc, WhisperTimeStampLogitsProcessor)][0]
+                timestamp_processor = [
+                    proc for proc in logits_processor if isinstance(proc, WhisperTimeStampLogitsProcessor)
+                ][0]
                 timestamp_processor.set_begin_index(decoder_input_ids.shape[-1])
 
                 passed_max_length = kwargs.get("max_length", None)
@@ -2240,14 +2254,29 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                 # Make sure we don't get larger than `max_length`
                 if passed_max_length is not None and passed_max_new_tokens is None:
-                    kwargs["max_length"] = max(kwargs["max_length"] + cut_off_length + 1, self.config.max_target_positions)
-                    logger.info(f"Increase max_length from {passed_max_length} to {kwargs['max_length']} since input is conditioned on previous segment.")
+                    kwargs["max_length"] = max(
+                        kwargs["max_length"] + cut_off_length + 1, self.config.max_target_positions
+                    )
+                    logger.info(
+                        f"Increase max_length from {passed_max_length} to {kwargs['max_length']} since input is conditioned on previous segment."
+                    )
                 elif max_length_config is not None and passed_max_new_tokens is None and max_new_tokens_config is None:
-                    kwargs["max_length"] = max(self.generation_config.max_length + cut_off_length + 1, self.config.max_target_positions)
-                    logger.info(f"Increase max_length from {max_length_config} to {kwargs['max_length']} since input is conditioned on previous segment.")
-                elif passed_max_new_tokens is not None and passed_max_new_tokens + cut_off_length + 2 > self.config.max_target_positions:
+                    kwargs["max_length"] = max(
+                        self.generation_config.max_length + cut_off_length + 1, self.config.max_target_positions
+                    )
+                    logger.info(
+                        f"Increase max_length from {max_length_config} to {kwargs['max_length']} since input is conditioned on previous segment."
+                    )
+                elif (
+                    passed_max_new_tokens is not None
+                    and passed_max_new_tokens + cut_off_length + 2 > self.config.max_target_positions
+                ):
                     kwargs["max_new_tokens"] = self.config.max_target_positions - cut_off_length - 2
-                elif passed_max_new_tokens is None and max_new_tokens_config is not None and max_new_tokens_config + cut_off_length + 2 > self.config.max_target_positions:
+                elif (
+                    passed_max_new_tokens is None
+                    and max_new_tokens_config is not None
+                    and max_new_tokens_config + cut_off_length + 2 > self.config.max_target_positions
+                ):
                     kwargs["max_new_tokens"] = self.config.max_target_positions - cut_off_length - 2
 
             # 6.6 Batch generate current chunk
@@ -2279,7 +2308,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 seek_sequences = seek_outputs
 
             if decoder_input_ids is not None:
-                seek_sequences = seek_sequences[:, decoder_input_ids.shape[-1]:]
+                seek_sequences = seek_sequences[:, decoder_input_ids.shape[-1] :]
 
             # 6.7 Loop over each decoded audio individually as each decoding can be of a different length
             for i, seek_sequence in enumerate(seek_sequences):
@@ -2338,7 +2367,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         sequences = torch.stack(sequences, dim=0)
         return sequences
-
 
     @staticmethod
     def _retrieve_segment(
