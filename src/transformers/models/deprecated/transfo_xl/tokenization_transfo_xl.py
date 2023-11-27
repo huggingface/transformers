@@ -182,7 +182,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         logger.error(
-            "`TransfoXL` was deprecated due to security issues linked to `pickle.load` in `TransfoXLTokenizer`."
+            "`TransfoXL` was deprecated due to security issues linked to `pickle.load` in `TransfoXLTokenizer`. "
             "See more details on this model's documentation page: "
             "`https://github.com/huggingface/transformers/blob/main/docs/source/en/model_doc/transfo-xl.md`."
         )
