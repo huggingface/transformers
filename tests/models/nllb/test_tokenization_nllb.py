@@ -364,13 +364,6 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
     def test_mask_token(self):
         self.assertListEqual(self.tokenizer.convert_tokens_to_ids(["<mask>", "ar_AR"]), [256203, 3])
 
-    def test_special_tokens_unaffacted_by_save_load(self):
-        tmpdirname = tempfile.mkdtemp()
-        original_special_tokens = self.tokenizer.fairseq_tokens_to_ids
-        self.tokenizer.save_pretrained(tmpdirname)
-        new_tok = NllbTokenizer.from_pretrained(tmpdirname)
-        self.assertDictEqual(new_tok.fairseq_tokens_to_ids, original_special_tokens)
-
     @require_torch
     def test_enro_tokenizer_prepare_batch(self):
         batch = self.tokenizer(
@@ -382,7 +375,7 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         )
         batch["decoder_input_ids"] = shift_tokens_right(
-            batch["labels"], self.tokenizer.pad_token_id, self.tokenizer.lang_code_to_id["ron_Latn"]
+            batch["labels"], self.tokenizer.pad_token_id, self.tokenizer.convert_tokens_to_ids("ron_Latn")
         )
 
         self.assertIsInstance(batch, BatchEncoding)
@@ -405,7 +398,7 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
         batch["decoder_input_ids"] = shift_tokens_right(
             labels,
             self.tokenizer.pad_token_id,
-            decoder_start_token_id=self.tokenizer.lang_code_to_id[self.tokenizer.tgt_lang],
+            decoder_start_token_id=self.tokenizer.convert_tokens_to_ids(self.tokenizer.tgt_lang),
         )
 
         self.assertEqual(batch.input_ids.shape[1], 3)
