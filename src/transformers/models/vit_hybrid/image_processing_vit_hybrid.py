@@ -84,10 +84,6 @@ class ViTHybridImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
-        use_square_size (`bool`, *optional*, defaults to `False`):
-            The value to be passed to `get_size_dict` as `default_to_square` when computing the image size. If the
-            `size` argument in `get_size_dict` is an `int`, it determines whether to default to a square image or not.
-            Note that this attribute is not used in computing `crop_size` via calling `get_size_dict`.
     """
 
     model_input_names = ["pixel_values"]
@@ -105,12 +101,11 @@ class ViTHybridImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
-        use_square_size: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 224}
-        size = get_size_dict(size, default_to_square=use_square_size)
+        size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
         crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
 
@@ -125,7 +120,6 @@ class ViTHybridImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
-        self.use_square_size = use_square_size
 
     # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize
     def resize(
@@ -249,7 +243,7 @@ class ViTHybridImageProcessor(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
-        size = get_size_dict(size, param_name="size", default_to_square=self.use_square_size)
+        size = get_size_dict(size, param_name="size", default_to_square=False)
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size
