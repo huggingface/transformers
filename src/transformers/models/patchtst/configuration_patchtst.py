@@ -56,7 +56,7 @@ class PatchTSTConfig(PretrainedConfig):
             Define the stride of the patchification process.
         num_hidden_layers (`int`, *optional*, defaults to 3):
             Number of hidden layers.
-        d_model (`int`, *optional*, defaults to 64):
+        d_model (`int`, *optional*, defaults to 128):
             Dimensionality of the transformer layers.
         num_attention_heads (`int`, *optional*, defaults to 4):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -64,7 +64,7 @@ class PatchTSTConfig(PretrainedConfig):
             Sharing the input embedding across all channels.
         channel_attention (`bool`, *optional*, defaults to `False`):
             Activate channel attention block in the Transformer to allow channels to attend each other.
-        ffn_dim (`int`, *optional*, defaults to 256):
+        ffn_dim (`int`, *optional*, defaults to 512):
             Dimension of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         norm_type (`str` , *optional*, defaults to `"batchnorm"`):
             Normalization at each Transformer layer. Can be `"batchnorm"` or `"layernorm"`.
@@ -164,11 +164,11 @@ class PatchTSTConfig(PretrainedConfig):
         patch_stride: int = 1,
         # Transformer architecture configuration
         num_hidden_layers: int = 3,
-        d_model: int = 64,
+        d_model: int = 128,
         num_attention_heads: int = 4,
         share_embedding: bool = True,
         channel_attention: bool = False,
-        ffn_dim: int = 256,
+        ffn_dim: int = 512,
         norm_type: str = "batchnorm",
         norm_eps: float = 1e-5,
         attention_dropout: float = 0.0,
