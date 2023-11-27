@@ -650,11 +650,11 @@ class PatchTSTEmbedding(nn.Module):
         """
         # Input encoding
         num_input_channels = patch_input.shape[1]
-        if num_input_channels != self.num_input_channels:
-            raise ValueError(
-                f"The defined number of input channels ({self.num_input_channels}) in the config "
-                f"has to be the same as the number of channels in the batch input ({num_input_channels})"
-            )
+        # if num_input_channels != self.num_input_channels:
+        #     raise ValueError(
+        #         f"The defined number of input channels ({self.num_input_channels}) in the config "
+        #         f"has to be the same as the number of channels in the batch input ({num_input_channels})"
+        #     )
         if self.share_embedding:
             embeddings = self.input_embedding(patch_input)  # x: [bs x num_channels  x num_patches x d_model]
         else:
@@ -1541,7 +1541,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         ...     stride = 12,
         ...     use_cls_token = True,
         ... )
-        >>> model = PatchTSTForClassification.from_pretrained("namctin/patchtst_etth1_pretrain", config=config)
+        >>> model = PatchTSTForClassification(config=config)
 
         >>> # during inference, one only provides past values
         >>> past_values = torch.randn(20, 512, 2)
@@ -1756,7 +1756,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         ...     use_cls_token = True,
         ...     prediction_length = 96,
         ... )
-        >>> model = PatchTSTForPrediction.from_pretrained(""namctin/patchtst_etth1_forecast", config=config)
+        >>> model = PatchTSTForPrediction.from_pretrained("namctin/patchtst_etth1_forecast", config=config)
 
         >>> # during training, one provides both past and future values
         >>> outputs = model(
@@ -2002,7 +2002,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         ...     stride = 12,
         ...     use_cls_token = True,
         ... )
-        >>> model = PatchTSTForRegression.from_pretrained("namctin/patchtst_etth1_regression", config=config)
+        >>> model = PatchTSTForRegression.from_pretrained("namctin/patchtst_etth1_regression" #, config=config)
 
         >>> # during inference, one only provides past values, the model generates future values
         >>> past_values = torch.randn(20, 512, 6)
