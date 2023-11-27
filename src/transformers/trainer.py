@@ -1595,7 +1595,7 @@ class Trainer:
                 # references registered here no longer work on other gpus, breaking the module
                 raise ValueError(
                     "Currently --debug underflow_overflow is not supported under DP. Please use DDP"
-                    " (torch.distributed.launch)."
+                    " (torchrun or torch.distributed.launch (deprecated))."
                 )
             else:
                 debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
