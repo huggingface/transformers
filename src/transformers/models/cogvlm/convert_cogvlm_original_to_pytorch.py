@@ -32,6 +32,9 @@ from transformers import (
 )
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
+original_device = "cuda:1"
+hf_device = "cuda:2"
+
 
 @torch.no_grad()
 def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
@@ -47,15 +50,17 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         # load_in_4bit=True,
         revision="refs/pr/3",
     )
-    original_model.to("cuda:0")
+    original_model.to(original_device)
 
     print("Original config:", original_model.config)
 
     # verify chat example
     query = "Describe this image"
-    image = Image.open(
-        requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-    ).convert("RGB")
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    url = "https://raw.githubusercontent.com/THUDM/CogVLM/main/assets/metrics-min.png"
+    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    # query = "Please extract all text from this image"
+    # image = Image.open("/home/niels/python_projects/transformers/src/transformers/models/cogvlm/img_3805.jpeg").convert("RGB")
 
     tokenizer = LlamaTokenizer.from_pretrained("lmsys/vicuna-7b-v1.5")
     inputs = original_model.build_conversation_input_ids(
@@ -72,7 +77,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         }
         return inputs
 
-    original_inputs = gather_inputs(inputs, device="cuda")
+    original_inputs = gather_inputs(inputs, device=original_device)
     gen_kwargs = {"max_length": 2048, "do_sample": False}
 
     with torch.no_grad():
@@ -89,8 +94,12 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
 
     # load state dict
     model.load_state_dict(original_model.state_dict())
-    model.to("cuda:1")
+    model.to(hf_device)
     model.eval()
+
+    # cast all parameters to bfloat16
+    for p in model.parameters():
+        p.data = p.data.to(torch.bfloat16)
 
     # create processor
     image_size = original_model.config.vision_config["image_size"]
@@ -101,15 +110,13 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         image_std=OPENAI_CLIP_STD,
     )
     patch_size = original_model.config.vision_config["patch_size"]
-    processor = CogVLMProcessor(
-        image_processor=image_processor, tokenizer=tokenizer, image_size=image_size, patch_size=patch_size
-    )
+    processor = CogVLMProcessor(image_processor=image_processor, tokenizer=tokenizer, image_size=image_size, patch_size=patch_size)
 
-    original_inputs = gather_inputs(inputs, device="cuda:1", use_bfloat16=False)
+    original_inputs = gather_inputs(inputs, device=hf_device)
     original_inputs["pixel_values"] = torch.stack(original_inputs.pop("images")[0])
 
     prompt = f"Question: {query} Answer:"
-    inputs = processor(images=image, text=prompt, return_tensors="pt").to("cuda:1")
+    inputs = processor(images=image, text=prompt, return_tensors="pt").to(hf_device, torch.bfloat16)
 
     for k, v in inputs.items():
         print(k, v.shape)
@@ -123,6 +130,8 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         outputs = outputs[:, inputs["input_ids"].shape[1] :]
         generated_text = tokenizer.decode(outputs[0])
 
+    print("Original text:", original_generated_text)
+    print("HF text:", generated_text)
     assert original_generated_text == generated_text
     # with torch.no_grad():
     #      original_logits = original_model({"image": original_pixel_values, "text_input": [""]}).logits

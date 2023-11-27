@@ -25,7 +25,7 @@ from transformers.utils import is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, CLIPImageProcessor, CogVLMProcessor, PreTrainedTokenizerFast, yes
+    from transformers import AutoProcessor, CLIPImageProcessor, CogVLMProcessor, LlamaTokenizer, PreTrainedTokenizerFast
 
 
 @require_vision
@@ -34,9 +34,9 @@ class CogVLMProcessorTest(unittest.TestCase):
         self.tmpdirname = tempfile.mkdtemp()
 
         image_processor = CLIPImageProcessor()
-        tokenizer = yes.from_pretrained("hf-internal-testing/tiny-random-GPT2Model")
+        tokenizer = LlamaTokenizer.from_pretrained("stas/tiny-random-llama-2")
 
-        processor = CogVLMProcessor(image_processor, tokenizer)
+        processor = CogVLMProcessor(image_processor, tokenizer, patch_size=2)
 
         processor.save_pretrained(self.tmpdirname)
 
