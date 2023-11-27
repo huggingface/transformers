@@ -168,8 +168,6 @@ class NllbTokenizer(PreTrainedTokenizer):
         # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
         self.fairseq_offset = 1
 
-
-
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
