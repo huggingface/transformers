@@ -744,7 +744,7 @@ class RTDetrTransformer(nn.Module):
         self.num_head = config.num_attention_heads
         self.feat_strides = feat_strides
         self.num_levels = config.num_levels
-        self.num_classes = config.num_classes
+        self.num_classes = config.num_labels
         self.num_queries = config.num_queries
         self.num_decoder_layers = config.num_decoder_layers
         self.image_size = config.image_size
@@ -928,7 +928,7 @@ class RTDetrTransformer(nn.Module):
             attn_mask=attn_mask,
         )
 
-        if self.training and dn_meta is not None:
+        if dn_meta is not None:
             dn_out_bboxes, out_bboxes = torch.split(out_bboxes, dn_meta["dn_num_split"], dim=2)
             dn_out_logits, out_logits = torch.split(out_logits, dn_meta["dn_num_split"], dim=2)
 
@@ -1032,7 +1032,7 @@ class RTDetrLoss(nn.Module):
         super().__init__()
 
         self.matcher = RTDetrHungarianMatcher(config)
-        self.num_classes = config.num_classes
+        self.num_classes = config.num_labels
         self.weight_dict = {
             "loss_vfl": config.weight_loss_vfl,
             "loss_bbox": config.weight_loss_bbox,
@@ -1040,7 +1040,7 @@ class RTDetrLoss(nn.Module):
         }
         self.losses = ["vfl", "boxes"]
         self.eos_coef = config.eos_coefficient
-        empty_weight = torch.ones(config.num_classes + 1)
+        empty_weight = torch.ones(config.num_labels + 1)
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
         self.alpha = config.focal_loss_alpha
@@ -1462,15 +1462,15 @@ class RTDetrHungarianMatcher(nn.Module):
         super().__init__()
         requires_backends(self, ["scipy"])
 
-        self.cost_class = config.matcher_class_cost
-        self.cost_bbox = config.matcher_bbox_cost
-        self.cost_giou = config.matcher_giou_cost
+        self.class_cost = config.matcher_class_cost
+        self.bbox_cost = config.matcher_bbox_cost
+        self.giou_cost = config.matcher_giou_cost
 
         self.use_focal_loss = config.use_focal_loss
         self.alpha = config.matcher_alpha
         self.gamma = config.matcher_gamma
 
-        if self.cost_class == 0 and self.cost_bbox == 0 and self.cost_giou == 0:
+        if self.class_cost == self.bbox_cost == self.giou_cost == 0:
             raise ValueError("All costs of the Matcher can't be 0")
 
     @torch.no_grad()
@@ -1499,31 +1499,31 @@ class RTDetrHungarianMatcher(nn.Module):
         # We flatten to compute the cost matrices in a batch
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
         # Also concat the target labels and boxes
-        tgt_ids = torch.cat([v["class_labels"] for v in targets])
-        tgt_bbox = torch.cat([v["boxes"] for v in targets])
+        target_ids = torch.cat([v["class_labels"] for v in targets])
+        target_bbox = torch.cat([v["boxes"] for v in targets])
         # Compute the classification cost. Contrary to the loss, we don't use the NLL,
         # but approximate it in 1 - proba[target class].
         # The 1 is a constant that doesn't change the matching, it can be ommitted.
         if self.use_focal_loss:
             out_prob = F.sigmoid(outputs["logits"].flatten(0, 1))
-            out_prob = out_prob[:, tgt_ids]
+            out_prob = out_prob[:, target_ids]
             neg_cost_class = (1 - self.alpha) * (out_prob**self.gamma) * (-(1 - out_prob + 1e-8).log())
             pos_cost_class = self.alpha * ((1 - out_prob) ** self.gamma) * (-(out_prob + 1e-8).log())
-            cost_class = pos_cost_class - neg_cost_class
+            class_cost = pos_cost_class - neg_cost_class
         else:
             out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
-            cost_class = -out_prob[:, tgt_ids]
+            class_cost = -out_prob[:, target_ids]
 
         # Compute the L1 cost between boxes
-        cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
+        bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
         # Compute the giou cost betwen boxes
-        cost_giou = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(tgt_bbox))
+        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
         # Compute the final cost matrix
-        final_cost = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
-        final_cost = final_cost.view(batch_size, num_queries, -1).cpu()
+        cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
-        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(final_cost.split(sizes, -1))]
+        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
 
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 

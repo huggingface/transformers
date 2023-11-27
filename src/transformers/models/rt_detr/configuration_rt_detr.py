@@ -71,8 +71,6 @@ class RTDetrConfig(PretrainedConfig):
         normalize_before (`bool`, *optional*, defaults to `False`):
             Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
             feed-forward modules.
-        num_classes (`int`, *optional*, defaults to 80):
-            Number of target classes or labels used by the detector.
         num_queries (`int`, *optional*, defaults to 300):
             Number of object queries.
         feat_channels (`List[int]`, *optional*, defaults to `[256, 256, 256]`):
@@ -163,7 +161,6 @@ class RTDetrConfig(PretrainedConfig):
         eval_size=None,
         normalize_before=False,
         # decoder RTDetrTransformer
-        num_classes=80,
         num_queries=300,
         feat_channels=[256, 256, 256],
         num_levels=3,
@@ -227,7 +224,6 @@ class RTDetrConfig(PretrainedConfig):
         self.eval_size = eval_size
         self.normalize_before = normalize_before
         # decoder
-        self.num_classes = num_classes
         self.num_queries = num_queries
         self.feat_channels = feat_channels
         self.num_levels = num_levels

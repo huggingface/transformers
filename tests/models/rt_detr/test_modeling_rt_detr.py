@@ -62,7 +62,6 @@ class RTDetrConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "act_encoder"))
         self.parent.assertTrue(hasattr(config, "eval_size"))
         self.parent.assertTrue(hasattr(config, "normalize_before"))
-        self.parent.assertTrue(hasattr(config, "num_classes"))
         self.parent.assertTrue(hasattr(config, "num_queries"))
         self.parent.assertTrue(hasattr(config, "feat_channels"))
         self.parent.assertTrue(hasattr(config, "num_levels"))
@@ -219,7 +218,6 @@ class RTDetrModelTester:
             expansion=self.expansion,
             act_encoder=self.act_encoder,
             eval_size=self.eval_size,
-            num_classes=self.num_classes,
             num_queries=self.num_queries,
             feat_channels=self.feat_channels,
             num_levels=self.num_levels,
@@ -249,7 +247,6 @@ class RTDetrModelTester:
 
     def create_and_check_model(self, model_class, config, pixel_values, labels):
         """Create and check the shape of the logits and boxes predicted by the model, and their types."""
-        config.num_classes = self.num_classes
         model = model_class(config)
         model.to(torch_device)
         model.eval()
@@ -263,7 +260,7 @@ class RTDetrModelTester:
         else:
             result = model(pixel_values)
         # Check model's outputs
-        self.parent.assertEqual(result["logits"].shape, (self.batch_size, self.num_queries, self.num_classes))
+        self.parent.assertEqual(result["logits"].shape, (self.batch_size, self.num_queries, config.num_labels))
         self.parent.assertEqual(result["pred_boxes"].shape, (self.batch_size, self.num_queries, 4))
 
     def prepare_config_and_inputs_for_common(self):
