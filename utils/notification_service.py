@@ -119,7 +119,10 @@ class Message:
         # Failures and success of the additional tests
         self.n_additional_success = sum(r["success"] for r in additional_results.values())
 
+        print(additional_results)
         all_additional_failures = dicts_to_sum([r["failed"] for r in additional_results.values()])
+        print(all_additional_failures)
+
         self.n_additional_single_gpu_failures = all_additional_failures["single"]
         self.n_additional_multi_gpu_failures = all_additional_failures["multi"]
         self.n_additional_unknown_gpu_failures = all_additional_failures["unclassified"]
