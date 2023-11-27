@@ -80,8 +80,6 @@ class PatchTSMixerConfig(PretrainedConfig):
         positional_encoding_type (`str`, *optional*, defaults to `"sincos"`):
             Positional encodings. Options `"random"` and `"sincos"` are supported. Works only when
             `use_positional_encoding` is set to `True`
-        learn_positional_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to learn the positional encoding. Works only when `use_positional_encoding` is set to `True`
         scaling (`string` or `bool`, *optional*, defaults to `"std"`):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
             scaler is set to "mean".
@@ -91,8 +89,6 @@ class PatchTSMixerConfig(PretrainedConfig):
             error "mse".
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal weight initialization distribution.
-        seed_number (`int`, *optional*):
-            Random seed for masking.
         post_init (`bool`, *optional*, defaults to `False`):
             Whether to use custom weight initialization from `transformers` library, or the default initialization in
             `PyTorch`. Setting it to `False` performs `PyTorch` weight initialization.
@@ -174,11 +170,9 @@ class PatchTSMixerConfig(PretrainedConfig):
         self_attn_heads: int = 1,
         use_positional_encoding: bool = False,
         positional_encoding_type: str = "sincos",
-        learn_positional_encoding: bool = False,
         scaling: Optional[Union[str, bool]] = "std",
         loss: str = "mse",
         init_std: float = 0.02,
-        seed_number: Optional[int] = None,
         post_init: bool = False,
         norm_eps: float = 1e-5,
         # Pretrain model configuration
@@ -224,7 +218,6 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.patch_last = True
         self.use_positional_encoding = use_positional_encoding
         self.positional_encoding_type = positional_encoding_type
-        self.learn_positional_encoding = learn_positional_encoding
         self.prediction_length = prediction_length
         self.prediction_channel_indices = prediction_channel_indices
         self.num_targets = num_targets
@@ -233,7 +226,6 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.self_attn = self_attn
         self.self_attn_heads = self_attn_heads
         self.init_std = init_std
-        self.seed_number = seed_number
         self.post_init = post_init
         self.distribution_output = distribution_output
         self.loss = loss
