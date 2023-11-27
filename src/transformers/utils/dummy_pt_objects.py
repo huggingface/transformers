@@ -8205,6 +8205,7 @@ class ViTPreTrainedModel(metaclass=DummyObject):
 
 SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
+
 class SegGPTModel(metaclass=DummyObject):
     _backends = ["torch"]
 

@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Set, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss, functional as F
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -168,7 +168,7 @@ class SegGPTEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPatchEmbeddings with ViT->SegGPT
+# Copied from transformers.models.sam.modeling_sam.SamPatchEmbeddings with Sam->SegGPT
 class SegGPTPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -180,7 +180,6 @@ class SegGPTPatchEmbeddings(nn.Module):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
-
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
@@ -191,38 +190,33 @@ class SegGPTPatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+    def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-                f" Expected {self.num_channels} but got {num_channels}."
             )
-        if not interpolate_pos_encoding:
-            if height != self.image_size[0] or width != self.image_size[1]:
-                raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model"
-                    f" ({self.image_size[0]}*{self.image_size[1]})."
-                )
-        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        if height != self.image_size[0] or width != self.image_size[1]:
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            )
+        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
         return embeddings
 
-# Copied from transformers.models.sam.modeling_sam.SamVisionAttention with Sam->SegGPT
-class SamVisionAttention(nn.Module):
+# Modified from transformers.models.sam.modeling_sam.SamVisionAttention
+class SegGPTAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
-    def __init__(self, config, window_size):
+    def __init__(self, config):
         super().__init__()
-        input_size = (
-            (config.image_size // config.patch_size, config.image_size // config.patch_size)
-            if window_size == 0
-            else (window_size, window_size)
-        )
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+
+        input_size = (config.image_size[0] // config.patch_size, config.image_size[1] // config.patch_size)
+        head_dim = config.hidden_size // config.num_attention_heads
 
         self.num_attention_heads = config.num_attention_heads
-        head_dim = config.hidden_size // config.num_attention_heads
         self.scale = head_dim**-0.5
-        self.dropout = config.attention_dropout
 
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size)
@@ -333,9 +327,7 @@ class SamVisionAttention(nn.Module):
 
         attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = (attn_probs @ value).reshape(batch_size, self.num_attention_heads, height, width, -1)
+        attn_output = (attn_weights @ value).reshape(batch_size, self.num_attention_heads, height, width, -1)
         attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
 
         attn_output = self.proj(attn_output)
@@ -346,10 +338,6 @@ class SamVisionAttention(nn.Module):
             outputs = (attn_output, None)
 
         return outputs
-
-
-
-
 
 class SegGPTMlp(nn.Module):
     def __init__(self, config):

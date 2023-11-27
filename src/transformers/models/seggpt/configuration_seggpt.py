@@ -75,6 +75,7 @@ class SegGPTConfig(PretrainedConfig):
         drop_path_rate (`<fill_type>`, *optional*, defaults to 0.1): <fill_docstring>
         pretrain_img_size (`<fill_type>`, *optional*, defaults to 224): <fill_docstring>
         decoder_embed_dim (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
+        use_rel_pos (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         merge_index (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
 
     Example:
@@ -113,6 +114,7 @@ class SegGPTConfig(PretrainedConfig):
         drop_path_rate=0.1,
         pretrain_img_size=224,
         decoder_embed_dim=64,
+        use_rel_pos=True,
         merge_index=2,
         **kwargs,
     ):
@@ -135,6 +137,7 @@ class SegGPTConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.pretrain_img_size = pretrain_img_size
         self.decoder_embed_dim = decoder_embed_dim
+        self.use_rel_pos = use_rel_pos
         self.merge_index = merge_index
 
 
