@@ -1322,14 +1322,14 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         if config.add_fpn:
             if len(self.config.out_indices) != 4:
                 raise ValueError(
-                    "BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers, "
+                    "BeitBackbone requires config.out_indices to be a list of 4 integers, "
                     "specifying which features to use from the backbone. One can use [3, 5, 7, 11] in case of "
                     "a base-sized architecture."
                 )
             hidden_size = config.hidden_size
             self.fpn1 = nn.Sequential(
                 nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2),
-                nn.BatchNorm2d(hidden_size),
+                nn.BatchNorm2d(hidden_size, eps=config.batch_norm_eps),
                 nn.GELU(),
                 nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2),
             )
