@@ -70,8 +70,8 @@ class PatchTSTModelTester:
         distil=False,
         seed=42,
         num_targets=2,
-        mask_type='random',
-        random_mask_ratio=0
+        mask_type="random",
+        random_mask_ratio=0,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -114,7 +114,7 @@ class PatchTSTModelTester:
             seed=self.seed,
             num_targets=self.num_targets,
             mask_type=self.mask_type,
-            random_mask_ratio=self.random_mask_ratio
+            random_mask_ratio=self.random_mask_ratio,
         )
 
     def prepare_patchtst_inputs_dict(self, config):

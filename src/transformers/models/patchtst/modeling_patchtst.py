@@ -259,9 +259,7 @@ def random_masking(
     len_keep = int(sequence_length * (1 - mask_ratio))
 
     if channel_consistent_masking:
-        noise = torch.rand(
-            batch_size, 1, sequence_length, device=device
-        )  # noise in [0, 1], bs x 1 x  L
+        noise = torch.rand(batch_size, 1, sequence_length, device=device)  # noise in [0, 1], bs x 1 x  L
         noise = noise.repeat(1, num_channels, 1)  # bs x num_channels x time
     else:
         # noise in [0, 1], bs x num_channels x L
@@ -757,8 +755,9 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
             `BaseModelOutput`
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         # Input embedding
         patch_input = self.embedder(patch_input)
@@ -1257,7 +1256,9 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if past_observed_mask is None:
             past_observed_mask = torch.ones_like(past_values)
@@ -1288,7 +1289,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
             mask=mask,
             loc=loc,
             scale=scale,
-            patch_input=patched_values
+            patch_input=patched_values,
         )
 
 
@@ -1434,10 +1435,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
             outputs = (masked_loss,) + outputs if masked_loss is not None else outputs
             return outputs
         return PatchTSTForPretrainingOutput(
-            loss=masked_loss,
-            prediction_output=x_hat,
-            hidden_states=encoder_states,
-            attentions=model_output.attentions
+            loss=masked_loss, prediction_output=x_hat, hidden_states=encoder_states, attentions=model_output.attentions
         )
 
 
