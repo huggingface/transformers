@@ -152,7 +152,6 @@ class TextNetImageProcessor(BaseImageProcessor):
         """
         if "shortest_edge" in size:
             size = size["shortest_edge"]
-            default_to_square = False
         elif "height" in size and "width" in size:
             size = (size["height"], size["width"])
         else:

@@ -313,7 +313,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 @require_torch
 @require_vision
 class TextNetModelIntegrationTest(unittest.TestCase):
-    @slow
+    # @slow
     def test_inference_textnet_image_classification(self):
         model = TextNetForImageClassification.from_pretrained("Raghavan/textnet-base").to(torch_device)
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
