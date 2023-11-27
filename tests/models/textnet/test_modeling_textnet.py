@@ -320,9 +320,7 @@ class TextNetModelIntegrationTest(unittest.TestCase):
         image = Image.open(requests.get(url, stream=True).raw)
         processor = TextNetImageProcessor.from_pretrained("Raghavan/textnet-base")
         text = "This is a photo of a cat"
-        inputs = processor(
-            text=text, images=image, return_tensors="pt", size={"shortest_edge": 640}, default_to_square=True
-        )
+        inputs = processor(text=text, images=image, return_tensors="pt", size={"height": 640, "width": 640})
 
         # forward pass
         output = model(pixel_values=torch.tensor(inputs["pixel_values"]))

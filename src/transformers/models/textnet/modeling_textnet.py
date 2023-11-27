@@ -352,7 +352,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         >>> processor = TextNetImageProcessor.from_pretrained("Raghavan/textnet-base")
         >>> model = TextNetForImageClassification.from_pretrained("Raghavan/textnet-base")
 
-        >>> inputs = processor(images=image, return_tensors="pt", size={"shortest_edge": 640}, default_to_square=True)
+        >>> inputs = processor(images=image, return_tensors="pt", size={"height": 640, "width": 640})
         >>> outputs = model(**inputs)
         >>> outputs.logits.shape
         torch.Size([1, 2])

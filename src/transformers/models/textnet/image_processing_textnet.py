@@ -127,7 +127,6 @@ class TextNetImageProcessor(BaseImageProcessor):
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        default_to_square: bool = False,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -158,7 +157,7 @@ class TextNetImageProcessor(BaseImageProcessor):
             raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
 
         output_size = get_resize_output_image_size(
-            image, size=size, input_data_format=input_data_format, default_to_square=default_to_square
+            image, size=size, input_data_format=input_data_format, default_to_square=False
         )
         height, weight = output_size
         if height % 32 != 0:
@@ -194,7 +193,6 @@ class TextNetImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        default_to_square: bool = False,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -247,14 +245,10 @@ class TextNetImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            default_to_square (`bool`, *optional*, defaults to `False`):
-                The value to be passed to `get_size_dict` as `default_to_square` when computing the image size. If the
-                `size` argument in `get_size_dict` is an `int`, it determines whether to default to a square image or
-                not.Note that this attribute is not used in computing `crop_size` via calling `get_size_dict`.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
-        size = get_size_dict(size, param_name="size", default_to_square=default_to_square)
+        size = get_size_dict(size, param_name="size", default_to_square=False)
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size
@@ -310,7 +304,6 @@ class TextNetImageProcessor(BaseImageProcessor):
                     size=size,
                     resample=resample,
                     input_data_format=input_data_format,
-                    default_to_square=default_to_square,
                 )
                 for image in images
             ]
