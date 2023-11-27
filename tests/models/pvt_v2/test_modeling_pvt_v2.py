@@ -37,7 +37,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MODEL_MAPPING, PvtV2ForImageClassification, PvtV2ImageProcessor, PvtV2Model
+    from transformers import MODEL_MAPPING, PvtV2ForImageClassification, AutoImageProcessor, PvtV2Model
     from transformers.models.pvt_v2.modeling_pvt_v2 import PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -348,7 +348,7 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification(self):
         # only resize + normalize
-        image_processor = PvtV2ImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
+        image_processor = AutoImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
         model = PvtV2ForImageClassification.from_pretrained("FoamoftheSea/pvt_v2_b0").to(torch_device).eval()
 
         image = prepare_img()
@@ -369,7 +369,7 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
     def test_inference_model(self):
         model = PvtV2Model.from_pretrained("FoamoftheSea/pvt_v2_b0").to(torch_device).eval()
 
-        image_processor = PvtV2ImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
+        image_processor = AutoImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
@@ -397,7 +397,7 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
         """
         model = PvtV2ForImageClassification.from_pretrained("FoamoftheSea/pvt_v2_b0", torch_dtype=torch.float16)
         model.to(torch_device)
-        image_processor = PvtV2ImageProcessor(size={"height": 224, "width": 224})
+        image_processor = AutoImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")

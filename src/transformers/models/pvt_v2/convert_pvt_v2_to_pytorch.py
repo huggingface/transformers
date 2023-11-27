@@ -24,7 +24,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import PvtV2Config, PvtV2ForImageClassification, PvtV2ImageProcessor
+from transformers import PvtV2Config, PvtV2ForImageClassification, PvtImageProcessor
 from transformers.utils import logging
 
 
@@ -220,8 +220,8 @@ def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folde
     model = PvtV2ForImageClassification(config).eval()
     model.load_state_dict(state_dict)
 
-    # Check outputs on an image, prepared by PvtV2ImageProcessor
-    image_processor = PvtV2ImageProcessor(size=config.image_size)
+    # Check outputs on an image, prepared by PvtImageProcessor
+    image_processor = PvtImageProcessor(size=config.image_size)
     encoding = image_processor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)
