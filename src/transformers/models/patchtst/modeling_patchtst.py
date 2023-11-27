@@ -1747,14 +1747,6 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         >>> batch = torch.load(file)
 
         >>> # Prediction task with 7 input channels and prediction length is 96
-        >>> config = PatchTSTConfig(
-        ...     num_input_channels=7,
-        ...     context_length=512,
-        ...     patch_length = 12,
-        ...     stride = 12,
-        ...     use_cls_token = True,
-        ...     prediction_length = 96,
-        ... )
         >>> model = PatchTSTForPrediction.from_pretrained("namctin/patchtst_etth1_forecast")
 
         >>> # during training, one provides both past and future values
