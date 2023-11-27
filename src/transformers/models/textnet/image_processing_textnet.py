@@ -150,11 +150,16 @@ class TextNetImageProcessor(BaseImageProcessor):
                 `size` argument in `get_size_dict` is an `int`, it determines whether to default to a square image or
                 not.Note that this attribute is not used in computing `crop_size` via calling `get_size_dict`.
         """
-        size = get_size_dict(size)
-        if "shortest_edge" not in size:
-            raise ValueError(f"The `size` parameter must contain the key `shortest_edge`. Got {size.keys()}")
+        if "shortest_edge" in size:
+            size = size["shortest_edge"]
+            default_to_square = False
+        elif "height" in size and "width" in size:
+            size = (size["height"], size["width"])
+        else:
+            raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
+
         output_size = get_resize_output_image_size(
-            image, size=size["shortest_edge"], input_data_format=input_data_format, default_to_square=default_to_square
+            image, size=size, input_data_format=input_data_format, default_to_square=default_to_square
         )
         height, weight = output_size
         if height % 32 != 0:
@@ -173,6 +178,7 @@ class TextNetImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
+    # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.preprocess
     def preprocess(
         self,
         images: ImageInput,
@@ -190,7 +196,6 @@ class TextNetImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        default_to_square: bool = False,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -243,24 +248,21 @@ class TextNetImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            default_to_square (`bool`, *optional*, defaults to `False`):
-                The value to be passed to `get_size_dict` as `default_to_square` when computing the image size. If the
-                `size` argument in `get_size_dict` is an `int`, it determines whether to default to a square image or
-                not.Note that this attribute is not used in computing `crop_size` via calling `get_size_dict`.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
-        size = get_size_dict(size, param_name="size")
+        size = get_size_dict(size, param_name="size", default_to_square=self.use_square_size)
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size")
+        crop_size = get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+
         images = make_list_of_images(images)
 
         if not valid_images(images):
@@ -300,13 +302,7 @@ class TextNetImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [
-                self.resize(
-                    image=image,
-                    size=size,
-                    resample=resample,
-                    input_data_format=input_data_format,
-                    default_to_square=default_to_square,
-                )
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
                 for image in images
             ]
 
