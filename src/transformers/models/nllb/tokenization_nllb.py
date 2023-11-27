@@ -168,8 +168,7 @@ class NllbTokenizer(PreTrainedTokenizer):
         # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
         self.fairseq_offset = 1
 
-        self._src_lang = src_lang if src_lang is not None else "eng_Latn"
-        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+
 
         super().__init__(
             bos_token=bos_token,
@@ -187,7 +186,8 @@ class NllbTokenizer(PreTrainedTokenizer):
             legacy_behaviour=legacy_behaviour,
             **kwargs,
         )
-
+        self._src_lang = src_lang if src_lang is not None else "eng_Latn"
+        self.cur_lang_code_id = self.convert_tokens_to_ids(self._src_lang)
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
@@ -209,7 +209,7 @@ class NllbTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token
+        return len(self.sp_model) + self.fairseq_offset
 
     @property
     def src_lang(self) -> str:
@@ -377,7 +377,7 @@ class NllbTokenizer(PreTrainedTokenizer):
         - In legacy mode: No prefix and suffix=[eos, src_lang_code].
         - In default mode: Prefix=[src_lang_code], suffix = [eos]
         """
-        self.cur_lang_code = self.lang_code_to_id[src_lang]
+        self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
         if self.legacy_behaviour:
             self.prefix_tokens = []
             self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
@@ -390,7 +390,7 @@ class NllbTokenizer(PreTrainedTokenizer):
         - In legacy mode: No prefix and suffix=[eos, tgt_lang_code].
         - In default mode: Prefix=[tgt_lang_code], suffix = [eos]
         """
-        self.cur_lang_code = self.lang_code_to_id[lang]
+        self.cur_lang_code = self.convert_tokens_to_ids(lang)
         if self.legacy_behaviour:
             self.prefix_tokens = []
             self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
