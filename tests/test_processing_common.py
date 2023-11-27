@@ -20,22 +20,24 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from transformers import AutoProcessor
 from transformers.testing_utils import require_torch
 
 
 @require_torch
 class ProcessorTesterMixin:
+    tokenizer_class = None
+    fast_tokenizer_class = None
+    image_processor_class = None
     processor_class = None
 
     def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
+        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_fast_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
+        return self.fast_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+        return self.image_processor_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -67,13 +69,13 @@ class ProcessorTesterMixin:
         self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
         self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
         self.assertEqual(tokenizer_slow.get_vocab(), tokenizer_fast.get_vocab())
-        self.assertIsInstance(processor_slow.tokenizer, tokenizer_slow)
-        self.assertIsInstance(processor_fast.tokenizer, tokenizer_fast)
+        self.assertIsInstance(processor_slow.tokenizer, self.tokenizer_class)
+        self.assertIsInstance(processor_fast.tokenizer, self.fast_tokenizer_class)
 
         self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertIsInstance(processor_slow.image_processor, tokenizer_slow)
-        self.assertIsInstance(processor_fast.image_processor, tokenizer_fast)
+        self.assertIsInstance(processor_slow.image_processor, self.image_processor_class)
+        self.assertIsInstance(processor_fast.image_processor, self.image_processor_class)
 
     def test_save_load_pretrained_additional_features(self):
         tokenizer_slow = self.get_tokenizer()
@@ -91,10 +93,10 @@ class ProcessorTesterMixin:
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, tokenizer_fast)
+        self.assertIsInstance(processor.tokenizer, self.fast_tokenizer_class)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, image_processor)
+        self.assertIsInstance(processor.image_processor, self.image_processor_class)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()

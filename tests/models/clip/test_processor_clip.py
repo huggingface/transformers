@@ -17,6 +17,7 @@ import os
 import tempfile
 import unittest
 
+from transformers import CLIPImageProcessor, CLIPProcessor, CLIPTokenizer, CLIPTokenizerFast
 from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME
@@ -26,6 +27,11 @@ from ...test_processing_common import ProcessorTesterMixin
 
 @require_vision
 class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    tokenizer_class = CLIPTokenizer
+    fast_tokenizer_class = CLIPTokenizerFast
+    image_processor_class = CLIPImageProcessor
+    processor_class = CLIPProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
