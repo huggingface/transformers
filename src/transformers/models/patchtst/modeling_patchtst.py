@@ -2004,7 +2004,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         ...     stride = 12,
         ...     use_cls_token = True,
         ... )
-        >>> model = PatchTSTForRegression.from_pretrained("namctin/patchtst_etth1_regression" #, config=config)
+        >>> model = PatchTSTForRegression.from_pretrained("namctin/patchtst_etth1_regression")
 
         >>> # during inference, one only provides past values, the model generates future values
         >>> past_values = torch.randn(20, 512, 6)
