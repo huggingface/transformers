@@ -899,8 +899,8 @@ class PatchTSTForRegressionOutput(ModelOutput):
     Parameters:
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
             MSE loss.
-        forecast_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction outputs of the time series modeling heads.
+        regression_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Regression outputs of the time series modeling heads.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
@@ -915,7 +915,7 @@ class PatchTSTForRegressionOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    forecast_outputs: torch.FloatTensor = None
+    regression_outputs: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1766,12 +1766,9 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         >>> loss = outputs.loss
         >>> loss.backward()
 
-        >>> # during inference, one only provides past values, the model generates future values
-        >>> outputs = model.generate(
-        ...     past_values=batch["past_values"],
-        ... )
-
-        >>> mean_prediction = outputs.sequences.mean(dim=1)
+        >>> # during inference, one only provides past values, the model outputs future values
+        >>> outputs = model(past_values=batch["past_values"])
+        >>> prediction_outputs = outputs.prediction_outputs
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2003,13 +2000,10 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         ... )
         >>> model = PatchTSTForRegression.from_pretrained("namctin/patchtst_etth1_regression")
 
-        >>> # during inference, one only provides past values, the model generates future values
+        >>> # during inference, one only provides past values, the model outputs future values
         >>> past_values = torch.randn(20, 512, 6)
-        >>> outputs = model.generate(
-        ...     past_values=past_values
-        ... )
-
-        >>> mean_prediction = outputs.sequences.mean(dim=1)
+        >>> outputs = model(past_values)
+        >>> regression_outputs = outputs.regression_outputs
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2041,7 +2035,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             return outputs
         return PatchTSTForRegressionOutput(
             loss=loss,
-            forecast_outputs=y_hat,
+            regression_outputs=y_hat,
             hidden_states=model_output.hidden_states,
             attentions=model_output.attentions,
         )
@@ -2080,7 +2074,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         )
 
         # get distribution
-        distribution = self.distribution_output.distribution(outputs.forecast_outputs)
+        distribution = self.distribution_output.distribution(outputs.regression_outputs)
         # get samples: list of [bs x num_targets]
         samples = [distribution.sample() for _ in range(num_parallel_samples)]
         # samples: [bs x num_samples x num_targets]
