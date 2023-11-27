@@ -85,6 +85,25 @@ class ContextPooler(nn.Module):
         return self.config.hidden_size
 
 
+def _traceable(cls):
+    class _Function(object):
+        @staticmethod
+        def apply(*args):
+            if torch.jit.is_tracing():
+                return cls.forward(_Function, *args)
+            else:
+                return cls.apply(*args)
+
+        @staticmethod
+        def save_for_backward(*args):
+            pass
+
+    _Function.__name__ = cls.__name__
+    _Function.__doc__ = cls.__doc__
+    return _Function
+
+
+@_traceable
 class XSoftmax(torch.autograd.Function):
     """
     Masked Softmax which is optimized for saving memory
@@ -175,6 +194,7 @@ def get_mask(input, local_context):
     return mask, dropout
 
 
+@_traceable
 class XDropout(torch.autograd.Function):
     """Optimized dropout function to save computation and memory by using mask operation instead of multiplication."""
 

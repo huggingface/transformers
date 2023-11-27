@@ -75,6 +75,26 @@ class ContextPooler(nn.Module):
         return self.config.hidden_size
 
 
+# copied from transformers.models.deberta.modeling_deberta._traceable
+def _traceable(cls):
+    class _Function(object):
+        @staticmethod
+        def apply(*args):
+            if torch.jit.is_tracing():
+                return cls.forward(_Function, *args)
+            else:
+                return cls.apply(*args)
+
+        @staticmethod
+        def save_for_backward(*args):
+            pass
+
+    _Function.__name__ = cls.__name__
+    _Function.__doc__ = cls.__doc__
+    return _Function
+
+
+@_traceable
 # Copied from transformers.models.deberta.modeling_deberta.XSoftmax with deberta->deberta_v2
 class XSoftmax(torch.autograd.Function):
     """
@@ -168,6 +188,7 @@ def get_mask(input, local_context):
     return mask, dropout
 
 
+@_traceable
 # Copied from transformers.models.deberta.modeling_deberta.XDropout
 class XDropout(torch.autograd.Function):
     """Optimized dropout function to save computation and memory by using mask operation instead of multiplication."""
