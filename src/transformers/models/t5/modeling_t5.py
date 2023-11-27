@@ -57,6 +57,8 @@ except ImportError:
     print('Could not import xformers! please install it https://github.com/facebookresearch/xformers    one method tested to work was to install it with "pip3 install -U xformers --index-url https://download.pytorch.org/whl/cu118"')
     raise
 
+import torch
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
@@ -81,11 +83,7 @@ class SinusoidalPositionalEmbedding(nn.Module):
     def forward(self, position_ids: torch.Tensor):
         return self.embed(position_ids.long())
 
-#### rotary positional embedding
 
-from typing import Tuple
-
-import torch
 
 
 def rotate_half(x):
@@ -695,18 +693,7 @@ class T5Attention(nn.Module):
         )
         value_states = project(
             hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
-        )
-
-        ## flash attention based
-        # print('WARNING! verify that xops.memory_efficient_attention dropout arg behaves correctly in inference mode')
-        # attn_weights = xops.memory_efficient_attention(
-        #     query=query_states.permute(0,2,1,3), #BHMK -> BMHK
-        #     key=key_states.permute(0,2,1,3), #BHMK -> BMHK
-        #     value=value_states.permute(0,2,1,3), #BHMK -> BMHK
-        #     p=self.dropout, 
-        #     attn_bias=mask, 
-        # )
-                
+        )               
 
         def _compress_to_single_unpadded_sample(tens:torch.Tensor, sizes:List[int]):
             separated = [tens[i,:,:curr_len] for (i,curr_len) in enumerate(sizes)]
@@ -723,9 +710,6 @@ class T5Attention(nn.Module):
 
         add_to_scores = None
 
-        # if 2==1+1:
-        #     assert False, "use self.positional_embedding_injected_in_attention and figure out the content of position_ids_info_list"
-        
         if position_bias is None:
             pos_embedding_found_in_add_bias = False
         else:
@@ -743,7 +727,6 @@ class T5Attention(nn.Module):
                         position_bias = curr_position_bias if position_bias is None else (position_bias+curr_position_bias)  # michal: shape don't match
                         pos_embedding_found_in_add_bias = True
                     elif position_embedding_name == POSITION_EMBEDDING_ROTARY:
-                        #TODO: make it consider the actual provided positions, and not just the default indices
                         query_states, key_states = self.rotary_op(
                             query_states.permute(0,2,1,3).reshape(B,M,H*K), 
                             key_states.permute(0,2,1,3).reshape(B,M,H*K),
@@ -792,10 +775,6 @@ class T5Attention(nn.Module):
             #position_bias was provided from outside, so it was cached from an earlier layer.
             add_to_scores = position_bias
             
-            
-
-            
-
         if not self.memory_efficient_attention: #attention as it was originally implemented in the transformers repo                                   
             # compute scores
             scores = torch.matmul(
@@ -820,12 +799,9 @@ class T5Attention(nn.Module):
         
 
         attn_bias_for_xformers = None
-        
 
 
-        if self.memory_efficient_attention: #memory efficient attention            
-            # if position_ids_info_list and self.memory_efficient_attention:
-            #     raise Exception("We don't currently support combination of memory_efficient_attention and standard relative attention. See: https://github.com/facebookresearch/xformers/issues/925   Note: we can reconsider this and still allow usage of a custom add_bias tensor case, which is not as optimized as FLASHv2 version, but still may be useful.")
+        if self.memory_efficient_attention:
                         
             if (mask.shape[1]==1) and (mask.shape[2]==1): #non-causal case
                 original_max_seq_len = mask.shape[-1] ##it is also found in real_seq_length, possibly switch to it
@@ -858,8 +834,7 @@ class T5Attention(nn.Module):
                 scale = 1.0,
             )
 
-            flash_not_supported_reasons =  fmha.flash.FwOp.not_supported_reasons(fmha.Inputs(**memory_efficient_attention_kwargs))
-
+            #flash_not_supported_reasons =  fmha.flash.FwOp.not_supported_reasons(fmha.Inputs(**memory_efficient_attention_kwargs))
 
             if (torch.cuda.get_device_capability('cuda') < (8, 0)) and isinstance(attn_bias_for_xformers, xattn.AttentionBias):
                 raise Exception('This setting was shown to be unstable convergance wise. Either meet the requirements for FLASH in xformers (mainly A100 or better and using half precision) or use t5_default_relative')
@@ -873,9 +848,6 @@ class T5Attention(nn.Module):
                 attn_output = _convert_to_single_padded_tensor(attn_output, sizes=actual_lengths, pad_to_size=original_max_seq_len)            
             attn_output = attn_output.reshape(B, M, H*K)     
        
-            
-        #print('debug=', attn_output[0,247:252,3], '\nmask=', mask[0,...,247:252])
-        
         
         attn_output = self.o(attn_output)
 
