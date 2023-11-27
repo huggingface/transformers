@@ -56,14 +56,9 @@ This model was contributed by [FoamoftheSea](https://huggingface.co/FoamoftheSea
 | PVT-V2-B5        |  224 |  83.8 |     82.0    |
 
 
-## PvtConfig
+## PvtV2Config
 
 [[autodoc]] PvtV2Config
-
-## PvtImageProcessor
-
-[[autodoc]] PvtV2ImageProcessor
-    - preprocess
 
 ## PvtForImageClassification
 
