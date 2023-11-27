@@ -479,6 +479,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.config_tester = ConfigTester(self, config_class=BertConfig, hidden_size=37)
 
     def test_config(self):
+        assert 1 == 2
         self.config_tester.run_common_tests()
 
     def test_model(self):
