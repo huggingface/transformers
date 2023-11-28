@@ -118,8 +118,21 @@ class Message:
 
         # Failures and success of the additional tests
         self.n_additional_success = sum(r["success"] for r in additional_results.values())
-
+        if len(additional_results) == 0:
+            # `dicts_to_sum` uses `dicts_to_sum` which requires a non empty dictionary. Let's just add an empty entry.
+            additional_results = {
+                "dummy": {
+                    "failed": {"unclassified": 0, "single": 0, "multi": 0},
+                    "success": 0,
+                    "time_spent": "",
+                    "error": False,
+                    "failures": {},
+                    "job_link": {},
+                    }
+                }
         all_additional_failures = dicts_to_sum([r["failed"] for r in additional_results.values()])
+        if "dummy" in additional_results:
+            del additional_results["dummy"]
         self.n_additional_single_gpu_failures = all_additional_failures["single"]
         self.n_additional_multi_gpu_failures = all_additional_failures["multi"]
         self.n_additional_unknown_gpu_failures = all_additional_failures["unclassified"]
