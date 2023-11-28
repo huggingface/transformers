@@ -542,10 +542,11 @@ class ModelTesterMixin:
                     else ["encoder_outputs"]
                 )
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-            elif model_class.__name__ in [*get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]:
+            elif model_class.__name__ in [*get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)] and self.has_attentions:
+                expected_arg_names = ["pixel_values", "output_hidden_states", "output_attentions", "return_dict"]
+                self.assertListEqual(arg_names, expected_arg_names)
+            elif model_class.__name__ in [*get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)] and not self.has_attentions:
                 expected_arg_names = ["pixel_values", "output_hidden_states", "return_dict"]
-                if self.has_attentions:
-                    expected_arg_names += ["output_attentions"]
                 self.assertListEqual(arg_names, expected_arg_names)
             else:
                 expected_arg_names = [model.main_input_name]
