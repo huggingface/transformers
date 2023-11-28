@@ -45,7 +45,6 @@ class LlavaVisionText2TextModelTester:
     def __init__(
         self,
         parent,
-        vision_model_tester,
         ignore_index=-100,
         image_token_index=-200,
         projector_hidden_act="gelu",
@@ -78,7 +77,6 @@ class LlavaVisionText2TextModelTester:
         is_training=True,
     ):
         self.parent = parent
-        self.vision_model_tester = vision_model_tester
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
@@ -93,6 +91,10 @@ class LlavaVisionText2TextModelTester:
         self.num_attention_heads = text_config["num_attention_heads"]
         self.is_training = is_training
 
+        self.batch_size = 3
+        self.num_channels = 3
+        self.image_size = 233
+                
     def get_config(self):
         return LlavaConfig(
             # vision_config=vision_config, TODO add a small model config

@@ -104,8 +104,8 @@ class LlavaConfig(PretrainedConfig):
             vision_config["model_type"] = vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
             self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
-            self.vision_config = CONFIG_MAPPING["clip_vision_model"](intermediate_size=4096, hidden_size=1024 , patch_size = 14, image_size=336, num_hidden_layers=24)
-        self.vocab_size = self.vision_config.vocab_size
+            self.vision_config = CONFIG_MAPPING["clip"](intermediate_size=4096, hidden_size=1024 , patch_size = 14, image_size=336, num_hidden_layers=24, vocab_size=32000)
+        self.vocab_size = self.vocab_size
 
         self.text_config = text_config
 
