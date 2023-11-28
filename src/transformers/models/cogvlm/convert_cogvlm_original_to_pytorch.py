@@ -32,6 +32,7 @@ from transformers import (
 )
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
+
 original_device = "cuda:1"
 hf_device = "cuda:2"
 
@@ -110,7 +111,9 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         image_std=OPENAI_CLIP_STD,
     )
     patch_size = original_model.config.vision_config["patch_size"]
-    processor = CogVLMProcessor(image_processor=image_processor, tokenizer=tokenizer, image_size=image_size, patch_size=patch_size)
+    processor = CogVLMProcessor(
+        image_processor=image_processor, tokenizer=tokenizer, image_size=image_size, patch_size=patch_size
+    )
 
     original_inputs = gather_inputs(inputs, device=hf_device)
     original_inputs["pixel_values"] = torch.stack(original_inputs.pop("images")[0])

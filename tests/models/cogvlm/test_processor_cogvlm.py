@@ -25,7 +25,13 @@ from transformers.utils import is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, CLIPImageProcessor, CogVLMProcessor, LlamaTokenizer, PreTrainedTokenizerFast
+    from transformers import (
+        AutoProcessor,
+        CLIPImageProcessor,
+        CogVLMProcessor,
+        LlamaTokenizer,
+        PreTrainedTokenizerFast,
+    )
 
 
 @require_vision
