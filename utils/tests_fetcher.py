@@ -303,16 +303,16 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
         new_keys = set(new_content.keys())
 
         # get the difference
-        diff_keys = old_keys.symmetric_difference(new_keys)
+        keys_with_diff = old_keys.symmetric_difference(new_keys)
         common_keys = old_keys.intersection(new_keys)
         # if both have the same key, check its content
         for key in common_keys:
             if old_content[key] != new_content[key]:
-                diff_keys.add(key)
+                keys_with_diff.add(key)
 
         # get the model classes
         impacted_model_classes = []
-        for key in diff_keys:
+        for key in keys_with_diff:
             if key in new_keys:
                 impacted_model_classes.extend(new_content[key]["model_classes"])
 
