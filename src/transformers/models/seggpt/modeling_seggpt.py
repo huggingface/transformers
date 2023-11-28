@@ -32,6 +32,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -49,16 +50,34 @@ _CONFIG_FOR_DOC = "SegGPTConfig"
 _CHECKPOINT_FOR_DOC = "BAAI/SegGPT"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/seggpt-base-patch16-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
-
 
 SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "BAAI/SegGPT",
     # See all SegGPT models at https://huggingface.co/models?filter=seggpt
 ]
 
+
+def patchify(self, tensor: torch.Tensor, patch_size: int) -> torch.Tensor:
+        batch_size = tensor.shape[0]
+        patch_height = tensor.shape[2] // patch_size
+        patch_width = tensor.shape[3] // patch_size
+
+        tensor = tensor.reshape(shape=(batch_size, 3, patch_height, patch_size, patch_width, patch_size))
+        tensor = torch.einsum('nchpwq->nhwpqc', tensor)
+        tensor = tensor.reshape(shape=(batch_size, patch_height * patch_width, patch_size**2 * 3))
+
+        return tensor
+
+def unpatchify(self, tensor: torch.Tensor, patch_height: int, patch_width: int) -> torch.Tensor:
+    batch_size = tensor.shape[0]
+    patch_size = int((tensor.shape[-1] / 3)**.5)
+    assert patch_height * patch_width == tensor.shape[1]
+    
+    tensor = tensor.reshape(shape=(batch_size, patch_height, patch_width, patch_size, patch_size, 3))
+    tensor = torch.einsum('nhwpqc->nchpwq', tensor)
+    tensor = tensor.reshape(shape=(batch_size, 3, patch_height * patch_size, patch_width * patch_size))
+
+    return tensor
 
 @dataclass
 class SegGPTModelOutput(BaseModelOutput):
@@ -81,26 +100,49 @@ class SegGPTModelOutput(BaseModelOutput):
 
     intermidiate_features: Optional[Tuple[torch.FloatTensor]] = None
 
+@dataclass
+class SegGPTImageSegmentationOutput(ModelOutput):
+    """
+    Output type of [`SegGPTImageSegmentationOutput`].
+
+    Args:
+        pred_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            The predicted masks.
+        hidden_states (`Tuple[torch.FloatTensor]`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape `(batch_size, patch_height, patch_width, hidden_size)`.
+        attentions (`Tuple[torch.FloatTensor]`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape
+            `(batch_size, num_heads, seq_len, seq_len)`.
+        loss (`torch.FloatTensor`, `optional`, returned when ``labels`` is provided):
+            The loss value.
+
+    """
+    pred_masks: torch.FloatTensor
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None    
+    loss: Optional[torch.FloatTensor] = None
 
 class SegGPTEmbeddings(nn.Module):
     """
     Construct the embeddings from patch, position embeddings for input and prompt.
     """
 
-    def __init__(self, config: SegGPTConfig) -> None:
+    def __init__(self, config: SegGPTConfig, embedding_type: Optional[str] = None) -> None:
         super().__init__()
-        self.embedding_type = config.embedding_type
+        self.embedding_type = embedding_type if embedding_type is not None else "instance"
 
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.segment_token_input = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.segment_token_prompt = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
+        self.segment_token_input = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
+        self.segment_token_prompt = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
         # token for seg types
-        self.type_token_semantic = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.type_token_instance = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.type_token_semantic = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
+        self.type_token_instance = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
 
         self.patch_embeddings = SegGPTPatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
+
+        num_positions = (config.pretrain_img_size // config.patch_size) ** 2 + 1
+        self.position_embeddings = nn.Parameter(torch.randn(1, num_positions , config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
@@ -439,7 +481,7 @@ class SegGPTEncoder(nn.Module):
         super().__init__()
         self.config = config
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
-        self.layer = nn.ModuleList([SegGPTLayer(config, dpr[i]) for i in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([SegGPTLayer(config, dpr[i]) for i in range(config.num_hidden_layers)])
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
@@ -454,7 +496,7 @@ class SegGPTEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         intermediate_features = []
 
-        for i, layer_module in enumerate(self.layer):
+        for i, layer_module in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -589,11 +631,11 @@ SEGGPT_INPUTS_DOCSTRING = r"""
     SEGGPT_START_DOCSTRING,
 )
 class SegGPTModel(SegGPTPreTrainedModel):
-    def __init__(self, config: SegGPTConfig):
+    def __init__(self, config: SegGPTConfig, embedding_type: Optional[str] = None):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = SegGPTEmbeddings(config)
+        self.embeddings = SegGPTEmbeddings(config, embedding_type)
         self.encoder = SegGPTEncoder(config)
 
         # Initialize weights and apply final processing
@@ -613,7 +655,7 @@ class SegGPTModel(SegGPTPreTrainedModel):
     @add_start_docstrings_to_model_forward(SEGGPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
+        output_type=SegGPTModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -626,7 +668,7 @@ class SegGPTModel(SegGPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[Tuple, SegGPTModelOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -660,31 +702,27 @@ class SegGPTModel(SegGPTPreTrainedModel):
         )
 
         return encoder_outputs
-
-
+    
 class SegGPTDecoderHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.conv = (
-            nn.Conv2d(
-                config.decoder_hidden_size,
-                config.decoder_hidden_size,
-                kernel_size=3,
-                padding=1,
-            ),
+        self.conv = nn.Conv2d(
+            config.decoder_hidden_size,
+            config.decoder_hidden_size,
+            kernel_size=3,
+            padding=1,
         )
         self.layernorm = nn.GroupNorm(num_groups=1, num_channels=config.decoder_hidden_size, eps=config.layer_norm_eps)
         self.act_fct = ACT2FN[config.hidden_act]
-        self.head = (nn.Conv2d(self.decoder_embed_dim, 3, kernel_size=1, bias=True),)  # decoder to patch
+        self.head = nn.Conv2d(config.decoder_hidden_size, 3, kernel_size=1, bias=True) # decoder to patch
 
     def forward(self, hidden_states: torch.FloatTensor):
         hidden_states = self.conv(hidden_states)
         hidden_states = self.layernorm(hidden_states)
         hidden_states = self.act_fct(hidden_states)
         hidden_states = self.head(hidden_states)
+
         return hidden_states
-
-
 class SegGPTDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -716,3 +754,116 @@ class SegGPTDecoder(nn.Module):
         hidden_states = self.decoder_pred(hidden_states)
 
         return hidden_states
+    
+class SegGPTForInstanceSegmentation(SegGPTPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.model = SegGPTModel(config, "instance")
+        self.decoder = SegGPTDecoder(config)
+        
+        self.post_init()
+
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        prompt_pixel_values: torch.FloatTensor,
+        labels: Optional[torch.FloatTensor] = None,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if bool_masked_pos is None:
+            num_patches = self.model.embeddings.patch_embeddings.num_patches
+            bool_masked_pos = torch.zeros(num_patches, dtype=torch.bool).to(pixel_values.device)
+            bool_masked_pos[num_patches//2:] = 1
+            bool_masked_pos = bool_masked_pos.unsqueeze(dim=0)
+        
+        outputs = self.model(
+            pixel_values=pixel_values,
+            prompt_pixel_values=prompt_pixel_values,
+            bool_masked_pos=bool_masked_pos,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+
+        intermediate_features = outputs[-1]
+        intermediate_features = torch.cat(intermediate_features, dim=-1)
+
+        pred_masks = self.decoder(intermediate_features)
+
+        loss = None
+        if labels is not None:
+            patch_size = self.config.patch_size
+            mask = bool_masked_pos[:, :, None].repeat(1, 1, patch_size**2 * 3)
+            mask = unpatchify(mask, pixel_values.shape[1] // patch_size, pixel_values.shape[2] // patch_size)
+            mask = mask * labels
+            loss = F.smooth_l1_loss(pred_masks, prompt_pixel_values, reduction="none", beta=0.01)
+            loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+
+        if not return_dict:
+            output = (pred_masks, )
+            if output_hidden_states:
+                output = output + (outputs[1],)
+
+            if output_attentions:
+                output = output + (outputs[2],)
+            return output
+
+        return SegGPTImageSegmentationOutput(
+            pred_masks=pred_masks,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            loss=loss,
+        )
+
+    
+
+class SegGPTForSemanticSegmentation(SegGPTPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.model = SegGPTModel(config, "semantic")
+        self.decoder = SegGPTDecoder(config)
+        
+        self.post_init()
+
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        prompt_pixel_values: torch.FloatTensor,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if bool_masked_pos is None:
+            num_patches = self.model.embeddings.patch_embeddings.num_patches
+            bool_masked_pos = torch.zeros(num_patches)
+            bool_masked_pos[num_patches//2:] = 1
+            bool_masked_pos = bool_masked_pos.unsqueeze(dim=0)
+        
+        outputs = self.model(
+            pixel_values=pixel_values,
+            prompt_pixel_values=prompt_pixel_values,
+            bool_masked_pos=bool_masked_pos,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+
+        decoder_input = self.get_decoder_input(outputs.last_hidden_state)
+        decoder_output = self.decoder(decoder_input)
+
+        return decoder_output

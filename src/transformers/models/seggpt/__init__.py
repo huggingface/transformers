@@ -33,6 +33,7 @@ else:
     _import_structure["modeling_seggpt"] = [
         "SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SegGPTModel",
+        "SegGPTForInstanceSegmentation",
         "SegGPTPreTrainedModel",
     ]
 
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
         from .modeling_seggpt import (
             SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             SegGPTModel,
+            SegGPTForInstanceSegmentation,
             SegGPTPreTrainedModel,
         )
 

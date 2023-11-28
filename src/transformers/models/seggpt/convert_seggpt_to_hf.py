@@ -12,114 +12,81 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert SegGPT checkpoints trained with the DINO method."""
+"""Convert SegGPT checkpoints"""
 
 
 import argparse
 import json
 from pathlib import Path
 
+import pandas as pd
 import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import SegGPTConfig, SegGPTModel, ViTImageProcessor
+from transformers import SegGPTConfig, ViTImageProcessor, SegGPTForInstanceSegmentation
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config, base_model=False):
+def create_rename_keys(config):
     rename_keys = []
+
+    # fmt: off
+
+    # rename embedding and its parameters
+    rename_keys.append(("patch_embed.proj.weight", "model.embeddings.patch_embeddings.projection.weight"))
+    rename_keys.append(("patch_embed.proj.bias", "model.embeddings.patch_embeddings.projection.bias"))
+    rename_keys.append(("mask_token", "model.embeddings.mask_token"))
+    rename_keys.append(("segment_token_x", "model.embeddings.segment_token_input"))
+    rename_keys.append(("segment_token_y", "model.embeddings.segment_token_prompt"))
+    rename_keys.append(("type_token_cls", "model.embeddings.type_token_semantic"))
+    rename_keys.append(("type_token_ins", "model.embeddings.type_token_instance"))
+    rename_keys.append(("pos_embed", "model.embeddings.position_embeddings"))
+
+    # rename decoder and other
+    rename_keys.append(("norm.weight", "model.encoder.layernorm.weight"))
+    rename_keys.append(("norm.bias", "model.encoder.layernorm.bias"))
+    rename_keys.append(("decoder_embed.weight", "decoder.decoder_embed.weight"))
+    rename_keys.append(("decoder_embed.bias", "decoder.decoder_embed.bias"))
+    rename_keys.append(("decoder_pred.0.weight", "decoder.decoder_pred.conv.weight"))
+    rename_keys.append(("decoder_pred.0.bias", "decoder.decoder_pred.conv.bias"))
+    rename_keys.append(("decoder_pred.1.weight", "decoder.decoder_pred.layernorm.weight"))
+    rename_keys.append(("decoder_pred.1.bias", "decoder.decoder_pred.layernorm.bias"))
+    rename_keys.append(("decoder_pred.3.weight", "decoder.decoder_pred.head.weight"))
+    rename_keys.append(("decoder_pred.3.bias", "decoder.decoder_pred.head.bias"))
+
+    # rename blocks
     for i in range(config.num_hidden_layers):
-        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"blocks.{i}.norm1.weight", f"seggpt.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"blocks.{i}.norm1.bias", f"seggpt.encoder.layer.{i}.layernorm_before.bias"))
-        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"seggpt.encoder.layer.{i}.attention.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"seggpt.encoder.layer.{i}.attention.output.dense.bias"))
-        rename_keys.append((f"blocks.{i}.norm2.weight", f"seggpt.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"blocks.{i}.norm2.bias", f"seggpt.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"seggpt.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"seggpt.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"seggpt.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"seggpt.encoder.layer.{i}.output.dense.bias"))
+        rename_keys.append((f"blocks.{i}.attn.qkv.weight", f"model.encoder.layers.{i}.attention.qkv.weight"))
+        rename_keys.append((f"blocks.{i}.attn.qkv.bias", f"model.encoder.layers.{i}.attention.qkv.bias"))
+        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"model.encoder.layers.{i}.attention.proj.weight"))
+        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"model.encoder.layers.{i}.attention.proj.bias"))
+        rename_keys.append((f"blocks.{i}.attn.rel_pos_h", f"model.encoder.layers.{i}.attention.rel_pos_h"))
+        rename_keys.append((f"blocks.{i}.attn.rel_pos_w", f"model.encoder.layers.{i}.attention.rel_pos_w"))
 
-    # projection layer + position embeddings
-    rename_keys.extend(
-        [
-            ("cls_token", "seggpt.embeddings.cls_token"),
-            ("patch_embed.proj.weight", "seggpt.embeddings.patch_embeddings.projection.weight"),
-            ("patch_embed.proj.bias", "seggpt.embeddings.patch_embeddings.projection.bias"),
-            ("pos_embed", "seggpt.embeddings.position_embeddings"),
-        ]
-    )
+        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"model.encoder.layers.{i}.mlp.fc1.weight"))
+        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"model.encoder.layers.{i}.mlp.fc1.bias"))
+        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"model.encoder.layers.{i}.mlp.fc2.weight"))
+        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"model.encoder.layers.{i}.mlp.fc2.bias"))
 
-    if base_model:
-        # layernorm + pooler
-        rename_keys.extend(
-            [
-                ("norm.weight", "layernorm.weight"),
-                ("norm.bias", "layernorm.bias"),
-            ]
-        )
+        rename_keys.append((f"blocks.{i}.norm1.weight", f"model.encoder.layers.{i}.layernorm_before.weight"))
+        rename_keys.append((f"blocks.{i}.norm1.bias", f"model.encoder.layers.{i}.layernorm_before.bias"))
+        rename_keys.append((f"blocks.{i}.norm2.weight", f"model.encoder.layers.{i}.layernorm_after.weight"))
+        rename_keys.append((f"blocks.{i}.norm2.bias", f"model.encoder.layers.{i}.layernorm_after.bias"))
 
-        # if just the base model, we should remove "seggpt" from all keys that start with "seggpt"
-        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("seggpt") else pair for pair in rename_keys]
-    else:
-        # layernorm + classification head
-        rename_keys.extend(
-            [
-                ("norm.weight", "seggpt.layernorm.weight"),
-                ("norm.bias", "seggpt.layernorm.bias"),
-                ("head.weight", "classifier.weight"),
-                ("head.bias", "classifier.bias"),
-            ]
-        )
+    # fmt: on
+
 
     return rename_keys
-
-
-# we split up the matrix of each encoder layer into queries, keys and values
-def read_in_q_k_v(state_dict, config, base_model=False):
-    for i in range(config.num_hidden_layers):
-        if base_model:
-            prefix = ""
-        else:
-            prefix = "seggpt."
-        # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
-        in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
-        # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
-            config.hidden_size : config.hidden_size * 2
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            -config.hidden_size :, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
-
-
-def remove_classification_head_(state_dict):
-    ignore_keys = ["head.weight", "head.bias"]
-    for k in ignore_keys:
-        state_dict.pop(k, None)
-
 
 def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -127,72 +94,42 @@ def prepare_img():
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
-
 @torch.no_grad()
-def convert_seggpt_checkpoint(model_name, pytorch_dump_folder_path, base_model=True):
-    """
-    Copy/paste/tweak model's weights to our SegGPT structure.
-    """
+def convert_seggpt_checkpoint(args):
+    model_name = args.model_name
+    pytorch_dump_folder_path = args.pytorch_dump_folder_path
+    push_to_hub = args.push_to_hub
 
-    # define default SegGPT configuration
+    # Define default GroundingDINO configuation
     config = SegGPTConfig()
-    # patch_size
-    if model_name[-1] == "8":
-        config.patch_size = 8
-    # set labels if required
-    if not base_model:
-        config.num_labels = 1000
-        repo_id = "huggingface/label-files"
-        filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
-        id2label = {int(k): v for k, v in id2label.items()}
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
-    # size of the architecture
-    if model_name in ["dino_seggpts8", "dino_seggpts16"]:
-        config.hidden_size = 384
-        config.intermediate_size = 1536
-        config.num_hidden_layers = 12
-        config.num_attention_heads = 6
 
-    # load original model from torch hub
-    original_model = torch.hub.load("facebookresearch/dino:main", model_name)
-    original_model.eval()
+    # Load original checkpoint
+    checkpoint_url = "https://huggingface.co/BAAI/SegGPT/blob/main/seggpt_vit_large.pth"
+    original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
 
-    # load state_dict of original model, remove and rename some keys
-    state_dict = original_model.state_dict()
-    if base_model:
-        remove_classification_head_(state_dict)
-    rename_keys = create_rename_keys(config, base_model=base_model)
+    # # Rename keys
+    new_state_dict = original_state_dict.copy()
+    rename_keys = create_rename_keys(config)
+
     for src, dest in rename_keys:
-        rename_key(state_dict, src, dest)
-    read_in_q_k_v(state_dict, config, base_model)
+        rename_key(new_state_dict, src, dest)
 
-    # load HuggingFace model
-    if base_model:
-        model = SegGPTModel(config, add_pooling_layer=False).eval()
-    else:
-        model.load_state_dict(state_dict)
+    # Load HF model
+    model = SegGPTForInstanceSegmentation(config)
+    model.eval();
+    missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:", unexpected_keys)
 
-    # Check outputs on an image, prepared by ViTImageProcessor
-    image_processor = ViTImageProcessor()
-    encoding = image_processor(images=prepare_img(), return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
-    outputs = model(pixel_values)
+    if pytorch_dump_folder_path is not None:
+        print(f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
+        # processor.save_pretrained(pytorch_dump_folder_path)
 
-    if base_model:
-        final_hidden_state_cls_token = original_model(pixel_values)
-        assert torch.allclose(final_hidden_state_cls_token, outputs.last_hidden_state[:, 0, :], atol=1e-1)
-    else:
-        logits = original_model(pixel_values)
-        assert logits.shape == outputs.logits.shape
-        assert torch.allclose(logits, outputs.logits, atol=1e-3)
-
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving image processor to {pytorch_dump_folder_path}")
-    image_processor.save_pretrained(pytorch_dump_folder_path)
+    if push_to_hub:
+        print(f"Pushing model and processor for {model_name} to hub")
+        model.push_to_hub(f"EduardoPacheco/{model_name}")
+        # processor.push_to_hub(f"EduardoPacheco/{model_name}")
 
 
 if __name__ == "__main__":
@@ -200,19 +137,17 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="dino_seggptb16",
+        default="grounding-dino-tiny",
         type=str,
-        help="Name of the model trained with DINO you'd like to convert.",
+        choices=["grounding-dino-tiny", "grounding-dino-base"],
+        help="Name of the GroundingDINO model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--base_model",
-        action="store_true",
-        help="Whether to only convert the base model (no projection head weights).",
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
     )
 
-    parser.set_defaults(base_model=True)
     args = parser.parse_args()
-    convert_seggpt_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.base_model)
+    convert_seggpt_checkpoint(args)

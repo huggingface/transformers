@@ -2779,6 +2779,7 @@ else:
         [
             "SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SegGPTModel",
+            "SegGPTForInstanceSegmentation",
             "SegGPTPreTrainedModel",
         ]
     )
@@ -6671,6 +6672,7 @@ if TYPE_CHECKING:
         from .models.seggpt import (
             SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             SegGPTModel,
+            SegGPTForInstanceSegmentation,
             SegGPTPreTrainedModel,
         )
         from .models.sew import (
