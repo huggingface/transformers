@@ -157,9 +157,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (
-        (PatchTSTForPrediction, PatchTSTForRegression, PatchTSTForPretraining) if is_torch_available() else ()
-    )
+
     pipeline_model_mapping = {"feature-extraction": PatchTSTModel} if is_torch_available() else {}
     is_encoder_decoder = False
     test_pruning = False

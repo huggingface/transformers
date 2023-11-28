@@ -799,6 +799,7 @@ PATCHTST_START_DOCSTRING = r"""
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
+
 @dataclass
 class PatchTSTModelOutput(ModelOutput):
     """
