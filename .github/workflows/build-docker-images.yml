@@ -22,7 +22,7 @@ jobs:
   latest-pytorch-deepspeed-amd:
     name: "PyTorch + DeepSpeed (AMD) [dev]"
 
-    runs-on: [self-hosted, yih-dar-shieh-debug-daily]
+    runs-on: [self-hosted, yih-dar-shieh-debug-doctest]
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
