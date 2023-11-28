@@ -799,38 +799,6 @@ PATCHTST_START_DOCSTRING = r"""
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-PATCHTST_INPUTS_DOCSTRING = r"""
-    Parameters:
-        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, num_input_channels)`):
-            Past values of the time series, that serve as context in order to predict the future. The sequence size of
-            this tensor must be larger than the `context_length` of the model, since the model will use the larger size
-            to construct lag features, i.e. additional values from the past which are added in order to serve as "extra
-            context".
-
-            The `sequence_length` here is equal to `config.context_length`
-
-            The `past_values` is what the Transformer encoder gets as input (with optional additional features, such as
-            `static_categorical_features`, `static_real_features`).
-
-            For multivariate time series, the `num_input_channels` > 1 dimension is required and corresponds to the
-            number of variates in the time series per time step.
-
-        future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)` or `(batch_size, prediction_length, num_input_channels)`, *optional*):
-            Future values of the time series, that serve as labels for the model. The `future_values` is what the
-            Transformer needs during training to learn to output, given the `past_values`.
-
-            The sequence length here is equal to `prediction_length`.
-
-            See the demo notebook and code snippets for details.
-
-            For multivariate time series, the `num_input_channels` > 1 dimension is required and corresponds to the
-            number of variates in the time series per time step.
-
-        output_hidden_states (`bool`, *optional*, default to False):
-            Whether or not to return the hidden states of all layers.
-"""
-
-
 @dataclass
 class PatchTSTModelOutput(ModelOutput):
     """
