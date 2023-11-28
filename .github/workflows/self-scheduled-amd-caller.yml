@@ -5,7 +5,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_amd_scheduled_ci_caller__*
+      - run_amd_scheduled_ci_caller*
 
 jobs:
   run_amd_ci_mi210:
