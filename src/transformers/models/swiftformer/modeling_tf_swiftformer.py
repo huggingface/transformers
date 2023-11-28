@@ -738,8 +738,7 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
             elif self.config.problem_type == "single_label_classification":
                 # FIXME: from_logits? Initially I had False from somewhere
                 loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(
-                    from_logits=True,
-                    reduction=tf.keras.losses.Reduction.NONE
+                    from_logits=True, reduction=tf.keras.losses.Reduction.NONE
                 )
                 loss = loss_fct(labels, logits)
             elif self.config.problem_type == "multi_label_classification":
