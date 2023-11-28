@@ -258,7 +258,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TFLayoutLMForQuestionAnswering",
     "TFOpenAIGPTDoubleHeadsModel",
     "TFRagModel",
-    "LlavaVisionModel",
     "TFRagSequenceForGeneration",
     "TFRagTokenForGeneration",
     "Wav2Vec2ForCTC",

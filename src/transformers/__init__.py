@@ -2158,7 +2158,6 @@ else:
             "LlavaForVisionText2Text",
             "LlavaPreTrainedModel",
             "LlavaProcessor",
-            "LlavaVisionModel",
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -6158,7 +6157,6 @@ if TYPE_CHECKING:
             LlavaForVisionText2Text,
             LlavaPreTrainedModel,
             LlavaProcessor,
-            LlavaVisionModel,
         )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

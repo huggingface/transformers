@@ -20,6 +20,7 @@
 """ Llava model configuration"""
 
 from ...configuration_utils import PretrainedConfig
+from ... import CLIPVisionConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
 
@@ -29,81 +30,6 @@ logger = logging.get_logger(__name__)
 LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "llava/llava-v1.5-7b": "https://huggingface.co/llava/llava-v1.5-7b/resolve/main/config.json",
 }
-
-
-class LlavaVisionConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`LlavaVisionModel`]. It is used to instantiate an
-    Llava model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Llava-9B.
-
-    e.g. [HuggingFaceM4/llava-9b](https://huggingface.co/HuggingFaceM4/llava-9b)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer. (elsewhere referred to as `hidden_size`)
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        intermediate_size (`int`, *optional*, defaults to 5120):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        image_num_channels (`int`, *optional*, defaults to `3`):
-            Number of image channels.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-    """
-
-    model_type = "llava"
-    attribute_map = {
-        "hidden_size": "embed_dim",
-    }
-
-    def __init__(
-        self,
-        embed_dim=1024,
-        image_size=336,
-        intermediate_size=4096,
-        patch_size=14,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        num_channels=3,
-        hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        self.embed_dim = embed_dim
-        self.image_size = image_size
-        self.intermediate_size = intermediate_size
-        self.patch_size = patch_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.layer_norm_eps = layer_norm_eps
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.hidden_act = hidden_act
-
-        super().__init__(**kwargs)
-
 
 class LlavaConfig(PretrainedConfig):
     r"""
@@ -172,18 +98,22 @@ class LlavaConfig(PretrainedConfig):
         self.vision_feature_layer = vision_feature_layer
         self.vocab_size = vocab_size
 
-        if vision_config is None:
-            self.vision_config = LlavaVisionConfig()
-        elif isinstance(vision_config, dict):
-            self.vision_config = LlavaVisionConfig(**vision_config)
-        elif isinstance(vision_config, LlavaVisionConfig):
-            self.vision_config = vision_config
+        self.vision_config = vision_config
+
+        if isinstance(self.vision_config, dict):
+            vision_config["model_type"] = vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
+            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
+        elif vision_config is None:
+            self.vision_config = CONFIG_MAPPING["clip_vision_model"](intermediate_size=4096, hidden_size=1024 , patch_size = 14, image_size=336, num_hidden_layers=24)
+        self.vocab_size = self.vision_config.vocab_size
 
         self.text_config = text_config
 
         if isinstance(self.text_config, dict):
-            text_model_type = text_config["model_type"] if "model_type" in text_config else "llama"
-            self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
             self.vocab_size = self.text_config.vocab_size
+        elif text_config is None:
+            self.text_config = CONFIG_MAPPING["llama"]()
 
         super().__init__(**kwargs)

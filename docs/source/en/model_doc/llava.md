@@ -40,11 +40,6 @@ The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/
 
 [[autodoc]] LlavaProcessor
 
-## LlavaVisionModel
-
-[[autodoc]] LlavaVisionModel
-    - forward
-
 ## LlavaForVisionText2Text
 
 [[autodoc]] LlavaForVisionText2Text
