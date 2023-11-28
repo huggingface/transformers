@@ -29,7 +29,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Swinv2ForImageClassification, Swinv2ForMaskedImageModeling, Swinv2Model
+    from transformers import Swinv2Backbone, Swinv2ForImageClassification, Swinv2ForMaskedImageModeling, Swinv2Model
     from transformers.models.swinv2.modeling_swinv2 import SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
@@ -172,7 +172,14 @@ class Swinv2ModelTester:
 @require_torch
 class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Swinv2Model, Swinv2ForImageClassification, Swinv2ForMaskedImageModeling) if is_torch_available() else ()
+        (
+            Swinv2Model,
+            Swinv2ForImageClassification,
+            Swinv2ForMaskedImageModeling,
+            Swinv2Backbone,
+        )
+        if is_torch_available()
+        else ()
     )
     pipeline_model_mapping = (
         {"feature-extraction": Swinv2Model, "image-classification": Swinv2ForImageClassification}

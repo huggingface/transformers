@@ -16,6 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -27,7 +28,7 @@ SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class Swinv2Config(PretrainedConfig):
+class Swinv2Config(PretrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Swinv2Model`]. It is used to instantiate a Swin
     Transformer v2 model according to the specified arguments, defining the model architecture. Instantiating a
@@ -74,6 +75,8 @@ class Swinv2Config(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         encoder_stride (`int`, *optional*, defaults to 32):
             Factor to increase the spatial resolution by in the decoder head for masked image modeling.
+        out_features (`<fill_type>`, *optional*): <fill_docstring>
+        out_indices (`<fill_type>`, *optional*): <fill_docstring>
 
     Example:
 
@@ -116,6 +119,8 @@ class Swinv2Config(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         encoder_stride=32,
+        out_features=None,
+        out_indices=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -138,6 +143,10 @@ class Swinv2Config(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.encoder_stride = encoder_stride
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
         # we set the hidden_size attribute in order to make Swinv2 work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
