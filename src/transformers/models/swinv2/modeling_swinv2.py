@@ -924,7 +924,11 @@ class Swinv2Encoder(nn.Module):
                 all_self_attentions += layer_outputs[3:]
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions, all_reshaped_hidden_states]
+                if v is not None
+            )
 
         return Swinv2EncoderOutput(
             last_hidden_state=hidden_states,

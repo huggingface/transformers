@@ -28,7 +28,7 @@ SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class Swinv2Config(PretrainedConfig, BackboneConfigMixin):
+class Swinv2Config(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Swinv2Model`]. It is used to instantiate a Swin
     Transformer v2 model according to the specified arguments, defining the model architecture. Instantiating a
