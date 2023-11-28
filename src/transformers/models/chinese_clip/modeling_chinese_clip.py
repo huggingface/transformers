@@ -1091,6 +1091,7 @@ class ChineseCLIPVisionTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -1104,7 +1105,7 @@ class ChineseCLIPVisionTransformer(nn.Module):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(
@@ -1336,6 +1337,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -1366,6 +1368,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
 
@@ -1462,6 +1465,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1498,6 +1502,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         pooled_output = vision_outputs[1]  # pooled_output
@@ -1518,6 +1523,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, ChineseCLIPOutput]:
         r"""
         Returns:
@@ -1553,6 +1559,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         text_outputs = self.text_model(

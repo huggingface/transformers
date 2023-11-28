@@ -345,8 +345,8 @@ class BridgeTowerVisionTransformer(nn.Module):
                 [nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in range(config.num_hidden_layers)]
             )
 
-    def forward(self, pixel_values: torch.Tensor, attention_mask):
-        hidden_states = self.embeddings(pixel_values)
+    def forward(self, pixel_values: torch.Tensor, attention_mask, interpolate_pos_encoding=False):
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.ln_pre(hidden_states)
         # NLD -> LND
         hidden_states = hidden_states.permute(1, 0, 2)
@@ -367,8 +367,8 @@ class BridgeTowerVisionTransformer(nn.Module):
             hidden_states = torch.stack(hidden_states_stack, dim=0)
         return hidden_states
 
-    def forward_pre(self, pixel_values: torch.Tensor):
-        hidden_states = self.embeddings(pixel_values)
+    def forward_pre(self, pixel_values: torch.Tensor, interpolate_pos_encoding=False):
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.ln_pre(hidden_states)
         # NLD -> LND
         hidden_states = hidden_states.permute(1, 0, 2)
@@ -1051,8 +1051,8 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
     def dtype(self):
         return self.visual.embeddings.patch_embedding.weight.dtype
 
-    def forward(self, image, image_mask=None):
-        return self.visual(image.type(self.dtype), image_mask)
+    def forward(self, image, image_mask=None, interpolate_pos_encoding=False):
+        return self.visual(image.type(self.dtype), image_mask, interpolate_pos_encoding=interpolate_pos_encoding)
 
 
 class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
@@ -1316,6 +1316,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple[torch.Tensor], BridgeTowerModelOutput]:
         r"""
         output_hidden_states (`bool`, *optional*):
@@ -1383,7 +1384,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 all_hidden_states_text += (text_embeds,)
 
         if image_embeds is None:
-            image_embeds = self.vision_model.visual.forward_pre(pixel_values.type(self.vision_model.dtype))
+            image_embeds = self.vision_model.visual.forward_pre(pixel_values.type(self.vision_model.dtype), interpolate_pos_encoding=interpolate_pos_encoding)
         else:
             # Permute as BridgeTowerResidualAttention has batch_first=True
             image_embeds = image_embeds.permute(1, 0, 2)
@@ -1615,6 +1616,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[MaskedLMOutput, Tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1661,6 +1663,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         mlm_logits = self.mlm_score(outputs.text_features if return_dict else outputs[0])
@@ -1717,6 +1720,7 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[SequenceClassifierOutput, Tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
@@ -1760,6 +1764,7 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         pooler_output = outputs.pooler_output if return_dict else outputs[2]
@@ -1831,6 +1836,7 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         output_hidden_states: Optional[bool] = True,
         return_dict: Optional[bool] = None,
         return_loss: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[BridgeTowerContrastiveOutput, Tuple[torch.FloatTensor]]:
         r"""
         return_loss (`bool`, *optional*):
@@ -1881,6 +1887,7 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=True,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         pooler_output = outputs.pooler_output if return_dict else outputs[2]

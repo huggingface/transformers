@@ -958,6 +958,7 @@ class GitVisionTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
         Returns:
@@ -972,7 +973,7 @@ class GitVisionTransformer(nn.Module):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(
@@ -1022,6 +1023,7 @@ class GitVisionModel(GitPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
         Returns:
@@ -1051,6 +1053,7 @@ class GitVisionModel(GitPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
 
