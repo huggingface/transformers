@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - build_ci_docker_image*
-      # - run_amd_scheduled_ci_caller_deepspeed_test
+      - run_amd_scheduled_ci_caller_deepspeed_test
   repository_dispatch:
   workflow_call:
     inputs:
@@ -40,4 +40,4 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-pytorch-deepspeed-amd-gpu${{ inputs.image_postfix }}-test
+          tags: huggingface/transformers-pytorch-deepspeed-amd-gpu${{ inputs.image_postfix }}
