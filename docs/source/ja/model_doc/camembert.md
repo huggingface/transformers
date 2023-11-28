@@ -32,7 +32,7 @@ Bi-direction Encoders for Transformers (BERT) のフランス語版である Cam
 複数の下流タスク、つまり品詞タグ付けにおける多言語モデルと比較した CamemBERT のパフォーマンス
 依存関係解析、固有表現認識、自然言語推論。 CamemBERT は最先端技術を向上させます
 検討されているほとんどのタスクに対応します。私たちは、研究と
-フランス語 NLP の下流アプリケーション*。
+フランス語 NLP の下流アプリケーション。*
 
 このモデルは [camembert](https://huggingface.co/camembert) によって提供されました。元のコードは [ここ](https://camembert-model.fr/) にあります。
 
