@@ -98,7 +98,7 @@ class PatchTSTConfig(PretrainedConfig):
         scaling (`Union`, *optional*, defaults to `"std"`):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
             scaler is set to "mean".
-        mask_input (`bool`, *optional*):
+        do_mask_input (`bool`, *optional*):
             Apply masking during the pretraining.
         mask_type (`str`, *optional*, defaults to `"random"`):
             Masking type. Only `"random"` and `"forecast"` are currently supported.
@@ -185,7 +185,7 @@ class PatchTSTConfig(PretrainedConfig):
         share_projection: bool = True,
         scaling: Optional[Union[str, bool]] = "std",
         # mask pretraining
-        mask_input: Optional[bool] = None,
+        do_mask_input: Optional[bool] = None,
         mask_type: str = "random",
         random_mask_ratio: float = 0.5,
         num_forecast_mask_patches: Optional[Union[List[int], int]] = [2],
@@ -236,7 +236,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.patch_stride = patch_stride
 
         # Mask pretraining
-        self.mask_input = mask_input
+        self.do_mask_input = do_mask_input
         self.mask_type = mask_type
         self.random_mask_ratio = random_mask_ratio  # for random masking
         self.num_forecast_mask_patches = num_forecast_mask_patches  # for forecast masking

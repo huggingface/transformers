@@ -1189,11 +1189,11 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
 
         self.scaler = PatchTSTScaler(config)
         self.patchifier = PatchTSTPatchify(config)
-        self.mask_input = config.mask_input
+        self.do_mask_input = config.do_mask_input
         # get num_patches information from PatchTSTPatchify
         num_patches = self.patchifier.num_patches
 
-        if self.mask_input:
+        if self.do_mask_input:
             self.masking = PatchTSTMasking(config)
         else:
             self.masking = nn.Identity()
@@ -1270,7 +1270,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
 
         # patched_values: [bs x num_input_channels x num_patches x patch_length] for pretrain
         patched_values = self.patchifier(scaled_past_values)
-        if self.mask_input:
+        if self.do_mask_input:
             masked_values, mask = self.masking(patched_values)
         else:
             masked_values, mask = self.masking(patched_values), None
@@ -1331,7 +1331,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
-        config.mask_input = True
+        config.do_mask_input = True
         self.model = PatchTSTModel(config=config)
         self.head = PatchTSTMaskPretrainHead(config)
 
@@ -1484,9 +1484,9 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         super().__init__(config)
 
         # Turn off masking
-        if config.mask_input:
-            logger.debug("Setting `mask_input` parameter to False.")
-            config.mask_input = False
+        if config.do_mask_input:
+            logger.debug("Setting `do_mask_input` parameter to False.")
+            config.do_mask_input = False
 
         self.model = PatchTSTModel(config)
         self.head = PatchTSTClassificationHead(config)
@@ -1679,9 +1679,9 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         super().__init__(config)
 
         # Turn off masking
-        if config.mask_input:
-            logger.debug("Setting `mask_input` parameter to False.")
-            config.mask_input = False
+        if config.do_mask_input:
+            logger.debug("Setting `do_mask_input` parameter to False.")
+            config.do_mask_input = False
 
         self.model = PatchTSTModel(config)
 
@@ -1922,9 +1922,9 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         super().__init__(config)
 
         # Turn off masking
-        if config.mask_input:
-            logger.debug("Setting `mask_input` parameter to False.")
-            config.mask_input = False
+        if config.do_mask_input:
+            logger.debug("Setting `do_mask_input` parameter to False.")
+            config.do_mask_input = False
 
         self.model = PatchTSTModel(config)
         if config.loss == "mse":
