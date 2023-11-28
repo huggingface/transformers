@@ -145,7 +145,7 @@ Generally, we recommend using the `AutoTokenizer` class and the `TFAutoModelFor`
 
 ## AutoBackbone
 
-`AutoBackbone` lets you use pretrained models as backbones and get feature maps as outputs from different stages of the models. Below you can see how to get feature maps from a [Swin](model_doc/swin.md) checkpoint.
+`AutoBackbone` lets you use pretrained models as backbones and get feature maps as outputs from different stages of the models. Below you can see how to get feature maps from a [Swin](model_doc/swin) checkpoint.
 
 ```py
 >>> from transformers import AutoImageProcessor, AutoBackbone
