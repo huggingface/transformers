@@ -185,16 +185,6 @@
       sections:
       - local: model_doc/albert
         title: ALBERT
-      - local: model_doc/bloom
-        title: BLOOM
-      - local: model_doc/bort
-        title: BORT
-      - local: model_doc/byt5
-        title: ByT5
-      - local: model_doc/camembert
-        title: CamemBERT
-      - local: model_doc/canine
-        title: CANINE
       - local: model_doc/bart
         title: BART
       - local: model_doc/barthez
@@ -219,6 +209,16 @@
         title: Blenderbot
       - local: model_doc/blenderbot-small
         title: Blenderbot Small
+      - local: model_doc/bloom
+        title: BLOOM
+      - local: model_doc/bort
+        title: BORT
+      - local: model_doc/byt5
+        title: ByT5
+      - local: model_doc/camembert
+        title: CamemBERT
+      - local: model_doc/canine
+        title: CANINE
       title: 文章モデル
     - isExpanded: false
       sections:
@@ -231,10 +231,10 @@
       sections:
       - local: model_doc/audio-spectrogram-transformer
         title: Audio Spectrogram Transformer
-      - local: model_doc/clap
-        title: CLAP
       - local: model_doc/bark
         title: Bark
+      - local: model_doc/clap
+        title: CLAP
       title: 音声モデル
     - isExpanded: false
       sections:

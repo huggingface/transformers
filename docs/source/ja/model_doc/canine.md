@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 CANINE モデルは、[CANINE: 言語用の効率的なトークン化フリーのエンコーダーの事前トレーニング](https://arxiv.org/abs/2103.06874)、Jonathan H. Clark、Dan Garrette、Iulia Turc、John Wieting 著。その
 明示的なトークン化ステップ (バイト ペアなど) を使用せずに Transformer をトレーニングする最初の論文の 1 つ
-エンコーディング (BPE)、WordPiece または SentencePiece)。代わりに、モデルは Unicode 文字レベルで直接トレーニングされます。
+エンコーディング (BPE、WordPiece または SentencePiece)。代わりに、モデルは Unicode 文字レベルで直接トレーニングされます。
 キャラクターレベルでのトレーニングでは必然的にシーケンスの長さが長くなりますが、CANINE はこれを効率的な方法で解決します。
 ディープ Transformer エンコーダを適用する前に、ダウンサンプリング戦略を実行します。
 

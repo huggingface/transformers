@@ -19,8 +19,8 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 CamemBERT モデルは、[CamemBERT: a Tasty French Language Model](https://arxiv.org/abs/1911.03894) で提案されました。
-ルイ・マーティン、ベンジャミン・ミュラー、ペドロ・ハビエル・オルティス・スアレス、ヨアン・デュポン、ローラン・ロマリー、エリック・ヴィルモンテ・デ・ラ
-クレジュリー、ジャメ・セッダ、ブノワ・サゴ。 2019年にリリースされたFacebookのRoBERTaモデルをベースにしたモデルです。
+Louis Martin, Benjamin Muller, Pedro Javier Ortiz Suárez, Yoann Dupont, Laurent Romary, Éric Villemonte de la
+Clergerie, Djamé Seddah, and Benoît Sagot. 2019年にリリースされたFacebookのRoBERTaモデルをベースにしたモデルです。
 138GBのフランス語テキストでトレーニングされました。
 
 論文の要約は次のとおりです。
