@@ -822,7 +822,7 @@ class T5Attention(nn.Module):
                     value_states = _compress_to_single_unpadded_sample(value_states, actual_lengths)
                 else:
                     #TODO: also warn about half precision and "too old" GPU 
-                    warnings.warn("Since the default T5 relative positional encoding was requested, Flash V2 will NOT be used. You can use a different positional encoding method if you want to use Flash V2, for example, RoPE.")                    
+                    warnings.warn("Since the default T5 relative positional encoding was requested, Flash V2 will NOT be used. You can use a different positional encoding method if you want to use Flash V2, for example, RoPE (additionally, you'll need to use at least A100 and half precision)")                    
                     attn_bias_for_xformers = add_to_scores.contiguous().to(query_states.dtype) #TODO: is contiguous necessary here?                
             else:
                 raise Exception("not supporting causal attention yet")
