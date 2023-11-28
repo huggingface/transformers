@@ -151,6 +151,7 @@ docs/source/en/model_doc/longt5.md
 docs/source/en/model_doc/luke.md
 docs/source/en/model_doc/lxmert.md
 docs/source/en/model_doc/m2m_100.md
+docs/source/en/model_doc/madlad-400.md
 docs/source/en/model_doc/marian.md
 docs/source/en/model_doc/mask2former.md
 docs/source/en/model_doc/maskformer.md
