@@ -364,7 +364,7 @@ class MistralFlashAttention2(MistralAttention):
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
             if getattr(self.config, "sliding_window", None) is not None and kv_seq_len > self.config.sliding_window:
-                slicing_tokens = kv_seq_len - self.config.sliding_window
+                slicing_tokens = 1 - self.config.sliding_window
 
                 past_key = past_key_value[0]
                 past_value = past_key_value[1]
