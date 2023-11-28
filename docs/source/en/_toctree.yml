@@ -60,7 +60,7 @@
     - local: tasks/image_classification
       title: Image classification
     - local: tasks/semantic_segmentation
-      title: Semantic segmentation
+      title: Image segmentation
     - local: tasks/video_classification
       title: Video classification
     - local: tasks/object_detection
@@ -378,6 +378,8 @@
         title: LUKE
       - local: model_doc/m2m_100
         title: M2M100
+      - local: model_doc/madlad-400
+        title: MADLAD-400
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
@@ -628,6 +630,8 @@
         title: UniSpeech
       - local: model_doc/unispeech-sat
         title: UniSpeech-SAT
+      - local: model_doc/univnet
+        title: UnivNet
       - local: model_doc/vits
         title: VITS
       - local: model_doc/wav2vec2
@@ -723,6 +727,8 @@
         title: TrOCR
       - local: model_doc/tvlt
         title: TVLT
+      - local: model_doc/tvp
+        title: TVP
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vision-encoder-decoder

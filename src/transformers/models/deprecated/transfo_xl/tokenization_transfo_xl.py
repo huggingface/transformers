@@ -27,8 +27,8 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import (
+from ....tokenization_utils import PreTrainedTokenizer
+from ....utils import (
     cached_file,
     is_sacremoses_available,
     is_torch_available,
@@ -181,6 +181,12 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         language="en",
         **kwargs,
     ):
+        logger.error(
+            "`TransfoXL` was deprecated due to security issues linked to `pickle.load` in `TransfoXLTokenizer`. "
+            "See more details on this model's documentation page: "
+            "`https://github.com/huggingface/transformers/blob/main/docs/source/en/model_doc/transfo-xl.md`."
+        )
+
         requires_backends(self, "sacremoses")
         if special is None:
             special = []
@@ -223,7 +229,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
             if vocab_dict is not None:
                 for key, value in vocab_dict.items():
-                    if key not in self.__dict__ or key == "sym2idx":
+                    if key not in self.__dict__ or key in ["sym2idx", "idx2sym"]:
                         self.__dict__[key] = value
             elif vocab_file is not None:
                 self.build_vocab()

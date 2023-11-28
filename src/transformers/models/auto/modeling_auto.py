@@ -200,9 +200,11 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("trajectory_transformer", "TrajectoryTransformerModel"),
         ("transfo-xl", "TransfoXLModel"),
         ("tvlt", "TvltModel"),
+        ("tvp", "TvpModel"),
         ("umt5", "UMT5Model"),
         ("unispeech", "UniSpeechModel"),
         ("unispeech-sat", "UniSpeechSatModel"),
+        ("univnet", "UnivNetModel"),
         ("van", "VanModel"),
         ("videomae", "VideoMAEModel"),
         ("vilt", "ViltModel"),
@@ -1078,6 +1080,7 @@ MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
     [
         # Backbone mapping
+        ("beit", "BeitBackbone"),
         ("bit", "BitBackbone"),
         ("convnext", "ConvNextBackbone"),
         ("convnextv2", "ConvNextV2Backbone"),

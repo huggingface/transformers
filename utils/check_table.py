@@ -155,6 +155,7 @@ MODEL_NAMES_WITH_SAME_CONFIG = {
     "HerBERT": "BERT",
     "LayoutXLM": "LayoutLMv2",
     "Llama2": "LLaMA",
+    "MADLAD-400": "T5",
     "MatCha": "Pix2Struct",
     "mBART-50": "mBART",
     "Megatron-GPT2": "OpenAI GPT-2",

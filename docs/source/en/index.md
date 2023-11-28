@@ -175,6 +175,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                        [LXMERT](model_doc/lxmert)                        |       ✅        |         ✅         |      ❌      |
 |                        [M-CTC-T](model_doc/mctct)                        |       ✅        |         ❌         |      ❌      |
 |                       [M2M100](model_doc/m2m_100)                        |       ✅        |         ❌         |      ❌      |
+|                    [MADLAD-400](model_doc/madlad-400)                    |       ✅        |         ✅         |      ✅      |
 |                        [Marian](model_doc/marian)                        |       ✅        |         ✅         |      ✅      |
 |                      [MarkupLM](model_doc/markuplm)                      |       ✅        |         ❌         |      ❌      |
 |                   [Mask2Former](model_doc/mask2former)                   |       ✅        |         ❌         |      ❌      |
@@ -264,10 +265,12 @@ Flax), PyTorch, and/or TensorFlow.
 |                  [Transformer-XL](model_doc/transfo-xl)                  |       ✅        |         ✅         |      ❌      |
 |                         [TrOCR](model_doc/trocr)                         |       ✅        |         ❌         |      ❌      |
 |                          [TVLT](model_doc/tvlt)                          |       ✅        |         ❌         |      ❌      |
+|                           [TVP](model_doc/tvp)                           |       ✅        |         ❌         |      ❌      |
 |                           [UL2](model_doc/ul2)                           |       ✅        |         ✅         |      ✅      |
 |                          [UMT5](model_doc/umt5)                          |       ✅        |         ❌         |      ❌      |
 |                     [UniSpeech](model_doc/unispeech)                     |       ✅        |         ❌         |      ❌      |
 |                 [UniSpeechSat](model_doc/unispeech-sat)                  |       ✅        |         ❌         |      ❌      |
+|                       [UnivNet](model_doc/univnet)                       |       ✅        |         ❌         |      ❌      |
 |                       [UPerNet](model_doc/upernet)                       |       ✅        |         ❌         |      ❌      |
 |                           [VAN](model_doc/van)                           |       ✅        |         ❌         |      ❌      |
 |                      [VideoMAE](model_doc/videomae)                      |       ✅        |         ❌         |      ❌      |
