@@ -2778,8 +2778,8 @@ else:
     _import_structure["models.seggpt"].extend(
         [
             "SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SegGPTModel",
             "SegGPTForInstanceSegmentation",
+            "SegGPTModel",
             "SegGPTPreTrainedModel",
         ]
     )
@@ -6671,8 +6671,8 @@ if TYPE_CHECKING:
         )
         from .models.seggpt import (
             SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SegGPTModel,
             SegGPTForInstanceSegmentation,
+            SegGPTModel,
             SegGPTPreTrainedModel,
         )
         from .models.sew import (

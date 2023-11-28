@@ -28,7 +28,6 @@ from torch.nn import functional as F
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPooling,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -58,26 +57,28 @@ SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def patchify(self, tensor: torch.Tensor, patch_size: int) -> torch.Tensor:
-        batch_size = tensor.shape[0]
-        patch_height = tensor.shape[2] // patch_size
-        patch_width = tensor.shape[3] // patch_size
+    batch_size = tensor.shape[0]
+    patch_height = tensor.shape[2] // patch_size
+    patch_width = tensor.shape[3] // patch_size
 
-        tensor = tensor.reshape(shape=(batch_size, 3, patch_height, patch_size, patch_width, patch_size))
-        tensor = torch.einsum('nchpwq->nhwpqc', tensor)
-        tensor = tensor.reshape(shape=(batch_size, patch_height * patch_width, patch_size**2 * 3))
+    tensor = tensor.reshape(shape=(batch_size, 3, patch_height, patch_size, patch_width, patch_size))
+    tensor = torch.einsum("nchpwq->nhwpqc", tensor)
+    tensor = tensor.reshape(shape=(batch_size, patch_height * patch_width, patch_size**2 * 3))
 
-        return tensor
+    return tensor
+
 
 def unpatchify(self, tensor: torch.Tensor, patch_height: int, patch_width: int) -> torch.Tensor:
     batch_size = tensor.shape[0]
-    patch_size = int((tensor.shape[-1] / 3)**.5)
+    patch_size = int((tensor.shape[-1] / 3) ** 0.5)
     assert patch_height * patch_width == tensor.shape[1]
-    
+
     tensor = tensor.reshape(shape=(batch_size, patch_height, patch_width, patch_size, patch_size, 3))
-    tensor = torch.einsum('nhwpqc->nchpwq', tensor)
+    tensor = torch.einsum("nhwpqc->nchpwq", tensor)
     tensor = tensor.reshape(shape=(batch_size, 3, patch_height * patch_size, patch_width * patch_size))
 
     return tensor
+
 
 @dataclass
 class SegGPTModelOutput(BaseModelOutput):
@@ -100,6 +101,7 @@ class SegGPTModelOutput(BaseModelOutput):
 
     intermidiate_features: Optional[Tuple[torch.FloatTensor]] = None
 
+
 @dataclass
 class SegGPTImageSegmentationOutput(ModelOutput):
     """
@@ -118,10 +120,12 @@ class SegGPTImageSegmentationOutput(ModelOutput):
             The loss value.
 
     """
+
     pred_masks: torch.FloatTensor
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None    
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
     loss: Optional[torch.FloatTensor] = None
+
 
 class SegGPTEmbeddings(nn.Module):
     """
@@ -142,7 +146,7 @@ class SegGPTEmbeddings(nn.Module):
         self.patch_embeddings = SegGPTPatchEmbeddings(config)
 
         num_positions = (config.pretrain_img_size // config.patch_size) ** 2 + 1
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_positions , config.hidden_size))
+        self.position_embeddings = nn.Parameter(torch.randn(1, num_positions, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
@@ -702,7 +706,8 @@ class SegGPTModel(SegGPTPreTrainedModel):
         )
 
         return encoder_outputs
-    
+
+
 class SegGPTDecoderHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -714,7 +719,7 @@ class SegGPTDecoderHead(nn.Module):
         )
         self.layernorm = nn.GroupNorm(num_groups=1, num_channels=config.decoder_hidden_size, eps=config.layer_norm_eps)
         self.act_fct = ACT2FN[config.hidden_act]
-        self.head = nn.Conv2d(config.decoder_hidden_size, 3, kernel_size=1, bias=True) # decoder to patch
+        self.head = nn.Conv2d(config.decoder_hidden_size, 3, kernel_size=1, bias=True)  # decoder to patch
 
     def forward(self, hidden_states: torch.FloatTensor):
         hidden_states = self.conv(hidden_states)
@@ -723,6 +728,8 @@ class SegGPTDecoderHead(nn.Module):
         hidden_states = self.head(hidden_states)
 
         return hidden_states
+
+
 class SegGPTDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -754,14 +761,15 @@ class SegGPTDecoder(nn.Module):
         hidden_states = self.decoder_pred(hidden_states)
 
         return hidden_states
-    
+
+
 class SegGPTForInstanceSegmentation(SegGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.model = SegGPTModel(config, "instance")
         self.decoder = SegGPTDecoder(config)
-        
+
         self.post_init()
 
     def forward(
@@ -783,9 +791,9 @@ class SegGPTForInstanceSegmentation(SegGPTPreTrainedModel):
         if bool_masked_pos is None:
             num_patches = self.model.embeddings.patch_embeddings.num_patches
             bool_masked_pos = torch.zeros(num_patches, dtype=torch.bool).to(pixel_values.device)
-            bool_masked_pos[num_patches//2:] = 1
+            bool_masked_pos[num_patches // 2 :] = 1
             bool_masked_pos = bool_masked_pos.unsqueeze(dim=0)
-        
+
         outputs = self.model(
             pixel_values=pixel_values,
             prompt_pixel_values=prompt_pixel_values,
@@ -809,12 +817,15 @@ class SegGPTForInstanceSegmentation(SegGPTPreTrainedModel):
             loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
 
         if not return_dict:
-            output = (pred_masks, )
+            output = (pred_masks,)
             if output_hidden_states:
                 output = output + (outputs[1],)
 
             if output_attentions:
                 output = output + (outputs[2],)
+
+            if loss is not None:
+                output = output + (loss,)
             return output
 
         return SegGPTImageSegmentationOutput(
@@ -824,7 +835,6 @@ class SegGPTForInstanceSegmentation(SegGPTPreTrainedModel):
             loss=loss,
         )
 
-    
 
 class SegGPTForSemanticSegmentation(SegGPTPreTrainedModel):
     def __init__(self, config):
@@ -832,16 +842,18 @@ class SegGPTForSemanticSegmentation(SegGPTPreTrainedModel):
 
         self.model = SegGPTModel(config, "semantic")
         self.decoder = SegGPTDecoder(config)
-        
+
         self.post_init()
 
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         prompt_pixel_values: torch.FloatTensor,
+        labels: Optional[torch.FloatTensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -851,10 +863,10 @@ class SegGPTForSemanticSegmentation(SegGPTPreTrainedModel):
 
         if bool_masked_pos is None:
             num_patches = self.model.embeddings.patch_embeddings.num_patches
-            bool_masked_pos = torch.zeros(num_patches)
-            bool_masked_pos[num_patches//2:] = 1
+            bool_masked_pos = torch.zeros(num_patches, dtype=torch.bool).to(pixel_values.device)
+            bool_masked_pos[num_patches // 2 :] = 1
             bool_masked_pos = bool_masked_pos.unsqueeze(dim=0)
-        
+
         outputs = self.model(
             pixel_values=pixel_values,
             prompt_pixel_values=prompt_pixel_values,
@@ -863,7 +875,35 @@ class SegGPTForSemanticSegmentation(SegGPTPreTrainedModel):
             output_hidden_states=output_hidden_states,
         )
 
-        decoder_input = self.get_decoder_input(outputs.last_hidden_state)
-        decoder_output = self.decoder(decoder_input)
+        intermediate_features = outputs[-1]
+        intermediate_features = torch.cat(intermediate_features, dim=-1)
 
-        return decoder_output
+        pred_masks = self.decoder(intermediate_features)
+
+        loss = None
+        if labels is not None:
+            patch_size = self.config.patch_size
+            mask = bool_masked_pos[:, :, None].repeat(1, 1, patch_size**2 * 3)
+            mask = unpatchify(mask, pixel_values.shape[1] // patch_size, pixel_values.shape[2] // patch_size)
+            mask = mask * labels
+            loss = F.smooth_l1_loss(pred_masks, prompt_pixel_values, reduction="none", beta=0.01)
+            loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+
+        if not return_dict:
+            output = (pred_masks,)
+            if output_hidden_states:
+                output = output + (outputs[1],)
+
+            if output_attentions:
+                output = output + (outputs[2],)
+
+            if loss is not None:
+                output = output + (loss,)
+            return output
+
+        return SegGPTImageSegmentationOutput(
+            pred_masks=pred_masks,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            loss=loss,
+        )

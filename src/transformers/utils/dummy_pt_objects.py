@@ -7200,6 +7200,30 @@ class SegformerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SegGPTModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SegGPTForInstanceSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SegGPTPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 SEW_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -8197,23 +8221,6 @@ class ViTModel(metaclass=DummyObject):
 
 
 class ViTPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class SegGPTModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class SegGPTPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

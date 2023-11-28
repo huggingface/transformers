@@ -16,21 +16,18 @@
 
 
 import argparse
-import json
-from pathlib import Path
 
-import pandas as pd
 import requests
 import torch
-from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import SegGPTConfig, ViTImageProcessor, SegGPTForInstanceSegmentation
+from transformers import SegGPTConfig, SegGPTForInstanceSegmentation
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
 def create_rename_keys(config):
@@ -81,18 +78,20 @@ def create_rename_keys(config):
 
     # fmt: on
 
-
     return rename_keys
+
 
 def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
+
 
 @torch.no_grad()
 def convert_seggpt_checkpoint(args):
@@ -116,7 +115,7 @@ def convert_seggpt_checkpoint(args):
 
     # Load HF model
     model = SegGPTForInstanceSegmentation(config)
-    model.eval();
+    model.eval()
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)

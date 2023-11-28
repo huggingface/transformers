@@ -48,8 +48,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_seggpt import (
             SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SegGPTModel,
             SegGPTForInstanceSegmentation,
+            SegGPTModel,
             SegGPTPreTrainedModel,
         )
 

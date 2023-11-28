@@ -73,9 +73,10 @@ class SegGPTConfig(PretrainedConfig):
         mlp_ratio (`<fill_type>`, *optional*, defaults to 4.0): <fill_docstring>
         drop_path_rate (`<fill_type>`, *optional*, defaults to 0.1): <fill_docstring>
         pretrain_img_size (`<fill_type>`, *optional*, defaults to 224): <fill_docstring>
-        decoder_embed_dim (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
+        decoder_hidden_size (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
         use_rel_pos (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         merge_index (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        encoder_output_indicies (`<fill_type>`, *optional*, defaults to `[5, 11, 17, 23]`): <fill_docstring>
 
     Example:
 
