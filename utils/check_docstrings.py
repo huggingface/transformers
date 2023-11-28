@@ -738,7 +738,6 @@ OBJECTS_TO_IGNORE = [
     "TrainerState",
     "TrainingArguments",
     "TrajectoryTransformerConfig",
-    "TransfoXLConfig",
     "TranslationPipeline",
     "TvltImageProcessor",
     "UMT5Config",
