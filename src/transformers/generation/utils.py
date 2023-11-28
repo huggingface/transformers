@@ -37,7 +37,7 @@ from ..models.auto import (
 from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
-from .candidate_generator import (
+from .candidates import (
     AssistedCandidateGenerator,
     CandidateGenerator,
     _crop_past_key_values,
@@ -904,6 +904,7 @@ class GenerationMixin:
         assistant_model: "PreTrainedModel",
         logits_processor: LogitsProcessorList,
         model_kwargs: Dict,
+        eos_token_id: Union[int, List[int]],
     ) -> CandidateGenerator:
         """
         Returns the candidate generator to be used in `assisted_generation`
@@ -915,6 +916,7 @@ class GenerationMixin:
             logits_processor=logits_processor,
             model_kwargs=model_kwargs,
             inputs_tensor=inputs_tensor,
+            eos_token_id=eos_token_id,
         )
         return candidate_generator
 
@@ -1708,6 +1710,7 @@ class GenerationMixin:
                 assistant_model=assistant_model,
                 logits_processor=logits_processor,
                 model_kwargs=model_kwargs,
+                eos_token_id=generation_config.eos_token_id,
             )
 
             # 12. run assisted generate
@@ -4426,7 +4429,7 @@ class GenerationMixin:
                 The sequence used as a prompt for the generation.
             candidate_generator (`CandidateGenerator`, *optional*):
                 A derived instance of [`CandidateGenerator`] that defines how candidate sequences are generated. For
-                more information, the documentation of [`CandidateGenerator`] should be read. Only one of `assistant_model` or `candidate_generator` should be passed as input to this function.
+                more information, the documentation of [`CandidateGenerator`] should be read.
             assistant_model (`PreTrainedModel`, *optional*):
                 An assistant model that can be used to accelerate generation. The assistant model must have the exact
                 same tokenizer. The acceleration is achieved when forecasting candidate tokens with the assistent model
@@ -4515,11 +4518,7 @@ class GenerationMixin:
 
         if assistant_model is not None:
             candidate_generator = AssistedCandidateGenerator(
-                input_ids=input_ids,
-                assistant_model=assistant_model,
-                logits_processor=logits_processor,
-                model_kwargs=model_kwargs,
-                eos_token_id=eos_token_id,
+                input_ids, assistant_model, logits_processor, model_kwargs, eos_token_id
             )
             warnings.warn(
                 "Passing `assistant_model` to `assisted_decoding` is deprecated and will be removed in v4.38. "
@@ -4585,7 +4584,7 @@ class GenerationMixin:
             cur_len = input_ids.shape[-1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
-            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
+            candidate_input_ids = candidate_generator.get_candidates(input_ids)
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
             last_assistant_token_is_eos = (
                 ~candidate_input_ids[:, -1]
