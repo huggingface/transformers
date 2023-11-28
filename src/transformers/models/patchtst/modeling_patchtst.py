@@ -240,7 +240,7 @@ def random_masking(
             Masking ratio applied to mask the input data during random pretraining. It is the number between 0 and 1.
         unmasked_channel_indices (list, *optional*):
             Indices of channels that will not be masked.
-        channel_consistent_masking (bool, *optional* defaults to False):
+        channel_consistent_masking (bool, *optional*, defaults to `False`):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
             across channels.
         mask_value (int, *optional*, defaults to 0):
@@ -899,7 +899,7 @@ class PatchTSTForRegressionOutput(ModelOutput):
     Parameters:
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
             MSE loss.
-        regression_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        regression_outputs (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
             Regression outputs of the time series modeling heads.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
@@ -928,7 +928,7 @@ class PatchTSTForPredictionOutput(ModelOutput):
     Parameters:
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
             MSE loss.
-        prediction_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, -1)`):
+        prediction_outputs (`torch.FloatTensor` of shape `(batch_size, prediction_length, -1)`):
             Prediction outputs of the time series modeling heads.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
@@ -964,8 +964,8 @@ class PatchTSTForClassificationOutput(ModelOutput):
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
             Total loss as the sum of the masked language modeling loss and the next sequence prediction
             (classification) loss.
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        prediction_logits (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
+            Prediction scores of the PatchTST modeling head (scores before SoftMax).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
