@@ -14,13 +14,11 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Llava model. """
 
-import inspect
 import unittest
 
 from transformers import is_torch_available, is_vision_available
 from transformers.testing_utils import (
     require_torch,
-    slow,
     torch_device,
 )
 
@@ -29,17 +27,14 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
-    import torch
-    import torch.nn as nn
-
     from transformers import LlavaForVisionText2Text
     from transformers.models.llava.configuration_llava import LlavaConfig
-    from transformers.models.llava.modeling_llava import LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST
 else:
     is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     pass
+
 
 class LlavaVisionText2TextModelTester:
     def __init__(
@@ -94,7 +89,7 @@ class LlavaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 64
-                
+
     def get_config(self):
         return LlavaConfig(
             # vision_config=vision_config, TODO add a small model config
@@ -169,7 +164,6 @@ class LlavaForVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-
     def test_large_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
         pass
@@ -189,4 +183,3 @@ class LlavaForVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_prepare_inputs_labels_for_multimodal(self):
         # Pretty much the most important function
         pass
-

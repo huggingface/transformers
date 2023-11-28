@@ -1,11 +1,5 @@
 # coding=utf-8
-# Copyright 2023 EleutherAI and the HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
-#
+# Copyright 2023 Microsoft Research & University of Wisconsin-Madison and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -20,7 +14,6 @@
 """ Llava model configuration"""
 
 from ...configuration_utils import PretrainedConfig
-from ... import CLIPVisionConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
 
@@ -30,6 +23,7 @@ logger = logging.get_logger(__name__)
 LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "llava/llava-v1.5-7b": "https://huggingface.co/llava/llava-v1.5-7b/resolve/main/config.json",
 }
+
 
 class LlavaConfig(PretrainedConfig):
     r"""
@@ -101,10 +95,19 @@ class LlavaConfig(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(self.vision_config, dict):
-            vision_config["model_type"] = vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
+            vision_config["model_type"] = (
+                vision_config["model_type"] if "model_type" in vision_config else "clip_vision_model"
+            )
             self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
-            self.vision_config = CONFIG_MAPPING["clip"](intermediate_size=4096, hidden_size=1024 , patch_size = 14, image_size=336, num_hidden_layers=24, vocab_size=32000)
+            self.vision_config = CONFIG_MAPPING["clip"](
+                intermediate_size=4096,
+                hidden_size=1024,
+                patch_size=14,
+                image_size=336,
+                num_hidden_layers=24,
+                vocab_size=32000,
+            )
         self.vocab_size = self.vocab_size
 
         self.text_config = text_config
