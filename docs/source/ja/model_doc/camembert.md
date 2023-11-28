@@ -49,7 +49,7 @@ Bi-direction Encoders for Transformers (BERT) のフランス語版である Cam
 - [テキスト分類タスクガイド](../tasks/sequence_classification)
 - [トークン分類タスクガイド](../tasks/token_classification)
 - [質問回答タスク ガイド](../tasks/question_answering)
-- [因果言語モデリング タスク ガイド](../tasks/ language_modeling)
+- [因果言語モデリング タスク ガイド](../tasks/language_modeling)
 - [マスク言語モデリング タスク ガイド](../tasks/masked_language_modeling)
 - [多肢選択タスク ガイド](../tasks/multiple_choice)
 
