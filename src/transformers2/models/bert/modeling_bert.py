@@ -184,6 +184,7 @@ class CombinedEmbeddings(nn.Module):
         self.combination_layer = nn.Linear(config.hidden_size * 2, config.hidden_size)
 
     def forward(self, char_ids, wp_ids):
+        print("fuck")
         char_embeds = self.word_embeddings(char_ids)
         print(char_embeds)
         word_embeds =  self.char_embeddings(wp_ids) 
@@ -204,6 +205,7 @@ class BertEmbeddings(nn.Module):
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.word_embeddings = self.combined_embeddings
         # self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
 
         
@@ -980,6 +982,7 @@ class BertModel(BertPreTrainedModel):
         else:
             use_cache = False
 
+        input_ids = char_ids
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -1339,7 +1342,6 @@ class BertForMaskedLM(BertPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-
         if config.is_decoder:
             logger.warning(
                 "If you want to use `BertForMaskedLM` make sure `config.is_decoder=False` for "

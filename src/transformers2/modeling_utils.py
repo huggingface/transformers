@@ -1830,7 +1830,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # Tie weights should be skipped when not initializing all weights
             # since from_pretrained(...) calls tie weights anyways
-            self.tie_weights()
+            # self.tie_weights()
 
     def prune_heads(self, heads_to_prune: Dict[int, List[int]]):
         """
