@@ -446,7 +446,6 @@ class EncodecPreTrainedModel(PreTrainedModel):
     config_class = EncodecConfig
     base_model_prefix = "encodec"
     main_input_name = "input_values"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -472,10 +471,6 @@ class EncodecPreTrainedModel(PreTrainedModel):
                     nn.init.xavier_uniform_(param)
                 elif "bias" in name:
                     nn.init.constant_(param, 0.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (EncodecEncoder, EncodecDecoder)):
-            module.gradient_checkpointing = value
 
 
 ENCODEC_START_DOCSTRING = r"""

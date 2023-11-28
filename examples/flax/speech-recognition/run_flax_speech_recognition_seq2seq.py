@@ -60,7 +60,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risk.
-check_min_version("4.35.0.dev0")
+check_min_version("4.36.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/flax/speech-recogintion/requirements.txt")
 
@@ -439,6 +439,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.train_split_name,
             cache_dir=data_args.dataset_cache_dir,
+            num_proc=data_args.preprocessing_num_workers,
             token=True if model_args.use_auth_token else None,
         )
 
@@ -448,6 +449,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.eval_split_name,
             cache_dir=data_args.dataset_cache_dir,
+            num_proc=data_args.preprocessing_num_workers,
             token=True if model_args.use_auth_token else None,
         )
 
@@ -551,7 +553,7 @@ def main():
         prepare_dataset,
         remove_columns=next(iter(raw_datasets.values())).column_names,
         num_proc=num_workers,
-        desc="preprocess train dataset",
+        desc="preprocess train and eval dataset",
     )
 
     # filter training data with inputs longer than max_input_length

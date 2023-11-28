@@ -16,18 +16,12 @@ rendered properly in your Markdown viewer.
 
 # Time Series Transformer
 
-<Tip>
-
-This is a recently introduced model so the API hasn't been tested extensively. There may be some bugs or slight
-breaking changes to fix it in the future. If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title).
-
-</Tip>
-
 ## Overview
 
 The Time Series Transformer model is a vanilla encoder-decoder Transformer for time series forecasting.
+This model was contributed by [kashif](https://huggingface.co/kashif).
 
-Tips:
+## Usage tips
 
 - Similar to other models in the library, [`TimeSeriesTransformerModel`] is the raw Transformer without any head on top, and [`TimeSeriesTransformerForPrediction`]
 adds a distribution head on top of the former, which can be used for time-series forecasting. Note that this is a so-called probabilistic forecasting model, not a
@@ -56,9 +50,6 @@ of the context as initial input for the decoder).
 - At inference time, we give the final value of the `past_values` as input to the decoder. Next, we can sample from the model to make a prediction at the next time step,
 which is then fed to the decoder in order to make the next prediction (also called autoregressive generation).
 
-
-This model was contributed by [kashif](https://huggingface.co/kashif).
-
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
@@ -70,12 +61,10 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] TimeSeriesTransformerConfig
 
-
 ## TimeSeriesTransformerModel
 
 [[autodoc]] TimeSeriesTransformerModel
     - forward
-
 
 ## TimeSeriesTransformerForPrediction
 

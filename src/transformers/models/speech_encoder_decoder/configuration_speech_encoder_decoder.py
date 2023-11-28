@@ -69,6 +69,7 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
     >>> encoder_decoder_config = SpeechEncoderDecoderConfig.from_pretrained("my-model")
     >>> model = SpeechEncoderDecoderModel.from_pretrained("my-model", config=encoder_decoder_config)
     ```"""
+
     model_type = "speech-encoder-decoder"
     is_composition = True
 

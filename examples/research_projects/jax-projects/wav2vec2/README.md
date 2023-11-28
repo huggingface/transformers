@@ -10,7 +10,7 @@ way which enables simple and efficient model parallelism.
 
 `run_wav2vec2_pretrain_flax.py` is a lightweight example of how to download and preprocess a dataset from the 🤗 Datasets library or use your own files (jsonlines or csv), then pretrain the wav2vec2 architectures above on it.
 
-For custom datasets in `jsonlines` format please see: [the Datasets documentation](https://huggingface.co/docs/datasets/loading_datasets.html#json-files) and you also will find examples of these below.
+For custom datasets in `jsonlines` format please see: [the Datasets documentation](https://huggingface.co/docs/datasets/loading_datasets#json-files) and you also will find examples of these below.
 
 Let's start by creating a model repository to save the trained model and logs.
 Here we call the model `"wav2vec2-base-robust"`, but you can change the model name as you like.

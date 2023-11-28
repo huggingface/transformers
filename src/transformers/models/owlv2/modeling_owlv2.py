@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch OWLv2 model."""
 
-
 import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
@@ -25,6 +24,7 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -51,21 +51,6 @@ OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/owlv2-base-patch16-ensemble",
     # See all OWLv2 models at https://huggingface.co/models?filter=owlv2
 ]
-
-
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss with clip->owlv2
@@ -260,11 +245,11 @@ class Owlv2ImageGuidedObjectDetectionOutput(ModelOutput):
             (disregarding possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to
             retrieve the unnormalized bounding boxes.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
-            Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes image
-            embeddings for each patch.
+            Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes
+            image embeddings for each patch.
         query_image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
-            Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes image
-            embeddings for each patch.
+            Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes
+            image embeddings for each patch.
         class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
             Class embeddings of all image patches. OWLv2 represents images as a set of image patches where the total
             number of patches is (image_size / patch_size)**2.
@@ -563,9 +548,7 @@ class Owlv2PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, Owlv2MLP):
             factor = self.config.initializer_factor
-            in_proj_std = (
-                (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            )
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
@@ -583,10 +566,6 @@ class Owlv2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, Owlv2Encoder):
-            module.gradient_checkpointing = value
 
 
 OWLV2_START_DOCSTRING = r"""
@@ -764,18 +743,12 @@ class Owlv2Encoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
+                layer_outputs = self._gradient_checkpointing_func(
+                    encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     causal_attention_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -798,24 +771,6 @@ class Owlv2Encoder(nn.Module):
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
-
-
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(
-    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
-):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
-    mask_cond = torch.arange(mask.size(-1), device=device)
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
-
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTTextTransformer with OWLVIT->OWLV2,OwlViT->Owlv2
@@ -855,11 +810,13 @@ class Owlv2TextTransformer(nn.Module):
         # num_samples, seq_len = input_shape  where num_samples = batch_size * num_max_text_queries
         # OWLV2's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        causal_attention_mask = _make_causal_mask(input_shape, hidden_states.dtype, device=hidden_states.device)
+        causal_attention_mask = _create_4d_causal_attention_mask(
+            input_shape, hidden_states.dtype, device=hidden_states.device
+        )
         # expand attention_mask
         if attention_mask is not None:
             # [num_samples, seq_len] -> [num_samples, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -1378,6 +1335,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
     def objectness_predictor(self, image_features: torch.FloatTensor) -> torch.FloatTensor:
         """Predicts the probability that each image feature token is an object.
+
         Args:
             image_features (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_dim)`)):
                 Features extracted from the image.
@@ -1586,19 +1544,38 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> import requests
         >>> from PIL import Image
         >>> import torch
+        >>> import numpy as np
         >>> from transformers import AutoProcessor, Owlv2ForObjectDetection
+        >>> from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
         >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble")
+
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> query_url = "http://images.cocodataset.org/val2017/000000001675.jpg"
         >>> query_image = Image.open(requests.get(query_url, stream=True).raw)
         >>> inputs = processor(images=image, query_images=query_image, return_tensors="pt")
+
+        >>> # forward pass
         >>> with torch.no_grad():
         ...     outputs = model.image_guided_detection(**inputs)
-        >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
-        >>> target_sizes = torch.Tensor([image.size[::-1]])
+
+        >>> # Note: boxes need to be visualized on the padded, unnormalized image
+        >>> # hence we'll set the target image sizes (height, width) based on that
+
+        >>> def get_preprocessed_image(pixel_values):
+        ...     pixel_values = pixel_values.squeeze().numpy()
+        ...     unnormalized_image = (pixel_values * np.array(OPENAI_CLIP_STD)[:, None, None]) + np.array(OPENAI_CLIP_MEAN)[:, None, None]
+        ...     unnormalized_image = (unnormalized_image * 255).astype(np.uint8)
+        ...     unnormalized_image = np.moveaxis(unnormalized_image, 0, -1)
+        ...     unnormalized_image = Image.fromarray(unnormalized_image)
+        ...     return unnormalized_image
+
+        >>> unnormalized_image = get_preprocessed_image(inputs.pixel_values)
+
+        >>> target_sizes = torch.Tensor([unnormalized_image.size[::-1]])
+
         >>> # Convert outputs (bounding boxes and class logits) to COCO API
         >>> results = processor.post_process_image_guided_detection(
         ...     outputs=outputs, threshold=0.9, nms_threshold=0.3, target_sizes=target_sizes
@@ -1608,19 +1585,19 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> for box, score in zip(boxes, scores):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(f"Detected similar object with confidence {round(score.item(), 3)} at location {box}")
-        Detected similar object with confidence 0.938 at location [327.31, 54.94, 547.39, 268.06]
-        Detected similar object with confidence 0.959 at location [5.78, 360.65, 619.12, 366.39]
-        Detected similar object with confidence 0.902 at location [2.85, 360.01, 627.63, 380.79]
-        Detected similar object with confidence 0.985 at location [176.97, -29.45, 672.69, 182.83]
-        Detected similar object with confidence 1.0 at location [6.53, 14.35, 624.87, 470.82]
-        Detected similar object with confidence 0.998 at location [579.98, 29.14, 615.49, 489.05]
-        Detected similar object with confidence 0.985 at location [206.15, 10.53, 247.74, 466.01]
-        Detected similar object with confidence 0.947 at location [18.62, 429.72, 646.5, 457.72]
-        Detected similar object with confidence 0.996 at location [523.88, 20.69, 586.84, 483.18]
-        Detected similar object with confidence 0.998 at location [3.39, 360.59, 617.29, 499.21]
-        Detected similar object with confidence 0.969 at location [4.47, 449.05, 614.5, 474.76]
-        Detected similar object with confidence 0.966 at location [31.44, 463.65, 654.66, 471.07]
-        Detected similar object with confidence 0.924 at location [30.93, 468.07, 635.35, 475.39]
+        Detected similar object with confidence 0.938 at location [490.96, 109.89, 821.09, 536.11]
+        Detected similar object with confidence 0.959 at location [8.67, 721.29, 928.68, 732.78]
+        Detected similar object with confidence 0.902 at location [4.27, 720.02, 941.45, 761.59]
+        Detected similar object with confidence 0.985 at location [265.46, -58.9, 1009.04, 365.66]
+        Detected similar object with confidence 1.0 at location [9.79, 28.69, 937.31, 941.64]
+        Detected similar object with confidence 0.998 at location [869.97, 58.28, 923.23, 978.1]
+        Detected similar object with confidence 0.985 at location [309.23, 21.07, 371.61, 932.02]
+        Detected similar object with confidence 0.947 at location [27.93, 859.45, 969.75, 915.44]
+        Detected similar object with confidence 0.996 at location [785.82, 41.38, 880.26, 966.37]
+        Detected similar object with confidence 0.998 at location [5.08, 721.17, 925.93, 998.41]
+        Detected similar object with confidence 0.969 at location [6.7, 898.1, 921.75, 949.51]
+        Detected similar object with confidence 0.966 at location [47.16, 927.29, 981.99, 942.14]
+        Detected similar object with confidence 0.924 at location [46.4, 936.13, 953.02, 950.78]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1692,8 +1669,10 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         ```python
         >>> import requests
         >>> from PIL import Image
+        >>> import numpy as np
         >>> import torch
         >>> from transformers import AutoProcessor, Owlv2ForObjectDetection
+        >>> from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
         >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble")
@@ -1702,10 +1681,25 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> texts = [["a photo of a cat", "a photo of a dog"]]
         >>> inputs = processor(text=texts, images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
 
-        >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
-        >>> target_sizes = torch.Tensor([image.size[::-1]])
+        >>> # forward pass
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> # Note: boxes need to be visualized on the padded, unnormalized image
+        >>> # hence we'll set the target image sizes (height, width) based on that
+
+        >>> def get_preprocessed_image(pixel_values):
+        ...     pixel_values = pixel_values.squeeze().numpy()
+        ...     unnormalized_image = (pixel_values * np.array(OPENAI_CLIP_STD)[:, None, None]) + np.array(OPENAI_CLIP_MEAN)[:, None, None]
+        ...     unnormalized_image = (unnormalized_image * 255).astype(np.uint8)
+        ...     unnormalized_image = np.moveaxis(unnormalized_image, 0, -1)
+        ...     unnormalized_image = Image.fromarray(unnormalized_image)
+        ...     return unnormalized_image
+
+        >>> unnormalized_image = get_preprocessed_image(inputs.pixel_values)
+
+        >>> target_sizes = torch.Tensor([unnormalized_image.size[::-1]])
         >>> # Convert outputs (bounding boxes and class logits) to final bounding boxes and scores
         >>> results = processor.post_process_object_detection(
         ...     outputs=outputs, threshold=0.2, target_sizes=target_sizes
@@ -1718,8 +1712,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> for box, score, label in zip(boxes, scores, labels):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
-        Detected a photo of a cat with confidence 0.614 at location [341.67, 17.54, 642.32, 278.51]
-        Detected a photo of a cat with confidence 0.665 at location [6.75, 38.97, 326.62, 354.85]
+        Detected a photo of a cat with confidence 0.614 at location [512.5, 35.08, 963.48, 557.02]
+        Detected a photo of a cat with confidence 0.665 at location [10.13, 77.94, 489.93, 709.69]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
