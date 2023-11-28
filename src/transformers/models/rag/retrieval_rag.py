@@ -103,7 +103,6 @@ class LegacyIndex(Index):
     PASSAGE_FILENAME = "psgs_w100.tsv.pkl"
 
     def __init__(self, vector_size, index_path):
-
         logger.error(
             "`LegacyIndex` was deprecated due to security issues linked to `pickle.load`. See more details on this "
             "model's documentation page: "
