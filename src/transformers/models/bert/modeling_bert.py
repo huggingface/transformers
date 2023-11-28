@@ -185,9 +185,13 @@ class CombinedEmbeddings(nn.Module):
 
     def forward(self, char_ids, wp_ids):
         char_embeds = self.word_embeddings(char_ids)
+        print(char_embeds)
         word_embeds =  self.char_embeddings(wp_ids) 
+        print(word_embeds)
         combined_embeds = torch.cat([char_embeds, word_embeds], dim=-1)
+        print(combined_embeds)
         embeddings = self.combination_layer(combined_embeds)
+        print(embeddings)
         return embeddings
 
 class BertEmbeddings(nn.Module):
