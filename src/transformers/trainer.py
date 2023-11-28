@@ -3509,7 +3509,7 @@ class Trainer:
             dataset_args=dataset_args,
         )
         model_card = training_summary.to_model_card()
-        with open(os.path.join(self.args.output_dir, "README.md"), "w") as f:
+        with open(model_card_filepath, "w") as f:
             f.write(model_card)
 
         if is_peft_library:
