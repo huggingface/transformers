@@ -38,6 +38,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -281,9 +282,10 @@ class ClvpDecoderTester:
 
 
 @require_torch
-class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpModel, ClvpForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (ClvpForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": ClvpModelForConditionalGeneration} if is_torch_available() else {}
 
     test_pruning = False
 
