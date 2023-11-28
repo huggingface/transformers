@@ -110,7 +110,7 @@ def apply_rotary_pos_emb(q, k, v, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed, v_embed
 
 
-def pad_extra_bos_eos_tokens(
+def _pad_extra_bos_eos_tokens(
     input_ids,
     attention_mask=None,
     pad_token_id=0,
@@ -659,7 +659,7 @@ class ClvpConditioningEncoder(nn.Module):
 
         # We add bos and eos input_ids in the modeling file instead of the tokenizer file to keep the logic simple
         # This logic is specific to ClvpConditioningEncoder and not used by other modules.
-        input_ids, attention_mask = pad_extra_bos_eos_tokens(
+        input_ids, attention_mask = _pad_extra_bos_eos_tokens(
             input_ids,
             attention_mask,
             bos_token_id=self.text_config.bos_token_id,
@@ -1905,6 +1905,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
                 Pads generated speech_ids to the specified value. This is to implement the same logic from the official
                 repo, link: https://github.com/neonbjb/tortoise-tts/blob/80f89987a5abda5e2b082618cd74f9c7411141dc/tortoise/api.py#L430
                 and to make sure the logits are same.
+                This does not affect generation quality so please don't consider using it since it is less efficient.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of decoder model, text encoder and speech encoder models.
 
@@ -1913,8 +1914,9 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             `config.return_dict_in_generate=True`) or a tuple.
         """
 
-        # If the input sequences are larger than (self.config.decoder_config.max_text_tokens - 3) then raise error, because we add 1 bos tokens and
-        # 2 eos tokens to the input_ids in ClvpConditioningEncoder.
+        # If the input sequences are larger than (self.config.decoder_config.max_text_tokens - 3) then raise error,
+        # because we need to add 3 tokens ( 1 bos tokens and 2 eos tokens) to the input_ids in ClvpConditioningEncoder to
+        # properly sample
         sequence_length = input_ids.shape[-1]
         if sequence_length > (self.config.decoder_config.max_text_tokens - 3):
             raise ValueError(
@@ -1932,7 +1934,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
         # pad input_ids as specified in the original repo
         # link: https://github.com/neonbjb/tortoise-tts/blob/80f89987a5abda5e2b082618cd74f9c7411141dc/tortoise/api.py#L380
-        input_ids, attention_mask = pad_extra_bos_eos_tokens(
+        input_ids, attention_mask = _pad_extra_bos_eos_tokens(
             input_ids,
             attention_mask,
             add_bos_token=False,
