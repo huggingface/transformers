@@ -93,7 +93,7 @@ class LlavaVisionText2TextModelTester:
 
         self.batch_size = 3
         self.num_channels = 3
-        self.image_size = 233
+        self.image_size = 64
                 
     def get_config(self):
         return LlavaConfig(
@@ -168,3 +168,25 @@ class LlavaForVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase):
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
+
+
+    def test_large_model_integration_test(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        pass
+
+    def test_small_model_integration_test(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        pass
+
+    def test_small_model_logits_test(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        pass
+
+    def test_image_text_pre_processing(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        pass
+
+    def test_prepare_inputs_labels_for_multimodal(self):
+        # Pretty much the most important function
+        pass
+
