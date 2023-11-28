@@ -1044,6 +1044,13 @@ class PretrainedBartModel(metaclass=DummyObject):
 BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class BeitBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class BeitForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
