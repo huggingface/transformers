@@ -45,7 +45,7 @@ You can use `AutoBackbone` class to initialize a model as a backbone and get the
 
 ## Initializing Backbone Configuration
 
-You can initialize architectures with model backbones by passing a model configuration to `backbone_config` to the model neck configuration. For example, below you can see how to initialize the [MaskFormer](model_doc/maskformer.md) model with [ResNet](model_doc/resnet.md) backbone.
+You can initialize architectures with model backbones by passing a model configuration to `backbone_config` to the model neck configuration. For example, below you can see how to initialize the [MaskFormer](../model_doc/maskformer) model with [ResNet](../model_doc/resnet) backbone.
 
 ```py
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
