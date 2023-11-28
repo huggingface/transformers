@@ -103,6 +103,13 @@ class LegacyIndex(Index):
     PASSAGE_FILENAME = "psgs_w100.tsv.pkl"
 
     def __init__(self, vector_size, index_path):
+
+        logger.error(
+            "`LegacyIndex` was deprecated due to security issues linked to `pickle.load`. See more details on this "
+            "model's documentation page: "
+            "`https://github.com/huggingface/transformers/blob/main/docs/source/en/model_doc/rag.md`."
+        )
+
         self.index_id_to_db_id = []
         self.index_path = index_path
         self.passages = self._load_passages()

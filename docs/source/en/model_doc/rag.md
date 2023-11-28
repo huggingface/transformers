@@ -16,6 +16,15 @@ rendered properly in your Markdown viewer.
 
 # RAG
 
+<Tip warning={true}>
+
+The class `LegacyIndex` used to define the retriever component `RagRetriever` in the `RAG` architecture was deprecated
+due to security issues linked to `pickle.load`.
+
+For improved security, we recommend using `CanonicalHFIndex` or `CustomHFIndex` to build and load your index dataset.
+
+</Tip>
+
 <div class="flex flex-wrap space-x-1">
 <a href="https://huggingface.co/models?filter=rag">
 <img alt="Models" src="https://img.shields.io/badge/All_model_pages-rag-blueviolet">
