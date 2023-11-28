@@ -572,6 +572,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("luke", "LUKE"),
         ("lxmert", "LXMERT"),
         ("m2m_100", "M2M100"),
+        ("madlad-400", "MADLAD-400"),
         ("marian", "Marian"),
         ("markuplm", "MarkupLM"),
         ("mask2former", "Mask2Former"),
