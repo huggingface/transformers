@@ -96,6 +96,8 @@ class PatchTSTModelTester:
         self.num_targets = num_targets
         self.distil = distil
         self.num_patches = (max(self.context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
+        # define seq_length so that it can pass the test_attention_outputs
+        self.seq_length = self.num_patches
 
     def get_config(self):
         return PatchTSTConfig(
@@ -170,7 +172,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_resize_position_embeddings = False
     test_mismatched_shapes = True
     test_model_parallel = False
-    has_attentions = False
+    has_attentions = True
 
     def setUp(self):
         self.model_tester = PatchTSTModelTester(self)
