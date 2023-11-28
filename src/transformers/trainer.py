@@ -48,7 +48,7 @@ import huggingface_hub.utils as hf_hub_utils
 import numpy as np
 import torch
 import torch.distributed as dist
-from huggingface_hub import create_repo, upload_folder
+from huggingface_hub import ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
@@ -3489,6 +3489,13 @@ class Trainer:
         if not self.is_world_process_zero():
             return
 
+        model_card_filepath = os.path.join(self.args.output_dir, "README.md")
+        is_peft_library = False
+        if os.path.exists(model_card_filepath):
+            library_name = ModelCard.load(model_card_filepath).data["library_name"]
+            if library_name is not None and library_name == "peft":
+                is_peft_library = True
+
         training_summary = TrainingSummary.from_trainer(
             self,
             language=language,
@@ -3504,6 +3511,9 @@ class Trainer:
         model_card = training_summary.to_model_card()
         with open(os.path.join(self.args.output_dir, "README.md"), "w") as f:
             f.write(model_card)
+
+        if is_peft_library:
+            unwrap_model(self.model).create_or_update_model_card(self.args.output_dir)
 
     def _push_from_checkpoint(self, checkpoint_folder):
         # Only push from one node.
