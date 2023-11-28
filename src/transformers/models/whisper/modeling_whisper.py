@@ -2230,7 +2230,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     active_segments, self.generation_config.pad_token_id, padding="left"
                 )
 
-                prev_start_of_text = 50360  # TODO(Patrick): Need to put in generation_config
+                prev_start_of_text = self.generation_config.suppress_tokens[-2]  # TODO(Patrick): Need to put in generation_config
                 one_tensor = torch.ones((cur_bsz, 1), device=decoder_input_ids.device, dtype=torch.long)
 
                 decoder_input_ids = torch.cat(
@@ -2241,6 +2241,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     ],
                     dim=-1,
                 )
+                # print(decoder_input_ids)
+                # import ipdb; ipdb.set_trace()
 
                 timestamp_processor = [
                     proc for proc in logits_processor if isinstance(proc, WhisperTimeStampLogitsProcessor)
