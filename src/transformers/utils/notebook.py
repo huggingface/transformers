@@ -161,7 +161,7 @@ class NotebookProgressBar:
             self.update_bar(value)
             self.last_value = value
             self.last_time = current_time
-            if self.average_time_per_item is None:
+            if (self.average_time_per_item is None) or (self.average_time_per_item == 0):
                 self.wait_for = 1
             else:
                 self.wait_for = max(int(self.update_every / self.average_time_per_item), 1)
@@ -177,7 +177,11 @@ class NotebookProgressBar:
                 f"[{spaced_value}/{self.total} {format_time(self.elapsed_time)} <"
                 f" {format_time(self.predicted_remaining)}"
             )
-            self.label += f", {1/self.average_time_per_item:.2f} it/s"
+            if self.average_time_per_item == 0:
+                self.label += ", +inf it/s"
+            else:
+                self.label += f", {1/self.average_time_per_item:.2f} it/s"
+
         self.label += "]" if self.comment is None or len(self.comment) == 0 else f", {self.comment}]"
         self.display()
 
@@ -367,6 +371,8 @@ class NotebookProgressCallback(TrainerCallback):
 
     def on_train_end(self, args, state, control, **kwargs):
         self.training_tracker.update(
-            state.global_step, comment=f"Epoch {int(state.epoch)}/{state.num_train_epochs}", force_update=True
+            state.global_step,
+            comment=f"Epoch {int(state.epoch)}/{state.num_train_epochs}",
+            force_update=True,
         )
         self.training_tracker = None
