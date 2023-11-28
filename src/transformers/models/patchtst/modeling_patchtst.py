@@ -420,7 +420,7 @@ class PatchTSTMasking(nn.Module):
         self.unmasked_channel_indices = config.unmasked_channel_indices
         self.mask_value = config.mask_value
         if self.unmasked_channel_indices is not None:
-            self.unmasked_channel_indices.sort()
+            self.unmasked_channel_indices = sorted(self.unmasked_channel_indices)
 
     def forward(self, patch_input: torch.Tensor):
         """
@@ -652,11 +652,11 @@ class PatchTSTEmbedding(nn.Module):
         """
         # Input encoding
         num_input_channels = patch_input.shape[1]
-        # if num_input_channels != self.num_input_channels:
-        #     raise ValueError(
-        #         f"The defined number of input channels ({self.num_input_channels}) in the config "
-        #         f"has to be the same as the number of channels in the batch input ({num_input_channels})"
-        #     )
+        if num_input_channels != self.num_input_channels:
+            raise ValueError(
+                f"The defined number of input channels ({self.num_input_channels}) in the config "
+                f"has to be the same as the number of channels in the batch input ({num_input_channels})"
+            )
         if self.share_embedding:
             embeddings = self.input_embedding(patch_input)  # x: [bs x num_channels  x num_patches x d_model]
         else:
@@ -1382,21 +1382,21 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         >>> config = PatchTSTConfig(
         ...     num_input_channels=7,
         ...     context_length=512,
-        ...     patch_length = 12,
-        ...     stride = 12,
-        ...     mask_type = 'random',
-        ...     random_mask_ratio = 0.4,
-        ...     use_cls_token = True,
+        ...     patch_length=12,
+        ...     stride=12,
+        ...     mask_type='random',
+        ...     random_mask_ratio=0.4,
+        ...     use_cls_token=True,
         ... )
         >>> # Config for forecast mask pretraining
         >>> config = PatchTSTConfig(
         ...     num_input_channels=7,
         ...     context_length=512,
-        ...     patch_length = 12,
-        ...     stride = 12,
-        ...     mask_type = 'forecast',
-        ...     num_forecast_mask_patches = 5,
-        ...     use_cls_token = True,
+        ...     patch_length=12,
+        ...     stride=12,
+        ...     mask_type='forecast',
+        ...     num_forecast_mask_patches=5,
+        ...     use_cls_token=True,
         ... )
         >>> model = PatchTSTForPretraining(config)
 
@@ -1536,9 +1536,9 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         ...     num_input_channels=2,
         ...     num_targets=3,
         ...     context_length=512,
-        ...     patch_length = 12,
-        ...     stride = 12,
-        ...     use_cls_token = True,
+        ...     patch_length=12,
+        ...     stride=12,
+        ...     use_cls_token=True,
         ... )
         >>> model = PatchTSTForClassification(config=config)
 
