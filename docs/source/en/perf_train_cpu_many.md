@@ -254,6 +254,7 @@ spec:
 To run this example, update the yaml based on your training script and the nodes in your cluster.
 
 <Tip>
+
 The CPU resource limits/requests in the yaml are defined in [cpu units](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#meaning-of-cpu)
 where 1 CPU unit is equivalent to 1 physical CPU core or 1 virtual core (depending on whether the node is a physical
 host or a VM). The amount of CPU and memory limits/requests defined in the yaml should be less than the amount of
@@ -261,6 +262,7 @@ available CPU/memory capacity on a single machine. It is usually a good idea to 
 order to leave some resources for the kubelet and OS. In order to get ["guaranteed"](https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/#guaranteed)
 [quality of service](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/) for the worker pods,
 set the same CPU and memory amounts for both the resource limits and requests.
+
 </Tip>
 
 ### Deploy
