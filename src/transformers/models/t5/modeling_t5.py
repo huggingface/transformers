@@ -492,12 +492,15 @@ class T5Attention(nn.Module):
             for pos_emb_name, pos_emb_config in self.positional_embedding_injected_in_attention.items():
                 pos_emb_config = pos_emb_config if pos_emb_config is not None else {}
                 if pos_emb_name == POSITION_EMBEDDING_T5_RELATIVE:
-                    self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)                                          
-                    relative_attention_num_buckets = pos_emb_config.get("num_buckets", self.relative_attention_num_buckets)
-                    self.relative_attention_bias_dict[pos_emb_name] = nn.Embedding(relative_attention_num_buckets, self.n_heads)
+                    self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)                                                              
                 elif pos_emb_name == POSITION_EMBEDDING_ROTARY:
                     self.rotary_op = RotaryEmbedding(self.d_model) #TODO: should this be inside self.relative_attention_bias_dict module dict as well? it has no parameters (but does have a buffer)
                 else:
+
+                    #TODO: there was a support of some alternative relative embedding in Michal's branch dev, check this with her.
+                    #relative_attention_num_buckets = pos_emb_config.get("num_buckets", self.relative_attention_num_buckets)
+                    #self.relative_attention_bias_dict[pos_emb_name] = nn.Embedding(relative_attention_num_buckets, self.n_heads)
+
                     raise Exception(f'unfamiliar positional attention type to be injected at attention level. Got "{pos_emb_name}". Supported options are {POSITION_EMBEDDING_T5_RELATIVE} and {POSITION_EMBEDDING_ROTARY}')
 
         self.pruned_heads = set()
@@ -1935,7 +1938,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         # Model parallel
         self.model_parallel = False
         self.device_map = None
-        self.supports_new_embedding = True        
+        self.supports_new_embedding = True        #for backward compatibility
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
