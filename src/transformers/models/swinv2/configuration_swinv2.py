@@ -54,6 +54,8 @@ class Swinv2Config(PretrainedConfig, BackboneConfigMixin):
             Number of attention heads in each layer of the Transformer encoder.
         window_size (`int`, *optional*, defaults to 7):
             Size of windows.
+        pretrained_window_sizes (`list(int)`, *optional*, defaults to `[0, 0, 0, 0]`):
+            Size of windows during pretraining.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             Ratio of MLP hidden dimensionality to embedding dimensionality.
         qkv_bias (`bool`, *optional*, defaults to `True`):
@@ -115,6 +117,7 @@ class Swinv2Config(PretrainedConfig, BackboneConfigMixin):
         depths=[2, 2, 6, 2],
         num_heads=[3, 6, 12, 24],
         window_size=7,
+        pretrained_window_sizes=[0, 0, 0, 0],
         mlp_ratio=4.0,
         qkv_bias=True,
         hidden_dropout_prob=0.0,
@@ -139,6 +142,7 @@ class Swinv2Config(PretrainedConfig, BackboneConfigMixin):
         self.num_layers = len(depths)
         self.num_heads = num_heads
         self.window_size = window_size
+        self.pretrained_window_sizes = pretrained_window_sizes
         self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -156,4 +160,3 @@ class Swinv2Config(PretrainedConfig, BackboneConfigMixin):
         # we set the hidden_size attribute in order to make Swinv2 work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
-        self.pretrained_window_sizes = (0, 0, 0, 0)

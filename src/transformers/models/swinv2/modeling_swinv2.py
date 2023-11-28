@@ -1393,10 +1393,11 @@ class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
                 feature_maps += (hidden_state,)
 
         if not return_dict:
+            output = (feature_maps,)
             if output_hidden_states:
-                output = (feature_maps,) + outputs[1:]
-            else:
-                output = (feature_maps,) + outputs[2:]
+                output += (outputs[1],)
+            if output_attentions:
+                output += (outputs[2],)
             return output
 
         return BackboneOutput(
