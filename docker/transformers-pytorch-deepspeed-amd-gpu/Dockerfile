@@ -1,4 +1,4 @@
-FROM rocm/deepspeed:rocm5.7_ubuntu20.04_py3.9_pytorch_2.0.1_DeepSpeed
+FROM rocm/pytorch:rocm5.7_ubuntu22.04_py3.10_pytorch_2.0.1
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -6,7 +6,7 @@ ARG PYTORCH='2.0.1'
 ARG ROCM='5.7'
 
 RUN apt update && \
-    apt install -y --no-install-recommends libaio-dev && \
+    apt install -y --no-install-recommends libaio-dev git && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
