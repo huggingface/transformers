@@ -1485,7 +1485,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
 
         # Turn off masking
         if config.do_mask_input:
-            logger.debug("Setting `do_mask_input` parameter to False.")
+            logger.warning("Setting `do_mask_input` parameter to False.")
             config.do_mask_input = False
 
         self.model = PatchTSTModel(config)
@@ -1680,7 +1680,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
 
         # Turn off masking
         if config.do_mask_input:
-            logger.debug("Setting `do_mask_input` parameter to False.")
+            logger.warning("Setting `do_mask_input` parameter to False.")
             config.do_mask_input = False
 
         self.model = PatchTSTModel(config)
@@ -1923,7 +1923,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
 
         # Turn off masking
         if config.do_mask_input:
-            logger.debug("Setting `do_mask_input` parameter to False.")
+            logger.warning("Setting `do_mask_input` parameter to False.")
             config.do_mask_input = False
 
         self.model = PatchTSTModel(config)
