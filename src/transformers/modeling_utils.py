@@ -516,6 +516,7 @@ def set_initialized_submodules(model, state_dict_keys):
 
 
 def _end_ptr(tensor: torch.Tensor) -> int:
+    # extract the end of the pointer if the tensor is a slice of a bigger tensor
     if tensor.nelement():
         stop = tensor.view(-1)[-1].data_ptr() + tensor.element_size()
     else:
@@ -2193,7 +2194,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             if found < len(names):
                                 to_delete_names.add(name)
             # We are entering a place where the weights and the transformers configuration do NOT match.
-            names, disjoint_names = _find_disjoint(shared_ptrs.values(), state_dict)
+            shared_names, disjoint_names = _find_disjoint(shared_ptrs.values(), state_dict)
             # Those are actually tensor sharing but disjoint from each other, we can safely clone them
             # Reloaded won't have the same property, but it shouldn't matter in any meaningful way.
             for name in disjoint_names:
@@ -2204,7 +2205,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # the key back leading to random tensor. A proper warning will be shown
             # during reload (if applicable), but since the file is not necessarily compatible with
             # the config, better show a proper warning.
-            names, identical_names = _find_identical(names, state_dict)
+            shared_names, identical_names = _find_identical(shared_names, state_dict)
+            # delete tensors that have identical storage
             for inames in identical_names:
                 known = inames.intersection(to_delete_names)
                 for name in known:
@@ -2214,7 +2216,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     del state_dict[name]
                     warn_names.add(name)
 
-            error_names.update(names)
+            error_names.update(shared_names)
 
             if len(warn_names) > 0:
                 logger.warning_once(
