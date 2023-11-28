@@ -199,7 +199,7 @@ def split_code_into_blocks(
     indent_str = " " * indent
     block_without_name_idx = 0
 
-    # Find the lines for the defintion header
+    # Find the lines for the definition header
     index = start_index
     if "(" in lines[start_index] and "):" not in lines[start_index] in lines[start_index]:
         while index < end_index:
@@ -225,12 +225,8 @@ def split_code_into_blocks(
             block_start_index = index
             if index > prev_block_end_index and backtrace:
                 idx = index - 1
-                for idx in range(index - 1, prev_block_end_index - 1, -1):
-                    if not (
-                        len(lines[idx].strip()) > 0
-                        and lines[idx].startswith(indent_str)
-                        and not lines[idx].startswith(" " * (indent + 4))
-                    ):
+                for idx in range(index - 1, prev_block_end_index - 2, -1):
+                    if not (len(lines[idx].strip()) > 0 and lines[idx].startswith(indent_str) and not lines[idx].startswith(" " * (indent + 4))):
                         break
                 idx += 1
                 if idx < index:
@@ -255,32 +251,7 @@ def split_code_into_blocks(
     if index > prev_block_end_index:
         splits.append((f"_block_without_name_{block_without_name_idx}", prev_block_end_index, index))
 
-    block_without_name_idx = 0
-    empty_block_idx = 0
-
-    # split empty regions with other blocks
-    blocks = []
-    for name, start, end in splits:
-        if not name.startswith("_block_without_name_"):
-            blocks.append((name, start, end))
-        else:
-            start, index = start, start
-            while index < end:
-                is_empty = len(lines[index].strip()) == 0
-                while index < end and (len(lines[index].strip()) == 0) == is_empty:
-                    index += 1
-                if len("".join(lines[start:index]).strip()) > 0:
-                    name = f"_block_without_name_{block_without_name_idx}"
-                else:
-                    name = f"_empty_block_{empty_block_idx}"
-                blocks.append((name, start, index))
-                if len("".join(lines[start:index]).strip()) > 0:
-                    block_without_name_idx += 1
-                else:
-                    empty_block_idx += 1
-                start = index
-
-    return blocks
+    return splits
 
 
 def find_code_in_transformers(
@@ -649,7 +620,6 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buf: dict = None)
         }
 
         # Ignore the blocks specified to be ignored. This is the version used to check if there is a mismatch
-        # (don't remove "_empty_block_" otherwise `stylify` later will be slower -> deal with them after `stylify`)
         theoretical_code_blocks_clean = {
             k: v
             for k, v in theoretical_code_blocks.items()
