@@ -7275,7 +7275,7 @@
         "model_classes": [
             "YosoForTokenClassification"
         ],
-        "sha": "fd2219856608d3dba70dc7b1a06af629903dec31"
+        "sha": "fd2219856608d3dba70dc7b1a06af629903dec32"
     },
     "YosoModel": {
         "tokenizer_classes": [
