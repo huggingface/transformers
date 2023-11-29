@@ -1170,6 +1170,13 @@ MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING_NAMES = OrderedDict(
+    [
+        ("patchtsmixer", "PatchTSMixerForPrediction"),
+        ("patchtst", "PatchTSTForPrediction"),
+    ]
+)
+
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES = OrderedDict(
     [
         ("swin2sr", "Swin2SRForImageSuperResolution"),
@@ -1267,6 +1274,10 @@ MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING = _LazyAutoMapping(
 
 MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING_NAMES
+)
+
+MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING_NAMES
 )
 
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES)
@@ -1547,6 +1558,14 @@ class AutoModelForMaskedImageModeling(_BaseAutoModelClass):
 
 AutoModelForMaskedImageModeling = auto_class_update(AutoModelForMaskedImageModeling, head_doc="masked image modeling")
 
+
+
+class AutoModelForTimeSeriesPrediction(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING
+
+AutoModelForTimeSeriesPrediction = auto_class_update(
+    AutoModelForTimeSeriesPrediction, head_doc="time series prediction"
+)
 
 class AutoModelWithLMHead(_AutoModelWithLMHead):
     @classmethod
