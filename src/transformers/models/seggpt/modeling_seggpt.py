@@ -10,15 +10,52 @@ import torch.nn.functional as F
 # import fvcore.nn.weight_init as weight_init
 # from detectron2.layers import get_norm
 # from fairscale.nn.checkpoint import checkpoint_wrapper
-from transformers import PreTrainedModel
+from transformers import PreTrainedModel, add_start_docstrings
 from transformers.modeling_outputs import BaseModelOutput, SemanticSegmenterOutput
 from transformers.models.seggpt.configuration_seggpt import SegGPTConfig
-from transformers.utils import ModelOutput
+from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, replace_return_docstrings
 
+
+_CONFIG_FOR_DOC = "SegGPTConfig"
 
 SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Raghavan/seggpt_semantic_segmentation",
 ]
+
+SEGGPT_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`SegGPTConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+SEGGPT_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size * num_prompts, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`SegGPTImageProcessor.__call__`]
+            for details. Along with pixel values, the suppiled input promp(s) image needs to stitched, 
+            Use SegGPTImageProcessor.pre_process_semantic_segmenation prepare the input.
+
+        prompt_pixel_values (`torch.FloatTensor` of shape `(batch_size * num_prompts, num_channels, height, width)`):
+            Prompt pixel values. Prompt pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`SegGPTImageProcessor.__call__`] for details. Use SegGPTImageProcessor.pre_process_semantic_segmenation 
+            to prepare the input. 
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        interpolate_pos_encoding (`bool`, *optional*):
+            Whether to interpolate the pre-trained position encodings.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
 class LayerNorm2D(nn.Module):
@@ -187,7 +224,7 @@ def patchify(imgs, patch_size):
     h = w * 2
     x = imgs.reshape(shape=(imgs.shape[0], 3, h, patch_size, w, patch_size))
     x = torch.einsum("nchpwq->nhwpqc", x)
-    x = x.reshape(shape=(imgs.shape[0], h * w, patch_size**2 * 3))
+    x = x.reshape(shape=(imgs.shape[0], h * w, patch_size ** 2 * 3))
     return x
 
 
@@ -195,13 +232,13 @@ class SegGPTAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
     def __init__(
-        self,
-        config,
+            self,
+            config,
     ):
         super().__init__()
         self.num_heads = config.num_attention_heads
         head_dim = config.hidden_size // config.num_attention_heads
-        self.scale = head_dim**-0.5
+        self.scale = head_dim ** -0.5
         input_size = (config.image_size[0] // config.patch_size, config.image_size[1] // config.patch_size)
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size)
@@ -247,13 +284,13 @@ class SegGPTAttention(nn.Module):
 
     # copied from transformers.models.bert.modeling_sam.SamVisionAttention.add_decomposed_rel_pos
     def add_decomposed_rel_pos(
-        self,
-        attn: torch.Tensor,
-        query: torch.Tensor,
-        rel_pos_h: torch.Tensor,
-        rel_pos_w: torch.Tensor,
-        q_size: Tuple[int, int],
-        k_size: Tuple[int, int],
+            self,
+            attn: torch.Tensor,
+            query: torch.Tensor,
+            rel_pos_h: torch.Tensor,
+            rel_pos_w: torch.Tensor,
+            q_size: Tuple[int, int],
+            k_size: Tuple[int, int],
     ) -> torch.Tensor:
         """
         Calculate decomposed Relative Positional Embeddings from :paper:`mvitv2`.
@@ -292,9 +329,9 @@ class SegGPTAttention(nn.Module):
         return attn
 
     def forward(
-        self,
-        hidden_states,
-        output_attentions: Optional[bool] = False,
+            self,
+            hidden_states,
+            output_attentions: Optional[bool] = False,
     ):
         B, H, W, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
@@ -321,9 +358,9 @@ class SegGPTBlock(nn.Module):
     """Transformer blocks with support of window attention and residual propagation blocks"""
 
     def __init__(
-        self,
-        config,
-        block_depth,
+            self,
+            config,
+            block_depth,
     ):
         super().__init__()
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -339,9 +376,9 @@ class SegGPTBlock(nn.Module):
         self.mlp = SegGPTMlp(config)
 
     def forward(
-        self,
-        hidden_state,
-        output_attentions: Optional[bool] = None,
+            self,
+            hidden_state,
+            output_attentions: Optional[bool] = None,
     ):
         shortcut = hidden_state
         hidden_state = self.norm1(hidden_state)
@@ -366,8 +403,9 @@ class SegGPTBlock(nn.Module):
 
         if self.swap_img_tgts:
             hidden_state = (
-                hidden_state[: hidden_state.shape[0] // 2] + hidden_state[hidden_state.shape[0] // 2 :]
-            ) * 0.5
+                                   hidden_state[: hidden_state.shape[0] // 2] + hidden_state[
+                                                                                hidden_state.shape[0] // 2:]
+                           ) * 0.5
 
         if output_attentions:
             return hidden_state, attention_output
@@ -388,11 +426,11 @@ class SegGPTBlockGroup(nn.Module):
         self.blocks = nn.ModuleList(blocks)
 
     def forward(
-        self,
-        hidden_state,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            hidden_state,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ):
         hidden_states = []
         attention_outputs = []
@@ -443,13 +481,13 @@ class SegGPTEncoder(nn.Module):
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
-        self,
-        imgs,
-        tgts,
-        seg_type=None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            imgs,
+            tgts,
+            seg_type=None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ):
         # embed patches
         x = self.patch_embed(imgs)
@@ -460,7 +498,7 @@ class SegGPTEncoder(nn.Module):
         # replace the masked visual tokens by mask_token
 
         bool_masked_pos = torch.zeros(self.num_patches)
-        bool_masked_pos[self.num_patches // 2 :] = 1
+        bool_masked_pos[self.num_patches // 2:] = 1
         bool_masked_pos = bool_masked_pos.unsqueeze(dim=0).flatten(1).to(torch.bool)
 
         w = bool_masked_pos.unsqueeze(-1).type_as(mask_token).reshape(-1, Hp, Wp, 1)
@@ -517,7 +555,7 @@ class SegGPTDecoder(nn.Module):
         self.patch_size = config.patch_size
         self.decoder_hidden_size = config.decoder_hidden_size
         self.decoder_embed = nn.Linear(
-            config.hidden_size * 4, config.patch_size**2 * config.decoder_hidden_size, bias=True
+            config.hidden_size * 4, config.patch_size ** 2 * config.decoder_hidden_size, bias=True
         )  # decoder to patch
         self.decoder_pred = nn.Sequential(
             nn.Conv2d(
@@ -626,6 +664,10 @@ class InstanceSegmenterOutput(SemanticSegmenterOutput):
     """
 
 
+@add_start_docstrings(
+    "The bare SegGPT Model transformer outputting raw hidden-states without any specific head on top.",
+    SEGGPT_START_DOCSTRING,
+)
 class SegGPTModel(SegGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -651,13 +693,13 @@ class SegGPTModel(SegGPTPreTrainedModel):
         return imgs
 
     def forward(
-        self,
-        pixel_values,
-        prompt_pixel_values,
-        seg_type=None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            pixel_values,
+            prompt_pixel_values,
+            seg_type=None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -686,6 +728,10 @@ class SegGPTModel(SegGPTPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    "The bare SegGPT Model transformer outputting raw hidden-states without any specific head on top.",
+    SEGGPT_START_DOCSTRING,
+)
 class SegGPTForInstanceSegmentation(SegGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -697,13 +743,15 @@ class SegGPTForInstanceSegmentation(SegGPTPreTrainedModel):
 
         self.post_init()
 
+    @add_start_docstrings_to_model_forward(SEGGPT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        pixel_values,
-        prompt_pixel_values,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            pixel_values,
+            prompt_pixel_values,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -731,6 +779,10 @@ class SegGPTForInstanceSegmentation(SegGPTPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    "The bare SegGPT Model transformer outputting raw hidden-states without any specific head on top.",
+    SEGGPT_START_DOCSTRING,
+)
 class SegGPTForSemanticSegmentation(SegGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -742,13 +794,16 @@ class SegGPTForSemanticSegmentation(SegGPTPreTrainedModel):
 
         self.post_init()
 
+    @add_start_docstrings_to_model_forward(SEGGPT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=InstanceSegmenterOutput, config_class=_CONFIG_FOR_DOC)
+
     def forward(
-        self,
-        pixel_values,
-        prompt_pixel_values,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            pixel_values,
+            prompt_pixel_values,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
