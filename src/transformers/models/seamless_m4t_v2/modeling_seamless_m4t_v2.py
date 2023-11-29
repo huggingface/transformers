@@ -1687,7 +1687,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
         else:
             # if batched sample, need to interleave per sample, and pad -> loss of parallelism
             if hidden_states.shape[0] > 1 and self.training:
-                logger.warning(
+                logger.warning_once(
                     """`self.training=True` and you use batching. You lose parallelism during the hifigan
                                forward pass because the samples are interleaved."""
                 )

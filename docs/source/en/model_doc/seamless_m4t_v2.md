@@ -56,7 +56,7 @@ Here is how to use the processor to process text and audio:
 >>> # now, process it
 >>> audio_inputs = processor(audios=audio_sample["array"], return_tensors="pt")
 
->>> # now, process some English test as well
+>>> # now, process some English text as well
 >>> text_inputs = processor(text = "Hello, my dog is cute", src_lang="eng", return_tensors="pt")
 ```
 
