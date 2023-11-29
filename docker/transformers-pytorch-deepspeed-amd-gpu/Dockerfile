@@ -12,6 +12,8 @@ RUN apt update && \
 
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
+RUN python3 -m pip uninstall -y apex
+
 ARG REF=main
 WORKDIR /
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
