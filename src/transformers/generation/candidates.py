@@ -110,20 +110,20 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Prepare the kwargs for the assistant model
         assistant_kwargs = {}
         for key, value in model_kwargs.items():  # deepcopy crashes if we attempt to copy encoder outputs with grads
-            if key != "encoder_outputs":
-                assistant_kwargs[key] = (
-                    value.clone().detach() if isinstance(value, torch.Tensor) else copy.deepcopy(value)
-                )
-        if "encoder_outputs" in model_kwargs:
-            assistant_kwargs["encoder_outputs"] = model_kwargs["encoder_outputs"]
+            if key not in ("encoder_outputs", "assistant_encoder_outputs"):
+                assistant_kwargs[key] = value.detach() if isinstance(value, torch.Tensor) else copy.deepcopy(value)
 
-        if assistant_model.config.is_encoder_decoder and "assistant_encoder_outputs" not in model_kwargs:
+        if "assistant_encoder_outputs" in model_kwargs:
+            assistant_kwargs["encoder_outputs"] = model_kwargs["assistant_encoder_outputs"]
+        elif assistant_model.config.is_encoder_decoder:
             inputs_tensor, model_input_name, assistant_kwargs = assistant_model._prepare_model_inputs(
                 inputs_tensor, assistant_model.generation_config.bos_token_id, assistant_kwargs
             )
             assistant_kwargs = assistant_model._prepare_encoder_decoder_kwargs_for_generation(
                 inputs_tensor, assistant_kwargs, model_input_name
             )
+        elif "encoder_outputs" in model_kwargs:
+            assistant_kwargs["encoder_outputs"] = model_kwargs["encoder_outputs"]
         self.assistant_kwargs = assistant_kwargs
 
         # Prepare assistant model's keys of inputs
