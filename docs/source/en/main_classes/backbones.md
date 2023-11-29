@@ -34,7 +34,7 @@ Illustrating feature maps of the first stage looks like below.
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Swin%20Stage%201.png">
 </div>
 
-Let's see with an example. We would like to have the feature maps from first, second, and third stage of the model.
+Let's see with an example. Note that `out_indices=(0,)` results in yielding the stem of the model. Stem refers to the stage before the first feature extraction stage. In above diagram, it refers to patch partition. We would like to have the feature maps from stem, first, and second stage of the model.
 ```py
 >>> from transformers import AutoImageProcessor, AutoBackbone
 >>> import torch
@@ -50,18 +50,18 @@ Let's see with an example. We would like to have the feature maps from first, se
 >>> outputs = model(**inputs)
 >>> feature_maps = outputs.feature_maps
 ```
-`feature_maps` object now has three feature maps, each can be accessed like below. Say we would like to get the feature map of the first stage.
+`feature_maps` object now has three feature maps, each can be accessed like below. Say we would like to get the feature map of the stem.
 ```python
 >>> list(feature_maps[0].shape)
 [1, 96, 56, 56]
 ```
 
-We can get the feature maps of other stages like below.
+We can get the feature maps of first and second stages like below.
 ```python
 >>> list(feature_maps[1].shape)
-torch.Size([1, 96, 56, 56])
+[1, 96, 56, 56]
 >>> list(feature_maps[2].shape)
-torch.Size([1, 192, 28, 28])
+[1, 192, 28, 28]
 ```
 
 ## Initializing Backbone Configuration
