@@ -755,6 +755,8 @@
         title: Autoformer
       - local: model_doc/informer
         title: Informer
+      - local: model_doc/patchtst
+        title: PatchTST
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
       title: Time series models

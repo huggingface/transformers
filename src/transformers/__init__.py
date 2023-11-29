@@ -499,6 +499,7 @@ _import_structure = {
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
     ],
+    "models.patchtst": ["PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP", "PatchTSTConfig"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
@@ -1178,6 +1179,8 @@ else:
             "MODEL_FOR_TEXT_ENCODING_MAPPING",
             "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING",
             "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING",
+            "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING",
             "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
@@ -2506,6 +2509,17 @@ else:
             "OwlViTPreTrainedModel",
             "OwlViTTextModel",
             "OwlViTVisionModel",
+        ]
+    )
+    _import_structure["models.patchtst"].extend(
+        [
+            "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PatchTSTForClassification",
+            "PatchTSTForPrediction",
+            "PatchTSTForPretraining",
+            "PatchTSTForRegression",
+            "PatchTSTModel",
+            "PatchTSTPreTrainedModel",
         ]
     )
     _import_structure["models.pegasus"].extend(
@@ -4729,6 +4743,7 @@ if TYPE_CHECKING:
         OwlViTTextConfig,
         OwlViTVisionConfig,
     )
+    from .models.patchtst import PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP, PatchTSTConfig
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
@@ -5340,6 +5355,8 @@ if TYPE_CHECKING:
             MODEL_FOR_TEXT_ENCODING_MAPPING,
             MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING,
             MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
+            MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING,
+            MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING,
             MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
@@ -6433,6 +6450,15 @@ if TYPE_CHECKING:
             OwlViTPreTrainedModel,
             OwlViTTextModel,
             OwlViTVisionModel,
+        )
+        from .models.patchtst import (
+            PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PatchTSTForClassification,
+            PatchTSTForPrediction,
+            PatchTSTForPretraining,
+            PatchTSTForRegression,
+            PatchTSTModel,
+            PatchTSTPreTrainedModel,
         )
         from .models.pegasus import (
             PegasusForCausalLM,
