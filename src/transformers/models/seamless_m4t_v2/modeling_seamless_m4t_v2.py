@@ -1099,7 +1099,7 @@ class SeamlessM4Tv2Attention(nn.Module):
 
         query_states = self._shape(self.q_proj(hidden_states) * self.scaling)
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
-        
+
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -1112,7 +1112,7 @@ class SeamlessM4Tv2Attention(nn.Module):
 
         if attention_mask is not None:
             attention_scores = attention_scores + attention_mask
-            
+
         # (batch_size, n_heads, seq_length, key_length)
         attn_weights = nn.functional.softmax(attention_scores.float(), dim=-1).type_as(attention_scores)
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
@@ -1122,7 +1122,7 @@ class SeamlessM4Tv2Attention(nn.Module):
         # attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim) ?
         context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
         attn_output = self.out_proj(context_states)
-        
+
         if output_attentions:
             return attn_output, attn_weights, past_key_value
         else:
