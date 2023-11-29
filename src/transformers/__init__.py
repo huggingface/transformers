@@ -529,6 +529,7 @@ _import_structure = {
     "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
     "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
+    "models.crate": ["CRATE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CrateConfig"],
     "models.roberta_prelayernorm": ["ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaPreLayerNormConfig"],
     "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
@@ -2704,6 +2705,19 @@ else:
             "RobertaPreTrainedModel",
         ]
     )
+    _import_structure["models.crate"].extend(
+        [
+            "CRATE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CrateForCausalLM",
+            "CrateForMaskedLM",
+            "CrateForMultipleChoice",
+            "CrateForQuestionAnswering",
+            "CrateForSequenceClassification",
+            "CrateForTokenClassification",
+            "CrateModel",
+            "CratePreTrainedModel",
+        ]
+    )
     _import_structure["models.roberta_prelayernorm"].extend(
         [
             "ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4773,6 +4787,7 @@ if TYPE_CHECKING:
     from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
     from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
+    from .models.crate import CRATE_PRETRAINED_CONFIG_ARCHIVE_MAP, CrateConfig
     from .models.roberta_prelayernorm import (
         ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         RobertaPreLayerNormConfig,
@@ -6613,6 +6628,17 @@ if TYPE_CHECKING:
             RobertaForTokenClassification,
             RobertaModel,
             RobertaPreTrainedModel,
+        )
+        from .models.crate import (
+            CRATE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CrateForCausalLM,
+            CrateForMaskedLM,
+            CrateForMultipleChoice,
+            CrateForQuestionAnswering,
+            CrateForSequenceClassification,
+            CrateForTokenClassification,
+            CrateModel,
+            CratePreTrainedModel,
         )
         from .models.roberta_prelayernorm import (
             ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST,

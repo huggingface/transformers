@@ -304,6 +304,8 @@
         title: CPM
       - local: model_doc/cpmant
         title: CPMANT
+      - local: model_doc/crate
+        title: CRATE
       - local: model_doc/ctrl
         title: CTRL
       - local: model_doc/deberta

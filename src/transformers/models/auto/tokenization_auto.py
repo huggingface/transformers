@@ -332,6 +332,7 @@ else:
             ),
             ("retribert", ("RetriBertTokenizer", "RetriBertTokenizerFast" if is_tokenizers_available() else None)),
             ("roberta", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            ("crate", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "roberta-prelayernorm",
                 ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None),

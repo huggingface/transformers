@@ -179,6 +179,7 @@ from . import (
     rembert,
     resnet,
     roberta,
+    crate,
     roberta_prelayernorm,
     roc_bert,
     roformer,
