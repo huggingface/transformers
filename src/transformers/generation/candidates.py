@@ -14,11 +14,11 @@
 # limitations under the License.
 
 import copy
-import inspect
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import torch
+
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -92,9 +92,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
         logits_processor: "LogitsProcessorList",
         model_kwargs: Dict,
         inputs_tensor: Optional[torch.Tensor] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None
+        eos_token_id: Optional[Union[int, List[int]]] = None,
     ):
-
         self.assistant_model = assistant_model
 
         # Prepare the number of candidate tokens
@@ -109,7 +108,15 @@ class AssistedCandidateGenerator(CandidateGenerator):
             self.num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
 
         # Prepare the kwargs for the assistant model
-        assistant_kwargs = copy.deepcopy(model_kwargs)
+        assistant_kwargs = {}
+        for key, value in model_kwargs.items():  # deepcopy crashes if we attempt to copy encoder outputs with grads
+            if key != "encoder_outputs":
+                assistant_kwargs[key] = (
+                    value.clone().detach() if isinstance(value, torch.Tensor) else copy.deepcopy(value)
+                )
+        if "encoder_outputs" in model_kwargs:
+            assistant_kwargs["encoder_outputs"] = model_kwargs["encoder_outputs"]
+
         if assistant_model.config.is_encoder_decoder and "assistant_encoder_outputs" not in model_kwargs:
             inputs_tensor, model_input_name, assistant_kwargs = assistant_model._prepare_model_inputs(
                 inputs_tensor, assistant_model.generation_config.bos_token_id, assistant_kwargs
@@ -140,7 +147,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Prepare other attributes
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
-        self.eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+        self.eos_token_id_tensor = (
+            torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+        )
         self.logits_processor = logits_processor
 
     def get_candidates(self, input_ids: torch.LongTensor) -> torch.LongTensor:
@@ -200,7 +209,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
             # 2.5. update assistant model inputs
             if self.assistant_kwargs.get(self.attention_key, None) is not None:
                 mask = self.assistant_kwargs[self.attention_key]
-                self.assistant_kwargs[self.attention_key] = torch.cat([mask, mask.new_ones((mask.shape[0], 1))], dim=-1)
+                self.assistant_kwargs[self.attention_key] = torch.cat(
+                    [mask, mask.new_ones((mask.shape[0], 1))], dim=-1
+                )
             self.assistant_kwargs["past_key_values"] = assistant_model_outputs.past_key_values
 
             # 2.6. stop assistant generation on EOS

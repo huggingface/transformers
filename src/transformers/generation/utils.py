@@ -4518,7 +4518,11 @@ class GenerationMixin:
 
         if assistant_model is not None:
             candidate_generator = AssistedCandidateGenerator(
-                input_ids, assistant_model, logits_processor, model_kwargs, eos_token_id
+                input_ids=input_ids,
+                assistant_model=assistant_model,
+                logits_processor=logits_processor,
+                model_kwargs=model_kwargs,
+                eos_token_id=eos_token_id,
             )
             warnings.warn(
                 "Passing `assistant_model` to `assisted_decoding` is deprecated and will be removed in v4.38. "
