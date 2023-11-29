@@ -273,6 +273,7 @@ _import_structure = {
     "models.convnextv2": ["CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextV2Config"],
     "models.cpm": [],
     "models.cpmant": ["CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CpmAntConfig", "CpmAntTokenizer"],
+    "models.crate": ["CRATE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CrateConfig"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"],
     "models.data2vec": [
@@ -529,7 +530,6 @@ _import_structure = {
     "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
     "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
-    "models.crate": ["CRATE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CrateConfig"],
     "models.roberta_prelayernorm": ["ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaPreLayerNormConfig"],
     "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
@@ -1550,6 +1550,19 @@ else:
             "CpmAntForCausalLM",
             "CpmAntModel",
             "CpmAntPreTrainedModel",
+        ]
+    )
+    _import_structure["models.crate"].extend(
+        [
+            "CRATE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CrateForCausalLM",
+            "CrateForMaskedLM",
+            "CrateForMultipleChoice",
+            "CrateForQuestionAnswering",
+            "CrateForSequenceClassification",
+            "CrateForTokenClassification",
+            "CrateModel",
+            "CratePreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -2703,19 +2716,6 @@ else:
             "RobertaForTokenClassification",
             "RobertaModel",
             "RobertaPreTrainedModel",
-        ]
-    )
-    _import_structure["models.crate"].extend(
-        [
-            "CRATE_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CrateForCausalLM",
-            "CrateForMaskedLM",
-            "CrateForMultipleChoice",
-            "CrateForQuestionAnswering",
-            "CrateForSequenceClassification",
-            "CrateForTokenClassification",
-            "CrateModel",
-            "CratePreTrainedModel",
         ]
     )
     _import_structure["models.roberta_prelayernorm"].extend(
@@ -4546,6 +4546,7 @@ if TYPE_CHECKING:
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.convnextv2 import CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextV2Config
     from .models.cpmant import CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP, CpmAntConfig, CpmAntTokenizer
+    from .models.crate import CRATE_PRETRAINED_CONFIG_ARCHIVE_MAP, CrateConfig
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
     from .models.data2vec import (
@@ -4787,7 +4788,6 @@ if TYPE_CHECKING:
     from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
     from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
-    from .models.crate import CRATE_PRETRAINED_CONFIG_ARCHIVE_MAP, CrateConfig
     from .models.roberta_prelayernorm import (
         ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         RobertaPreLayerNormConfig,
@@ -5680,6 +5680,17 @@ if TYPE_CHECKING:
             CpmAntForCausalLM,
             CpmAntModel,
             CpmAntPreTrainedModel,
+        )
+        from .models.crate import (
+            CRATE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CrateForCausalLM,
+            CrateForMaskedLM,
+            CrateForMultipleChoice,
+            CrateForQuestionAnswering,
+            CrateForSequenceClassification,
+            CrateForTokenClassification,
+            CrateModel,
+            CratePreTrainedModel,
         )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6628,17 +6639,6 @@ if TYPE_CHECKING:
             RobertaForTokenClassification,
             RobertaModel,
             RobertaPreTrainedModel,
-        )
-        from .models.crate import (
-            CRATE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CrateForCausalLM,
-            CrateForMaskedLM,
-            CrateForMultipleChoice,
-            CrateForQuestionAnswering,
-            CrateForSequenceClassification,
-            CrateForTokenClassification,
-            CrateModel,
-            CratePreTrainedModel,
         )
         from .models.roberta_prelayernorm import (
             ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST,
