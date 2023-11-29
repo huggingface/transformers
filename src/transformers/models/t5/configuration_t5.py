@@ -141,9 +141,7 @@ class T5Config(PretrainedConfig):
         self.position_embedding_definitions = position_embedding_definitions
         if self.position_embedding_definitions is None:
             #this configuration mimics the default T5 relative positional encoding behavior
-            self.position_embedding_definitions = dict(
-                injected_in_attention=dict(t5_default_relative=dict(type='t5_default_relative', config=None))
-            )
+            self.position_embedding_definitions = dict(t5_default_relative=dict(type='t5_default_relative', config=None))            
         self.memory_efficient_attention = memory_efficient_attention
 
         super().__init__(
