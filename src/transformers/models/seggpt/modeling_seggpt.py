@@ -692,6 +692,8 @@ class SegGPTModel(SegGPTPreTrainedModel):
         imgs = x.reshape(shape=(x.shape[0], 3, h * p, w * p))
         return imgs
 
+    @add_start_docstrings_to_model_forward(SEGGPT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
             self,
             pixel_values,
@@ -701,6 +703,10 @@ class SegGPTModel(SegGPTPreTrainedModel):
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
     ):
+        r"""
+        Returns:
+
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -753,6 +759,11 @@ class SegGPTForInstanceSegmentation(SegGPTPreTrainedModel):
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
     ):
+        r"""
+        Returns:
+
+        """
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -796,7 +807,6 @@ class SegGPTForSemanticSegmentation(SegGPTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEGGPT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=InstanceSegmenterOutput, config_class=_CONFIG_FOR_DOC)
-
     def forward(
             self,
             pixel_values,
@@ -805,6 +815,10 @@ class SegGPTForSemanticSegmentation(SegGPTPreTrainedModel):
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
     ):
+        r"""
+        Returns:
+
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
