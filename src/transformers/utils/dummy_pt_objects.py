@@ -1050,6 +1050,13 @@ class PretrainedBartModel(metaclass=DummyObject):
 BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class BeitBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class BeitForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -2680,6 +2687,48 @@ class TrajectoryTransformerPreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
+
+TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class AdaptiveEmbedding(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TransfoXLForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TransfoXLLMHeadModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TransfoXLModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TransfoXLPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_transfo_xl(*args, **kwargs):
+    requires_backends(load_tf_weights_in_transfo_xl, ["torch"])
 
 
 VAN_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -6070,6 +6119,51 @@ class PatchTSMixerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class PatchTSTForClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PatchTSTForPrediction(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PatchTSTForPretraining(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PatchTSTForRegression(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PatchTSTModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PatchTSTPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class PegasusForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7790,48 +7884,6 @@ class TimmBackbone(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class AdaptiveEmbedding(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TransfoXLForSequenceClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TransfoXLLMHeadModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TransfoXLModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TransfoXLPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-def load_tf_weights_in_transfo_xl(*args, **kwargs):
-    requires_backends(load_tf_weights_in_transfo_xl, ["torch"])
-
-
 TROCR_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -7874,6 +7926,30 @@ class TvltModel(metaclass=DummyObject):
 
 
 class TvltPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+TVP_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TvpForVideoGrounding(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TvpModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TvpPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -8006,6 +8082,16 @@ class UniSpeechSatModel(metaclass=DummyObject):
 
 
 class UniSpeechSatPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class UnivNetModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

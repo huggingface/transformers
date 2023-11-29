@@ -33,6 +33,7 @@ from pytest import mark
 import transformers
 from transformers import (
     AutoModel,
+    AutoModelForCausalLM,
     AutoModelForSequenceClassification,
     PretrainedConfig,
     is_torch_available,
@@ -542,7 +543,7 @@ class ModelTesterMixin:
                 )
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
-                expected_arg_names = ["input_ids"]
+                expected_arg_names = [model.main_input_name]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
@@ -1926,7 +1927,6 @@ class ModelTesterMixin:
             "FunnelForPreTraining",
             "ElectraForPreTraining",
             "XLMWithLMHeadModel",
-            "TransfoXLLMHeadModel",
         ]:
             for k in key_differences:
                 if k in ["loss", "losses"]:
@@ -2039,7 +2039,7 @@ class ModelTesterMixin:
         tf_inputs_dict = {}
         for key, tensor in pt_inputs_dict.items():
             # skip key that does not exist in tf
-            if type(tensor) == bool:
+            if isinstance(tensor, bool):
                 tf_inputs_dict[key] = tensor
             elif key == "input_values":
                 tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
@@ -2834,7 +2834,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             model = model_class(config)
 
@@ -2859,7 +2859,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -2956,7 +2956,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -3049,7 +3049,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -3092,7 +3092,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -3108,7 +3108,7 @@ class ModelTesterMixin:
                     dummy_input = dummy_input.to(torch.float16)
 
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # make sure we do left padding
+                # make sure we do right padding
                 dummy_attention_mask[:, :-1] = 1
                 dummy_attention_mask[:, -1:] = 0
 
@@ -3137,7 +3137,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3165,7 +3165,11 @@ class ModelTesterMixin:
 
                 # Just test that a large cache works as expected
                 _ = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
+                    dummy_input,
+                    attention_mask=dummy_attention_mask,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
                 )
 
     @require_flash_attn
@@ -3178,7 +3182,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_flash_attn_2:
-                return
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -3268,6 +3272,53 @@ class ModelTesterMixin:
 
                 # Check models are equal
                 self.assertTrue(check_models_equal(flax_model_1, flax_model_2))
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_from_config(self):
+        import torch
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            # TODO: to change it in the future with other relevant auto classes
+            fa2_model = AutoModelForCausalLM.from_config(
+                config, use_flash_attention_2=True, torch_dtype=torch.bfloat16
+            ).to(torch_device)
+
+            dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+            dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+
+            fa2_correctly_converted = False
+
+            for _, module in fa2_model.named_modules():
+                if "FlashAttention" in module.__class__.__name__:
+                    fa2_correctly_converted = True
+                    break
+
+            self.assertTrue(fa2_correctly_converted)
+
+            _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                fa2_model.save_pretrained(tmpdirname)
+
+                model_from_pretrained = AutoModelForCausalLM.from_pretrained(tmpdirname)
+
+                self.assertFalse(getattr(model_from_pretrained.config, "_flash_attn_2_enabled", False))
+
+                fa2_correctly_converted = False
+
+                for _, module in model_from_pretrained.named_modules():
+                    if "FlashAttention" in module.__class__.__name__:
+                        fa2_correctly_converted = True
+                        break
+
+                self.assertFalse(fa2_correctly_converted)
 
 
 global_rng = random.Random()

@@ -46,8 +46,8 @@ class Owlv2TextConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the OWLv2 text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`Owlv2TextModel`].
+            Vocabulary size of the OWLv2 text model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`Owlv2TextModel`].
         hidden_size (`int`, *optional*, defaults to 512):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 2048):
@@ -92,6 +92,7 @@ class Owlv2TextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "owlv2_text_model"
 
     def __init__(
@@ -148,8 +149,8 @@ class Owlv2TextConfig(PretrainedConfig):
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTVisionConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2, 32->16
 class Owlv2VisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`Owlv2VisionModel`]. It is used to instantiate an
-    OWLv2 image encoder according to the specified arguments, defining the model architecture. Instantiating a
+    This is the configuration class to store the configuration of an [`Owlv2VisionModel`]. It is used to instantiate
+    an OWLv2 image encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the OWLv2
     [google/owlv2-base-patch16](https://huggingface.co/google/owlv2-base-patch16) architecture.
 
@@ -255,8 +256,8 @@ class Owlv2VisionConfig(PretrainedConfig):
 class Owlv2Config(PretrainedConfig):
     r"""
     [`Owlv2Config`] is the configuration class to store the configuration of an [`Owlv2Model`]. It is used to
-    instantiate an OWLv2 model according to the specified arguments, defining the text model and vision model configs.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the OWLv2
+    instantiate an OWLv2 model according to the specified arguments, defining the text model and vision model
+    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the OWLv2
     [google/owlv2-base-patch16](https://huggingface.co/google/owlv2-base-patch16) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -270,7 +271,8 @@ class Owlv2Config(PretrainedConfig):
         projection_dim (`int`, *optional*, defaults to 512):
             Dimensionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* parameter. Default is used as per the original OWLv2 implementation.
+            The inital value of the *logit_scale* parameter. Default is used as per the original OWLv2
+            implementation.
         return_dict (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return a dictionary. If `False`, returns a tuple.
         kwargs (*optional*):
@@ -323,8 +325,8 @@ class Owlv2Config(PretrainedConfig):
     @classmethod
     def from_text_vision_configs(cls, text_config: Dict, vision_config: Dict, **kwargs):
         r"""
-        Instantiate a [`Owlv2Config`] (or a derived class) from owlv2 text model configuration and owlv2 vision model
-        configuration.
+        Instantiate a [`Owlv2Config`] (or a derived class) from owlv2 text model configuration and owlv2 vision
+        model configuration.
 
         Returns:
             [`Owlv2Config`]: An instance of a configuration object

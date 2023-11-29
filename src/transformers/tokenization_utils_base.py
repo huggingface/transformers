@@ -1593,9 +1593,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # By default, do not split special tokens for both fast and slow tokenizers
         self.split_special_tokens = kwargs.pop("split_special_tokens", False)
 
-        self.deprecation_warnings = (
-            {}
-        )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
+        self.deprecation_warnings = {}  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
         self._in_target_context_manager = False
 
         # Stores a Jinja template that formats chat histories into tokenizable strings
@@ -1788,7 +1786,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         logger.warning_once(
             "\nNo chat template is defined for this tokenizer - using a default chat template "
-            "that implements the ChatML format. If the default is not appropriate for "
+            "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
             "your model, please set `tokenizer.chat_template` to an appropriate template. "
             "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
         )

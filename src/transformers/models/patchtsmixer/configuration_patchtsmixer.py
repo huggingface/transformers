@@ -144,6 +144,7 @@ class PatchTSMixerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "patchtsmixer"
     attribute_map = {
         "hidden_size": "d_model",
