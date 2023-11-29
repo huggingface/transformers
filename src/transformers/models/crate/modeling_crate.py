@@ -38,7 +38,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -223,8 +222,7 @@ class CrateSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-        
-        # outputs[0] is always the context_layer (the hidden states for the next layer)
+
         return outputs
 
 
@@ -232,7 +230,7 @@ class CrateSelfOutput(nn.Module):
     """Aggregation layer of CRATE self-attention module."""
     def __init__(self, config):
         super().__init__()
-        # as long as config.hidden_size / config.num_attention_heads is an integer, 
+        # as long as config.hidden_size / config.num_attention_heads is an integer,
         # all_head_size is the same as config.hidden_size
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = config.num_attention_heads * self.attention_head_size
@@ -981,12 +979,6 @@ class CrateForMaskedLM(CratePreTrainedModel):
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
-        
-        # print("input_ids shape:", input_ids.shape)
-        # print("sequence_output shape:", sequence_output.shape)
-        # print("prediction_scores shape:", prediction_scores.view(-1, self.config.vocab_size).shape)
-        # print("labels shape:", labels.shape)
-        # print("label view shape:", labels.view(-1).shape)
 
         masked_lm_loss = None
         if labels is not None:
