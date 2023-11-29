@@ -120,13 +120,13 @@ class SegGPTPatchEmbed(nn.Module):
             stride (Tuple): stride of the projection layer.
             padding (Tuple): padding size of the projection layer.
             in_chans (int): Number of input image channels.
-            embed_dim (int):  embed_dim (int): Patch embedding dimension.
+            hidden_size (int):  hidden_size (int): Patch embedding dimension.
         """
         super().__init__()
 
         self.proj = nn.Conv2d(
             config.num_channels,
-            config.embed_dim,
+            config.hidden_size,
             kernel_size=(config.patch_size, config.patch_size),
             stride=(config.patch_size, config.patch_size),
             padding=(0, 0),
@@ -142,9 +142,9 @@ class SegGPTPatchEmbed(nn.Module):
 class SegGPTMlp(nn.Module):
     def __init__(self, config):
         super().__init__()
-        out_features = config.embed_dim
-        hidden_features = int(config.embed_dim * config.mlp_ratio)
-        self.fc1 = nn.Linear(config.embed_dim, hidden_features)
+        out_features = config.hidden_size
+        hidden_features = int(config.hidden_size * config.mlp_ratio)
+        self.fc1 = nn.Linear(config.hidden_size, hidden_features)
         self.act = nn.GELU()
         self.fc2 = nn.Linear(hidden_features, out_features)
         self.drop = nn.Dropout(0)
@@ -186,11 +186,11 @@ class SegGPTAttention(nn.Module):
     ):
         super().__init__()
         self.num_heads = config.num_attention_heads
-        head_dim = config.embed_dim // config.num_attention_heads
+        head_dim = config.hidden_size // config.num_attention_heads
         self.scale = head_dim**-0.5
         input_size = (config.image_size[0] // config.patch_size, config.image_size[1] // config.patch_size)
-        self.qkv = nn.Linear(config.embed_dim, config.embed_dim * 3, bias=config.qkv_bias)
-        self.proj = nn.Linear(config.embed_dim, config.embed_dim)
+        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
+        self.proj = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.use_rel_pos = config.use_rel_pos
         if self.use_rel_pos:
@@ -312,7 +312,7 @@ class SegGPTBlock(nn.Module):
         block_depth,
     ):
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = SegGPTAttention(
             config,
         )
@@ -321,7 +321,7 @@ class SegGPTBlock(nn.Module):
         self.swap_img_tgts = config.merge_index == block_depth
         dpr_values = torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)
         self.drop_path_rate = dpr_values[block_depth]
-        self.norm2 = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = SegGPTMlp(config)
 
     def forward(
@@ -406,17 +406,17 @@ class SegGPTEncoder(nn.Module):
         self.patch_embed = SegGPTPatchEmbed(config)
         self.num_patches = (config.image_size[0] // config.patch_size) * (config.image_size[1] // config.patch_size)
 
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, 1, config.embed_dim))
-        self.segment_token_x = nn.Parameter(torch.zeros(1, 1, 1, config.embed_dim))
-        self.segment_token_y = nn.Parameter(torch.zeros(1, 1, 1, config.embed_dim))
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
+        self.segment_token_x = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
+        self.segment_token_y = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
         # token for seg types
-        self.type_token_cls = nn.Parameter(torch.zeros(1, 1, 1, config.embed_dim))
-        self.type_token_ins = nn.Parameter(torch.zeros(1, 1, 1, config.embed_dim))
+        self.type_token_cls = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
+        self.type_token_ins = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
 
         # Initialize absolute positional embedding with pretrain image size.
         num_patches = (config.pretrain_img_size // config.patch_size) * (config.pretrain_img_size // config.patch_size)
         num_positions = num_patches + 1
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_positions, config.embed_dim), requires_grad=True)
+        self.pos_embed = nn.Parameter(torch.zeros(1, num_positions, config.hidden_size), requires_grad=True)
 
         # stochastic depth decay rule
 
@@ -427,7 +427,7 @@ class SegGPTEncoder(nn.Module):
             block = SegGPTBlockGroup(config, depth=i)
             self.group_blocks.append(block)
 
-        self.norm = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -502,27 +502,27 @@ class SegGPTDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.patch_size = config.patch_size
-        self.decoder_embed_dim = config.decoder_embed_dim
+        self.decoder_hidden_size = config.decoder_hidden_size
         self.decoder_embed = nn.Linear(
-            config.embed_dim * 4, config.patch_size**2 * config.decoder_embed_dim, bias=True
+            config.hidden_size * 4, config.patch_size**2 * config.decoder_hidden_size, bias=True
         )  # decoder to patch
         self.decoder_pred = nn.Sequential(
             nn.Conv2d(
-                config.decoder_embed_dim,
-                config.decoder_embed_dim,
+                config.decoder_hidden_size,
+                config.decoder_hidden_size,
                 kernel_size=3,
                 padding=1,
             ),
-            LayerNorm2D(config.decoder_embed_dim),
+            LayerNorm2D(config.decoder_hidden_size),
             nn.GELU(),
-            nn.Conv2d(config.decoder_embed_dim, 3, kernel_size=1, bias=True),  # decoder to patch
+            nn.Conv2d(config.decoder_hidden_size, 3, kernel_size=1, bias=True),  # decoder to patch
         )
 
     def forward(self, hidden_states):
         hidden_states = self.decoder_embed(hidden_states)  # BxhxwxC
         p = self.patch_size
         h, w = hidden_states.shape[1], hidden_states.shape[2]
-        hidden_states = hidden_states.reshape(shape=(hidden_states.shape[0], h, w, p, p, self.decoder_embed_dim))
+        hidden_states = hidden_states.reshape(shape=(hidden_states.shape[0], h, w, p, p, self.decoder_hidden_size))
         hidden_states = torch.einsum("nhwpqc->nchpwq", hidden_states)
         hidden_states = hidden_states.reshape(shape=(hidden_states.shape[0], -1, h * p, w * p))
 
@@ -630,7 +630,7 @@ class SegGPTModel(SegGPTPreTrainedModel):
         x = self.decoder_embed(x)  # BxhxwxC
         p = self.patch_size
         h, w = x.shape[1], x.shape[2]
-        x = x.reshape(shape=(x.shape[0], h, w, p, p, self.decoder_embed_dim))
+        x = x.reshape(shape=(x.shape[0], h, w, p, p, self.decoder_hidden_size))
         x = torch.einsum("nhwpqc->nchpwq", x)
         x = x.reshape(shape=(x.shape[0], -1, h * p, w * p))
 

@@ -45,7 +45,7 @@ class SegGPTConfig(PretrainedConfig):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
-        embed_dim (`int`, *optional*, defaults to 1024):
+        hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of encoder patch embedding.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -63,8 +63,7 @@ class SegGPTConfig(PretrainedConfig):
             Number of group blocks. A Group block contains n transformer blocks.
         use_rel_pos (`bool`, *optional*, defaults to `True`):
             Whether to use relative position embedding.
-        decoder_embed_dim (`int`, *optional*, defaults to 64):
-            Dimensionality of decoder patch embedding.
+        decoder_hidden_size (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
         pretrain_img_size (`int`, *optional*, defaults to 224):
             Pretrained image size.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -93,7 +92,7 @@ class SegGPTConfig(PretrainedConfig):
         num_channels=3,
         image_size=[896, 448],
         patch_size=16,
-        embed_dim=1024,
+        hidden_size=1024,
         num_attention_heads=16,
         drop_path_rate=0.1,
         qkv_bias=True,
@@ -102,7 +101,7 @@ class SegGPTConfig(PretrainedConfig):
         num_hidden_layers=24,
         num_group_blocks=4,
         use_rel_pos=True,
-        decoder_embed_dim=64,
+        decoder_hidden_size=64,
         pretrain_img_size=224,
         initializer_range=0.02,
         merge_index=2,
@@ -113,7 +112,7 @@ class SegGPTConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.image_size = image_size
         self.patch_size = patch_size
-        self.embed_dim = embed_dim
+        self.hidden_size = hidden_size
         self.num_group_blocks = num_group_blocks
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -122,7 +121,7 @@ class SegGPTConfig(PretrainedConfig):
         self.mlp_ratio = mlp_ratio
         self.layer_norm_eps = layer_norm_eps
         self.use_rel_pos = use_rel_pos
-        self.decoder_embed_dim = decoder_embed_dim
+        self.decoder_hidden_size = decoder_hidden_size
         self.initializer_range = initializer_range
         self.pretrain_img_size = pretrain_img_size
         self.merge_index = merge_index

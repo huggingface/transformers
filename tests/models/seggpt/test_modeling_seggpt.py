@@ -55,7 +55,7 @@ class SegGPTModelTester:
         num_channels=3,
         image_size=[128, 64],
         patch_size=16,
-        embed_dim=16,
+        hidden_size=16,
         num_heads=16,
         drop_path_rate=0.1,
         window_size=14,
@@ -66,7 +66,7 @@ class SegGPTModelTester:
         num_hidden_layers=12,
         use_rel_pos=True,
         out_feature="last_feat",
-        decoder_embed_dim=16,
+        decoder_hidden_size=16,
         pretrain_img_size=224,
         num_labels=2,
         type_sequence_label_size=10,
@@ -79,7 +79,7 @@ class SegGPTModelTester:
         self.num_channels = num_channels
         self.image_size = image_size
         self.patch_size = patch_size
-        self.embed_dim = embed_dim
+        self.hidden_size = hidden_size
         self.num_attention_heads = num_heads
         self.drop_path_rate = drop_path_rate
         self.window_size = window_size
@@ -90,7 +90,7 @@ class SegGPTModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.use_rel_pos = use_rel_pos
         self.out_feature = out_feature
-        self.decoder_embed_dim = decoder_embed_dim
+        self.decoder_hidden_size = decoder_hidden_size
         self.pretrain_img_size = pretrain_img_size
         self.batch_size = 1
         self.num_labels = num_labels
@@ -130,7 +130,7 @@ class SegGPTModelTester:
             num_channels=self.num_channels,
             image_size=self.image_size,
             patch_size=self.patch_size,
-            embed_dim=self.embed_dim,
+            hidden_size=self.hidden_size,
             num_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
             drop_path_rate=self.drop_path_rate,
@@ -141,7 +141,7 @@ class SegGPTModelTester:
             num_group_blocks=self.num_group_blocks,
             use_rel_pos=self.use_rel_pos,
             out_feature=self.out_feature,
-            decoder_embed_dim=self.decoder_embed_dim,
+            decoder_hidden_size=self.decoder_hidden_size,
             pretrain_img_size=self.pretrain_img_size,
         )
 
