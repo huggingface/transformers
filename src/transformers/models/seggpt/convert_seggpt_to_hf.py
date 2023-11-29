@@ -21,7 +21,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import SegGPTConfig, SegGPTForInstanceSegmentation
+from transformers import SegGPTConfig, SegGPTForInstanceSegmentation, SegGPTImageProcessor
 from transformers.utils import logging
 
 
@@ -86,11 +86,23 @@ def rename_key(dct, old, new):
     dct[new] = val
 
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+# We will verify our results on spongebob images
+def prepare_input():
+    image_input_url = (
+        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"
+    )
+    image_prompt_url = (
+        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1.jpg"
+    )
+    mask_prompt_url = (
+        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1_target.png"
+    )
+
+    image_input = Image.open(requests.get(image_input_url, stream=True).raw)
+    image_prompt = Image.open(requests.get(image_prompt_url, stream=True).raw)
+    mask_prompt = Image.open(requests.get(mask_prompt_url, stream=True).raw)
+
+    return image_input, image_prompt, mask_prompt
 
 
 @torch.no_grad()
@@ -119,6 +131,26 @@ def convert_seggpt_checkpoint(args):
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
+
+    input_img, prompt_img, prompt_mask = prepare_input()
+    image_processor = SegGPTImageProcessor()
+    inputs = image_processor(images=input_img, prompt_images=prompt_img, prompt_masks=prompt_mask, return_tensors="pt")
+    torch.manual_seed(2)
+    inputs = {k: torch.ones_like(v) for k, v in inputs.items()}
+    outputs = model(**inputs)
+    print(outputs)
+
+    expected_dummy_output = torch.tensor(
+        [
+            [[0.9410, 1.0075, 0.9631], [0.9487, 1.0162, 0.9713], [0.9502, 1.0162, 0.9684]],
+            [[0.9338, 1.0081, 0.9691], [0.9428, 1.0179, 0.9773], [0.9429, 1.0172, 0.9722]],
+            [[0.9412, 1.0122, 0.9720], [0.9465, 1.0193, 0.9778], [0.9449, 1.0184, 0.9692]],
+        ]
+    )
+
+    assert torch.allclose(outputs.pred_masks[0, :3, :3, :3], expected_dummy_output)
+
+    print("Looks good!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}")

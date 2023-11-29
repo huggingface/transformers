@@ -79,7 +79,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("resnet", "ConvNextFeatureExtractor"),
         ("seamless_m4t", "SeamlessM4TFeatureExtractor"),
         ("segformer", "SegformerFeatureExtractor"),
-        ("seggpt", "SegGPTFeatureExtractor"),
         ("sew", "Wav2Vec2FeatureExtractor"),
         ("sew-d", "Wav2Vec2FeatureExtractor"),
         ("speech_to_text", "Speech2TextFeatureExtractor"),
