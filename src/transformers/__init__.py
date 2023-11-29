@@ -2944,17 +2944,6 @@ else:
         ]
     )
     _import_structure["models.timm_backbone"].extend(["TimmBackbone"])
-    _import_structure["models.transfo_xl"].extend(
-        [
-            "TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "AdaptiveEmbedding",
-            "TransfoXLForSequenceClassification",
-            "TransfoXLLMHeadModel",
-            "TransfoXLModel",
-            "TransfoXLPreTrainedModel",
-            "load_tf_weights_in_transfo_xl",
-        ]
-    )
     _import_structure["models.trocr"].extend(
         ["TROCR_PRETRAINED_MODEL_ARCHIVE_LIST", "TrOCRForCausalLM", "TrOCRPreTrainedModel"]
     )
