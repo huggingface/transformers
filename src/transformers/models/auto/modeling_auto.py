@@ -1559,13 +1559,14 @@ class AutoModelForMaskedImageModeling(_BaseAutoModelClass):
 AutoModelForMaskedImageModeling = auto_class_update(AutoModelForMaskedImageModeling, head_doc="masked image modeling")
 
 
-
 class AutoModelForTimeSeriesPrediction(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING
+
 
 AutoModelForTimeSeriesPrediction = auto_class_update(
     AutoModelForTimeSeriesPrediction, head_doc="time series prediction"
 )
+
 
 class AutoModelWithLMHead(_AutoModelWithLMHead):
     @classmethod
