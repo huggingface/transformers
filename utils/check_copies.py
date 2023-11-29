@@ -177,18 +177,28 @@ def _sanity_check_splits(splits_1, splits_2, is_class):
     for block in splits_1[1:]:
         if block[0].startswith("_block_without_name_"):
             block_names_1.append("block_without_name")
-        elif not block[0].startswith("_empty_block_") and (not is_class or len(block_names_1) == 0 or block_names_1[-1].startswith("block_without_name")):
+        elif not block[0].startswith("_empty_block_") and (
+            not is_class or len(block_names_1) == 0 or block_names_1[-1].startswith("block_without_name")
+        ):
             block_names_1.append("block_with_name")
 
     for block in splits_2[1:]:
         if block[0].startswith("_block_without_name_"):
             block_names_2.append("block_without_name")
-        elif not block[0].startswith("_empty_block_") and (not is_class or len(block_names_2) == 0 or block_names_2[-1].startswith("block_without_name")):
+        elif not block[0].startswith("_empty_block_") and (
+            not is_class or len(block_names_2) == 0 or block_names_2[-1].startswith("block_without_name")
+        ):
             block_names_2.append("block_with_name")
 
     if is_class:
-        if not block_names_1 in [["block_without_name"], ["block_with_name"], ["block_without_name", "block_with_name"]]:
-            raise ValueError("For a class, it must have a specific structure. See the docstring of `_sanity_check_splits` in the file `utils/check_copies.py`")
+        if block_names_1 not in [
+            ["block_without_name"],
+            ["block_with_name"],
+            ["block_without_name", "block_with_name"],
+        ]:
+            raise ValueError(
+                "For a class, it must have a specific structure. See the docstring of `_sanity_check_splits` in the file `utils/check_copies.py`"
+            )
 
     if block_names_1 != block_names_2:
         raise ValueError("The structures in the 2 code blocks differ.")
