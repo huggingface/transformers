@@ -1006,7 +1006,7 @@ class ModuleUtilsMixin:
             else:
                 raise ValueError(
                     "bitsandbytes is not installed but it seems that the model has been loaded in 4bit precision, something went wrong"
-                    " make sure to install bitsandbytes with `pip install bitsandbytes`."
+                    " make sure to install bitsandbytes with `pip install bitsandbytes`. You also need a GPU. "
                 )
 
         for param in total_parameters:
@@ -2715,7 +2715,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise ImportError(
                     "Using `load_in_8bit=True` requires Accelerate: `pip install accelerate` and the latest version of"
                     " bitsandbytes `pip install -i https://test.pypi.org/simple/ bitsandbytes` or"
-                    " pip install bitsandbytes` "
+                    " pip install bitsandbytes. You also need to GPU. "
                 )
 
             if torch_dtype is None:
