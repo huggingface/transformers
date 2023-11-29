@@ -66,7 +66,7 @@ torch.Size([1, 192, 28, 28])
 
 ## Initializing Backbone Configuration
 
-In computer vision, models consist of backbone, neck, and a head. Backbone is extracts the features, neck transforms the output of the backbone and head is used for the main task (e.g. object detection). You can initialize neck and head with model backbones by passing a model configuration to `backbone_config`. For example, below you can see how to initialize the [MaskFormer](../model_doc/maskformer) model with instance segmentation head with [ResNet](../model_doc/resnet) backbone.
+In computer vision, models consist of backbone, neck, and a head. Backbone extracts the features, neck transforms the output of the backbone and head is used for the main task (e.g. object detection). You can initialize neck and head with model backbones by passing a model configuration to `backbone_config`. For example, below you can see how to initialize the [MaskFormer](../model_doc/maskformer) model with instance segmentation head with [ResNet](../model_doc/resnet) backbone.
 
 ```py
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
