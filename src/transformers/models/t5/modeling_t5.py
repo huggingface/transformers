@@ -493,6 +493,10 @@ class T5Attention(nn.Module):
                 pos_emb_config = pos_emb_config if pos_emb_config is not None else {}
                 if pos_emb_name == POSITION_EMBEDDING_T5_RELATIVE:
                     self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)                                                              
+
+                    #relative_attention_num_buckets = pos_emb_config.get("num_buckets", self.relative_attention_num_buckets)
+                    #self.relative_attention_bias_dict[pos_emb_name] = nn.Embedding(relative_attention_num_buckets, self.n_heads)
+
                 elif pos_emb_name == POSITION_EMBEDDING_ROTARY:
                     self.rotary_op = RotaryEmbedding(self.d_model) #TODO: should this be inside self.relative_attention_bias_dict module dict as well? it has no parameters (but does have a buffer)
                 else:
@@ -1213,7 +1217,7 @@ class T5Stack(T5PreTrainedModel):
         if 'injected_in_stack' in self.position_embedding_definitions:                   
             for position_embedding_name, embedding_config in self.position_embedding_definitions['injected_in_stack'].items():                
                 if position_embedding_name == POSITION_EMBEDDING_SINUSOIDAL:
-                    self.attention_injected_in_t5_stack_level[POSITION_EMBEDDING_SINUSOIDAL] = SinusoidalPositionalEmbedding(config.d_model)
+                    self.attention_injected_in_t5_stack_level[position_embedding_name] = SinusoidalPositionalEmbedding(config.d_model)
                 elif position_embedding_name == POSITION_EMBEDDING_LEARNED:
                     self.attention_injected_in_t5_stack_level[position_embedding_name] =  nn.Embedding(embedding_config.num_embeddings, config.d_model)
                 else:
