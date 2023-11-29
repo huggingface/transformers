@@ -145,9 +145,10 @@ This example assumes that you have:
 * Access to a Kubernetes cluster with [Kubeflow installed](https://www.kubeflow.org/docs/started/installing-kubeflow/)
 * [`kubectl`](https://kubernetes.io/docs/tasks/tools/) installed and configured to access the Kubernetes cluster
 * A [Persistent Volume Claim (PVC)](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) that can be used
-  to store datasets, model files, etc.
+  to store datasets and model files. There are multiple options for setting up the PVC including using an NFS
+  [storage class](https://kubernetes.io/docs/concepts/storage/storage-classes/) or a cloud storage bucket.
 * A Docker container that includes your model training script and all the dependencies needed to run the script. For
-  distributed CPU training jobs, this typically includes PyTorch, transformers, Intel Extension for PyTorch, Intel
+  distributed CPU training jobs, this typically includes PyTorch, Transformers, Intel Extension for PyTorch, Intel
   oneCCL Bindings for PyTorch, and OpenSSH to communicate between the containers.
 
 ### PyTorchJob Specification File
@@ -267,7 +268,7 @@ set the same CPU and memory amounts for both the resource limits and requests.
 
 ### Deploy
 
-After the PyTorchJob spec has been updated with values appropriate to your cluster and training job, it can be deployed
+After the PyTorchJob spec has been updated with values appropriate for your cluster and training job, it can be deployed
 to the cluster using:
 ```
 kubectl create -f pytorchjob.yaml
@@ -291,8 +292,8 @@ The logs for worker can be viewed using `kubectl logs -n kubeflow <pod name>`. A
 kubectl logs -n kubeflow transformers-pytorchjob-worker-0 -f
 ```
 
-After the training job completes, the trained model can be copied from the PVC or your cloud storage location. When you
-are done with the job, the PyTorchJob resource can be deleted from the cluster using `kubectl delete -f pytorchjob.yaml`.
+After the training job completes, the trained model can be copied from the PVC or storage location. When you are done
+with the job, the PyTorchJob resource can be deleted from the cluster using `kubectl delete -f pytorchjob.yaml`.
 
 ## Summary
 
