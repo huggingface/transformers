@@ -599,6 +599,11 @@ _import_structure = {
         "TvltFeatureExtractor",
         "TvltProcessor",
     ],
+    "models.tvp": [
+        "TVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TvpConfig",
+        "TvpProcessor",
+    ],
     "models.umt5": ["UMT5Config"],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -607,6 +612,11 @@ _import_structure = {
     "models.unispeech_sat": [
         "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechSatConfig",
+    ],
+    "models.univnet": [
+        "UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "UnivNetConfig",
+        "UnivNetFeatureExtractor",
     ],
     "models.upernet": ["UperNetConfig"],
     "models.videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
@@ -1012,6 +1022,7 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
+    _import_structure["models.tvp"].append("TvpImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
@@ -2956,6 +2967,14 @@ else:
             "TvltPreTrainedModel",
         ]
     )
+    _import_structure["models.tvp"].extend(
+        [
+            "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TvpForVideoGrounding",
+            "TvpModel",
+            "TvpPreTrainedModel",
+        ]
+    )
     _import_structure["models.umt5"].extend(
         [
             "UMT5EncoderModel",
@@ -2986,6 +3005,12 @@ else:
             "UniSpeechSatForXVector",
             "UniSpeechSatModel",
             "UniSpeechSatPreTrainedModel",
+        ]
+    )
+    _import_structure["models.univnet"].extend(
+        [
+            "UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "UnivNetModel",
         ]
     )
     _import_structure["models.upernet"].extend(
@@ -4822,9 +4847,19 @@ if TYPE_CHECKING:
     from .models.timm_backbone import TimmBackboneConfig
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltFeatureExtractor, TvltProcessor
+    from .models.tvp import (
+        TVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TvpConfig,
+        TvpProcessor,
+    )
     from .models.umt5 import UMT5Config
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
+    from .models.univnet import (
+        UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        UnivNetConfig,
+        UnivNetFeatureExtractor,
+    )
     from .models.upernet import UperNetConfig
     from .models.videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
     from .models.vilt import (
@@ -5192,6 +5227,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
+        from .models.tvp import TvpImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
@@ -6801,6 +6837,12 @@ if TYPE_CHECKING:
             TvltModel,
             TvltPreTrainedModel,
         )
+        from .models.tvp import (
+            TVP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TvpForVideoGrounding,
+            TvpModel,
+            TvpPreTrainedModel,
+        )
         from .models.umt5 import (
             UMT5EncoderModel,
             UMT5ForConditionalGeneration,
@@ -6827,6 +6869,7 @@ if TYPE_CHECKING:
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )
+        from .models.univnet import UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST, UnivNetModel
         from .models.upernet import UperNetForSemanticSegmentation, UperNetPreTrainedModel
         from .models.videomae import (
             VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
