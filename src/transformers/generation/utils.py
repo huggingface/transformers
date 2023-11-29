@@ -39,6 +39,7 @@ from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidates import (
     AssistedCandidateGenerator,
+    PromptLookupCandidateGenerator,
     CandidateGenerator,
     _crop_past_key_values,
     _prepare_attention_mask,
@@ -908,15 +909,26 @@ class GenerationMixin:
         """
         Returns the candidate generator to be used in `assisted_generation`
         """
-        candidate_generator = AssistedCandidateGenerator(
-            input_ids=input_ids,
-            assistant_model=assistant_model,
-            generation_config=generation_config,
-            logits_processor=logits_processor,
-            model_kwargs=model_kwargs,
-            inputs_tensor=inputs_tensor,
-            eos_token_id=generation_config.eos_token_id,
-        )
+        # Check if assistant_model is a string
+        if isinstance(assistant_model, str):
+            if assistant_model == "prompt_lookup":
+                candidate_generator = PromptLookupCandidateGenerator(
+                    num_output_tokens=generation_config.prompt_lookup_num_tokens,
+                    max_matching_ngram_size=generation_config.prompt_lookup_max_matching_ngram,
+                )
+            else:
+                raise NotImplementedError(
+                    f"{assistant_model} is not implemented."
+                )
+        else:
+            candidate_generator = AssistedCandidateGenerator(
+                input_ids=input_ids,
+                assistant_model=assistant_model,
+                logits_processor=logits_processor,
+                model_kwargs=model_kwargs,
+                inputs_tensor=inputs_tensor,
+                eos_token_id=generation_config.eos_token_id,
+            )
         return candidate_generator
 
     def _get_logits_warper(
