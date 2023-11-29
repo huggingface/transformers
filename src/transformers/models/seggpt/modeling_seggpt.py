@@ -11,7 +11,7 @@ import torch.nn.functional as F
 # from detectron2.layers import get_norm
 # from fairscale.nn.checkpoint import checkpoint_wrapper
 from transformers import PreTrainedModel
-from transformers.modeling_outputs import BaseModelOutput
+from transformers.modeling_outputs import BaseModelOutput, SemanticSegmenterOutput
 from transformers.models.seggpt.configuration_seggpt import SegGPTConfig
 from transformers.utils import ModelOutput
 
@@ -175,6 +175,20 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     random_tensor.floor_()  # binarize
     output = x.div(keep_prob) * random_tensor
     return output
+
+
+def patchify(imgs, patch_size):
+    """
+    imgs: (N, 3, H, W) x: (N, L, patch_size**2 *3)
+    """
+    assert imgs.shape[2] == 2 * imgs.shape[3] and imgs.shape[2] % patch_size == 0
+
+    w = imgs.shape[3] // patch_size
+    h = w * 2
+    x = imgs.reshape(shape=(imgs.shape[0], 3, h, patch_size, w, patch_size))
+    x = torch.einsum("nchpwq->nhwpqc", x)
+    x = x.reshape(shape=(imgs.shape[0], h * w, patch_size**2 * 3))
+    return x
 
 
 class SegGPTAttention(nn.Module):
@@ -402,7 +416,6 @@ class SegGPTBlockGroup(nn.Module):
 class SegGPTEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.patch_size = config.patch_size
         self.patch_embed = SegGPTPatchEmbed(config)
         self.num_patches = (config.image_size[0] // config.patch_size) * (config.image_size[1] // config.patch_size)
 
@@ -557,12 +570,8 @@ class SegGPTPreTrainedModel(PreTrainedModel):
 @dataclass
 class SegGPTModelOutput(ModelOutput):
     """
-    Class for outputs of [`MaskFormerForInstanceSegmentation`].
+    Class for outputs of [`SegGPT Base Model`].
 
-    This output can be directly passed to [`~MaskFormerImageProcessor.post_process_semantic_segmentation`] or or
-    [`~MaskFormerImageProcessor.post_process_instance_segmentation`] or
-    [`~MaskFormerImageProcessor.post_process_panoptic_segmentation`] depending on the task. Please, see
-    [`~MaskFormerImageProcessor] for details regarding usage.
 
     Args:
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
@@ -585,6 +594,38 @@ class SegGPTModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+class InstanceSegmenterOutput(SemanticSegmenterOutput):
+    """
+    Base class for outputs of Instance segmentation..
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, logits_height, logits_width)`):
+            Classification scores for each pixel.
+
+            <Tip warning={true}>
+
+            The logits returned do not necessarily have the same size as the `pixel_values` passed as inputs. This is
+            to avoid doing two interpolations and lose some quality when a user needs to resize the logits to the
+            original image size as post-processing. You should always check your logits shape and resize as needed.
+
+            </Tip>
+
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, patch_size, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, patch_size,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+
 class SegGPTModel(SegGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -592,25 +633,8 @@ class SegGPTModel(SegGPTPreTrainedModel):
         # --------------------------------------------------------------------------
         self.encoder = SegGPTEncoder(config)
 
-        self.decoder = SegGPTDecoder(config)
-        self.num_patches = (config.image_size[0] // config.patch_size) * (config.image_size[1] // config.patch_size)
-
         self.apply(self._init_weights)
         self.patch_size = config.patch_size
-
-    def patchify(self, imgs):
-        """
-        imgs: (N, 3, H, W) x: (N, L, patch_size**2 *3)
-        """
-        p = self.patch_size
-        assert imgs.shape[2] == 2 * imgs.shape[3] and imgs.shape[2] % p == 0
-
-        w = imgs.shape[3] // p
-        h = w * 2
-        x = imgs.reshape(shape=(imgs.shape[0], 3, h, p, w, p))
-        x = torch.einsum("nchpwq->nhwpqc", x)
-        x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * 3))
-        return x
 
     def unpatchify(self, x):
         """
@@ -625,17 +649,6 @@ class SegGPTModel(SegGPTPreTrainedModel):
         x = torch.einsum("nhwpqc->nchpwq", x)
         imgs = x.reshape(shape=(x.shape[0], 3, h * p, w * p))
         return imgs
-
-    def forward_decoder(self, x):
-        x = self.decoder_embed(x)  # BxhxwxC
-        p = self.patch_size
-        h, w = x.shape[1], x.shape[2]
-        x = x.reshape(shape=(x.shape[0], h, w, p, p, self.decoder_hidden_size))
-        x = torch.einsum("nhwpqc->nchpwq", x)
-        x = x.reshape(shape=(x.shape[0], -1, h * p, w * p))
-
-        x = self.decoder_pred(x)  # Bx3xHxW
-        return x
 
     def forward(
         self,
@@ -661,19 +674,12 @@ class SegGPTModel(SegGPTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        decoder_output = self.decoder(encoder_outputs[0])
-        logits = self.patchify(decoder_output)  # [N, L, p*p*3]
-
         if not return_dict:
-            outputs = (
-                logits,
-                encoder_outputs[0],
-            )
+            outputs = (encoder_outputs[0],)
             outputs = outputs + (encoder_outputs[1],) if output_hidden_states else outputs
             return outputs + (encoder_outputs[-1],) if output_attentions else outputs
 
-        return SegGPTModelOutput(
-            logits=logits,
+        return BaseModelOutput(
             last_hidden_state=encoder_outputs[0],
             hidden_states=encoder_outputs[1] if output_hidden_states else None,
             attentions=encoder_outputs[-1] if output_attentions else None,
@@ -685,6 +691,11 @@ class SegGPTForInstanceSegmentation(SegGPTPreTrainedModel):
         super().__init__(config)
 
         self.seggpt_model = SegGPTModel(config)
+        self.patch_size = config.patch_size
+        self.decoder = SegGPTDecoder(config)
+        self.num_patches = (config.image_size[0] // config.patch_size) * (config.image_size[1] // config.patch_size)
+
+        self.post_init()
 
     def forward(
         self,
@@ -701,16 +712,35 @@ class SegGPTForInstanceSegmentation(SegGPTPreTrainedModel):
         )
 
         seg_type = torch.ones([prompt_pixel_values.shape[0], 1])
-        return self.seggpt_model(
+        outputs = self.seggpt_model(
             pixel_values, prompt_pixel_values, seg_type, output_attentions, output_hidden_states, return_dict
+        )
+        last_hidden_state = outputs[0]
+        decoder_last_hidden_state = self.decoder(last_hidden_state)
+        logits = patchify(decoder_last_hidden_state, self.patch_size)  # [N, L, p*p*3]
+
+        if not return_dict:
+            outputs = decoder_last_hidden_state
+            outputs = outputs + (outputs[1],) if output_hidden_states else outputs
+            return outputs + (outputs[-1],) if output_attentions else outputs
+
+        return InstanceSegmenterOutput(
+            logits=logits,
+            hidden_states=outputs[1] if output_hidden_states else None,
+            attentions=outputs[-1] if output_attentions else None,
         )
 
 
 class SegGPTForSemanticSegmentation(SegGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
+        self.patch_size = config.patch_size
         self.seggpt_model = SegGPTModel(config)
+
+        self.decoder = SegGPTDecoder(config)
+        self.num_patches = (config.image_size[0] // config.patch_size) * (config.image_size[1] // config.patch_size)
+
+        self.post_init()
 
     def forward(
         self,
@@ -727,6 +757,21 @@ class SegGPTForSemanticSegmentation(SegGPTPreTrainedModel):
         )
 
         seg_type = torch.zeros([prompt_pixel_values.shape[0], 1])
-        return self.seggpt_model(
+        outputs = self.seggpt_model(
             pixel_values, prompt_pixel_values, seg_type, output_attentions, output_hidden_states, return_dict
+        )
+
+        last_hidden_state = outputs[0]
+        decoder_last_hidden_state = self.decoder(last_hidden_state)
+        logits = patchify(decoder_last_hidden_state, self.patch_size)  # [N, L, p*p*3]
+
+        if not return_dict:
+            outputs = decoder_last_hidden_state
+            outputs = outputs + (outputs[1],) if output_hidden_states else outputs
+            return outputs + (outputs[-1],) if output_attentions else outputs
+
+        return SemanticSegmenterOutput(
+            logits=logits,
+            hidden_states=outputs[1] if output_hidden_states else None,
+            attentions=outputs[-1] if output_attentions else None,
         )
