@@ -16,7 +16,7 @@ specific language governing permissions and limitations under the License.
 
 The SeamlessM4T-v2 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by the Seamless Communication team from Meta AI.
 
-SeamlessM4T-v2 is a collection of models designed to provide high quality translation, allowing people from different linguistic communities to communicate effortlessly through speech and text. It is an improvement on the [previous version](./seamless_m4t.md).
+SeamlessM4T-v2 is a collection of models designed to provide high quality translation, allowing people from different linguistic communities to communicate effortlessly through speech and text. It is an improvement on the [previous version](./seamless_m4t.md). For more details on the differences between v1 and v2, refer to section [Difference with SeamlessM4T-v1](#difference-with-seamlessm4t-v1).
 
 SeamlessM4T-v2 enables multiple tasks without relying on separate models:
 
@@ -33,6 +33,8 @@ The abstract from the paper is the following:
 *<INSERT PAPER ABSTRACT HERE>*
 
 ## Usage
+
+In the following example, we'll load an Arabic audio sample and an English text sample and convert them into Russian speech and French text.
 
 First, load the processor and a checkpoint of the model:
 
