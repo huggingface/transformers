@@ -33,6 +33,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_crate"] = [
         "CRATE_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "CrateForCausalLM",
         "CrateForMaskedLM",
         "CrateForMultipleChoice",
         "CrateForQuestionAnswering",
@@ -53,6 +54,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_crate import (
             CRATE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CrateForCausalLM,
             CrateForMaskedLM,
             CrateForMultipleChoice,
             CrateForQuestionAnswering,
