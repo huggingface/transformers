@@ -629,7 +629,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("pop2piano", "Pop2Piano"),
         ("prophetnet", "ProphetNet"),
         ("pvt", "PVT"),
-        ("pvt_v2", "PVT_V2"),
+        ("pvt_v2", "PVTv2"),
         ("qdqbert", "QDQBert"),
         ("rag", "RAG"),
         ("realm", "REALM"),

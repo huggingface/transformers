@@ -24,7 +24,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import PvtV2Config, PvtV2ForImageClassification, PvtImageProcessor
+from transformers import PvtImageProcessor, PvtV2Config, PvtV2ForImageClassification
 from transformers.utils import logging
 
 

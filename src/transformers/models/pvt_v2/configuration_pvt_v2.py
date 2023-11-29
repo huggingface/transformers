@@ -84,8 +84,6 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
             The epsilon used by the layer normalization layers.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether or not a learnable bias should be added to the queries, keys and values.
-        num_labels ('int', *optional*, defaults to 1000):
-            The number of classes.
         attn_reduce (`str`, *optional*, defaults to `"spatialreduction"`):
             Attention complexity reduction type. Choice of 'spatialreduction' or 'averagepooling' .
         out_features (`List[str]`, *optional*):
