@@ -68,8 +68,14 @@ from collections import defaultdict
 
 POSITION_EMBEDDING_SINUSOIDAL = "abs_sinusoidal"
 POSITION_EMBEDDING_LEARNED = "abs_learned"
-POSITION_EMBEDDING_T5_RELATIVE = "t5_default_relative"
+POSITION_EMBEDDING_T5_DEFAULT_RELATIVE = "t5_default_relative"
+POSITION_EMBEDDING_T5_RELATIVE = "t5_relative"
 POSITION_EMBEDDING_ROTARY = 'RoPE' #Rotary Positional Encoding: https://nn.labml.ai/transformers/rope/index.html     https://facebookresearch.github.io/xformers/_modules/xformers/components/positional_embedding/rotary.html#RotaryEmbedding
+
+SUPPORTED_POS_ENC_TYPES_INJECTED_IN_STACK = [POSITION_EMBEDDING_SINUSOIDAL, POSITION_EMBEDDING_LEARNED ]
+SUPPORTED_POS_ENC_TYPES_INJECTED_IN_ATTENTION = [POSITION_EMBEDDING_T5_DEFAULT_RELATIVE, POSITION_EMBEDDING_T5_RELATIVE, POSITION_EMBEDDING_ROTARY]
+
+SUPPORTED_POS_ENC_TYPES = SUPPORTED_POS_ENC_TYPES_INJECTED_IN_STACK + SUPPORTED_POS_ENC_TYPES_INJECTED_IN_ATTENTION
 
 class SinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, dim, max_num_tokens=10000):
@@ -486,26 +492,30 @@ class T5Attention(nn.Module):
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
-
+        
         self.relative_attention_bias_dict = nn.ModuleDict()
         if self.positional_embedding_injected_in_attention is not None:
-            for pos_emb_name, pos_emb_config in self.positional_embedding_injected_in_attention.items():
-                pos_emb_config = pos_emb_config if pos_emb_config is not None else {}
-                if pos_emb_name == POSITION_EMBEDDING_T5_RELATIVE:
-                    self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)                                                              
+            for pos_emb_name, pos_emb_info in self.positional_embedding_injected_in_attention.items():
+                pos_emb_config = pos_emb_info.get('config', {})
+                if pos_emb_config is None:
+                    pos_emb_config =  {}
+                pos_emb_type = pos_emb_info['type']
+                if pos_emb_type == POSITION_EMBEDDING_T5_DEFAULT_RELATIVE:
 
-                    #relative_attention_num_buckets = pos_emb_config.get("num_buckets", self.relative_attention_num_buckets)
-                    #self.relative_attention_bias_dict[pos_emb_name] = nn.Embedding(relative_attention_num_buckets, self.n_heads)
+                    #TODO: we can instead always create it, consider that option.
+                    if not hasattr(self, 't5_default_relative_attention_bias'):
+                        self.t5_default_relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads) #creating this one in all cases, even if it's not used.
 
-                elif pos_emb_name == POSITION_EMBEDDING_ROTARY:
-                    self.rotary_op = RotaryEmbedding(self.d_model) #TODO: should this be inside self.relative_attention_bias_dict module dict as well? it has no parameters (but does have a buffer)
-                else:
-
-                    #TODO: there was a support of some alternative relative embedding in Michal's branch dev, check this with her.
-                    #relative_attention_num_buckets = pos_emb_config.get("num_buckets", self.relative_attention_num_buckets)
-                    #self.relative_attention_bias_dict[pos_emb_name] = nn.Embedding(relative_attention_num_buckets, self.n_heads)
-
-                    raise Exception(f'unfamiliar positional attention type to be injected at attention level. Got "{pos_emb_name}". Supported options are {POSITION_EMBEDDING_T5_RELATIVE} and {POSITION_EMBEDDING_ROTARY}')
+                    print("TODO: check whether we allow passing custom indices here or not")
+                    
+                elif pos_emb_type == POSITION_EMBEDDING_T5_RELATIVE:
+                    relative_attention_num_buckets = pos_emb_config.get("num_buckets", self.relative_attention_num_buckets)
+                    self.relative_attention_bias_dict[pos_emb_name] = nn.Embedding(relative_attention_num_buckets, self.n_heads)
+                elif pos_emb_type == POSITION_EMBEDDING_ROTARY:
+                    if not hasattr(self, 'rotary_op'):
+                        self.rotary_op = RotaryEmbedding(self.d_model) 
+                else:                    
+                    raise Exception(f'unfamiliar positional attention type to be injected at attention level. Got "{pos_emb_type}". Supported options are {SUPPORTED_POS_ENC_TYPES_INJECTED_IN_ATTENTION}')
 
         self.pruned_heads = set()
         self.gradient_checkpointing = False
@@ -1213,19 +1223,26 @@ class T5Stack(T5PreTrainedModel):
         self.position_embedding_definitions = config.position_embedding_definitions if hasattr(config, "position_embedding_definitions") else {}
 
         self.attention_injected_in_t5_stack_level = nn.ModuleDict()
-        
-        if 'injected_in_stack' in self.position_embedding_definitions:                   
-            for position_embedding_name, embedding_config in self.position_embedding_definitions['injected_in_stack'].items():                
-                if position_embedding_name == POSITION_EMBEDDING_SINUSOIDAL:
-                    self.attention_injected_in_t5_stack_level[position_embedding_name] = SinusoidalPositionalEmbedding(config.d_model)
-                elif position_embedding_name == POSITION_EMBEDDING_LEARNED:
-                    self.attention_injected_in_t5_stack_level[position_embedding_name] =  nn.Embedding(embedding_config.num_embeddings, config.d_model)
-                else:
-                    raise Exception(f'unfamiliar positional embedding for injection in stack "{position_embedding_name}" supported options are {POSITION_EMBEDDING_SINUSOIDAL} and {POSITION_EMBEDDING_LEARNED}.')
-                
 
+        
+        injected_in_attention = {}
+        #POS_EMB_INJECTION_LOCATION                        
+        for position_embedding_name, embedding_info in self.position_embedding_definitions.items():                
+            embedding_config = embedding_info.get('config', None)
+            embedding_type = embedding_info['type']
+
+            if embedding_type == POSITION_EMBEDDING_SINUSOIDAL:
+                self.attention_injected_in_t5_stack_level[position_embedding_name] = SinusoidalPositionalEmbedding(config.d_model)
+            elif embedding_type == POSITION_EMBEDDING_LEARNED:
+                self.attention_injected_in_t5_stack_level[position_embedding_name] =  nn.Embedding(embedding_config.num_embeddings, config.d_model)
+            else:
+                if embedding_type in SUPPORTED_POS_ENC_TYPES_INJECTED_IN_ATTENTION:
+                    injected_in_attention[position_embedding_name] = embedding_info
+                else:
+                    raise Exception(f'unfamiliar positional embedding type "{embedding_type}" supported options are {SUPPORTED_POS_ENC_TYPES}')
+                
         self.block = nn.ModuleList(
-            [T5Block(config, positional_embedding_injected_in_attention=self.position_embedding_definitions['injected_in_attention'] if i==0 else None) for i in range(config.num_layers)]
+            [T5Block(config, positional_embedding_injected_in_attention=injected_in_attention if i==0 else None) for i in range(config.num_layers)]
         )
         self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
