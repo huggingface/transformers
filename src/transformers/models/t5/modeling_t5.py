@@ -493,6 +493,9 @@ class T5Attention(nn.Module):
         self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
         
+        
+        self.t5_default_relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads) #creating this one in all cases, even if it's not used.                    
+
         self.relative_attention_bias_dict = nn.ModuleDict()
         if self.positional_embedding_injected_in_attention is not None:
             for pos_emb_name, pos_emb_info in self.positional_embedding_injected_in_attention.items():
@@ -501,13 +504,9 @@ class T5Attention(nn.Module):
                     pos_emb_config =  {}
                 pos_emb_type = pos_emb_info['type']
                 if pos_emb_type == POSITION_EMBEDDING_T5_DEFAULT_RELATIVE:
-
-                    #TODO: we can instead always create it, consider that option.
-                    if not hasattr(self, 't5_default_relative_attention_bias'):
-                        self.t5_default_relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads) #creating this one in all cases, even if it's not used.
-
-                    print("TODO: check whether we allow passing custom indices here or not")
-                    
+                    #if not hasattr(self, 't5_default_relative_attention_bias'):
+                    #    self.t5_default_relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads) #creating this one in all cases, even if it's not used.                    
+                    pass #no need to do anything, we already created it                        
                 elif pos_emb_type == POSITION_EMBEDDING_T5_RELATIVE:
                     relative_attention_num_buckets = pos_emb_config.get("num_buckets", self.relative_attention_num_buckets)
                     self.relative_attention_bias_dict[pos_emb_name] = nn.Embedding(relative_attention_num_buckets, self.n_heads)
@@ -651,10 +650,6 @@ class T5Attention(nn.Module):
         # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
         # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
         batch_size, seq_length = hidden_states.shape[:2]
-
-
-        #print('REMOVE THIS !!!! DEBUG !!!!! DISABLED DROPOUT FOR DEBUGGING !!!!!!\n'*4)
-        #self.dropout = 0.0
 
         real_seq_length = seq_length
 
@@ -1355,14 +1350,7 @@ class T5Stack(T5PreTrainedModel):
         if position_ids_dict is None:
             position_ids_dict = {}
 
-        # position_ids_info_list_for_relative_embeddings = []
-        # if self.add_t5_relative_position_embedding:
-        #     position_ids_info_list_for_relative_embeddings.append( (None, POSITION_EMBEDDING_T5_RELATIVE))
-        # if self.add_rotary_position_embedding:
-        #     position_ids_info_list_for_relative_embeddings.append( (None, POSITION_EMBEDDING_ROTARY))
-
         positional_indices_for_pos_emb_injection_in_attention = []
-        #print("TODO: take care of defaults when no pos embedding related configs are defined by a user (default to T5 default behavior of using relative pos embedding)")
 
         for position_ids, position_embedding_names in position_ids_dict.values():
             position_embedding_name = position_embedding_names[0]  # till collate if fixed, we move a list of identical embedding names of batch_size
@@ -1960,7 +1948,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         # Model parallel
         self.model_parallel = False
         self.device_map = None
-        self.supports_new_embedding = True        #for backward compatibility
+        self.supports_new_embedding = True #to identify that we work with our fork
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
