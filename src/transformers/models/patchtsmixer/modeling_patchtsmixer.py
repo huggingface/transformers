@@ -1209,7 +1209,10 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         self.use_return_dict = config.use_return_dict
 
         self.patcher = nn.Linear(config.patch_length, config.d_model)
-        self.positional_encoder = PatchTSMixerPositionalEncoding(config=config)
+        if config.use_positional_encoding:
+            self.positional_encoder = PatchTSMixerPositionalEncoding(config=config)
+        else:
+            self.positional_encoder = None
         self.mlp_mixer_encoder = PatchTSMixerBlock(config=config)
 
         # Initialize weights and apply final processing
@@ -1250,7 +1253,8 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         patches = self.patcher(past_values)
 
         # add positional encoder
-        patches = self.positional_encoder(patches)
+        if self.positional_encoder is not None:
+            patches = self.positional_encoder(patches)
 
         last_hidden_state, hidden_states = self.mlp_mixer_encoder(patches, output_hidden_states=output_hidden_states)
 

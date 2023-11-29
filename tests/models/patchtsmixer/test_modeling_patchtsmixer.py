@@ -530,7 +530,6 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             scaling="std",
             use_positional_encoding=False,
             positional_encoding="sincos",
-            # learn_positional_encoding=True,
             self_attn=False,
             self_attn_heads=1,
             num_parallel_samples=4,
@@ -879,7 +878,6 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             self_attn=True,
             use_positional_encoding=True,
             positional_encoding="sincos",
-            # learn_positional_encoding=True,
         )
         self.forecast_full_module(params, output_hidden_states=True)
 
