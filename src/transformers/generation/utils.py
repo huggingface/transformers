@@ -904,7 +904,6 @@ class GenerationMixin:
         assistant_model: "PreTrainedModel",
         logits_processor: LogitsProcessorList,
         model_kwargs: Dict,
-        eos_token_id: Union[int, List[int]],
     ) -> CandidateGenerator:
         """
         Returns the candidate generator to be used in `assisted_generation`
@@ -915,7 +914,7 @@ class GenerationMixin:
             logits_processor=logits_processor,
             model_kwargs=model_kwargs,
             inputs_tensor=inputs_tensor,
-            eos_token_id=eos_token_id,
+            eos_token_id=generation_config.eos_token_id,
         )
         return candidate_generator
 
@@ -1709,7 +1708,6 @@ class GenerationMixin:
                 assistant_model=assistant_model,
                 logits_processor=logits_processor,
                 model_kwargs=model_kwargs,
-                eos_token_id=generation_config.eos_token_id,
             )
 
             # 12. run assisted generate
