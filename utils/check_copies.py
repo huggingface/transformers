@@ -137,6 +137,63 @@ def _should_continue(line: str, indent: str) -> bool:
     return line.startswith(indent) or len(line.strip()) == 0 or _is_definition_header_ending_line(line)
 
 
+def _sanity_check_splits(splits_1, splits_2, is_class):
+    """Check the two (inner) block structures of the corresponding code block given by `split_code_into_blocks` match.
+
+    For the case of `class`, a consecutive sequence of blocks which names (e.g. inner class/func/method) is considered
+    as `a single block with name` in this check, because we want to allow new inner blocks in one of the 2 classes.
+    However, it must be one of the following 3 cases:
+
+        - a single block without name:
+
+            class foo:
+                a = 1
+
+        - a consecutive sequence of blocks with name
+
+            class foo:
+
+                def f(x):
+                    return x
+
+        - a block without name, followed by a consecutive sequence of blocks with name
+
+            class foo:
+                a = 1
+
+                def f(x):
+                    return x
+
+                def g(x):
+                    return None
+
+    For the case of `function or method`, we don't **merge** a consecutive sequence of blocks which names:
+    the 2 code blocks must contain exactly the same structure. However, we don't require that structure to match a
+    pre-defined structure.
+    """
+    block_names_1 = []
+    block_names_2 = []
+
+    for block in splits_1[1:]:
+        if block[0].startswith("_block_without_name_"):
+            block_names_1.append("block_without_name")
+        elif not block[0].startswith("_empty_block_") and (not is_class or len(block_names_1) == 0 or block_names_1[-1].startswith("block_without_name")):
+            block_names_1.append("block_with_name")
+
+    for block in splits_2[1:]:
+        if block[0].startswith("_block_without_name_"):
+            block_names_2.append("block_without_name")
+        elif not block[0].startswith("_empty_block_") and (not is_class or len(block_names_2) == 0 or block_names_2[-1].startswith("block_without_name")):
+            block_names_2.append("block_with_name")
+
+    if is_class:
+        if not block_names_1 in [["block_without_name"], ["block_with_name"], ["block_without_name", "block_with_name"]]:
+            raise ValueError("For a class, it must have a specific structure. See the docstring of `_sanity_check_splits` in the file `utils/check_copies.py`")
+
+    if block_names_1 != block_names_2:
+        raise ValueError("The structures in the 2 code blocks differ.")
+
+
 def find_block_end(lines: List[str], start_index: int, indent: int) -> int:
     """
     Find the end of the class/func block starting at `start_index` in a source code (defined by `lines`).
@@ -198,6 +255,7 @@ def split_code_into_blocks(
     # from now on, the `block` means inner blocks unless explicitly specified
     indent_str = " " * indent
     block_without_name_idx = 0
+    empty_block_idx = 0
 
     # Find the lines for the definition header
     index = start_index
@@ -226,7 +284,7 @@ def split_code_into_blocks(
             if index > prev_block_end_index and backtrace:
                 idx = index - 1
                 for idx in range(index - 1, prev_block_end_index - 2, -1):
-                    if not (len(lines[idx].strip()) > 0 and lines[idx].startswith(indent_str) and not lines[idx].startswith(" " * (indent + 4))):
+                    if not (len(lines[idx].strip()) > 0 and lines[idx].startswith(indent_str)):
                         break
                 idx += 1
                 if idx < index:
@@ -235,11 +293,14 @@ def split_code_into_blocks(
             # between the current found block and the previous found block
             if block_start_index > prev_block_end_index:
                 # give it a dummy name
-                prev_block_name = f"_block_without_name_{block_without_name_idx}"
+                if len("".join(lines[prev_block_end_index:block_start_index]).strip()) == 0:
+                    prev_block_name = f"_empty_block_{empty_block_idx}"
+                    empty_block_idx += 1
+                else:
+                    prev_block_name = f"_block_without_name_{block_without_name_idx}"
+                    block_without_name_idx += 1
                 # Add it as a block
                 splits.append((prev_block_name, prev_block_end_index, block_start_index))
-                if prev_block_name.startswith("_block_without_name_"):
-                    block_without_name_idx += 1
 
             # Add the current found block
             splits.append((name, block_start_index, block_end_index))
@@ -249,7 +310,11 @@ def split_code_into_blocks(
         index += 1
 
     if index > prev_block_end_index:
-        splits.append((f"_block_without_name_{block_without_name_idx}", prev_block_end_index, index))
+        if len("".join(lines[prev_block_end_index:index]).strip()) == 0:
+            prev_block_name = f"_empty_block_{empty_block_idx}"
+        else:
+            prev_block_name = f"_block_without_name_{block_without_name_idx}"
+        splits.append((prev_block_name, prev_block_end_index, index))
 
     return splits
 
@@ -560,6 +625,10 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buf: dict = None)
 
         # Split the observed code into blocks
         observed_code_splits = split_code_into_blocks(lines, start_index, line_index, len(indent), backtrace=True)
+
+        is_class = lines[start_index].startswith(f"{' ' * (len(indent) - 4)}class ")
+        # sanity check
+        _sanity_check_splits(theoretical_code_splits, observed_code_splits, is_class=is_class)
 
         # observed code in a structured way (a dict mapping block names to blocks' code)
         observed_code_blocks = OrderedDict()
