@@ -222,43 +222,16 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip("Pvt-V2 does not have get_input_embeddings method and get_output_embeddings methods")
+    @unittest.skip(reason="This architecture does not work with using reentrant.")
     def test_training_gradient_checkpointing(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.model_tester.is_training:
-            return
+        # Scenario - 1 default behaviour
+        self.check_training_gradient_checkpointing()
 
-        config.use_cache = False
-        config.return_dict = True
-
-        for model_class in self.all_model_classes:
-            # we don't test BeitForMaskedImageModeling
-            if (
-                model_class in [*get_values(MODEL_MAPPING), PvtV2ForImageClassification]
-                or not model_class.supports_gradient_checkpointing
-            ):
-                continue
-
-            model = model_class(config)
-            model.gradient_checkpointing_enable()
-            model.to(torch_device)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @unittest.skip(reason="This architecture does not work with using reentrant.")
     def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
+        # Scenario - 2 with `use_reentrant=True` - this is the default value that is used in pytorch's
+        # torch.utils.checkpoint.checkpoint
+        self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
