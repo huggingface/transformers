@@ -112,7 +112,7 @@ class RemBertTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken("[MASK]", lstrip=True, rstrip=False, normalized=False)
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
