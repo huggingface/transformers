@@ -395,7 +395,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--repo_id",
-        default="ylacombe/m4t_v2",
+        default="facebook/seamless-m4t-v2-large",
         type=str,
         help="Repo ID.",
     )

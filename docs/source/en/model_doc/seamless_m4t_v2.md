@@ -41,8 +41,8 @@ First, load the processor and a checkpoint of the model:
 ```python
 >>> from transformers import AutoProcessor, SeamlessM4Tv2Model
 
->>> processor = AutoProcessor.from_pretrained("ylacombe/m4t_v2")
->>> model = SeamlessM4Tv2Model.from_pretrained("ylacombe/m4t_v2")
+>>> processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large")
+>>> model = SeamlessM4Tv2Model.from_pretrained("facebook/seamless-m4t-v2-large")
 ```
 
 You can seamlessly use this model on text or on audio, to generated either translated text or translated audio.
@@ -99,14 +99,14 @@ For example, you can replace the audio-to-audio generation snippet with the mode
 
 ```python
 >>> from transformers import SeamlessM4Tv2ForSpeechToSpeech
->>> model = SeamlessM4Tv2ForSpeechToSpeech.from_pretrained("ylacombe/m4t_v2")
+>>> model = SeamlessM4Tv2ForSpeechToSpeech.from_pretrained("facebook/seamless-m4t-v2-large")
 ```
 
 Or you can replace the text-to-text generation snippet with the model dedicated to the T2TT task, you only have to remove `generate_speech=False`.
 
 ```python
 >>> from transformers import SeamlessM4Tv2ForTextToText
->>> model = SeamlessM4Tv2ForTextToText.from_pretrained("ylacombe/m4t_v2")
+>>> model = SeamlessM4Tv2ForTextToText.from_pretrained("facebook/seamless-m4t-v2-large")
 ```
 
 Feel free to try out [`SeamlessM4Tv2ForSpeechToText`] and [`SeamlessM4Tv2ForTextToSpeech`] as well.

@@ -974,7 +974,7 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
 
 @require_torch
 class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
-    repo_id = "ylacombe/m4t_v2"
+    repo_id = "facebook/seamless-m4t-v2-large"
 
     def assertListAlmostEqual(self, list1, list2, tol=1e-4):
         self.assertEqual(len(list1), len(list2))
