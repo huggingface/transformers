@@ -16,11 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Chargement d'instances pré-entraînées avec une AutoClass
 
-Avec autant d'architectures Transformer différentes, il peut être difficile d'en créer une pour votre point de contrôle. Dans l'idée de créer une librairie facile, simple et flexible à utiliser, 🤗 Transformers fournit une `AutoClass` qui infère et charge automatiquement l'architecture correcte à partir d'un point de contrôle donné. La fonction `from_pretrained()` vous permet de charger rapidement un modèle pré-entraîné pour n'importe quelle architecture afin que vous n'ayez pas à consacrer du temps et des ressources à l'entraînement d'un modèle à partir de zéro. Produire ce type de code indépendant du point de contrôle signifie que si votre code fonctionne pour un point de contrôle, il fonctionnera avec un autre point de contrôle - tant qu'il a été entraîné pour une tâche similaire - même si l'architecture est différente.
+Avec autant d'architectures Transformer différentes, il peut être difficile d'en créer une pour votre point de contrôle. Dans l'idée de créer une librairie facile, simple et flexible à utiliser, 🤗 Transformers fournit une `AutoClass` qui infère et charge automatiquement l'architecture correcte à partir d'un point de contrôle donné. La fonction `from_pretrained()` vous permet de charger rapidement un modèle pré-entraîné pour n'importe quelle architecture afin que vous n'ayez pas à consacrer du temps et des ressources à l'entraînement d'un modèle à partir de zéro. Produire un tel code indépendant du point de contrôle signifie que si votre code fonctionne pour un point de contrôle, il fonctionnera avec un autre point de contrôle - tant qu'il a été entraîné pour une tâche similaire - même si l'architecture est différente.
 
 <Tip>
 
-Rappel, l'architecture fait référence au squelette du modèle et les points de contrôle sont les poids pour une architecture donnée. Par exemple, [BERT](https://huggingface.co/bert-base-uncased) est une architecture, tandis que `bert-base-uncased` est un point de contrôle. Modèle est un terme général qui peut signifier soit architecture soit point de contrôle.
+Rappel, l'architecture fait référence au squelette du modèle et les points de contrôle sont les poids pour une architecture donnée. Par exemple, [BERT](https://huggingface.co/bert-base-uncased) est une architecture, tandis que `bert-base-uncased` est un point de contrôle. Le terme modèle est général et peut signifier soit architecture soit point de contrôle.
 
 </Tip>
 
@@ -34,7 +34,7 @@ Dans ce tutoriel, vous apprenez à:
 
 ## AutoTokenizer
 
-Presque toutes les tâches de traitement du langage (NLP) commencent avec un tokenizer. Un tokenizer convertit votre texte initial dans un format qui peut être traité par le modèle.
+Quasiment toutes les tâches de traitement du langage (NLP) commencent avec un tokenizer. Un tokenizer convertit votre texte initial dans un format qui peut être traité par le modèle.
 
 Chargez un tokenizer avec [`AutoTokenizer.from_pretrained`]:
 
@@ -44,7 +44,7 @@ Chargez un tokenizer avec [`AutoTokenizer.from_pretrained`]:
 >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 ```
 
-Puis, transformer votre texte initial comme montré ci-dessous:
+Puis, transformez votre texte initial comme montré ci-dessous:
 
 ```py
 >>> sequence = "In a hole in the ground there lived a hobbit."
@@ -112,13 +112,13 @@ Réutilisez facilement le même point de contrôle pour charger une architecture
 
 <Tip warning={true}>
 
-Pour les modèles PyTorch, la fonction `from_pretrained()` utilise `torch.load()` qui utilise `pickle` en interne et est connu pour être non sécurisé. En général, ne chargez jamais un modèle qui pourrait provenir d'une source non fiable, ou qui pourrait avoir été altéré. Ce risque de sécurité est partiellement atténué pour les modèles publics hébergés sur le Hugging Face Hub, qui sont [scannés pour les logiciels malveillants](https://huggingface.co/docs/hub/security-malware) à chaque modification. Consultez la [documentation du Hub](https://huggingface.co/docs/hub/security) pour connaître les meilleures pratiques comme la [vérification des modifications signées](https://huggingface.co/docs/hub/security-gpg#signing-commits-with-gpg) avec GPG.
+Pour les modèles PyTorch, la fonction `from_pretrained()` utilise `torch.load()` qui utilise `pickle` en interne et est connu pour être non sécurisé. En général, ne chargez jamais un modèle qui pourrait provenir d'une source non fiable, ou qui pourrait avoir été altéré. Ce risque de sécurité est partiellement atténué pour les modèles hébergés publiquement sur le Hugging Face Hub, qui sont [scannés pour les logiciels malveillants](https://huggingface.co/docs/hub/security-malware) à chaque modification. Consultez la [documentation du Hub](https://huggingface.co/docs/hub/security) pour connaître les meilleures pratiques comme la [vérification des modifications signées](https://huggingface.co/docs/hub/security-gpg#signing-commits-with-gpg) avec GPG.
 
 Les points de contrôle TensorFlow et Flax ne sont pas concernés, et peuvent être chargés dans des architectures PyTorch en utilisant les arguments `from_tf` et `from_flax` de la fonction `from_pretrained` pour contourner ce problème.
 
 </Tip>
 
-En général, nous recommandons d'utiliser les classes `AutoTokenizer` et `AutoModelFor` pour charger des instances pré-entraînées de tokenizers et modèles respectivement. Cela vous permettra de charger la bonne architecture à chaque fois. Dans le prochain [tutoriel](preprocessing), vous apprenez à utiliser un tokenizer, processeur d'image, extracteur de caractéristiques et processeur pour prétraiter un jeu de données pour le fine-tuning.
+En général, nous recommandons d'utiliser les classes `AutoTokenizer` et `AutoModelFor` pour charger des instances pré-entraînées de tokenizers et modèles respectivement. Cela vous permettra de charger la bonne architecture à chaque fois. Dans le prochain [tutoriel](preprocessing), vous apprenez à utiliser un tokenizer, processeur d'image, extracteur de caractéristiques et processeur pour pré-traiter un jeu de données pour le fine-tuning.
 </pt>
 <tf>
 Enfin, les classes `TFAutoModelFor` vous permettent de charger un modèle pré-entraîné pour une tâche donnée (voir [ici](model_doc/auto) pour une liste complète des tâches disponibles). Par exemple, chargez un modèle pour la classification de séquence avec [`TFAutoModelForSequenceClassification.from_pretrained`]:
@@ -137,6 +137,6 @@ Réutilisez facilement le même point de contrôle pour charger une architecture
 >>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-En général, nous recommandons d'utiliser les classes `AutoTokenizer` et `TFAutoModelFor` pour charger des instances pré-entraînées de tokenizers et modèles respectivement. Cela vous permettra de charger la bonne architecture à chaque fois. Dans le prochain [tutoriel](preprocessing), vous apprenez à utiliser un tokenizer, processeur d'image, extracteur de caractéristiques et processeur pour prétraiter un jeu de données pour le fine-tuning.
+En général, nous recommandons d'utiliser les classes `AutoTokenizer` et `TFAutoModelFor` pour charger des instances pré-entraînées de tokenizers et modèles respectivement. Cela vous permettra de charger la bonne architecture à chaque fois. Dans le prochain [tutoriel](preprocessing), vous apprenez à utiliser un tokenizer, processeur d'image, extracteur de caractéristiques et processeur pour pré-traiter un jeu de données pour le fine-tuning.
 </tf>
 </frameworkcontent>
