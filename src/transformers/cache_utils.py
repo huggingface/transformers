@@ -9,8 +9,8 @@ class Cache:
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cos: Optional[torch.Tensor] = None,
-        sin: Optional[torch.Tensor] = None,
+        cos: Optional[torch.Tensor] = None,    # needed for models having RoPE position embeddings
+        sin: Optional[torch.Tensor] = None,    # needed for models having RoPE position embeddings
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         raise NotImplementedError("Make sure to implement `update` in a subclass.")
 
