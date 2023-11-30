@@ -188,7 +188,7 @@ class CLIPSegVisionEmbeddings(nn.Module):
 
         return result
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
@@ -196,7 +196,7 @@ class CLIPSegVisionEmbeddings(nn.Module):
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
 
-        if embeddings.shape[1] != self.num_positions or interpolate_pos_encoding:
+        if embeddings.shape[1] != self.num_positions:
             new_shape = int(math.sqrt(embeddings.shape[1] - 1))
             embeddings = embeddings + self.interpolate_position_embeddings((new_shape, new_shape))
             embeddings = embeddings.to(embeddings.dtype)
@@ -826,14 +826,12 @@ class CLIPSegVisionTransformer(nn.Module):
 
     @add_start_docstrings_to_model_forward(CLIPSEG_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPSegVisionConfig)
-    # Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer.forward
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -848,7 +846,7 @@ class CLIPSegVisionTransformer(nn.Module):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(
