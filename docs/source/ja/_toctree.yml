@@ -213,6 +213,10 @@
         title: CodeGen
       - local: model_doc/code_llama
         title: CodeLlama
+      - local: model_doc/convbert
+        title: ConvBERT
+      - local: model_doc/cpm
+        title: CPM
       title: 文章モデル
     - isExpanded: false
       sections:
@@ -220,6 +224,12 @@
         title: BEiT
       - local: model_doc/bit
         title: BiT
+      - local: model_doc/conditional_detr
+        title: Conditional DETR
+      - local: model_doc/convnext
+        title: ConvNeXT
+      - local: model_doc/convnextv2
+        title: ConvNeXTV2
       title: ビジョンモデル
     - isExpanded: false
       sections:
