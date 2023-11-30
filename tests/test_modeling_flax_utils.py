@@ -16,11 +16,10 @@ import tempfile
 import unittest
 
 import numpy as np
-import torch
 from huggingface_hub import HfFolder, delete_repo, snapshot_download
 from requests.exceptions import HTTPError
 
-from transformers import BertConfig, BertModel, is_flax_available
+from transformers import BertConfig, BertModel, is_flax_available, is_torch_available
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -43,6 +42,9 @@ if is_flax_available():
     from transformers import FlaxBertModel
 
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.12"  # assumed parallelism: 8
+
+if is_torch_available():
+    import torch
 
 
 @require_flax
