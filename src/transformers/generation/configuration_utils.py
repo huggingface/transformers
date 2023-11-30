@@ -497,6 +497,24 @@ class GenerationConfig(PushToHubMixin):
                     f"({self.num_beams})."
                 )
 
+        # 5. check common issue: passing `generate` arguments inside the generation config
+        generate_arguments = (
+            "logits_processor",
+            "stopping_criteria",
+            "prefix_allowed_tokens_fn",
+            "synced_gpus",
+            "assistant_model",
+            "streamer",
+            "negative_prompt_ids",
+            "negative_prompt_attention_mask",
+        )
+        for arg in generate_arguments:
+            if hasattr(self, arg):
+                raise ValueError(
+                    f"Argument `{arg}` is not a valid argument of `GenerationConfig`. It should be passed to "
+                    "`generate()` (or a pipeline) directly."
+                )
+
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
