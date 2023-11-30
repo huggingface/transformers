@@ -1414,10 +1414,10 @@ class PatchTSMixerForPreTrainingOutput(ModelOutput):
             Total loss
     """
 
+    loss: Optional[torch.FloatTensor] = None
     prediction_outputs: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    loss: Optional[torch.FloatTensor] = None
 
 
 class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
@@ -1535,10 +1535,10 @@ class PatchTSMixerForPredictionOutput(ModelOutput):
 
     """
 
+    loss: Optional[torch.FloatTensor] = None
     prediction_outputs: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    loss: Optional[torch.FloatTensor] = None
     loc: torch.FloatTensor = None
     scale: torch.FloatTensor = None
 
@@ -1833,10 +1833,10 @@ class PatchTSMixerForClassificationOutput(ModelOutput):
             Total loss.
     """
 
+    loss: Optional[torch.FloatTensor] = None
     prediction_outputs: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    loss: Optional[torch.FloatTensor] = None
 
 
 class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
@@ -1961,10 +1961,10 @@ class PatchTSMixerForRegressionOutput(ModelOutput):
             Total loss.
     """
 
+    loss: Optional[torch.FloatTensor] = None
     prediction_outputs: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    loss: Optional[torch.FloatTensor] = None
 
 
 class InjectScalerStatistics4D(nn.Module):
