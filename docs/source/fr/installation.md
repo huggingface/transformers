@@ -93,7 +93,7 @@ Vérifiez que 🤗 Transformers a bien été installé avec la commande suivante
 python -c "from transformers import pipeline; print(pipeline('sentiment-analysis')('we love you'))"
 ```
 
-Le label et score est ensuite affiché :
+Le label et score sont ensuite affichés :
 
 ```bash
 [{'label': 'POSITIVE', 'score': 0.9998704791069031}]
