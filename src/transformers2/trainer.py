@@ -1172,7 +1172,7 @@ class Trainer:
             # Rebuild the deepspeed config to reflect the updated training parameters
             from accelerate.utils import DeepSpeedPlugin
 
-            from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
+            from transformers2.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
@@ -1523,7 +1523,6 @@ class Trainer:
         logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
-
         # Setting up training control variables:
         # number of training epochs: num_train_epochs
         # number of training steps per epoch: num_update_steps_per_epoch
@@ -1633,6 +1632,7 @@ class Trainer:
         # prepare using `accelerator` prepare
         if use_accelerator_prepare:
             self.model.train()
+            
             if hasattr(self.lr_scheduler, "step"):
                 if self.use_apex:
                     model = self.accelerator.prepare(self.model)
@@ -1643,7 +1643,6 @@ class Trainer:
                 model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
                     self.model, self.optimizer, self.lr_scheduler
                 )
-
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
 
@@ -1757,6 +1756,7 @@ class Trainer:
                     sampler = sampler if sampler is not None else []
                     _ = list(sampler)
 
+
         total_batched_samples = 0
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_iterator = train_dataloader
@@ -1862,7 +1862,7 @@ class Trainer:
                                 model.parameters(),
                                 args.max_grad_norm,
                             )
-
+                    
                     # Optimizer step
                     self.optimizer.step()
                     optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
@@ -3886,7 +3886,7 @@ class Trainer:
 
         if self.is_deepspeed_enabled:
             if getattr(self.args, "hf_deepspeed_config", None) is None:
-                from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
+                from transformers2.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
                 ds_plugin = self.accelerator.state.deepspeed_plugin
 

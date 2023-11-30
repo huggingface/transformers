@@ -183,16 +183,11 @@ class CombinedEmbeddings(nn.Module):
         self.word_embeddings = nn.Embedding(config.word_piece_vocab_size, config.hidden_size)
         self.combination_layer = nn.Linear(config.hidden_size * 2, config.hidden_size)
 
-    def forward(self, char_ids, wp_ids):
-        print("fuck")
-        char_embeds = self.word_embeddings(char_ids)
-        print(char_embeds)
+    def forward(self, input_ids, wp_ids):
+        char_embeds = self.word_embeddings(input_ids)
         word_embeds =  self.char_embeddings(wp_ids) 
-        print(word_embeds)
         combined_embeds = torch.cat([char_embeds, word_embeds], dim=-1)
-        print(combined_embeds)
         embeddings = self.combination_layer(combined_embeds)
-        print(embeddings)
         return embeddings
 
 class BertEmbeddings(nn.Module):
@@ -225,7 +220,7 @@ class BertEmbeddings(nn.Module):
 
     def forward(
         self,
-        char_ids: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
         wp_ids: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -256,7 +251,7 @@ class BertEmbeddings(nn.Module):
 
         # if inputs_embeds is None:
         #     inputs_embeds = self.word_embeddings(input_ids)
-        inputs_embeds = self.combined_embeddings(char_ids, wp_ids)
+        inputs_embeds = self.combined_embeddings(input_ids, wp_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
@@ -936,7 +931,7 @@ class BertModel(BertPreTrainedModel):
     )
     def forward(
         self,
-        char_ids: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         wp_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
@@ -982,7 +977,7 @@ class BertModel(BertPreTrainedModel):
         else:
             use_cache = False
 
-        input_ids = char_ids
+        input_ids = input_ids
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -1033,7 +1028,7 @@ class BertModel(BertPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
-            char_ids = char_ids,
+            input_ids = input_ids,
             wp_ids = wp_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
@@ -1097,7 +1092,7 @@ class BertForPreTraining(BertPreTrainedModel):
     @replace_return_docstrings(output_type=BertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        char_ids: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         wp_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
@@ -1145,7 +1140,7 @@ class BertForPreTraining(BertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
-            char_ids,
+            input_ids,
             wp_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1212,7 +1207,7 @@ class BertLMHeadModel(BertPreTrainedModel):
     )
     def forward(
         self,
-        char_ids: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         wp_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
@@ -1257,7 +1252,7 @@ class BertLMHeadModel(BertPreTrainedModel):
             use_cache = False
 
         outputs = self.bert(
-            char_ids,
+            input_ids,
             wp_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1298,7 +1293,7 @@ class BertLMHeadModel(BertPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, char_ids, wp_ids, past_key_values=None, attention_mask=None, use_cache=True, **model_kwargs
+        self, input_ids, wp_ids, past_key_values=None, attention_mask=None, use_cache=True, **model_kwargs
     ):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -1317,10 +1312,10 @@ class BertLMHeadModel(BertPreTrainedModel):
                 remove_prefix_length = wp_ids.shape[1] - 1
 
             wp_ids = wp_ids[:, remove_prefix_length:]
-            char_ids = char_ids[:, remove_prefix_length:]
+            input_ids = input_ids[:, remove_prefix_length:]
 
         return {
-            "char_ids": char_ids,
+            "input_ids": input_ids,
              "wp_ids": wp_ids,
             "attention_mask": attention_mask,
             "past_key_values": past_key_values,
@@ -1350,6 +1345,8 @@ class BertForMaskedLM(BertPreTrainedModel):
 
         self.bert = BertModel(config, add_pooling_layer=False)
         self.cls = BertOnlyMLMHead(config)
+        self.char_tokenizer = config.char_tokenizer
+        self.wordpiece_tokenizer = config.wordpiece_tokenizer
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1359,6 +1356,140 @@ class BertForMaskedLM(BertPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+
+    def tokenize_preserve_words(self, string): # not old man
+        # char_tok = self.char_tokenizer
+        word_tok = self.wordpiece_tokenizer
+        return_ids = ([], [])
+        cls_wp = word_tok.encode('[CLS]')[1]
+        return_ids[0].append(cls_wp)
+        delim_words = string.split(" ")
+        unk = '[UNK]'
+        unk_id = word_tok.encode(unk)[1]
+        pad = '[PAD]'
+        pad_id = word_tok.encode(pad)[1]
+        sep = '[SEP]'
+        sep_id = word_tok.encode(sep)[1]
+        for index, w in enumerate(delim_words):
+            # dealing with a single word a time, here
+            wp_toks_ids = word_tok.encode(w)[1:-1]
+            wps = word_tok.convert_ids_to_tokens(wp_toks_ids)
+            # have to avoid the CLS and SEP characters
+            for i, wp in enumerate(wps):
+                if wp == '[MASK]':
+                    return_ids[0].append(unk_id)
+                elif wp == '[UNK]':
+                    return_ids[0].append(unk_id)
+                elif wp == '[PAD]':
+                    return_ids[0].append(pad_id)
+                elif wp == '[SEP]':
+                    return_ids[0].append(sep_id)
+                else:
+                    clean_wp = wp.replace("##", "")
+                    for c in clean_wp:
+                        if '[MASK]' in wps:
+                            return_ids[0].append(unk_id)
+                        else:
+                            return_ids[0].append(wp_toks_ids[i])
+
+        
+        cls_wp = word_tok.encode('[SEP]')[1]
+        return_ids[0].append(cls_wp)
+        return torch.tensor(return_ids[0])
+
+    # def tokenize_preserve_words(self, string): # not old man
+        char_tok = self.char_tokenizer
+        word_tok = self.wordpiece_tokenizer
+        # ([wordpiece_ids], [char_tok_ids])
+        return_ids = ([], [])
+        cls_wp = word_tok.encode('[CLS]')[1]
+        return_ids[0].append(cls_wp)
+        cls_c = char_tok.encode('[CLS]')[1]
+        return_ids[1].append(cls_c)
+        # delim_words = string.replace(" ", "[SPACE]")
+        # wp_tok_ids = word_tok.encode(string)
+        # wp_toks = word_tokenizer.convert_ids_to_tokens(wp_tok_ids)
+        delim_words = string.split(" ")
+        # mask = "[MASK]"
+        # mask_id = word_tok.encode(mask)[1]
+        unk = '[UNK]'
+        unk_id = word_tok.encode(unk)[1]
+        for index, w in enumerate(delim_words):
+            # dealing with a single word a time, here
+            wp_toks_ids = word_tok.encode(w)[1:-1]
+            wps = word_tok.convert_ids_to_tokens(wp_toks_ids)
+            # have to avoid the CLS and SEP characters
+            # suffix = False
+            for i, wp in enumerate(wps):
+                if wp == '[MASK]':
+                    return_ids[0].append(unk_id)
+                    # return_ids[1].append(char_tok.encode(wp)[1])
+                else:
+                    clean_wp = wp.replace("##", "")
+                    if "##" in wp:
+                        suffix = True
+                    for c in clean_wp:
+                        # c = c if suffix == False else f'##{c}'
+                        # suffix = True # always true after the first letter in a word
+                        if '[MASK]' in wps:
+                            return_ids[0].append(unk_id)
+                            # return_ids[1].append(char_tok.encode(c)[1])
+                        else:
+                            return_ids[0].append(wp_toks_ids[i])
+                            # return_ids[1].append(char_tok.encode(c)[1])
+                # suffix = True
+
+        cls_wp = word_tok.encode('[SEP]')[1]
+        return_ids[0].append(cls_wp)
+        # cls_c = char_tok.encode('[SEP]')[1]
+        # return_ids[1].append(cls_c)
+        return torch.tensor(return_ids[0])
+
+    def _stringify(self, tokens):
+        special_tokens = ['[PAD]', '[CLS]', '[SEP]']
+        # Process tokens to form a properly spaced string
+        filtered_string = ""
+        for token in tokens:
+            if token.startswith("##"):
+                # Remove "##" and concatenate without a space
+                filtered_string += token[2:]
+            elif token in special_tokens:
+                # Skip PAD tokens
+                continue
+            else:
+                # Add space before the token (if it's not the first token)
+                if filtered_string:
+                    filtered_string += " "
+                filtered_string += token
+        return filtered_string
+
+
+    def _create_wp_ids(self, input_ids_tensor):
+        chars = self.char_tokenizer.convert_ids_to_tokens(input_ids_tensor[2])
+        if isinstance(input_ids_tensor, torch.Tensor):
+            char_ids = input_ids_tensor.tolist()
+
+        vocab = list(self.char_tokenizer.vocab.items())
+        tokens = []
+        for row in char_ids:
+            row_toks = []
+            for char_id in row:
+                row_toks.append(vocab[char_id][0])
+            tokens.append(row_toks)
+        strings = []
+        for row in tokens:
+            strings.append(self._stringify(row))
+        pad_id = self.wordpiece_tokenizer.encode('[PAD]')[1]
+        wp_ids = torch.full(input_ids_tensor.shape, pad_id)
+        
+
+        for i in range(wp_ids.shape[0]):
+            row = wp_ids[i]
+            row_word_tokens = self.tokenize_preserve_words(strings[i])
+            wp_ids[i, :row_word_tokens.shape[0]] = row_word_tokens
+        words = self.wordpiece_tokenizer.convert_ids_to_tokens(wp_ids[2])
+        return wp_ids
+
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1370,8 +1501,10 @@ class BertForMaskedLM(BertPreTrainedModel):
     )
     def forward(
         self,
-        char_ids: Optional[torch.Tensor] = None,
-        wp_ids: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        # wp_ids: Optional[torch.Tensor] = None,
+        char_tokenizer = None,
+        wordpiece_tokenizer = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1390,11 +1523,10 @@ class BertForMaskedLM(BertPreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-
+        wp_ids = self._create_wp_ids(input_ids)
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.bert(
-            char_ids,
+            input_ids,
             wp_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1440,10 +1572,10 @@ class BertForMaskedLM(BertPreTrainedModel):
             (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
         )
         wp_ids = torch.cat([wp_ids, dummy_token], dim=1)
-        char_ids = torch.cat([char_ids, dummy_token], dim=1)
+        input_ids = torch.cat([input_ids, dummy_token], dim=1)
 
 
-        return {"wp_ids": wp_ids, "char_ids": char_ids, "attention_mask": attention_mask}
+        return {"wp_ids": wp_ids, "input_ids": input_ids, "attention_mask": attention_mask}
 
 
 @add_start_docstrings(
@@ -1464,7 +1596,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     @replace_return_docstrings(output_type=NextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        char_ids: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         wp_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
@@ -1517,7 +1649,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
-            char_ids,
+            input_ids,
             wp_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1583,7 +1715,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
     )
     def forward(
         self,
-        char_ids: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         wp_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
@@ -1604,7 +1736,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
-            char_ids,
+            input_ids,
             wp_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1684,7 +1816,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
     )
     def forward(
         self,
-        char_ids: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         wp_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
@@ -1706,7 +1838,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
         num_choices = wp_ids.shape[1] if wp_ids is not None else inputs_embeds.shape[1]
 
         wp_ids = wp_ids.view(-1, wp_ids.size(-1)) if wp_ids is not None else None
-        char_ids = char_ids.view(-1, char_ids.size(-1)) if char_ids is not None else None
+        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
         attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
         token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
@@ -1717,7 +1849,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
         )
 
         outputs = self.bert(
-            char_ids,
+            input_ids,
             wp_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1784,7 +1916,7 @@ class BertForTokenClassification(BertPreTrainedModel):
     )
     def forward(
         self,
-        char_ids: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         wp_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
@@ -1803,7 +1935,7 @@ class BertForTokenClassification(BertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
-            char_ids,
+            input_ids,
             wp_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1867,7 +1999,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
     )
     def forward(
         self,
-        char_ids: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         wp_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
@@ -1893,7 +2025,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
-            char_ids,
+            input_ids,
             wp_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
