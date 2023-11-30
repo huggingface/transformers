@@ -56,6 +56,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("chinese_clip", "ChineseCLIPConfig"),
         ("clap", "ClapConfig"),
         ("clip", "CLIPConfig"),
+        ("clip_vision_model", "CLIPVisionConfig"),
         ("clipseg", "CLIPSegConfig"),
         ("clvp", "ClvpConfig"),
         ("code_llama", "LlamaConfig"),
@@ -249,7 +250,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
-        ("clip_vision_model", "CLIPVisionConfig"),
     ]
 )
 
@@ -491,6 +491,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("chinese_clip", "Chinese-CLIP"),
         ("clap", "CLAP"),
         ("clip", "CLIP"),
+        ("clip_vision_model", "CLIPVisionModel"),
         ("clipseg", "CLIPSeg"),
         ("clvp", "CLVP"),
         ("code_llama", "CodeLlama"),
@@ -708,7 +709,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
-        ("clip_vision_model", "CLIPVisionModel"),
     ]
 )
 

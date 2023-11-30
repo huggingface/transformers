@@ -244,10 +244,10 @@ _import_structure = {
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPConfig",
-        "CLIPVisionConfig",
         "CLIPProcessor",
         "CLIPTextConfig",
         "CLIPTokenizer",
+        "CLIPVisionConfig",
         "CLIPVisionConfig",
     ],
     "models.clipseg": [
