@@ -167,7 +167,7 @@ class LlavaForVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class LlavaForVisionText2TextModelTest(unittest.TestCase):
+class LlavaForVisionText2TextIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretraine("ArthurZ/llava-1.5-7b")
 
@@ -451,4 +451,5 @@ ASSISTANT: When visiting this place, which appears to be a pier or dock extendin
         pass
 
     def test_tokenizer_image_token(self):
-        prompt = "Make sure to always answer in a truthful manner"
+        # prompt = "Make sure to always answer in a truthful manner"
+        pass
