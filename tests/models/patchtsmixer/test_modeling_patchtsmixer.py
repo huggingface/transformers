@@ -26,7 +26,7 @@ from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import is_flaky, require_torch, torch_device
+from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -444,7 +444,7 @@ def prepare_batch(repo_id="ibm/patchtsmixer-etth1-test-data", file="pretrain_bat
 
 
 @require_torch
-# @slow
+@slow
 class PatchTSMixerModelIntegrationTests(unittest.TestCase):
     def test_pretrain_head(self):
         model = PatchTSMixerForPretraining.from_pretrained("ibm/patchtsmixer-etth1-pretrain").to(torch_device)
