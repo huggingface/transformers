@@ -119,7 +119,7 @@ Specify where to save the checkpoints from your training:
 >>> metric = evaluate.load("accuracy")
 ```
 
-Call [`~evaluate.compute`] on `metric` to calculate the accuracy of your predictions. Before passing your predictions to `compute`, you need to convert the predictions to logits (remember all 🤗 Transformers models return logits):
+Call [`~evaluate.compute`] on `metric` to calculate the accuracy of your predictions. Before passing your predictions to `compute`, you need to convert the logits to predictions (remember all 🤗 Transformers models return logits):
 
 ```py
 >>> def compute_metrics(eval_pred):

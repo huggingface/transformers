@@ -2,8 +2,8 @@
 # 1. modify the `_deps` dict in setup.py
 # 2. run `make deps_table_update``
 deps = {
-    "Pillow": "Pillow<10.0.0",
-    "accelerate": "accelerate>=0.20.3",
+    "Pillow": "Pillow>=10.0.1,<=15.0",
+    "accelerate": "accelerate>=0.21.0",
     "av": "av==9.2.0",
     "beautifulsoup4": "beautifulsoup4",
     "codecarbon": "codecarbon==1.2.0",

@@ -106,7 +106,7 @@ class MistralRotaryEmbedding(nn.Module):
         self.max_seq_len_cached = seq_len
         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
 
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
@@ -351,7 +351,7 @@ class MistralFlashAttention2(MistralAttention):
 
         use_sliding_windows = (
             _flash_supports_window_size
-            and hasattr(self.config, "sliding_window") is not None
+            and getattr(self.config, "sliding_window", None) is not None
             and kv_seq_len > self.config.sliding_window
         )
 
@@ -363,8 +363,8 @@ class MistralFlashAttention2(MistralAttention):
 
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
-            if hasattr(self.config, "sliding_window") and kv_seq_len > self.config.sliding_window:
-                slicing_tokens = kv_seq_len - self.config.sliding_window
+            if getattr(self.config, "sliding_window", None) is not None and kv_seq_len > self.config.sliding_window:
+                slicing_tokens = 1 - self.config.sliding_window
 
                 past_key = past_key_value[0]
                 past_value = past_key_value[1]
@@ -838,7 +838,7 @@ class MistralModel(MistralPreTrainedModel):
             attention_mask is not None
             and hasattr(self.config, "_flash_attn_2_enabled")
             and self.config._flash_attn_2_enabled
-            and past_key_values is not None
+            and use_cache
         ):
             is_padding_right = attention_mask[:, -1].sum().item() != batch_size
             if is_padding_right:

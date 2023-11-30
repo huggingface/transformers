@@ -486,6 +486,7 @@ class TvltImageProcessor(metaclass=DummyObject):
 
 
 class UdopImageProcessor(metaclass=DummyObject):
+class TvpImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

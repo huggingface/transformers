@@ -307,6 +307,12 @@ _import_structure = {
         "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrajectoryTransformerConfig",
     ],
+    "models.deprecated.transfo_xl": [
+        "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TransfoXLConfig",
+        "TransfoXLCorpus",
+        "TransfoXLTokenizer",
+    ],
     "models.deprecated.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.deta": ["DETA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetaConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
@@ -493,6 +499,7 @@ _import_structure = {
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
     ],
+    "models.patchtst": ["PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP", "PatchTSTConfig"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
@@ -580,12 +587,6 @@ _import_structure = {
     ],
     "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
-    "models.transfo_xl": [
-        "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "TransfoXLConfig",
-        "TransfoXLCorpus",
-        "TransfoXLTokenizer",
-    ],
     "models.trocr": [
         "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrOCRConfig",
@@ -596,6 +597,11 @@ _import_structure = {
         "TvltConfig",
         "TvltFeatureExtractor",
         "TvltProcessor",
+    ],
+    "models.tvp": [
+        "TVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TvpConfig",
+        "TvpProcessor",
     ],
     "models.udop": [
         "UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -610,6 +616,11 @@ _import_structure = {
     "models.unispeech_sat": [
         "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechSatConfig",
+    ],
+    "models.univnet": [
+        "UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "UnivNetConfig",
+        "UnivNetFeatureExtractor",
     ],
     "models.upernet": ["UperNetConfig"],
     "models.videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
@@ -1018,6 +1029,7 @@ else:
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.udop"].append("UdopImageProcessor")
+    _import_structure["models.tvp"].append("TvpImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
@@ -1175,6 +1187,8 @@ else:
             "MODEL_FOR_TEXT_ENCODING_MAPPING",
             "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING",
             "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING",
+            "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING",
             "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
@@ -1258,6 +1272,7 @@ else:
     _import_structure["models.beit"].extend(
         [
             "BEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BeitBackbone",
             "BeitForImageClassification",
             "BeitForMaskedImageModeling",
             "BeitForSemanticSegmentation",
@@ -1656,6 +1671,17 @@ else:
             "TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TrajectoryTransformerModel",
             "TrajectoryTransformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.deprecated.transfo_xl"].extend(
+        [
+            "TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AdaptiveEmbedding",
+            "TransfoXLForSequenceClassification",
+            "TransfoXLLMHeadModel",
+            "TransfoXLModel",
+            "TransfoXLPreTrainedModel",
+            "load_tf_weights_in_transfo_xl",
         ]
     )
     _import_structure["models.deprecated.van"].extend(
@@ -2493,6 +2519,17 @@ else:
             "OwlViTVisionModel",
         ]
     )
+    _import_structure["models.patchtst"].extend(
+        [
+            "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PatchTSTForClassification",
+            "PatchTSTForPrediction",
+            "PatchTSTForPretraining",
+            "PatchTSTForRegression",
+            "PatchTSTModel",
+            "PatchTSTPreTrainedModel",
+        ]
+    )
     _import_structure["models.pegasus"].extend(
         ["PegasusForCausalLM", "PegasusForConditionalGeneration", "PegasusModel", "PegasusPreTrainedModel"]
     )
@@ -2916,17 +2953,6 @@ else:
         ]
     )
     _import_structure["models.timm_backbone"].extend(["TimmBackbone"])
-    _import_structure["models.transfo_xl"].extend(
-        [
-            "TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "AdaptiveEmbedding",
-            "TransfoXLForSequenceClassification",
-            "TransfoXLLMHeadModel",
-            "TransfoXLModel",
-            "TransfoXLPreTrainedModel",
-            "load_tf_weights_in_transfo_xl",
-        ]
-    )
     _import_structure["models.trocr"].extend(
         ["TROCR_PRETRAINED_MODEL_ARCHIVE_LIST", "TrOCRForCausalLM", "TrOCRPreTrainedModel"]
     )
@@ -2946,6 +2972,14 @@ else:
             "UdopForConditionalGeneration",
             "UdopModel",
             "UdopPreTrainedModel",
+        ],
+    )
+    _import_structure["models.tvp"].extend(
+        [
+            "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TvpForVideoGrounding",
+            "TvpModel",
+            "TvpPreTrainedModel",
         ]
     )
     _import_structure["models.umt5"].extend(
@@ -2978,6 +3012,12 @@ else:
             "UniSpeechSatForXVector",
             "UniSpeechSatModel",
             "UniSpeechSatPreTrainedModel",
+        ]
+    )
+    _import_structure["models.univnet"].extend(
+        [
+            "UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "UnivNetModel",
         ]
     )
     _import_structure["models.upernet"].extend(
@@ -3517,6 +3557,17 @@ else:
             "TFDeiTPreTrainedModel",
         ]
     )
+    _import_structure["models.deprecated.transfo_xl"].extend(
+        [
+            "TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFAdaptiveEmbedding",
+            "TFTransfoXLForSequenceClassification",
+            "TFTransfoXLLMHeadModel",
+            "TFTransfoXLMainLayer",
+            "TFTransfoXLModel",
+            "TFTransfoXLPreTrainedModel",
+        ]
+    )
     _import_structure["models.distilbert"].extend(
         [
             "TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3879,17 +3930,6 @@ else:
             "TFTapasForSequenceClassification",
             "TFTapasModel",
             "TFTapasPreTrainedModel",
-        ]
-    )
-    _import_structure["models.transfo_xl"].extend(
-        [
-            "TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFAdaptiveEmbedding",
-            "TFTransfoXLForSequenceClassification",
-            "TFTransfoXLLMHeadModel",
-            "TFTransfoXLMainLayer",
-            "TFTransfoXLModel",
-            "TFTransfoXLPreTrainedModel",
         ]
     )
     _import_structure["models.vision_encoder_decoder"].extend(["TFVisionEncoderDecoderModel"])
@@ -4544,6 +4584,12 @@ if TYPE_CHECKING:
         TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TrajectoryTransformerConfig,
     )
+    from .models.deprecated.transfo_xl import (
+        TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TransfoXLConfig,
+        TransfoXLCorpus,
+        TransfoXLTokenizer,
+    )
     from .models.deprecated.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
     from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
@@ -4714,6 +4760,7 @@ if TYPE_CHECKING:
         OwlViTTextConfig,
         OwlViTVisionConfig,
     )
+    from .models.patchtst import PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP, PatchTSTConfig
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
@@ -4804,18 +4851,22 @@ if TYPE_CHECKING:
     )
     from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimesformerConfig
     from .models.timm_backbone import TimmBackboneConfig
-    from .models.transfo_xl import (
-        TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        TransfoXLConfig,
-        TransfoXLCorpus,
-        TransfoXLTokenizer,
-    )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltFeatureExtractor, TvltProcessor
+    from .models.tvp import (
+        TVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TvpConfig,
+        TvpProcessor,
+    )
     from .models.udop import UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP, UdopConfig, UdopProcessor
     from .models.umt5 import UMT5Config
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
+    from .models.univnet import (
+        UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        UnivNetConfig,
+        UnivNetFeatureExtractor,
+    )
     from .models.upernet import UperNetConfig
     from .models.videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
     from .models.vilt import (
@@ -5185,6 +5236,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
+        from .models.tvp import TvpImageProcessor
         from .models.udop import UdopImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
@@ -5324,6 +5376,8 @@ if TYPE_CHECKING:
             MODEL_FOR_TEXT_ENCODING_MAPPING,
             MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING,
             MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
+            MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING,
+            MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING,
             MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
@@ -5399,6 +5453,7 @@ if TYPE_CHECKING:
         )
         from .models.beit import (
             BEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BeitBackbone,
             BeitForImageClassification,
             BeitForMaskedImageModeling,
             BeitForSemanticSegmentation,
@@ -5730,6 +5785,15 @@ if TYPE_CHECKING:
             TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TrajectoryTransformerModel,
             TrajectoryTransformerPreTrainedModel,
+        )
+        from .models.deprecated.transfo_xl import (
+            TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AdaptiveEmbedding,
+            TransfoXLForSequenceClassification,
+            TransfoXLLMHeadModel,
+            TransfoXLModel,
+            TransfoXLPreTrainedModel,
+            load_tf_weights_in_transfo_xl,
         )
         from .models.deprecated.van import (
             VAN_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6408,6 +6472,15 @@ if TYPE_CHECKING:
             OwlViTTextModel,
             OwlViTVisionModel,
         )
+        from .models.patchtst import (
+            PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PatchTSTForClassification,
+            PatchTSTForPrediction,
+            PatchTSTForPretraining,
+            PatchTSTForRegression,
+            PatchTSTModel,
+            PatchTSTPreTrainedModel,
+        )
         from .models.pegasus import (
             PegasusForCausalLM,
             PegasusForConditionalGeneration,
@@ -6759,15 +6832,6 @@ if TYPE_CHECKING:
             TimesformerPreTrainedModel,
         )
         from .models.timm_backbone import TimmBackbone
-        from .models.transfo_xl import (
-            TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
-            AdaptiveEmbedding,
-            TransfoXLForSequenceClassification,
-            TransfoXLLMHeadModel,
-            TransfoXLModel,
-            TransfoXLPreTrainedModel,
-            load_tf_weights_in_transfo_xl,
-        )
         from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
         from .models.tvlt import (
             TVLT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6775,6 +6839,12 @@ if TYPE_CHECKING:
             TvltForPreTraining,
             TvltModel,
             TvltPreTrainedModel,
+        )
+        from .models.tvp import (
+            TVP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TvpForVideoGrounding,
+            TvpModel,
+            TvpPreTrainedModel,
         )
         from .models.udop import (
             UDOP_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6809,6 +6879,7 @@ if TYPE_CHECKING:
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )
+        from .models.univnet import UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST, UnivNetModel
         from .models.upernet import UperNetForSemanticSegmentation, UperNetPreTrainedModel
         from .models.videomae import (
             VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7254,6 +7325,15 @@ if TYPE_CHECKING:
             TFDeiTModel,
             TFDeiTPreTrainedModel,
         )
+        from .models.deprecated.transfo_xl import (
+            TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFAdaptiveEmbedding,
+            TFTransfoXLForSequenceClassification,
+            TFTransfoXLLMHeadModel,
+            TFTransfoXLMainLayer,
+            TFTransfoXLModel,
+            TFTransfoXLPreTrainedModel,
+        )
         from .models.distilbert import (
             TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDistilBertForMaskedLM,
@@ -7538,15 +7618,6 @@ if TYPE_CHECKING:
             TFTapasForSequenceClassification,
             TFTapasModel,
             TFTapasPreTrainedModel,
-        )
-        from .models.transfo_xl import (
-            TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFAdaptiveEmbedding,
-            TFTransfoXLForSequenceClassification,
-            TFTransfoXLLMHeadModel,
-            TFTransfoXLMainLayer,
-            TFTransfoXLModel,
-            TFTransfoXLPreTrainedModel,
         )
         from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import TFVisionTextDualEncoderModel

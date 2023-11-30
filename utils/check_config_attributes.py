@@ -129,7 +129,6 @@ SPECIAL_CASES_TO_ALLOW.update(
         "SwitchTransformersConfig": True,
         "TableTransformerConfig": True,
         "TapasConfig": True,
-        "TransfoXLConfig": True,
         "UniSpeechConfig": True,
         "UniSpeechSatConfig": True,
         "WavLMConfig": True,

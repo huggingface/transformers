@@ -25,8 +25,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
+from ....modeling_utils import PreTrainedModel
+from ....utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
