@@ -749,12 +749,12 @@ class T5Attention(nn.Module):
                     else:
                         raise Exception(f'Encountered pos_emb_type={pos_emb_type} but the only supported options to be injected inside attention are {SUPPORTED_POS_ENC_TYPES_INJECTED_IN_ATTENTION}')
 
-                if position_bias is None: # if it's STILL None (so no one requested POSITION_EMBEDDING_T5_RELATIVE)
-                    position_bias = torch.zeros(
-                        (1, self.n_heads, real_seq_length, key_length), device=query_states.device, dtype=query_states.dtype
-                    )
-                    if self.gradient_checkpointing and self.training:
-                        position_bias.requires_grad = True
+            if position_bias is None: # if it's STILL None (so no one requested POSITION_EMBEDDING_T5_RELATIVE)
+                position_bias = torch.zeros(
+                    (1, self.n_heads, real_seq_length, key_length), device=query_states.device, dtype=query_states.dtype
+                )
+                if self.gradient_checkpointing and self.training:
+                    position_bias.requires_grad = True
 
                         
             # if key and values are already calculated
