@@ -190,6 +190,10 @@ class LlavaForVisionText2TextModelTest(unittest.TestCase):
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
         inputs = self.processor(prompt, raw_image, return_tensors='pt')
+        
+        EXPECTED_INPUT_IDS = torch.tensor([[    1,  -200, 29871,    13, 11889, 29901,  1724,   526,   278,  2712,306,   881,   367,   274,  1300,  2738,  1048,   746,   306,  6493,445,  2058, 29973,    13, 22933,  9047, 13566, 29901]])
+        self.assertEqual(inputs["input_ids"], EXPECTED_INPUT_IDS)
+        
         output = model.generate(**inputs, max_new_tokens=20)
         torch.testing.assert_close(output, EXPECTED_OUTPUTS)
         
