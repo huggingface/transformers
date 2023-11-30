@@ -110,8 +110,90 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, ["▁", "清水寺は京都にある。"])
         encoded_string = tokenizer.encode(text)
         self.assertListEqual(encoded_string, [1000, 7, 0, 1001])
-        text_decode = tokenizer.convert_tokens_to_string(tokens)
-        self.assertEquals(text_decode, text)
+        decode_text = tokenizer.convert_tokens_to_string(tokens)
+        self.assertEquals(decode_text, text)
+
+        text = "That's awesome! 🤩 #HuggingFace,  🌟 Have a great day! 🌈"
+        tokens = tokenizer.tokenize(text)
+        self.assertListEqual(
+            tokens,
+            [
+                "▁That",
+                "'",
+                "s",
+                "▁a",
+                "w",
+                "es",
+                "ome",
+                "!",
+                "▁",
+                "🤩",
+                "▁",
+                "#",
+                "H",
+                "u",
+                "g",
+                "g",
+                "ing",
+                "F",
+                "a",
+                "ce",
+                ",",
+                "▁",
+                "🌟",
+                "▁H",
+                "a",
+                "ve",
+                "▁a",
+                "▁great",
+                "▁day",
+                "!",
+                "▁",
+                "🌈",
+            ],
+        )
+        encoded_string = tokenizer.encode(text)
+        self.assertListEqual(
+            encoded_string,
+            [
+                1000,
+                572,
+                32,
+                6,
+                10,
+                64,
+                110,
+                505,
+                146,
+                7,
+                0,
+                7,
+                0,
+                262,
+                51,
+                42,
+                42,
+                17,
+                365,
+                18,
+                133,
+                3,
+                7,
+                0,
+                369,
+                18,
+                123,
+                10,
+                590,
+                314,
+                146,
+                7,
+                0,
+                1001,
+            ],
+        )
+        decode_text = tokenizer.convert_tokens_to_string(tokens)
+        self.assertEquals(decode_text, "That's awesome! 🤩 #HuggingFace, 🌟 Have a great day! 🌈")
 
         text = "In the sky up above"
         tokens = tokenizer._tokenize(text)
