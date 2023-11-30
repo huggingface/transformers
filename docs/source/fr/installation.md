@@ -114,7 +114,7 @@ Cependant, cela veut aussi dire que la version de la branche `main` n'est pas to
 Nous nous efforçons de maintenir la version de la branche `main` opérationnelle, et la plupart des problèmes sont généralement résolus en l'espace de quelques heures ou d'un jour.
 Si vous recontrez un problème, n'hésitez pas à créer une [Issue](https://github.com/huggingface/transformers/issues) pour que l'on puisse trouver une solution au plus vite !
 
-Vérifiez si 🤗 Transformers a bien été installé avec la commande suivante :
+Vérifiez que 🤗 Transformers a bien été installé avec la commande suivante :
 
 ```bash
 python -c "from transformers import pipeline; print(pipeline('sentiment-analysis')('I love you'))"
