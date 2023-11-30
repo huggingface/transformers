@@ -29,7 +29,7 @@ Consulter les instructions d'installation ci-dessous pour la librairie d'apprent
 
 Vous devriez installer 🤗 Transformers dans un [environnement virtuel](https://docs.python.org/3/library/venv.html).
 Si vous n'êtes pas à l'aise avec les environnements virtuels, consultez ce [guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
-Utiliser un environnement virtuel permet de facilement gérer différent projets et d'éviter des erreurs de compatibilité entre les différentes dépendances.
+Utiliser un environnement virtuel permet de facilement gérer différents projets et d'éviter des erreurs de compatibilité entre les différentes dépendances.
 
 Commencez par créer un environnement virtuel dans l'espace de travail de votre projet :
 
