@@ -169,7 +169,7 @@ class LlavaForVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class LlavaForVisionText2TextIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretraine("ArthurZ/llava-1.5-7b")
+        self.processor = AutoProcessor.from_pretrained("ArthurZ/llava-1.5-7b")
 
     def test_large_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
