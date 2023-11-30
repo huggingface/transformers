@@ -16,11 +16,11 @@ Tree of Thoughts (ToT) is a framework that generalizes over the popular chain-of
 
 The implementation of ToT involves several key components:
 
-Prompt Design: Carefully crafted prompts provide the LLM with the necessary context and instructions to guide its reasoning process.
+1. Prompt Design: Carefully crafted prompts provide the LLM with the necessary context and instructions to guide its reasoning process.
 
-State Evaluation Function: This function assesses the quality of each thought, evaluating its progress towards the solution and its consistency with the problem constraints.
+2. State Evaluation Function: This function assesses the quality of each thought, evaluating its progress towards the solution and its consistency with the problem constraints.
 
-Backtracking Function: This function enables the LLM to retrace its steps and explore alternative reasoning paths when necessary.
+3. Backtracking Function: This function enables the LLM to retrace its steps and explore alternative reasoning paths when necessary.
 
 ToT Algorithm: The core algorithm orchestrates the entire process, guiding the LLM through the tree of thoughts, evaluating thoughts, and making decisions about the next course of action.
 
