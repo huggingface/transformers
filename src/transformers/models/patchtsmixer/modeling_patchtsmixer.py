@@ -591,7 +591,7 @@ class PatchTSMixerLayer(nn.Module):
             hidden = self.channel_feature_mixer(hidden)
 
         hidden = self.patch_mixer(hidden)
-        hidden = self.feature_mixer(hidden)  # hidden: (batch_size, num_patches, d_model)
+        hidden = self.feature_mixer(hidden)  # hidden: (batch_size x num_patches x d_model)
         return hidden
 
 
