@@ -492,12 +492,11 @@ class T5Attention(nn.Module):
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
-        
-        
-        self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads) #creating this one in all cases, even if it's not used.                    
-
-        self.relative_attention_bias_dict = nn.ModuleDict()
+                
         if self.positional_embedding_injected_in_attention is not None:
+            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads) #creating this one in all cases, even if it's not used.                    
+            self.relative_attention_bias_dict = nn.ModuleDict()
+
             for pos_emb_name, pos_emb_info in self.positional_embedding_injected_in_attention.items():
                 pos_emb_config = pos_emb_info.get('config', {})
                 if pos_emb_config is None:
