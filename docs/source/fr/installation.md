@@ -87,7 +87,7 @@ brew install pkg-config
 pip install 'transformers[flax]'
 ```
 
-Vérifiez si 🤗 Transformers a bien été installé avec la commande suivante. La commande va télécharger un modèle pré-entraîné :
+Vérifiez que 🤗 Transformers a bien été installé avec la commande suivante. La commande va télécharger un modèle pré-entraîné :
 
 ```bash
 python -c "from transformers import pipeline; print(pipeline('sentiment-analysis')('we love you'))"
