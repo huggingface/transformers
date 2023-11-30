@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch MobileNetV1 model. """
 
 
-import inspect
 import unittest
 
 from transformers import MobileNetV1Config
@@ -176,18 +175,6 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     @unittest.skip(reason="MobileNetV1 does not output attentions")
     def test_attention_outputs(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -175,6 +175,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                        [LXMERT](model_doc/lxmert)                        |       ✅        |         ✅         |      ❌      |
 |                        [M-CTC-T](model_doc/mctct)                        |       ✅        |         ❌         |      ❌      |
 |                       [M2M100](model_doc/m2m_100)                        |       ✅        |         ❌         |      ❌      |
+|                    [MADLAD-400](model_doc/madlad-400)                    |       ✅        |         ✅         |      ✅      |
 |                        [Marian](model_doc/marian)                        |       ✅        |         ✅         |      ✅      |
 |                      [MarkupLM](model_doc/markuplm)                      |       ✅        |         ❌         |      ❌      |
 |                   [Mask2Former](model_doc/mask2former)                   |       ✅        |         ❌         |      ❌      |
@@ -213,6 +214,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [OPT](model_doc/opt)                           |       ✅        |         ✅         |      ✅      |
 |                       [OWL-ViT](model_doc/owlvit)                        |       ✅        |         ❌         |      ❌      |
 |                         [OWLv2](model_doc/owlv2)                         |       ✅        |         ❌         |      ❌      |
+|                      [PatchTST](model_doc/patchtst)                      |       ✅        |         ❌         |      ❌      |
 |                       [Pegasus](model_doc/pegasus)                       |       ✅        |         ✅         |      ✅      |
 |                     [PEGASUS-X](model_doc/pegasus_x)                     |       ✅        |         ❌         |      ❌      |
 |                     [Perceiver](model_doc/perceiver)                     |       ✅        |         ❌         |      ❌      |

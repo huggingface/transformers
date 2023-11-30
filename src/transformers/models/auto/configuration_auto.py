@@ -164,6 +164,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("opt", "OPTConfig"),
         ("owlv2", "Owlv2Config"),
         ("owlvit", "OwlViTConfig"),
+        ("patchtst", "PatchTSTConfig"),
         ("pegasus", "PegasusConfig"),
         ("pegasus_x", "PegasusXConfig"),
         ("perceiver", "PerceiverConfig"),
@@ -378,6 +379,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("opt", "OPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("owlv2", "OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("owlvit", "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("patchtst", "PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pegasus", "PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pegasus_x", "PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("perceiver", "PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -572,6 +574,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("luke", "LUKE"),
         ("lxmert", "LXMERT"),
         ("m2m_100", "M2M100"),
+        ("madlad-400", "MADLAD-400"),
         ("marian", "Marian"),
         ("markuplm", "MarkupLM"),
         ("mask2former", "Mask2Former"),
@@ -611,6 +614,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("opt", "OPT"),
         ("owlv2", "OWLv2"),
         ("owlvit", "OWL-ViT"),
+        ("patchtst", "PatchTST"),
         ("pegasus", "Pegasus"),
         ("pegasus_x", "PEGASUS-X"),
         ("perceiver", "Perceiver"),
@@ -706,6 +710,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
     ]
 )
 
+# This is tied to the processing `-` -> `_` in `model_type_to_module_name`. For example, instead of putting
+# `transfo-xl` (as in `CONFIG_MAPPING_NAMES`), we should use `transfo_xl`.
 DEPRECATED_MODELS = [
     "bort",
     "mctct",
@@ -714,6 +720,7 @@ DEPRECATED_MODELS = [
     "retribert",
     "tapex",
     "trajectory_transformer",
+    "transfo_xl",
     "van",
 ]
 
