@@ -34,7 +34,7 @@ RUN python3 -m pip uninstall -y torch-tensorrt
 
 # recompile apex
 RUN python3 -m pip uninstall -y apex
-RUN git clone https://github.com/NVIDIA/apex
+# RUN git clone https://github.com/NVIDIA/apex
 #  `MAX_JOBS=1` disables parallel building to avoid cpu memory OOM when building image on GitHub Action (standard) runners
 # TODO: check if there is alternative way to install latest apex
 # RUN cd apex && MAX_JOBS=1 python3 -m pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .
