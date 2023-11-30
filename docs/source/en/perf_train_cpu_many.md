@@ -151,6 +151,21 @@ This example assumes that you have:
   distributed CPU training jobs, this typically includes PyTorch, Transformers, Intel Extension for PyTorch, Intel
   oneCCL Bindings for PyTorch, and OpenSSH to communicate between the containers.
 
+The snippet below is an example of a Dockerfile that uses a base image that supports distributed CPU training and then
+extracts a Transformers release to the `/workspace` directory, so that the example scripts are included in the image:
+```
+FROM intel/ai-workflows:torch-2.0.1-huggingface-multinode-py3.9
+
+WORKDIR /workspace
+
+# Download and extract the transformers code
+ARG HF_TRANSFORMERS_VER="4.35.2"
+RUN mkdir transformers && \
+    curl -sSL --retry 5 https://github.com/huggingface/transformers/archive/refs/tags/v${HF_TRANSFORMERS_VER}.tar.gz | tar -C transformers --strip-components=1 -xzf -
+```
+The image needs to be built and copied to the cluster's nodes or pushed to a container registry prior to deploying the
+PyTorchJob to the cluster.
+
 ### PyTorchJob Specification File
 
 The [Kubeflow PyTorchJob](https://www.kubeflow.org/docs/components/training/pytorch/) is used to run the distributed
@@ -188,7 +203,7 @@ spec:
         spec:
           containers:
             - name: pytorch
-              image: huggingface/transformers-pytorch-cpu:latest  # Specify the docker image to use for the worker pods
+              image: <image name>:<tag>  # Specify the docker image to use for the worker pods
               imagePullPolicy: IfNotPresent
               command:
                 - torchrun
@@ -215,7 +230,7 @@ spec:
                 - --ddp_backend
                 - "ccl"
                 - --use_ipex
-                - --bf16
+                - --bf16  # Specify --bf16 if your hardware supports bfloat16
               env:
               - name: LD_PRELOAD
                 value: "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4.5.9:/usr/local/lib/libiomp5.so"
@@ -231,10 +246,10 @@ spec:
                 value: "23"
               resources:
                 limits:
-                  cpu: 200         # Update the CPU and memory limit values based on your nodes
+                  cpu: 200  # Update the CPU and memory limit values based on your nodes
                   memory: 128Gi
                 requests:
-                  cpu: 200         # Update the CPU and memory request values based on your nodes
+                  cpu: 200  # Update the CPU and memory request values based on your nodes
                   memory: 128Gi
               volumeMounts:
               - name: pvc-volume
@@ -242,7 +257,7 @@ spec:
               - mountPath: /dev/shm
                 name: dshm
           restartPolicy: Never
-          nodeSelector:        #  Optionally use the node selector to specify what types of nodes to use for the workers
+          nodeSelector:  #  Optionally use the node selector to specify what types of nodes to use for the workers
             node-type: spr
           volumes:
           - name: pvc-volume
