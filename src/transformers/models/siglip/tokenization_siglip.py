@@ -119,7 +119,11 @@ class SiglipTokenizer(PreTrainedTokenizer):
         do_lower_case=True,
         **kwargs,
     ) -> None:
-        pad_token = AddedToken(pad_token, rstrip=True, lstrip=True, normalized = False) if isinstance(pad_token, str) else pad_token
+        pad_token = (
+            AddedToken(pad_token, rstrip=True, lstrip=True, normalized=False)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
         unk_token = AddedToken(unk_token, rstrip=True, lstrip=True) if isinstance(unk_token, str) else unk_token
         eos_token = AddedToken(eos_token, rstrip=True, lstrip=True) if isinstance(eos_token, str) else eos_token
 
