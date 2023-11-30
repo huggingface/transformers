@@ -543,7 +543,7 @@ class ModelTesterMixin:
                 )
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
-                expected_arg_names = ["input_ids"]
+                expected_arg_names = [model.main_input_name]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
@@ -1927,7 +1927,6 @@ class ModelTesterMixin:
             "FunnelForPreTraining",
             "ElectraForPreTraining",
             "XLMWithLMHeadModel",
-            "TransfoXLLMHeadModel",
         ]:
             for k in key_differences:
                 if k in ["loss", "losses"]:
