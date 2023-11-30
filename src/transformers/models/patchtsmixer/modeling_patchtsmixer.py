@@ -1499,10 +1499,10 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
             return tuple(
                 v
                 for v in [
+                    loss_val,
                     x_hat,
                     model_output.last_hidden_state,
                     model_output.hidden_states,
-                    loss_val,
                 ]
             )
 
@@ -1751,10 +1751,10 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
             return tuple(
                 v
                 for v in [
+                    loss_val,
                     y_hat,
                     model_output.last_hidden_state,
                     model_output.hidden_states,
-                    loss_val,
                     loc,
                     scale,
                 ]
@@ -1930,10 +1930,10 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
             return tuple(
                 v
                 for v in [
+                    loss_val,
                     y_hat,
                     model_output.last_hidden_state,
                     model_output.hidden_states,
-                    loss_val,
                 ]
             )
 
@@ -2132,10 +2132,10 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             return tuple(
                 v
                 for v in [
+                    loss_val,
                     y_hat,
                     model_output.last_hidden_state,
                     model_output.hidden_states,
-                    loss_val,
                 ]
             )
 
