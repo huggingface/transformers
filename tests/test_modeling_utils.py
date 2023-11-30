@@ -831,14 +831,8 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_safetensors
     def test_use_safetensors(self):
-        # test nice error message if no safetensor files available
-        with self.assertRaises(OSError) as env_error:
-            AutoModel.from_pretrained("hf-internal-testing/tiny-random-RobertaModel", use_safetensors=True)
-
-        self.assertTrue(
-            "model.safetensors or model.safetensors.index.json and thus cannot be loaded with `safetensors`"
-            in str(env_error.exception)
-        )
+        # Should not raise anymore
+        AutoModel.from_pretrained("hf-internal-testing/tiny-random-RobertaModel", use_safetensors=True)
 
         # test that error if only safetensors is available
         with self.assertRaises(OSError) as env_error:
@@ -1188,17 +1182,18 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
     def setUp(self) -> None:
         self.repo_name = f"{self.user}/test-model-on-the-fly-{uuid.uuid4()}"
 
-    def tearDown(self) -> None:
-        self.api.delete_repo(self.repo_name)
-
     def test_safetensors_on_the_fly_conversion(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        initial_model = BertModel(config)
+        repo_name = self.repo_name + "on-the-fly-conversion"
+        try:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
-        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True)
+            initial_model.push_to_hub(repo_name, token=self.token, safe_serialization=False)
+            converted_model = BertModel.from_pretrained(repo_name, use_safetensors=True)
+        finally:
+            self.api.delete_repo(repo_name)
 
         with self.subTest("Initial and converted models are equal"):
             for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
