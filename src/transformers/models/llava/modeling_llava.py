@@ -318,7 +318,6 @@ LLAMA_INPUTS_DOCSTRING = r"""
 class LlavaForVisionText2Text(LlavaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        config = LlavaConfig.from_pretrained("ybelkada/llava-1.5-7b", revision="refs/pr/5")
         self.vision_tower = AutoModel.from_config(config.vision_config)
         self.vision_tower._no_split_modules = ["CLIPEncoderLayer"]
         self.multi_modal_projector = LlavaMultiModalProjector(config)
