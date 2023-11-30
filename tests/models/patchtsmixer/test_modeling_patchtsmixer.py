@@ -188,9 +188,13 @@ class PatchTSMixerModelTester:
         # bs, n_vars, num_patch, patch_length
 
         # [bs x context_length x n_vars]
-        past_values = floats_tensor([self.batch_size, _past_length, self.num_input_channels])
+        past_values = floats_tensor(
+            [self.batch_size, _past_length, self.num_input_channels]
+        )
 
-        future_values = floats_tensor([self.batch_size, config.prediction_length, self.num_input_channels])
+        future_values = floats_tensor(
+            [self.batch_size, config.prediction_length, self.num_input_channels]
+        )
 
         inputs_dict = {
             "past_values": past_values,
@@ -222,9 +226,13 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         else ()
     )
     all_generative_model_classes = (
-        (PatchTSMixerForPrediction, PatchTSMixerForPretraining) if is_torch_available() else ()
+        (PatchTSMixerForPrediction, PatchTSMixerForPretraining)
+        if is_torch_available()
+        else ()
     )
-    pipeline_model_mapping = {"feature-extraction": PatchTSMixerModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": PatchTSMixerModel} if is_torch_available() else {}
+    )
     is_encoder_decoder = False
     test_pruning = False
     test_head_masking = False
@@ -253,18 +261,24 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         self.config_tester.run_common_tests()
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         # if classification model:
         if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
-            labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_targets, rng=rng)
+            labels = ids_tensor(
+                [self.model_tester.batch_size], self.model_tester.num_targets, rng=rng
+            )
             # inputs_dict["labels"] = labels
             inputs_dict["future_values"] = labels
             # inputs_dict.pop("future_values")
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
-            labels = floats_tensor([self.model_tester.batch_size, self.model_tester.num_targets], rng=rng)
+            labels = floats_tensor(
+                [self.model_tester.batch_size, self.model_tester.num_targets], rng=rng
+            )
             # inputs_dict["labels"] = labels
             inputs_dict["future_values"] = labels
             # inputs_dict.pop("future_values")
@@ -281,7 +295,9 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_hidden_states_output(self):
@@ -293,7 +309,11 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
                 self.model_tester,
@@ -329,14 +349,18 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+                tuple_output = model(
+                    **tuple_inputs, return_dict=False, **additional_kwargs
+                )
                 output_ = model(**dict_inputs, return_dict=True, **additional_kwargs)
                 attributes_ = vars(output_)
                 dict_output = tuple(attributes_.values())
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object, dict_object
+                        ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif isinstance(tuple_object, Dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
@@ -371,8 +395,12 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             check_equivalence(model, tuple_inputs, dict_inputs)
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
@@ -381,8 +409,12 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             dict_inputs.update({"output_hidden_states": False})
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             tuple_inputs.update({"output_hidden_states": False})
             dict_inputs.update({"output_hidden_states": False})
             check_equivalence(
@@ -424,12 +456,14 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
                 expected_arg_names = expected_arg_names_without_target + ["return_loss"]
             if model_class == PatchTSMixerModel:
                 expected_arg_names = expected_arg_names_without_target
-            if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
-                MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
-            ):
+            if model_class in get_values(
+                MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING
+            ) or model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
                 expected_arg_names.remove("observed_mask")
 
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
     @is_flaky()
     def test_retain_grad_hidden_states_attentions(self):
@@ -447,14 +481,19 @@ def prepare_batch(repo_id="ibm/patchtsmixer-etth1-test-data", file="pretrain_bat
 @slow
 class PatchTSMixerModelIntegrationTests(unittest.TestCase):
     def test_pretrain_head(self):
-        model = PatchTSMixerForPretraining.from_pretrained("ibm/patchtsmixer-etth1-pretrain").to(torch_device)
+        model = PatchTSMixerForPretraining.from_pretrained(
+            "ibm/patchtsmixer-etth1-pretrain"
+        ).to(torch_device)
         batch = prepare_batch()
 
         torch.manual_seed(0)
         with torch.no_grad():
-            output = model(past_values=batch["past_values"].to(torch_device)).prediction_outputs
+            output = model(
+                past_values=batch["past_values"].to(torch_device)
+            ).prediction_outputs
         num_patch = (
-            max(model.config.context_length, model.config.patch_length) - model.config.patch_length
+            max(model.config.context_length, model.config.patch_length)
+            - model.config.patch_length
         ) // model.config.patch_stride + 1
         expected_shape = torch.Size(
             [
@@ -480,10 +519,14 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
             ],
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
+        self.assertTrue(
+            torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE)
+        )
 
     def test_forecasting_head(self):
-        model = PatchTSMixerForPrediction.from_pretrained("ibm/patchtsmixer-etth1-forecasting").to(torch_device)
+        model = PatchTSMixerForPrediction.from_pretrained(
+            "ibm/patchtsmixer-etth1-forecasting"
+        ).to(torch_device)
         batch = prepare_batch(file="forecast_batch.pt")
 
         model.eval()
@@ -494,17 +537,23 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
                 future_values=batch["future_values"].to(torch_device),
             ).prediction_outputs
 
-        expected_shape = torch.Size([32, model.config.prediction_length, model.config.num_input_channels])
+        expected_shape = torch.Size(
+            [32, model.config.prediction_length, model.config.num_input_channels]
+        )
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
             [[0.4271, -0.0651, 0.4656, 0.7104, -0.3085, -1.9658, 0.4560]],
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
+        self.assertTrue(
+            torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE)
+        )
 
     def test_prediction_generation(self):
-        model = PatchTSMixerForPrediction.from_pretrained("ibm/patchtsmixer-etth1-generate").to("cpu")
+        model = PatchTSMixerForPrediction.from_pretrained(
+            "ibm/patchtsmixer-etth1-generate"
+        ).to("cpu")
         batch = prepare_batch(file="forecast_batch.pt")
         print(batch["past_values"])
 
@@ -512,7 +561,9 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         torch.manual_seed(0)
         with torch.no_grad():
             outputs = model.generate(past_values=batch["past_values"].to("cpu"))
-        expected_shape = torch.Size((32, 1, model.config.prediction_length, model.config.num_input_channels))
+        expected_shape = torch.Size(
+            (32, 1, model.config.prediction_length, model.config.num_input_channels)
+        )
 
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
@@ -522,7 +573,9 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         )
         mean_prediction = outputs.sequences.mean(dim=1)
 
-        self.assertTrue(torch.allclose(mean_prediction[0, -1:], expected_slice, atol=TOLERANCE))
+        self.assertTrue(
+            torch.allclose(mean_prediction[0, -1:], expected_slice, atol=TOLERANCE)
+        )
 
 
 @require_torch
@@ -566,7 +619,8 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         )
 
         cls.num_patches = (
-            max(cls.params["context_length"], cls.params["patch_length"]) - cls.params["patch_length"]
+            max(cls.params["context_length"], cls.params["patch_length"])
+            - cls.params["patch_length"]
         ) // cls.params["patch_stride"] + 1
 
         # batch_size = 32
@@ -605,7 +659,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             cls.params["prediction_length"],
             cls.params["num_input_channels"],
         )
-        cls.correct_regression_output = torch.rand(batch_size, cls.params["num_targets"])
+        cls.correct_regression_output = torch.rand(
+            batch_size, cls.params["num_targets"]
+        )
 
         cls.correct_pretrain_output = torch.rand(
             batch_size,
@@ -620,27 +676,34 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             cls.params["num_input_channels"],
         )
 
-        cls.correct_sel_forecast_output = torch.rand(batch_size, cls.params["prediction_length"], 2)
+        cls.correct_sel_forecast_output = torch.rand(
+            batch_size, cls.params["prediction_length"], 2
+        )
 
         cls.correct_classification_output = torch.rand(
             batch_size,
             cls.params["num_targets"],
         )
 
-        cls.correct_classification_classes = torch.randint(0, cls.params["num_targets"], (batch_size,))
+        cls.correct_classification_classes = torch.randint(
+            0, cls.params["num_targets"], (batch_size,)
+        )
 
     def test_patchtsmixer_encoder(self):
         config = PatchTSMixerConfig(**self.__class__.params)
         enc = PatchTSMixerEncoder(config)
         output = enc(self.__class__.enc_data)
-        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
+        self.assertEqual(
+            output.last_hidden_state.shape, self.__class__.enc_output.shape
+        )
 
     def test_patchmodel(self):
         config = PatchTSMixerConfig(**self.__class__.params)
         mdl = PatchTSMixerModel(config)
         output = mdl(self.__class__.data)
-        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
-        self.assertEqual(output.last_hidden_state.shape, output[0].shape)
+        self.assertEqual(
+            output.last_hidden_state.shape, self.__class__.enc_output.shape
+        )
         self.assertEqual(output.patch_input.shape, self.__class__.enc_data.shape)
 
     def test_pretrainhead(self):
@@ -660,16 +723,18 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             output.prediction_outputs.shape,
             self.__class__.correct_pretrain_output.shape,
         )
-        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
+        self.assertEqual(
+            output.last_hidden_state.shape, self.__class__.enc_output.shape
+        )
         self.assertEqual(output.loss.item() < 100, True)
 
     def test_pretrain_full_with_return_dict(self):
         config = PatchTSMixerConfig(**self.__class__.params)
         mdl = PatchTSMixerForPretraining(config)
         output = mdl(self.__class__.data, return_dict=False)
-        self.assertEqual(output[0].shape, self.__class__.correct_pretrain_output.shape)
-        self.assertEqual(output[1].shape, self.__class__.enc_output.shape)
-        self.assertEqual(output[-1].item() < 100, True)
+        self.assertEqual(output[1].shape, self.__class__.correct_pretrain_output.shape)
+        self.assertEqual(output[2].shape, self.__class__.enc_output.shape)
+        self.assertEqual(output[0].item() < 100, True)
 
     def test_forecast_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
@@ -695,7 +760,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
                 target_output = self.__class__.correct_sel_forecast_output
             else:
                 target_output = target_input
-            ref_samples = target_output.unsqueeze(1).expand(-1, config.num_parallel_samples, -1, -1)
+            ref_samples = target_output.unsqueeze(1).expand(
+                -1, config.num_parallel_samples, -1, -1
+            )
 
         elif task == "classification":
             mdl = PatchTSMixerForClassification(config)
@@ -705,7 +772,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             mdl = PatchTSMixerForRegression(config)
             target_input = self.__class__.correct_regression_output
             target_output = self.__class__.correct_regression_output
-            ref_samples = target_output.unsqueeze(1).expand(-1, config.num_parallel_samples, -1)
+            ref_samples = target_output.unsqueeze(1).expand(
+                -1, config.num_parallel_samples, -1
+            )
         elif task == "pretrain":
             mdl = PatchTSMixerForPretraining(config)
             target_input = None
@@ -756,7 +825,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             )
         )
     )
-    def test_forecast(self, mode, self_attn, scaling, gated_attn, prediction_channel_indices, loss):
+    def test_forecast(
+        self, mode, self_attn, scaling, gated_attn, prediction_channel_indices, loss
+    ):
         params = self.__class__.params.copy()
         params.update(
             mode=mode,
@@ -780,7 +851,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             )
         )
     )
-    def test_classification(self, mode, self_attn, scaling, gated_attn, head_aggregation):
+    def test_classification(
+        self, mode, self_attn, scaling, gated_attn, head_aggregation
+    ):
         params = self.__class__.params.copy()
         params.update(
             mode=mode,
@@ -804,7 +877,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             )
         )
     )
-    def test_regression(self, mode, self_attn, scaling, gated_attn, head_aggregation, loss):
+    def test_regression(
+        self, mode, self_attn, scaling, gated_attn, head_aggregation, loss
+    ):
         params = self.__class__.params.copy()
         params.update(
             mode=mode,
@@ -853,7 +928,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
         self.check_module(task="pretrain", params=params)
 
-    def forecast_full_module(self, params=None, output_hidden_states=False, return_dict=None):
+    def forecast_full_module(
+        self, params=None, output_hidden_states=False, return_dict=None
+    ):
         config = PatchTSMixerConfig(**params)
         mdl = PatchTSMixerForPrediction(config)
 
@@ -888,11 +965,15 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
         if config.loss == "nll":
             samples = mdl.generate(self.__class__.data)
-            ref_samples = target_val.unsqueeze(1).expand(-1, params["num_parallel_samples"], -1, -1)
+            ref_samples = target_val.unsqueeze(1).expand(
+                -1, params["num_parallel_samples"], -1, -1
+            )
             self.assertEqual(samples.sequences.shape, ref_samples.shape)
 
     def test_forecast_full(self):
-        self.check_module(task="forecast", params=self.__class__.params, output_hidden_states=True)
+        self.check_module(
+            task="forecast", params=self.__class__.params, output_hidden_states=True
+        )
         # self.forecast_full_module(self.__class__.params, output_hidden_states = True)
 
     def test_forecast_full_2(self):
@@ -982,7 +1063,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         # output = head(self.__class__.enc_output, raw_data = self.__class__.correct_pretrain_output)
         output = head(self.__class__.enc_output)
 
-        self.assertEqual(output.shape, self.__class__.correct_classification_output.shape)
+        self.assertEqual(
+            output.shape, self.__class__.correct_classification_output.shape
+        )
 
     def test_classification_full(self):
         config = PatchTSMixerConfig(**self.__class__.params)
@@ -995,7 +1078,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             output.prediction_outputs.shape,
             self.__class__.correct_classification_output.shape,
         )
-        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
+        self.assertEqual(
+            output.last_hidden_state.shape, self.__class__.enc_output.shape
+        )
         self.assertEqual(output.loss.item() < 100, True)
 
     def test_classification_full_with_return_dict(self):
@@ -1012,7 +1097,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             output.prediction_outputs.shape,
             self.__class__.correct_classification_output.shape,
         )
-        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
+        self.assertEqual(
+            output.last_hidden_state.shape, self.__class__.enc_output.shape
+        )
         self.assertEqual(output.loss.item() < 100, True)
 
     def test_regression_head(self):
@@ -1026,12 +1113,16 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
     def test_regression_full(self):
         config = PatchTSMixerConfig(**self.__class__.params)
         mdl = PatchTSMixerForRegression(config)
-        output = mdl(self.__class__.data, future_values=self.__class__.correct_regression_output)
+        output = mdl(
+            self.__class__.data, future_values=self.__class__.correct_regression_output
+        )
         self.assertEqual(
             output.prediction_outputs.shape,
             self.__class__.correct_regression_output.shape,
         )
-        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
+        self.assertEqual(
+            output.last_hidden_state.shape, self.__class__.enc_output.shape
+        )
         self.assertEqual(output.loss.item() < 100, True)
 
     def test_regression_full_with_return_dict(self):
@@ -1048,7 +1139,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             output.prediction_outputs.shape,
             self.__class__.correct_regression_output.shape,
         )
-        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
+        self.assertEqual(
+            output.last_hidden_state.shape, self.__class__.enc_output.shape
+        )
         self.assertEqual(output.loss.item() < 100, True)
 
     def test_regression_full_distribute(self):
@@ -1058,7 +1151,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         config = PatchTSMixerConfig(**params)
 
         mdl = PatchTSMixerForRegression(config)
-        output = mdl(self.__class__.data, future_values=self.__class__.correct_regression_output)
+        output = mdl(
+            self.__class__.data, future_values=self.__class__.correct_regression_output
+        )
         self.assertEqual(
             output.prediction_outputs[0].shape,
             self.__class__.correct_regression_output.shape,
@@ -1067,7 +1162,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             output.prediction_outputs[1].shape,
             self.__class__.correct_regression_output.shape,
         )
-        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
+        self.assertEqual(
+            output.last_hidden_state.shape, self.__class__.enc_output.shape
+        )
         self.assertEqual(output.loss.item() < 100, True)
 
         if config.loss == "nll":
@@ -1084,7 +1181,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         config = PatchTSMixerConfig(**params)
 
         mdl = PatchTSMixerForRegression(config)
-        output = mdl(self.__class__.data, future_values=self.__class__.correct_regression_output)
+        output = mdl(
+            self.__class__.data, future_values=self.__class__.correct_regression_output
+        )
         self.assertEqual(
             output.prediction_outputs[0].shape,
             self.__class__.correct_regression_output.shape,
@@ -1093,7 +1192,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             output.prediction_outputs[1].shape,
             self.__class__.correct_regression_output.shape,
         )
-        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
+        self.assertEqual(
+            output.last_hidden_state.shape, self.__class__.enc_output.shape
+        )
         self.assertEqual(output.loss.item() < 100, True)
 
         if config.loss == "nll":
