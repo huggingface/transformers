@@ -71,6 +71,21 @@ class LlavaVisionText2TextModelTester:
             "pad_token_id": 0,
         },
         is_training=True,
+        vision_config=dict(
+                    batch_size=12,
+                    image_size=30,
+                    patch_size=2,
+                    num_channels=3,
+                    is_training=True,
+                    hidden_size=32,
+                    projection_dim=32,
+                    num_hidden_layers=2,
+                    num_attention_heads=4,
+                    intermediate_size=37,
+                    dropout=0.1,
+                    attention_dropout=0.1,
+                    initializer_range=0.02,
+                    )
     ):
         self.parent = parent
         self.ignore_index = ignore_index
@@ -79,6 +94,7 @@ class LlavaVisionText2TextModelTester:
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
         self.text_config = text_config
+        self.vision_config = vision_config
         self.seq_length = seq_length
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
@@ -89,12 +105,12 @@ class LlavaVisionText2TextModelTester:
 
         self.batch_size = 3
         self.num_channels = 3
-        self.image_size = 64
+        self.image_size = 336
 
     def get_config(self):
         return LlavaConfig(
-            # vision_config=vision_config, TODO add a small model config
             text_config=self.text_config,
+            vision_config=self.vision_config,
             ignore_index=self.ignore_index,
             image_token_index=self.image_token_index,
             projector_hidden_act=self.projector_hidden_act,
@@ -106,9 +122,9 @@ class LlavaVisionText2TextModelTester:
         pixel_values = floats_tensor(
             [
                 self.batch_size,
-                self.num_channels,
-                self.image_size,
-                self.image_size,
+                self.vision_config["num_channels"],
+                self.vision_config["image_size"],
+                self.vision_config["image_size"],
             ]
         )
         config = self.get_config()
@@ -177,7 +193,7 @@ class LlavaForVisionText2TextIntegrationTest(unittest.TestCase):
             ["Hey how are you", "This seems<s>Odd not?</s>."], return_tensors="pt", padding=True
         )
         self.assertDictEqual(
-            inputs,
+            dict(inputs),
             {
                 "input_ids": torch.tensor(
                     [[1, 18637, 920, 526, 366, 0, 0, 0, 0, 0], [1, 910, 2444, 1, 29949, 1289, 451, 29973, 2, 29889]]
