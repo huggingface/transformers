@@ -1738,6 +1738,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             past_observed_mask=past_observed_mask,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
+            return_dict=True,
         )
         # get output head
         y_hat = self.head(model_output.last_hidden_state)
@@ -1964,10 +1965,10 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             past_observed_mask=past_observed_mask,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
-            return_dict=return_dict,
+            return_dict=True,
         )
         # get output head. y_hat is of shape [bs x num_targets] or tuple of this shape
-        y_hat = self.head(model_output[0])
+        y_hat = self.head(model_output.last_hidden_state)
 
         loss = None
         if target_values is not None:
