@@ -2191,7 +2191,7 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
         self.embed_char_positions = SeamlessM4Tv2SinusoidalPositionalEmbedding(
             self.max_target_positions,
             config.hidden_size,
-            padding_idx=0,
+            padding_idx=self.padding_idx,
         )
 
         self.pos_emb_alpha_char = nn.Parameter(torch.ones(1))
@@ -2627,7 +2627,7 @@ class SeamlessM4Tv2VariancePredictor(nn.Module):
             embed_dim,
             hidden_dim,
             kernel_size=kernel_size,
-            padding=(kernel_size - 1) // 2,
+            padding="same",
         )
         self.activation_fuction = nn.ReLU()
         self.ln1 = nn.LayerNorm(hidden_dim)
@@ -2636,7 +2636,7 @@ class SeamlessM4Tv2VariancePredictor(nn.Module):
             hidden_dim,
             hidden_dim,
             kernel_size=kernel_size,
-            padding=1,
+            padding="same",
         )
         self.ln2 = nn.LayerNorm(hidden_dim)
         self.proj = nn.Linear(hidden_dim, 1)
