@@ -1028,8 +1028,8 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
-    _import_structure["models.udop"].append("UdopImageProcessor")
     _import_structure["models.tvp"].append("TvpImageProcessor")
+    _import_structure["models.udop"].append("UdopImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
@@ -2965,6 +2965,14 @@ else:
             "TvltPreTrainedModel",
         ]
     )
+    _import_structure["models.tvp"].extend(
+        [
+            "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TvpForVideoGrounding",
+            "TvpModel",
+            "TvpPreTrainedModel",
+        ]
+    )
     _import_structure["models.udop"].extend(
         [
             "UDOP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2973,14 +2981,6 @@ else:
             "UdopModel",
             "UdopPreTrainedModel",
         ],
-    )
-    _import_structure["models.tvp"].extend(
-        [
-            "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TvpForVideoGrounding",
-            "TvpModel",
-            "TvpPreTrainedModel",
-        ]
     )
     _import_structure["models.umt5"].extend(
         [
