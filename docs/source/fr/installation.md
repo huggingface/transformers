@@ -203,7 +203,7 @@ Le script devrait maintenant s'exécuter sans rester en attente ou attendre une 
 
 ### Récupérer des modèles et des tokenizers pour une utilisation hors ligne
 
-Une autre option pour utiliser 🤗 Transformers hors ligne est de télécharger les fichiers à l'avance, puis d'utiliser vers leur chemin local lorsque vous en avez besoin en mode hors ligne. Il existe trois façons de faire cela :
+Une autre option pour utiliser 🤗 Transformers hors ligne est de télécharger les fichiers à l'avance, puis d'utiliser les chemins locaux lorsque vous en avez besoin en mode hors ligne. Il existe trois façons de faire cela :
 
   * Téléchargez un fichier via l'interface utilisateur sur le [Model Hub](https://huggingface.co/models) en cliquant sur l'icône ↓.
 
