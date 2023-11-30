@@ -217,7 +217,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        input_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -240,12 +240,13 @@ LLAMA_INPUTS_DOCSTRING = r"""
     LLAVA_START_DOCSTRING,
 )
 class LlavaForVisionText2Text(LlavaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
         self.vision_tower._no_split_modules = ["CLIPEncoderLayer"]
         self.multi_modal_projector = LlavaMultiModalProjector(config)
 
+        # set the pad token id to the token image -200? or just to the new index
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         # Initialize weights and apply final processing
         self.post_init()
@@ -270,7 +271,32 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
 
     def tie_weights(self):
         return self.language_model.tie_weights()
+    
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
+        # TODO make sur this works as expected
+        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        # update vocab size
+        self.config.text_config.vocab_size = new_num_tokens
+        return model_embeds
 
+    def _merge_input_ids_with_image_features(self, image_features, input_embeds, input_ids, attention_mask, position_ids):
+        # 1. Create a mask to know where image tokens are
+        image_token_mask = (input_ids == self.config.image_token_index)
+        num_image_tokens = torch.sum(image_token_mask, dim = -1)
+        max_embed_dim = num_image_tokens.max()
+        
+        # 2. Create the full embedding
+        final_embedding = torch.zeros(input_ids.shape[0], self.config.text_config.max_position_embeddings, input_embeds.shape[-1])
+        nb_text_tokens_per_images = image_features.shape[1]-1
+        
+        # 3. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"] 
+        # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
+        final_embedding[:, torch.cumsum(image_token_mask*nb_text_tokens_per_images + 1, -1)] = input_embeds
+        final_embedding[:, torch.range(0, image_features.shape[1], dtype=torch.long) * num_image_tokens] = image_features.split(num_image_tokens)[0]
+        # We can have multiple images in a single batch, hence we use different
+        # indexes for image and text.
+        return input_embeds, attention_mask, position_ids
+                    
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -280,7 +306,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layer: Optional[int] = None,
         vision_feature_select_strategy: Optional[str] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -329,25 +355,14 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
             else self.config.vision_feature_select_strategy
         )
 
-        if inputs_embeds is None:
-            if pixel_values is None or input_ids.shape[1] == 1:
-                # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
-                # generation without image information
-                if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
-                    target_seqlen = past_key_values[-1][-1].shape[-2] + 1
-
-                    extended_attention_mask = torch.ones(
-                        (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
-                        dtype=attention_mask.dtype,
-                        device=attention_mask.device,
-                    )
-
-                    attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
-                    position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
-            else:
-                image_outputs = self.vision_tower(
-                    pixel_values, output_hidden_states=True
-                )  # this is not memory efficient at all
+        if input_embeds is None:
+            # 1. Extra the input embeddings 
+            input_embeds = self.get_input_embeddings()(input_ids)
+            
+            # 2. Merge text and images
+            if pixel_values is not None and input_ids.shape[1] != 1:
+                image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+                # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
                 selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
 
                 if vision_feature_select_strategy == "default":
@@ -360,105 +375,15 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
                     )
 
                 image_features = self.multi_modal_projector(selected_image_feature)
-
-                if attention_mask is None:
-                    attention_mask = torch.ones_like(input_ids, dtype=torch.bool)
-                else:
-                    attention_mask = attention_mask.bool()
-
-                if position_ids is None:
-                    position_ids = torch.arange(0, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
-
+                input_embeds, attention_mask, position_ids = self._merge_input_ids_with_image_features(image_features, input_embeds, input_ids, attention_mask, position_ids)
                 if labels is None:
                     labels = torch.full_like(input_ids, self.config.ignore_index)
 
-                # We need to initiliaze these new arrays to process the inputs embed and labels
-                # to correctly deal with all case (e.g. single prompt & multi-image tokens)
-                processed_inputs_embeds = []
-                processed_labels = []
-
-                # We can have multiple images in a single batch, hence we use different
-                # indexes for image and text.
-                current_image_index = 0
-
-                # Since we might image tokens in different places of the input string, we need to
-                # process that one by one, batch element per batch element
-                for batch_idx, (current_input_ids, current_labels) in enumerate(zip(input_ids, labels)):
-                    # Get the number of the image tokens in the current prompt.
-                    num_image_tokens = (current_input_ids == self.config.image_token_index).sum()
-
-                    if num_image_tokens == 0:
-                        # If there is not image tokens, simply use the text tokens embeddings
-                        current_inputs_embed = self.get_input_embeddings()(current_input_ids)
-                        processed_inputs_embeds.append(current_inputs_embed)
-                        processed_labels.append(labels[batch_idx])
-                        current_image_index += 1
-                        continue
-
-                    input_ids_without_image_token, labels_without_image_token = self._split_input_ids_and_labels(
-                        current_input_ids, current_labels, self.config.image_token_index
-                    )
-
-                    split_index = torch.where(current_input_ids == self.config.image_token_index)[0][0].item()
-                    split_sizes = [split_index, labels_without_image_token.shape[-1] - split_index]
-
-                    inputs_embed_without_image = self.get_input_embeddings()(input_ids_without_image_token)
-
-                    inputs_embed_without_image = torch.split(inputs_embed_without_image, split_sizes, dim=0)
-                    labels_without_image_token = torch.split(labels_without_image_token, split_sizes, dim=0)
-
-                    current_processed_inputs_embed = []
-                    current_processed_labels = []
-
-                    for i in range(num_image_tokens + 1):
-                        current_processed_inputs_embed.append(inputs_embed_without_image[i])
-                        current_processed_labels.append(labels_without_image_token[i])
-
-                        if i < num_image_tokens:
-                            current_image_features = image_features[current_image_index]
-                            current_image_index += 1
-
-                            current_processed_inputs_embed.append(current_image_features)
-                            current_processed_labels.append(
-                                torch.full(
-                                    (current_image_features.shape[0],),
-                                    self.config.ignore_index,
-                                    device=current_labels.device,
-                                    dtype=current_labels.dtype,
-                                )
-                            )
-
-                    processed_inputs_embeds.append(torch.cat(current_processed_inputs_embed))
-                    processed_labels.append(torch.cat(current_processed_labels))
-
-                # Truncate sequences to max length as image embeddings can make the sequence longer
-                tokenizer_model_max_length = getattr(self.config, "tokenizer_model_max_length", None)
-                if tokenizer_model_max_length is not None:
-                    processed_inputs_embeds = [x[:tokenizer_model_max_length] for x in processed_inputs_embeds]
-                    processed_labels = [x[:tokenizer_model_max_length] for x in processed_labels]
-
-                # Combine them
-                max_len = max(x.shape[0] for x in processed_inputs_embeds)
-                batch_size = len(processed_inputs_embeds)
-
-                attention_mask = torch.zeros(
-                    (batch_size, max_len), dtype=attention_mask.dtype, device=attention_mask.device
-                )
-                position_ids = torch.zeros((batch_size, max_len), dtype=position_ids.dtype, device=position_ids.device)
-
-                inputs_embeds, attention_mask, position_ids, labels = self._optionally_pad_input_embeds(
-                    processed_inputs_embeds, attention_mask, position_ids, processed_labels, max_len, batch_size
-                )
-
-                # Set input_ids to None so that the LM will only use input_embeds
-                input_ids = None
-
         outputs = self.language_model(
-            input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
+            input_embeds=input_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -496,13 +421,13 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         )
 
     def _optionally_pad_input_embeds(
-        self, inputs_embeds, attention_mask, position_ids, labels, max_seqlen, batch_size
+        self, input_embeds, attention_mask, position_ids, labels, max_seqlen, batch_size
     ):
         r"""
         Optionally pad the input embeddings by correctly setting the padding tokens
         on the correct places inside the attention mask, position ids and labels.
         """
-        padded_inputs_embeds = []
+        padded_input_embeds = []
         padded_labels = torch.full(
             (batch_size, max_seqlen),
             self.config.ignore_index,
@@ -510,14 +435,14 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
             device=labels[0].device,
         )
 
-        for i, (current_embeds, cur_new_labels) in enumerate(zip(inputs_embeds, labels)):
+        for i, (current_embeds, cur_new_labels) in enumerate(zip(input_embeds, labels)):
             # Get the current sequence length and padding side
             # then optionally padd the input embeds
             current_seq_len = current_embeds.shape[0]
             padding_side = getattr(self.config, "tokenizer_padding_side", "right")
             padded_embedding = pad_sequence(current_embeds, max_seqlen, padding_side)
 
-            padded_inputs_embeds.append(padded_embedding)
+            padded_input_embeds.append(padded_embedding)
 
             if current_seq_len > 0:
                 start_index = -current_seq_len if padding_side == "left" else 0
@@ -529,29 +454,11 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
                     0, current_seq_len, dtype=position_ids.dtype, device=position_ids.device
                 )
 
-        inputs_embeds = torch.stack(padded_inputs_embeds, dim=0)
-        return inputs_embeds, attention_mask, position_ids, padded_labels
+        input_embeds = torch.stack(padded_input_embeds, dim=0)
+        return input_embeds, attention_mask, position_ids, padded_labels
 
-    def _split_input_ids_and_labels(self, input_ids, labels, image_token_id):
-        """
-        Simple method to split the input ids and labels in 2: the parts before / after `image_token_id`.
-        """
-        exclude_mask = input_ids != image_token_id
-
-        input_ids_without_image_token = input_ids[exclude_mask]
-        labels_without_image_token = labels[exclude_mask]
-
-        return input_ids_without_image_token, labels_without_image_token
-
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
-        # Pop the pixel_values to pick it up later
-        pixel_values = kwargs.pop("pixel_values", None)
-
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, input_embeds=None, pixel_values=None, **kwargs):
         # Call `prepare_inputs_for_generation` from the LM
-        model_input = self.language_model.prepare_inputs_for_generation(
-            input_ids, past_key_values, inputs_embeds=inputs_embeds, **kwargs
-        )
-
-        # Put back the `pixel_values` in `model_input`
+        model_input = self.language_model.prepare_inputs_for_generation(input_ids, past_key_values, input_embeds=input_embeds, **kwargs)
         model_input.update({"pixel_values": pixel_values})
         return model_input
