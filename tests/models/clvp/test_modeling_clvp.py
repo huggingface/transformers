@@ -604,12 +604,7 @@ class ClvpIntegrationTest(unittest.TestCase):
         text_embeds = self.model.text_encoder_model(input_ids=self.text_tokens, return_dict=True)[0].cpu()
 
         # fmt: off
-        EXPECTED_TEXT_EMBEDS = torch.tensor(
-            [ 1.8060e+00, -2.7928e+00,  3.2021e+00, -1.5673e+00,  2.3284e+00, -3.2065e+00, -1.3368e+00,  2.2322e+00,
-              -1.7667e+00,  4.1505e-01, 2.4119e+00, -5.8133e-03, -4.6367e+00,  1.6450e-01,  6.7459e+00, 6.6292e+00,
-              1.1046e+00,  3.6196e+00, -1.0496e+01,  5.4924e+00
-            ]
-        )
+        EXPECTED_TEXT_EMBEDS = torch.tensor([1.4798, -2.0005, 2.3902, -0.5042, 1.6401, -2.4135, -1.4800, 3.0118, -2.4422, 1.3266, 2.2339, 1.4761, -4.8983, -1.3592, 6.0251, 6.7364, 2.2576, 3.7229, -10.0436, 4.6676])
         # fmt: on
 
         self.assertTrue(torch.allclose(text_embeds[0, :20], EXPECTED_TEXT_EMBEDS, atol=1e-4))
@@ -618,11 +613,7 @@ class ClvpIntegrationTest(unittest.TestCase):
         speech_embeds = self.model.speech_encoder_model(input_ids=self.text_tokens, return_dict=True)[0].cpu()
 
         # fmt: off
-        EXPECTED_SPEECH_EMBEDS = torch.tensor(
-            [ 4.6143, -5.5784,  0.8983, -3.9665, -0.6714, -1.0665, -1.1277,  1.5619, 2.6322, -7.2008, -2.4932,  0.3265,
-              -1.4738,  0.1425,  5.0825,  4.1760, -5.4708,  2.1935, -6.0044,  3.9540
-            ]
-        )
+        EXPECTED_SPEECH_EMBEDS = torch.tensor([3.1202, -3.1183, -1.4264, -6.1339, 1.8885, -0.1983, 0.9461, -1.7414, 0.3320, -3.8400, -1.5715, 1.5096, -1.7576, 0.2387, 4.9758, 5.8450, -6.2534, 2.8587, -5.5816, 4.7821])
         # fmt: on
 
         self.assertTrue(torch.allclose(speech_embeds[0, :20], EXPECTED_SPEECH_EMBEDS, atol=1e-4))
@@ -635,8 +626,10 @@ class ClvpIntegrationTest(unittest.TestCase):
             num_beams=4,
             num_return_sequences=4,
             max_new_tokens=10,
-        ).speech_ids.cpu()
+        )
 
-        EXPECTED_OUTPUTS = torch.tensor([[1953, 1080, 612], [1953, 1953, 612], [1953, 612, 716]])
+        EXPECTED_SPEECH_IDS = torch.tensor([[1953, 1080, 612], [1953, 612, 493], [1953, 612, 716]])
+        EXPECTED_SIMILARITY_SCORES = torch.tensor([[14.7660, 14.4569, 13.6472, 13.5683]])
 
-        self.assertTrue(torch.allclose(full_model_output[-3:, -3:], EXPECTED_OUTPUTS))
+        self.assertTrue(torch.allclose(full_model_output.speech_ids.cpu()[-3:, -3:], EXPECTED_SPEECH_IDS))
+        self.assertTrue(torch.allclose(full_model_output.logits_per_text.cpu(), EXPECTED_SIMILARITY_SCORES))
