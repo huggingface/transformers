@@ -86,13 +86,12 @@ python run_fim.py \
     --dataset_config_name wikitext-2-raw-v1 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
+    --fim_rate 0.5 \
+    --fim_spm_rate 0.2 \
     --do_train \
     --do_eval \
     --output_dir /tmp/test-clm
 ```
-
-<!-- This takes about half an hour to train on a single K80 GPU and about one minute for the evaluation to run. It reaches
-a score of ~20 perplexity once fine-tuned on the dataset. -->
 
 To run on your own training and validation files, use the following command:
 
@@ -103,6 +102,8 @@ python run_fim.py \
     --validation_file path_to_validation_file \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
+    --fim_rate 0.5 \
+    --fim_spm_rate 0.2 \
     --do_train \
     --do_eval \
     --output_dir /tmp/test-clm
@@ -116,11 +117,12 @@ python run_fim_no_trainer.py \
     --dataset_name wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --model_name_or_path gpt2 \
+    --fim_rate 0.5 \
+    --fim_spm_rate 0.2 \
     --output_dir /tmp/test-clm
 ```
 
-<!-- **Few things to consider when running `run_fim.py` and `run_fim_no_trainer.py`**:
-1. If you are -->
+**Note**: Passing in FIM rate as `0.5` means that FIM transformations will be applied to the dataset with a probability of 50%. Whereas passing in FIM SPM rate as `0.2` means that 20% of FIM transformations will use SPM (or Suffix-Prefix-Middle) and the remaining 80% will use PSM (Prefix-Middle-Suffix) mode of transformation.
 
 ### RoBERTa/BERT/DistilBERT and masked language modeling
 
