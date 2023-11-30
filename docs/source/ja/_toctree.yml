@@ -209,6 +209,10 @@
         title: Blenderbot
       - local: model_doc/blenderbot-small
         title: Blenderbot Small
+      - local: model_doc/codegen
+        title: CodeGen
+      - local: model_doc/code_llama
+        title: CodeLlama
       title: 文章モデル
     - isExpanded: false
       sections:
@@ -230,6 +234,12 @@
         title: ALIGN
       - local: model_doc/altclip
         title: AltCLIP
+      - local: model_doc/clip
+        title: CLIP
+      - local: model_doc/clipseg
+        title: CLIPSeg
+      - local: model_doc/clvp
+        title: CLVP
       title: マルチモーダルモデル
     - isExpanded: false
       sections:
