@@ -260,6 +260,6 @@ Une fois que votre fichier est téléchargé et caché localement, spécifiez so
 
 <Tip>
 
-Consultez la section [How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream) pour plus de détails sur le téléchargement de fichiers stockés sur le Hub.
+Consultez la section [How to download files from the Hub (Comment télécharger des fichiers depuis le Hub)](https://huggingface.co/docs/hub/how-to-downstream) pour plus de détails sur le téléchargement de fichiers stockés sur le Hub.
 
 </Tip>
