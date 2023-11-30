@@ -76,7 +76,7 @@ class SegGPTImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -96,12 +96,12 @@ class SegGPTImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
-    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
+    # Modifed from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -114,8 +114,8 @@ class SegGPTImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
                 image is used. Can be one of:
@@ -380,5 +380,5 @@ class SegGPTImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-        data = {"pixel_values": images, "prompt_pixel_values": prompt_images, "prompt_mask": prompt_masks}
+        data = {"pixel_values": images, "prompt_pixel_values": prompt_images, "prompt_masks": prompt_masks}
         return BatchFeature(data=data, tensor_type=return_tensors)

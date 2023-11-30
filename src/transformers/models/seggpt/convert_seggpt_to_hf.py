@@ -21,7 +21,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import SegGPTConfig, SegGPTForInstanceSegmentation, SegGPTImageProcessor
+from transformers import SegGPTConfig, SegGPTImageProcessor, SegGPTModel
 from transformers.utils import logging
 
 
@@ -36,18 +36,18 @@ def create_rename_keys(config):
     # fmt: off
 
     # rename embedding and its parameters
-    rename_keys.append(("patch_embed.proj.weight", "model.embeddings.patch_embeddings.projection.weight"))
-    rename_keys.append(("patch_embed.proj.bias", "model.embeddings.patch_embeddings.projection.bias"))
-    rename_keys.append(("mask_token", "model.embeddings.mask_token"))
-    rename_keys.append(("segment_token_x", "model.embeddings.segment_token_input"))
-    rename_keys.append(("segment_token_y", "model.embeddings.segment_token_prompt"))
-    rename_keys.append(("type_token_cls", "model.embeddings.type_token_semantic"))
-    rename_keys.append(("type_token_ins", "model.embeddings.type_token_instance"))
-    rename_keys.append(("pos_embed", "model.embeddings.position_embeddings"))
+    rename_keys.append(("patch_embed.proj.weight", "embeddings.patch_embeddings.projection.weight"))
+    rename_keys.append(("patch_embed.proj.bias", "embeddings.patch_embeddings.projection.bias"))
+    rename_keys.append(("mask_token", "embeddings.mask_token"))
+    rename_keys.append(("segment_token_x", "embeddings.segment_token_input"))
+    rename_keys.append(("segment_token_y", "embeddings.segment_token_prompt"))
+    rename_keys.append(("type_token_cls", "embeddings.type_token_semantic"))
+    rename_keys.append(("type_token_ins", "embeddings.type_token_instance"))
+    rename_keys.append(("pos_embed", "embeddings.position_embeddings"))
 
     # rename decoder and other
-    rename_keys.append(("norm.weight", "model.encoder.layernorm.weight"))
-    rename_keys.append(("norm.bias", "model.encoder.layernorm.bias"))
+    rename_keys.append(("norm.weight", "encoder.layernorm.weight"))
+    rename_keys.append(("norm.bias", "encoder.layernorm.bias"))
     rename_keys.append(("decoder_embed.weight", "decoder.decoder_embed.weight"))
     rename_keys.append(("decoder_embed.bias", "decoder.decoder_embed.bias"))
     rename_keys.append(("decoder_pred.0.weight", "decoder.decoder_pred.conv.weight"))
@@ -59,22 +59,22 @@ def create_rename_keys(config):
 
     # rename blocks
     for i in range(config.num_hidden_layers):
-        rename_keys.append((f"blocks.{i}.attn.qkv.weight", f"model.encoder.layers.{i}.attention.qkv.weight"))
-        rename_keys.append((f"blocks.{i}.attn.qkv.bias", f"model.encoder.layers.{i}.attention.qkv.bias"))
-        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"model.encoder.layers.{i}.attention.proj.weight"))
-        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"model.encoder.layers.{i}.attention.proj.bias"))
-        rename_keys.append((f"blocks.{i}.attn.rel_pos_h", f"model.encoder.layers.{i}.attention.rel_pos_h"))
-        rename_keys.append((f"blocks.{i}.attn.rel_pos_w", f"model.encoder.layers.{i}.attention.rel_pos_w"))
+        rename_keys.append((f"blocks.{i}.attn.qkv.weight", f"encoder.layers.{i}.attention.qkv.weight"))
+        rename_keys.append((f"blocks.{i}.attn.qkv.bias", f"encoder.layers.{i}.attention.qkv.bias"))
+        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"encoder.layers.{i}.attention.proj.weight"))
+        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"encoder.layers.{i}.attention.proj.bias"))
+        rename_keys.append((f"blocks.{i}.attn.rel_pos_h", f"encoder.layers.{i}.attention.rel_pos_h"))
+        rename_keys.append((f"blocks.{i}.attn.rel_pos_w", f"encoder.layers.{i}.attention.rel_pos_w"))
 
-        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"model.encoder.layers.{i}.mlp.fc1.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"model.encoder.layers.{i}.mlp.fc1.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"model.encoder.layers.{i}.mlp.fc2.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"model.encoder.layers.{i}.mlp.fc2.bias"))
+        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"encoder.layers.{i}.mlp.fc1.weight"))
+        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"encoder.layers.{i}.mlp.fc1.bias"))
+        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"encoder.layers.{i}.mlp.fc2.weight"))
+        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"encoder.layers.{i}.mlp.fc2.bias"))
 
-        rename_keys.append((f"blocks.{i}.norm1.weight", f"model.encoder.layers.{i}.layernorm_before.weight"))
-        rename_keys.append((f"blocks.{i}.norm1.bias", f"model.encoder.layers.{i}.layernorm_before.bias"))
-        rename_keys.append((f"blocks.{i}.norm2.weight", f"model.encoder.layers.{i}.layernorm_after.weight"))
-        rename_keys.append((f"blocks.{i}.norm2.bias", f"model.encoder.layers.{i}.layernorm_after.bias"))
+        rename_keys.append((f"blocks.{i}.norm1.weight", f"encoder.layers.{i}.layernorm_before.weight"))
+        rename_keys.append((f"blocks.{i}.norm1.bias", f"encoder.layers.{i}.layernorm_before.bias"))
+        rename_keys.append((f"blocks.{i}.norm2.weight", f"encoder.layers.{i}.layernorm_after.weight"))
+        rename_keys.append((f"blocks.{i}.norm2.bias", f"encoder.layers.{i}.layernorm_after.bias"))
 
     # fmt: on
 
@@ -126,7 +126,7 @@ def convert_seggpt_checkpoint(args):
         rename_key(new_state_dict, src, dest)
 
     # Load HF model
-    model = SegGPTForInstanceSegmentation(config)
+    model = SegGPTModel(config)
     model.eval()
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
     print("Missing keys:", missing_keys)
@@ -135,32 +135,60 @@ def convert_seggpt_checkpoint(args):
     input_img, prompt_img, prompt_mask = prepare_input()
     image_processor = SegGPTImageProcessor()
     inputs = image_processor(images=input_img, prompt_images=prompt_img, prompt_masks=prompt_mask, return_tensors="pt")
-    torch.manual_seed(2)
-    inputs = {k: torch.ones_like(v) for k, v in inputs.items()}
-    outputs = model(**inputs)
-    print(outputs)
 
-    expected_dummy_output = torch.tensor(
+    expected_prompt_pixel_values = torch.tensor(
         [
-            [[0.9410, 1.0075, 0.9631], [0.9487, 1.0162, 0.9713], [0.9502, 1.0162, 0.9684]],
-            [[0.9338, 1.0081, 0.9691], [0.9428, 1.0179, 0.9773], [0.9429, 1.0172, 0.9722]],
-            [[0.9412, 1.0122, 0.9720], [0.9465, 1.0193, 0.9778], [0.9449, 1.0184, 0.9692]],
+            [[-0.6965, -0.6965, -0.6965], [-0.6965, -0.6965, -0.6965], [-0.6965, -0.6965, -0.6965]],
+            [[1.6583, 1.6583, 1.6583], [1.6583, 1.6583, 1.6583], [1.6583, 1.6583, 1.6583]],
+            [[2.3088, 2.3088, 2.3088], [2.3088, 2.3088, 2.3088], [2.3088, 2.3088, 2.3088]],
         ]
     )
 
-    assert torch.allclose(outputs.pred_masks[0, :3, :3, :3], expected_dummy_output)
+    expected_pixel_values = torch.tensor(
+        [
+            [[1.6324, 1.6153, 1.5810], [1.6153, 1.5982, 1.5810], [1.5810, 1.5639, 1.5639]],
+            [[1.2731, 1.2556, 1.2206], [1.2556, 1.2381, 1.2031], [1.2206, 1.2031, 1.1681]],
+            [[1.6465, 1.6465, 1.6465], [1.6465, 1.6465, 1.6465], [1.6291, 1.6291, 1.6291]],
+        ]
+    )
+
+    expected_prompt_masks = torch.tensor(
+        [
+            [[-2.1179, -2.1179, -2.1179], [-2.1179, -2.1179, -2.1179], [-2.1179, -2.1179, -2.1179]],
+            [[-2.0357, -2.0357, -2.0357], [-2.0357, -2.0357, -2.0357], [-2.0357, -2.0357, -2.0357]],
+            [[-1.8044, -1.8044, -1.8044], [-1.8044, -1.8044, -1.8044], [-1.8044, -1.8044, -1.8044]],
+        ]
+    )
+
+    assert torch.allclose(inputs.pixel_values[0, :, :3, :3], expected_pixel_values, atol=1e-4)
+    assert torch.allclose(inputs.prompt_pixel_values[0, :, :3, :3], expected_prompt_pixel_values, atol=1e-4)
+    assert torch.allclose(inputs.prompt_masks[0, :, :3, :3], expected_prompt_masks, atol=1e-4)
+
+    torch.manual_seed(2)
+    outputs = model(**inputs)
+    print(outputs)
+
+    expected_output = torch.tensor(
+        [
+            [[-2.1208, -2.1190, -2.1198], [-2.1237, -2.1228, -2.1227], [-2.1232, -2.1226, -2.1228]],
+            [[-2.0405, -2.0396, -2.0403], [-2.0434, -2.0434, -2.0433], [-2.0428, -2.0432, -2.0434]],
+            [[-1.8102, -1.8088, -1.8099], [-1.8131, -1.8126, -1.8129], [-1.8130, -1.8128, -1.8131]],
+        ]
+    )
+
+    assert torch.allclose(outputs.pred_masks[0, :, :3, :3], expected_output, atol=1e-4)
 
     print("Looks good!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # processor.save_pretrained(pytorch_dump_folder_path)
+        image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print(f"Pushing model and processor for {model_name} to hub")
         model.push_to_hub(f"EduardoPacheco/{model_name}")
-        # processor.push_to_hub(f"EduardoPacheco/{model_name}")
+        image_processor.push_to_hub(f"EduardoPacheco/{model_name}")
 
 
 if __name__ == "__main__":
@@ -168,10 +196,10 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="grounding-dino-tiny",
+        default="seggpt-vit-large",
         type=str,
-        choices=["grounding-dino-tiny", "grounding-dino-base"],
-        help="Name of the GroundingDINO model you'd like to convert.",
+        choices=["seggpt-vit-large"],
+        help="Name of the SegGPT model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."

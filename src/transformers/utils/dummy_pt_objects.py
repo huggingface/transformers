@@ -7203,13 +7203,6 @@ class SegformerPreTrainedModel(metaclass=DummyObject):
 SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class SegGPTForInstanceSegmentation(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class SegGPTModel(metaclass=DummyObject):
     _backends = ["torch"]
 

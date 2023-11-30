@@ -457,13 +457,6 @@ class SamImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class SegGPTImageProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class SegformerFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -472,6 +465,13 @@ class SegformerFeatureExtractor(metaclass=DummyObject):
 
 
 class SegformerImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class SegGPTImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

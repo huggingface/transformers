@@ -77,6 +77,7 @@ class SegGPTConfig(PretrainedConfig):
         use_rel_pos (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         merge_index (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
         encoder_output_indicies (`<fill_type>`, *optional*, defaults to `[5, 11, 17, 23]`): <fill_docstring>
+        beta (`<fill_type>`, *optional*, defaults to 0.01): <fill_docstring>
 
     Example:
 
@@ -117,6 +118,7 @@ class SegGPTConfig(PretrainedConfig):
         use_rel_pos=True,
         merge_index=2,
         encoder_output_indicies=[5, 11, 17, 23],
+        beta=0.01,
         **kwargs,
     ):
         super().__init__(**kwargs)
