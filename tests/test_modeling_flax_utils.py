@@ -16,6 +16,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import torch
 from huggingface_hub import HfFolder, delete_repo, snapshot_download
 from requests.exceptions import HTTPError
 
@@ -333,6 +334,7 @@ class FlaxModelUtilsTest(unittest.TestCase):
 
     @require_safetensors
     @require_torch
+    @is_pt_flax_cross_test
     def test_safetensors_flax_from_torch(self):
         hub_model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
         model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
@@ -364,3 +366,15 @@ class FlaxModelUtilsTest(unittest.TestCase):
         # This should not raise; should be able to load bf16-serialized torch safetensors without issue
         # and without torch.
         FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors-bf16")
+
+    @require_torch
+    @require_safetensors
+    @is_pt_flax_cross_test
+    def test_safetensors_from_pt_bf16(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
+        model.to(torch.bfloat16)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=False)
+            new_model = FlaxBertModel.from_pretrained(tmp_dir, from_pt=True)
+            self.assertEqual(new_model.dtype.dtpye, "float32")

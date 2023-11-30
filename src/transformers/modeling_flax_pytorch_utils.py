@@ -153,23 +153,27 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     # convert pytorch tensor to numpy
     # numpy currently does not support bfloat16, need to go over float32 in this case to not lose precision
 
-    def numpify_state_dict(state_dict):
-        from_bin = is_torch_available() and isinstance(next(iter(state_dict.values())), torch.Tensor)
+    def is_bfloat16(value):
+        from_bin = is_torch_available() and isinstance(value, torch.Tensor)
         if from_bin:
-            bfloat16_dtype = torch.bfloat16
+            bfloat16 = torch.bfloat16
         else:
-            bfloat16_dtype = "bfloat16"
+            bfloat16 = "bfloat16"
 
-        state_dict = {}
-        for k, v in pt_state_dict.items():
-            if v.dtype == bfloat16_dtype:
-                state_dict[k] = v.float().numpy() if from_bin else v
+        return value.dtype == bfloat16
+
+    def numpify_state_dict(_pt_state_dict):
+        from_bin = is_torch_available() and isinstance(next(iter(_pt_state_dict.values())), torch.Tensor)
+        _state_dict = {}
+        for k, v in _pt_state_dict.items():
+            if is_bfloat16(v):
+                _state_dict[k] = v.float().numpy() if from_bin else v
             else:
-                state_dict[k] = v.numpy() if from_bin else v
+                _state_dict[k] = v.numpy() if from_bin else v
 
-        return state_dict
+        return _state_dict
 
-    pt_state_dict = numpify_state_dict(pt_state_dict)
+    state_dict = numpify_state_dict(pt_state_dict)
     model_prefix = flax_model.base_model_prefix
 
     # use params dict if the model contains batch norm layers
@@ -187,15 +191,16 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     flax_state_dict = {}
 
     load_model_with_head_into_base_model = (model_prefix not in flax_model_params) and (
-        model_prefix in {k.split(".")[0] for k in pt_state_dict.keys()}
+        model_prefix in {k.split(".")[0] for k in state_dict.keys()}
     )
     load_base_model_into_model_with_head = (model_prefix in flax_model_params) and (
-        model_prefix not in {k.split(".")[0] for k in pt_state_dict.keys()}
+        model_prefix not in {k.split(".")[0] for k in state_dict.keys()}
     )
 
     # Need to change some parameters name to match Flax names
-    for pt_key, pt_tensor in pt_state_dict.items():
+    for pt_key, pt_tensor in state_dict.items():
         pt_tuple_key = tuple(pt_key.split("."))
+        is_bfloat_16 = is_bfloat16(pt_state_dict[pt_key])
 
         # remove base model prefix if necessary
         has_base_model_prefix = pt_tuple_key[0] == model_prefix
@@ -230,10 +235,14 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
                 continue
 
             # also add unexpected weight so that warning is thrown
-            flax_state_dict[("params",) + flax_key] = np.asarray(flax_tensor)
+            flax_state_dict[("params",) + flax_key] = (
+                jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
+            )
         else:
             # also add unexpected weight so that warning is thrown
-            flax_state_dict[flax_key] = jnp.asarray(flax_tensor)
+            flax_state_dict[("params",) + flax_key] = (
+                jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
+            )
 
     return unflatten_dict(flax_state_dict)
 
