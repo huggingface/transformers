@@ -242,8 +242,8 @@ spec:
                 value: "INFO"
               - name: CCL_WORKER_COUNT
                 value: "1"
-              - name: OMP_NUM_THREADS
-                value: "23"
+              - name: OMP_NUM_THREADS  # Can be tuned for optimal performance
+-                value: "56"
               resources:
                 limits:
                   cpu: 200  # Update the CPU and memory limit values based on your nodes
