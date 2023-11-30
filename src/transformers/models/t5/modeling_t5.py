@@ -748,6 +748,7 @@ class T5Attention(nn.Module):
                         key_states = key_states.reshape(B,M,H,K).permute(0,2,1,3)
                     else:
                         raise Exception(f'Encountered pos_emb_type={pos_emb_type} but the only supported options to be injected inside attention are {SUPPORTED_POS_ENC_TYPES_INJECTED_IN_ATTENTION}')
+  
 
             if position_bias is None: # if it's STILL None (so no one requested POSITION_EMBEDDING_T5_RELATIVE)
                 position_bias = torch.zeros(
@@ -763,15 +764,6 @@ class T5Attention(nn.Module):
                 position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
             if mask is not None:
-                
-                #the if below is for the case of NO pos encoding injected here (some code duplication with above - FIXME)
-                if position_bias is None: # if it's STILL None (so no one requested POSITION_EMBEDDING_T5_RELATIVE)
-                    position_bias = torch.zeros(
-                        (1, self.n_heads, real_seq_length, key_length), device=query_states.device, dtype=query_states.dtype
-                    )
-                    if self.gradient_checkpointing and self.training:
-                        position_bias.requires_grad = True
-
                 # MICHAL see above that mask is added to position_bias. Also in length-generalization.
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
@@ -1215,7 +1207,7 @@ class T5Stack(T5PreTrainedModel):
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
-        self.position_embedding_definitions = config.position_embedding_definitions if hasattr(config, "position_embedding_definitions") else {}
+        self.position_embedding_definitions = config.position_embedding_definitions if hasattr(config, "position_embedding_definitions") else dict(t5_default_relative=dict(type='t5_default_relative', config=None))
 
         self.attention_injected_in_t5_stack_level = nn.ModuleDict()
 
@@ -1314,8 +1306,10 @@ class T5Stack(T5PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        position_ids_dict=None,        
+        position_ids_dict='default',
     ):
+        if position_ids_dict == 'default':
+            position_ids_dict = {'placeholder': (None, [POSITION_EMBEDDING_T5_DEFAULT_RELATIVE,'placeholder'])}
         # Model parallel
         if self.model_parallel:
             torch.cuda.set_device(self.first_device)
@@ -1371,13 +1365,12 @@ class T5Stack(T5PreTrainedModel):
             if position_embedding_name in self.attention_injected_in_t5_stack_level:            
                 position_embeds = self.attention_injected_in_t5_stack_level[position_embedding_name](position_ids)
                 inputs_embeds += position_embeds
+            elif position_embedding_name in self.position_embedding_definitions.keys():
+                pos_emb_type = self.position_embedding_definitions[position_embedding_name]['type']
+                if pos_emb_type in SUPPORTED_POS_ENC_TYPES_INJECTED_IN_ATTENTION:
+                    positional_indices_for_pos_emb_injection_in_attention.append((position_ids, position_embedding_name))
             else:
-                if position_embedding_name in self.position_embedding_definitions.keys():
-                    pos_emb_type = self.position_embedding_definitions[position_embedding_name]['type']
-                    if pos_emb_type in SUPPORTED_POS_ENC_TYPES_INJECTED_IN_ATTENTION:
-                        positional_indices_for_pos_emb_injection_in_attention.append((position_ids, position_embedding_name))
-                else:
-                    raise Exception(f'the following positional attention name was provided during forward:  {position_embedding_name} -  but it was not defined as part of position_embedding_definitions which is {self.position_embedding_definitions}')                                      
+                raise Exception(f'the following positional attention name was provided during forward:  {position_embedding_name} -  but it was not defined as part of position_embedding_definitions which is {self.position_embedding_definitions}')                                      
             
         batch_size, seq_length = input_shape
 
