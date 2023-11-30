@@ -1,9 +1,11 @@
-FROM rocm/pytorch:rocm5.7_ubuntu22.04_py3.10_pytorch_2.0.1
+FROM rocm/pytorch:rocm5.6_ubuntu20.04_py3.8_pytorch_2.0.1
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG PYTORCH='2.0.1'
-ARG ROCM='5.7'
+ARG PYTORCH='2.1.0'
+ARG TORCH_VISION='0.16.0'
+ARG TORCH_AUDIO='2.1.0'
+ARG ROCM='5.6'
 
 RUN apt update && \
     apt install -y --no-install-recommends libaio-dev git && \
@@ -13,6 +15,10 @@ RUN apt update && \
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
 RUN python3 -m pip uninstall -y apex
+
+RUN python3 -m pip uninstall -y torch torchvision torchaudio
+
+RUN python3 -m pip install torch==$PYTORCH torchvision==$TORCH_VISION torchaudio==$TORCH_AUDIO --index-url https://download.pytorch.org/whl/rocm$ROCM
 
 ARG REF=main
 WORKDIR /
