@@ -1206,13 +1206,17 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
     def test_safetensors_on_the_fly_conversion_private(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        initial_model = BertModel(config)
+        repo_name = self.repo_name + "on-the-fly-conversion-private"
+        try:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, private=True)
-        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+            initial_model.push_to_hub(repo_name, token=self.token, safe_serialization=False, private=True)
+            converted_model = BertModel.from_pretrained(repo_name, use_safetensors=True, token=self.token)
+        finally:
+            self.api.delete_repo(repo_name)
 
         with self.subTest("Initial and converted models are equal"):
             for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
@@ -1225,17 +1229,21 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
     def test_safetensors_on_the_fly_conversion_gated(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        initial_model = BertModel(config)
+        repo_name = self.repo_name + "on-the-fly-conversion-gated"
+        try:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
-        headers = {"Authorization": f"Bearer {self.token}"}
-        requests.put(
-            f"https://huggingface.co/api/models/{self.repo_name}/settings", json={"gated": "auto"}, headers=headers
-        )
-        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+            initial_model.push_to_hub(repo_name, token=self.token, safe_serialization=False)
+            headers = {"Authorization": f"Bearer {self.token}"}
+            requests.put(
+                f"https://huggingface.co/api/models/{repo_name}/settings", json={"gated": "auto"}, headers=headers
+            )
+            converted_model = BertModel.from_pretrained(repo_name, use_safetensors=True, token=self.token)
+        finally:
+            self.api.delete_repo(repo_name)
 
         with self.subTest("Initial and converted models are equal"):
             for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
@@ -1248,13 +1256,17 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
     def test_safetensors_on_the_fly_sharded_conversion(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        initial_model = BertModel(config)
+        repo_name = self.repo_name + "on-the-fly-conversion-sharded"
+        try:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, max_shard_size="200kb")
-        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True)
+            initial_model.push_to_hub(repo_name, token=self.token, safe_serialization=False, max_shard_size="200kb")
+            converted_model = BertModel.from_pretrained(repo_name, use_safetensors=True)
+        finally:
+            self.api.delete_repo(repo_name)
 
         with self.subTest("Initial and converted models are equal"):
             for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
@@ -1267,15 +1279,19 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
     def test_safetensors_on_the_fly_sharded_conversion_private(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        initial_model = BertModel(config)
+        repo_name = self.repo_name + "on-the-fly-conversion-sharded-private"
+        try:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            initial_model = BertModel(config)
 
-        initial_model.push_to_hub(
-            self.repo_name, token=self.token, safe_serialization=False, max_shard_size="200kb", private=True
-        )
-        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+            initial_model.push_to_hub(
+                repo_name, token=self.token, safe_serialization=False, max_shard_size="200kb", private=True
+            )
+            converted_model = BertModel.from_pretrained(repo_name, use_safetensors=True, token=self.token)
+        finally:
+            self.api.delete_repo(repo_name)
 
         with self.subTest("Initial and converted models are equal"):
             for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
@@ -1288,17 +1304,21 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
     def test_safetensors_on_the_fly_sharded_conversion_gated(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        initial_model = BertModel(config)
+        repo_name = self.repo_name + "on-the-fly-conversion-sharded-gated"
+        try:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self._token, max_shard_size="200kb", safe_serialization=False)
-        headers = {"Authorization": f"Bearer {self._token}"}
-        requests.put(
-            f"https://huggingface.co/api/models/{self.repo_name}/settings", json={"gated": "auto"}, headers=headers
-        )
-        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self._token)
+            initial_model.push_to_hub(repo_name, token=self._token, max_shard_size="200kb", safe_serialization=False)
+            headers = {"Authorization": f"Bearer {self._token}"}
+            requests.put(
+                f"https://huggingface.co/api/models/{repo_name}/settings", json={"gated": "auto"}, headers=headers
+            )
+            converted_model = BertModel.from_pretrained(repo_name, use_safetensors=True, token=self._token)
+        finally:
+            self.api.delete_repo(repo_name)
 
         with self.subTest("Initial and converted models are equal"):
             for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
