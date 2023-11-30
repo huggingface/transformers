@@ -16,6 +16,7 @@
 
 
 import inspect
+import tempfile
 import unittest
 
 from transformers import PvtV2Backbone, PvtV2Config, is_torch_available, is_vision_available
@@ -422,6 +423,20 @@ class PvtV2BackboneTest(BackboneTesterMixin, unittest.TestCase):
         # Error raised when out_indices do not correspond to out_features
         with self.assertRaises(ValueError):
             config = config_class(out_features=["stage1", "stage2"], out_indices=[0, 2])
+
+    def test_config_save_pretrained(self):
+        config_class = self.config_class
+        config_first = config_class(out_indices=[0, 1, 2, 3])
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config_first.save_pretrained(tmpdirname)
+            config_second = self.config_class.from_pretrained(tmpdirname)
+
+        # Fix issue where type switches in the saving process
+        if isinstance(config_second.image_size, list):
+            config_second.image_size = tuple(config_second.image_size)
+
+        self.assertEqual(config_second.to_dict(), config_first.to_dict())
 
     def setUp(self):
         self.model_tester = PvtV2ModelTester(self)
