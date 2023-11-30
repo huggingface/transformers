@@ -184,8 +184,8 @@ class CombinedEmbeddings(nn.Module):
         self.combination_layer = nn.Linear(config.hidden_size * 2, config.hidden_size)
 
     def forward(self, input_ids, wp_ids):
-        char_embeds = self.word_embeddings(input_ids)
-        word_embeds =  self.char_embeddings(wp_ids) 
+        char_embeds = self.char_embeddings(input_ids)
+        word_embeds =  self.word_embeddings(wp_ids) 
         combined_embeds = torch.cat([char_embeds, word_embeds], dim=-1)
         embeddings = self.combination_layer(combined_embeds)
         return embeddings
