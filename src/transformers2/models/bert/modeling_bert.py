@@ -1347,7 +1347,8 @@ class BertForMaskedLM(BertPreTrainedModel):
         self.cls = BertOnlyMLMHead(config)
         self.char_tokenizer = config.char_tokenizer
         self.wordpiece_tokenizer = config.wordpiece_tokenizer
-
+        self.device2 = config.device2
+        
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1465,7 +1466,6 @@ class BertForMaskedLM(BertPreTrainedModel):
 
 
     def _create_wp_ids(self, input_ids_tensor):
-        chars = self.char_tokenizer.convert_ids_to_tokens(input_ids_tensor[2])
         if isinstance(input_ids_tensor, torch.Tensor):
             char_ids = input_ids_tensor.tolist()
 
@@ -1487,7 +1487,8 @@ class BertForMaskedLM(BertPreTrainedModel):
             row = wp_ids[i]
             row_word_tokens = self.tokenize_preserve_words(strings[i])
             wp_ids[i, :row_word_tokens.shape[0]] = row_word_tokens
-        words = self.wordpiece_tokenizer.convert_ids_to_tokens(wp_ids[2])
+
+        wp_ids.to(self.device2)
         return wp_ids
 
 
@@ -1503,8 +1504,8 @@ class BertForMaskedLM(BertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         # wp_ids: Optional[torch.Tensor] = None,
-        char_tokenizer = None,
-        wordpiece_tokenizer = None,
+        # char_tokenizer = None,
+        # wordpiece_tokenizer = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
