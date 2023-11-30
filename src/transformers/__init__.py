@@ -244,7 +244,7 @@ _import_structure = {
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPConfig",
-        "CLIPVisionConfig"
+        "CLIPVisionConfig",
         "CLIPProcessor",
         "CLIPTextConfig",
         "CLIPTokenizer",
@@ -4910,6 +4910,7 @@ if TYPE_CHECKING:
     from .models.xmod import XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP, XmodConfig
     from .models.yolos import YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP, YolosConfig
     from .models.yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
+
     # Pipelines
     from .pipelines import (
         AudioClassificationPipeline,

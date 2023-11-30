@@ -15,8 +15,10 @@
 """ Testing suite for the PyTorch Llava model. """
 
 import unittest
+
 import requests
-from transformers import is_torch_available, is_vision_available, AutoProcessor, LlavaForVisionText2Text, LlavaConfig
+
+from transformers import AutoProcessor, LlavaConfig, LlavaForVisionText2Text, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     require_torch,
     torch_device,
@@ -166,37 +168,268 @@ class LlavaForVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class LlavaForVisionText2TextModelTest(unittest.TestCase):
-    
     def setUp(self):
         self.processor = AutoProcessor.from_pretraine("ArthurZ/llava-1.5-7b")
 
-
     def test_large_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        inputs = self.processor.tokenizer(["Hey how are you", "This seems<s>Odd not?</s>."], return_tensors = "pt", padding = True)
+        inputs = self.processor.tokenizer(
+            ["Hey how are you", "This seems<s>Odd not?</s>."], return_tensors="pt", padding=True
+        )
         self.assertDictEqual(
-            inputs, 
-            {'input_ids': torch.tensor([[1, 18637, 920, 526, 366, 0, 0, 0, 0, 0],[1, 910, 2444, 1, 29949, 1289, 451, 29973, 2, 29889]]), 'attention_mask': torch.tensor([[1, 1, 1, 1, 1, 0, 0, 0, 0, 0],[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])}
+            inputs,
+            {
+                "input_ids": torch.tensor(
+                    [[1, 18637, 920, 526, 366, 0, 0, 0, 0, 0], [1, 910, 2444, 1, 29949, 1289, 451, 29973, 2, 29889]]
+                ),
+                "attention_mask": torch.tensor([[1, 1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]),
+            },
         )
         # model.prepare_inputs_labels_for_multimodal(input_ids = inputs["input_ids"], past_key_values = None, attention_mask = inputs["attention_mask"], position_ids=None, labels=None,images=None)
         prepared_inputs = self.model.prepare_inputs_for_generation(**inputs)
-        self.assertDictEqual(prepared_inputs,(torch.tensor([[1, 18637, 920, 526, 366, 0, 0, 0, 0, 0],[1, 910, 2444, 1, 29949, 1289, 451, 29973, 2, 29889]]),None,torch.tensor([[1, 1, 1, 1, 1, 0, 0, 0, 0, 0],[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]),None,None,None))
+        self.assertDictEqual(
+            prepared_inputs,
+            (
+                torch.tensor(
+                    [[1, 18637, 920, 526, 366, 0, 0, 0, 0, 0], [1, 910, 2444, 1, 29949, 1289, 451, 29973, 2, 29889]]
+                ),
+                None,
+                torch.tensor([[1, 1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]),
+                None,
+                None,
+                None,
+            ),
+        )
 
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = LlavaForVisionText2Text.from_pretrained("ArthurZ/llava-1.5-7b")
-        EXPECTED_OUTPUTS = torch.tensor([[1, -200, 29871, 13, 11889, 29901, 1724, 526, 278, 2712,306, 881, 367, 274, 1300, 2738, 1048, 746, 306, 6493,445, 2058, 29973, 13, 22933, 9047, 13566, 29901, 1932, 6493,292, 445, 2058, 29892, 607, 5692, 304, 367, 263, 9307,470, 23630, 23771, 964, 263, 3573, 310, 4094, 29892, 727,526, 263, 2846, 2712, 304, 367, 274, 1300, 2738, 1048,29889, 3824, 29892, 367, 9543, 310, 278, 4094, 10809, 322,738, 7037, 447, 29920, 3163, 29892, 1316, 408, 1014, 1050,3192, 23150, 470, 316, 1182, 275, 29889, 6440, 29892, 367,3458, 1319, 310, 278, 14826, 5855, 29892, 408, 8327, 3620,297, 14826, 508, 1207, 278, 9307, 470, 23630, 25110, 304,6686, 373, 29889, 18008, 29892, 367, 274, 1300, 2738, 310,278, 18830, 5177, 29892, 408, 727, 1795, 367, 8775, 19264,470, 916, 7037, 447, 29920, 3163, 297, 278, 4038, 29889,9208, 368, 29892, 367, 9543, 310, 738, 1887, 1072, 8250,470, 1410, 10652, 1475, 363, 278, 671, 310, 278, 9307,470, 23630, 29892, 408, 777, 10161, 1122, 505, 2702, 6865,470, 25091, 297, 2058, 29889, 2]])
+        EXPECTED_OUTPUTS = torch.tensor(
+            [
+                [
+                    1,
+                    -200,
+                    29871,
+                    13,
+                    11889,
+                    29901,
+                    1724,
+                    526,
+                    278,
+                    2712,
+                    306,
+                    881,
+                    367,
+                    274,
+                    1300,
+                    2738,
+                    1048,
+                    746,
+                    306,
+                    6493,
+                    445,
+                    2058,
+                    29973,
+                    13,
+                    22933,
+                    9047,
+                    13566,
+                    29901,
+                    1932,
+                    6493,
+                    292,
+                    445,
+                    2058,
+                    29892,
+                    607,
+                    5692,
+                    304,
+                    367,
+                    263,
+                    9307,
+                    470,
+                    23630,
+                    23771,
+                    964,
+                    263,
+                    3573,
+                    310,
+                    4094,
+                    29892,
+                    727,
+                    526,
+                    263,
+                    2846,
+                    2712,
+                    304,
+                    367,
+                    274,
+                    1300,
+                    2738,
+                    1048,
+                    29889,
+                    3824,
+                    29892,
+                    367,
+                    9543,
+                    310,
+                    278,
+                    4094,
+                    10809,
+                    322,
+                    738,
+                    7037,
+                    447,
+                    29920,
+                    3163,
+                    29892,
+                    1316,
+                    408,
+                    1014,
+                    1050,
+                    3192,
+                    23150,
+                    470,
+                    316,
+                    1182,
+                    275,
+                    29889,
+                    6440,
+                    29892,
+                    367,
+                    3458,
+                    1319,
+                    310,
+                    278,
+                    14826,
+                    5855,
+                    29892,
+                    408,
+                    8327,
+                    3620,
+                    297,
+                    14826,
+                    508,
+                    1207,
+                    278,
+                    9307,
+                    470,
+                    23630,
+                    25110,
+                    304,
+                    6686,
+                    373,
+                    29889,
+                    18008,
+                    29892,
+                    367,
+                    274,
+                    1300,
+                    2738,
+                    310,
+                    278,
+                    18830,
+                    5177,
+                    29892,
+                    408,
+                    727,
+                    1795,
+                    367,
+                    8775,
+                    19264,
+                    470,
+                    916,
+                    7037,
+                    447,
+                    29920,
+                    3163,
+                    297,
+                    278,
+                    4038,
+                    29889,
+                    9208,
+                    368,
+                    29892,
+                    367,
+                    9543,
+                    310,
+                    738,
+                    1887,
+                    1072,
+                    8250,
+                    470,
+                    1410,
+                    10652,
+                    1475,
+                    363,
+                    278,
+                    671,
+                    310,
+                    278,
+                    9307,
+                    470,
+                    23630,
+                    29892,
+                    408,
+                    777,
+                    10161,
+                    1122,
+                    505,
+                    2702,
+                    6865,
+                    470,
+                    25091,
+                    297,
+                    2058,
+                    29889,
+                    2,
+                ]
+            ]
+        )
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(prompt, raw_image, return_tensors='pt')
-        
-        EXPECTED_INPUT_IDS = torch.tensor([[    1,  -200, 29871,    13, 11889, 29901,  1724,   526,   278,  2712,306,   881,   367,   274,  1300,  2738,  1048,   746,   306,  6493,445,  2058, 29973,    13, 22933,  9047, 13566, 29901]])
+        inputs = self.processor(prompt, raw_image, return_tensors="pt")
+
+        EXPECTED_INPUT_IDS = torch.tensor(
+            [
+                [
+                    1,
+                    -200,
+                    29871,
+                    13,
+                    11889,
+                    29901,
+                    1724,
+                    526,
+                    278,
+                    2712,
+                    306,
+                    881,
+                    367,
+                    274,
+                    1300,
+                    2738,
+                    1048,
+                    746,
+                    306,
+                    6493,
+                    445,
+                    2058,
+                    29973,
+                    13,
+                    22933,
+                    9047,
+                    13566,
+                    29901,
+                ]
+            ]
+        )
         self.assertEqual(inputs["input_ids"], EXPECTED_INPUT_IDS)
-        
+
         output = model.generate(**inputs, max_new_tokens=20)
         torch.testing.assert_close(output, EXPECTED_OUTPUTS)
-        
+
         EXPECTED_DECODED_TEXT = """
 
 USER: What are the things I should be cautious about when I visit this place?
@@ -204,7 +437,7 @@ ASSISTANT: When visiting this place, which appears to be a pier or dock extendin
 
 """
         self.assertEqual(self.processor.decode(output[0][2:], skip_special_tokens=True), EXPECTED_DECODED_TEXT)
-        
+
     def test_small_model_logits_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
         pass
@@ -216,7 +449,6 @@ ASSISTANT: When visiting this place, which appears to be a pier or dock extendin
     def test_prepare_inputs_labels_for_multimodal(self):
         # Pretty much the most important function
         pass
-    
+
     def test_tokenizer_image_token(self):
         prompt = "Make sure to always answer in a truthful manner"
-        

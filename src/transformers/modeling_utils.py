@@ -3755,8 +3755,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 if param.device == torch.device("meta"):
                     if not (is_quantized):
-                        if len(param.size()): # logit scale is an nn.parameter and it seems to appear in the me
-                            set_module_tensor_to_device(model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype))
+                        if len(param.size()):  # logit scale is an nn.parameter and it seems to appear in the me
+                            set_module_tensor_to_device(
+                                model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype)
+                            )
                     else:
                         set_module_quantized_tensor_to_device(
                             model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype)

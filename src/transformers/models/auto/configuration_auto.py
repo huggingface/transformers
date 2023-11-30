@@ -708,7 +708,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
-        ("clip_vision_model", "CLIPVisionModel")
+        ("clip_vision_model", "CLIPVisionModel"),
     ]
 )
 
