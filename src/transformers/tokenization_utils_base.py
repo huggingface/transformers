@@ -967,8 +967,6 @@ class SpecialTokensMixin:
                 if value not in added_tokens:
                     added_tokens.append(value)
 
-        print("Added tokens:", added_tokens)
-
         # if we are adding tokens that were not part of the vocab, we ought to add them
         added_tokens = self.add_tokens(added_tokens, special_tokens=True)
         return added_tokens
