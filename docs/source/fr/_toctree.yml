@@ -16,7 +16,7 @@
     - local: in_translation
       title: Fine-tune un modèle pré-entraîné
     - local: in_translation
-      title: Train with a script
+      title: Entraînement avec un script
     - local: in_translation
       title: Entraînement distribué avec 🤗 Accelerate
     - local: in_translation
@@ -26,5 +26,5 @@
     - local: in_translation
       title: Agents
     - local: in_translation
-      title: Generation with LLMs
+      title: Génération avec LLMs
   title: Tutoriels
