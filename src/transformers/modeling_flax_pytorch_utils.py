@@ -240,7 +240,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
             )
         else:
             # also add unexpected weight so that warning is thrown
-            flax_state_dict[("params",) + flax_key] = (
+            flax_state_dict[flax_key] = (
                 jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
             )
 

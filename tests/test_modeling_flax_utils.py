@@ -24,13 +24,14 @@ from transformers import BertConfig, BertModel, is_flax_available
 from transformers.testing_utils import (
     TOKEN,
     USER,
+    CaptureLogger,
     is_pt_flax_cross_test,
     is_staging_test,
     require_flax,
     require_safetensors,
     require_torch,
 )
-from transformers.utils import FLAX_WEIGHTS_NAME, SAFE_WEIGHTS_NAME
+from transformers.utils import FLAX_WEIGHTS_NAME, SAFE_WEIGHTS_NAME, logging
 
 
 if is_flax_available():
@@ -365,16 +366,36 @@ class FlaxModelUtilsTest(unittest.TestCase):
     def test_safetensors_from_pt_bf16(self):
         # This should not raise; should be able to load bf16-serialized torch safetensors without issue
         # and without torch.
-        FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors-bf16")
+        logger = logging.get_logger("transformers.modeling_flax_utils")
+
+        with CaptureLogger(logger) as cl:
+            FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors-bf16")
+
+        self.assertTrue(
+            "Some of the weights of FlaxBertModel were initialized in bfloat16 precision from the model checkpoint"
+            in cl.out
+        )
 
     @require_torch
     @require_safetensors
     @is_pt_flax_cross_test
-    def test_safetensors_from_pt_bf16(self):
+    def test_from_pt_bf16(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
         model.to(torch.bfloat16)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir, safe_serialization=False)
-            new_model = FlaxBertModel.from_pretrained(tmp_dir, from_pt=True)
-            self.assertEqual(new_model.dtype.dtpye, "float32")
+
+            logger = logging.get_logger("transformers.modeling_flax_utils")
+
+            with CaptureLogger(logger) as cl:
+                new_model = FlaxBertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-safetensors-bf16")
+
+            self.assertTrue(
+                "Some of the weights of FlaxBertModel were initialized in bfloat16 precision from the model checkpoint"
+                in cl.out
+            )
+
+            flat_params_1 = flatten_dict(new_model.params)
+            for value in flat_params_1.values():
+                self.assertEqual(value.dtype, "bfloat16")
