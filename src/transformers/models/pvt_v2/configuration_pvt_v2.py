@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Pvt model configuration"""
+""" Pvt V2 model configuration"""
 
 import warnings
 from typing import Callable, List, Mapping, Tuple, Union
@@ -39,9 +39,9 @@ PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
     r"""
-    This is the configuration class to store the configuration of a [`PvtV2Model`]. It is used to instantiate an Pvt
+    This is the configuration class to store the configuration of a [`PvtV2Model`]. It is used to instantiate a Pvt V2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Pvt-b0
+    defaults will yield a similar configuration to that of the Pvt V2 B0
     [FoamoftheSea/pvt_v2_b0](https://huggingface.co/FoamoftheSea/pvt_v2_b0) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
