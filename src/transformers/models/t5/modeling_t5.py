@@ -494,7 +494,7 @@ class T5Attention(nn.Module):
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
         
         
-        self.t5_default_relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads) #creating this one in all cases, even if it's not used.                    
+        self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads) #creating this one in all cases, even if it's not used.                    
 
         self.relative_attention_bias_dict = nn.ModuleDict()
         if self.positional_embedding_injected_in_attention is not None:
@@ -504,8 +504,8 @@ class T5Attention(nn.Module):
                     pos_emb_config =  {}
                 pos_emb_type = pos_emb_info['type']
                 if pos_emb_type == POSITION_EMBEDDING_T5_DEFAULT_RELATIVE:
-                    #if not hasattr(self, 't5_default_relative_attention_bias'):
-                    #    self.t5_default_relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads) #creating this one in all cases, even if it's not used.                    
+                    #if not hasattr(self, 'relative_attention_bias'):
+                    #    self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads) #creating this one in all cases, even if it's not used.                    
                     pass #no need to do anything, we already created it                        
                 elif pos_emb_type == POSITION_EMBEDDING_T5_RELATIVE:
                     relative_attention_num_buckets = pos_emb_config.get("num_buckets", self.relative_attention_num_buckets)
@@ -589,7 +589,7 @@ class T5Attention(nn.Module):
         """Compute binned relative position bias"""
         if position_embedding_name == POSITION_EMBEDDING_T5_DEFAULT_RELATIVE:
             ### take the default t5 relative positional attention (will also use existing weights, possibly pretrained)
-            relative_attention_bias = self.t5_default_relative_attention_bias ###the single one we reuse for anyone who wishes to use it
+            relative_attention_bias = self.relative_attention_bias ###the single one we reuse for anyone who wishes to use it
             num_buckets=self.relative_attention_num_buckets
             max_distance=self.relative_attention_max_distance      
         elif position_embedding_name == POSITION_EMBEDDING_T5_RELATIVE:        
