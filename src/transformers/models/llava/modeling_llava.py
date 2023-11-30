@@ -23,14 +23,14 @@ from torch.nn import CrossEntropyLoss
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import ModelOutput
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
 )
-from ..auto import AutoModelForCausalLM, AutoModel
+from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava import LlavaConfig
 
 
@@ -310,6 +310,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 @add_start_docstrings(
     """The LLAVA model which consists of a vision backbone and a language model.""",
     LLAVA_START_DOCSTRING,
@@ -317,8 +318,9 @@ LLAMA_INPUTS_DOCSTRING = r"""
 class LlavaForVisionText2Text(LlavaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        config = LlavaConfig()
+        config = LlavaConfig.from_pretrained("ybelkada/llava-1.5-7b", revision="refs/pr/5")
         self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.vision_tower._no_split_modules = ["CLIPEncoderLayer"]
         self.multi_modal_projector = LlavaMultiModalProjector(config)
 
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
@@ -420,7 +422,9 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
                     attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
             else:
-                image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+                image_outputs = self.vision_tower(
+                    pixel_values, output_hidden_states=True
+                )  # this is not memory efficient at all
                 selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
 
                 if vision_feature_select_strategy == "default":

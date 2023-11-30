@@ -249,6 +249,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
+        ("clip_vision_model", "CLIPVisionConfig"),
     ]
 )
 
@@ -707,6 +708,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
+        ("clip_vision_model", "CLIPVisionModel")
     ]
 )
 
@@ -734,6 +736,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("kosmos-2", "kosmos2"),
         ("maskformer-swin", "maskformer"),
         ("xclip", "x_clip"),
+        ("clip_vision_model", "clip"),
     ]
 )
 

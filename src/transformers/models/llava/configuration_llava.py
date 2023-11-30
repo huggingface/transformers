@@ -107,7 +107,7 @@ class LlavaConfig(PretrainedConfig):
                 image_size=336,
                 num_hidden_layers=24,
                 vocab_size=32000,
-            )
+            ).vision_config
         self.vocab_size = self.vocab_size
 
         self.text_config = text_config
