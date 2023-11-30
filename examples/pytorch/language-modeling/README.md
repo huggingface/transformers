@@ -122,7 +122,7 @@ python run_fim_no_trainer.py \
     --output_dir /tmp/test-clm
 ```
 
-**Note**: Passing in FIM rate as `0.5` means that FIM transformations will be applied to the dataset with a probability of 50%. Whereas passing in FIM SPM rate as `0.2` means that 20% of FIM transformations will use SPM (or Suffix-Prefix-Middle) and the remaining 80% will use PSM (Prefix-Middle-Suffix) mode of transformation.
+**Note**: Passing in FIM rate as `0.5` means that FIM transformations will be applied to the dataset with a probability of 50%. Whereas passing in FIM SPM rate as `0.2` means that 20% of FIM transformations will use SPM (or Suffix-Prefix-Middle) and the remaining 80% will use PSM (or Prefix-Suffix-Middle) mode of transformation.
 
 ### RoBERTa/BERT/DistilBERT and masked language modeling
 
