@@ -47,6 +47,7 @@ class BlipProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
 
+    #  TODO uniformize signature
     def __call__(
         self,
         images: ImageInput = None,
