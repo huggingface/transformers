@@ -70,7 +70,7 @@ pip install 'transformers[tf-cpu]'
 
 <Tip warning={true}>
 
-Pour le architectures mac M1 / ARM
+Pour les architectures mac M1 / ARM
 
 Vous devez installer les outils suivants avant d'installer TensorFLow 2.0
 
@@ -107,12 +107,7 @@ Installez 🤗 Transformers depuis le code source avec la commande suivante :
 pip install git+https://github.com/huggingface/transformers
 ```
 
-Cette commande installe la version depuis la branche `main` au lieu de la dernière version stable.
-La version de la branche `main` est utile pour avoir les derniers développements.
-Par exemple, si un bug a été résolu depuis la dernière version stable mais n'a pas encore été publié officiellement.
-Cependant, cela veut aussi dire que la version de la branche `main` n'est pas toujours stable.
-Nous nous efforçons de maintenir la version de la branche `main` opérationnelle, et la plupart des problèmes sont généralement résolus en l'espace de quelques heures ou d'un jour.
-Si vous recontrez un problème, n'hésitez pas à créer une [Issue](https://github.com/huggingface/transformers/issues) pour que l'on puisse trouver une solution au plus vite !
+Cette commande installe la version depuis la branche `main` au lieu de la dernière version stable. La version de la branche `main` est utile pour avoir les derniers développements. Par exemple, si un bug a été résolu depuis la dernière version stable mais n'a pas encore été publié officiellement. Cependant, cela veut aussi dire que la version de la branche `main` n'est pas toujours stable. Nous nous efforçons de maintenir la version de la branche `main` opérationnelle, et la plupart des problèmes sont généralement résolus en l'espace de quelques heures ou d'un jour. Si vous recontrez un problème, n'hésitez pas à créer une [Issue](https://github.com/huggingface/transformers/issues) pour que l'on puisse trouver une solution au plus vite !
 
 Vérifiez que 🤗 Transformers a bien été installé avec la commande suivante :
 
@@ -135,9 +130,7 @@ cd transformers
 pip install -e .
 ```
 
-Ces commandes créent des liens entre le dossier où le projet a été cloné et les chemins de vos librairies Python.
-Python regardera maintenant dans le dossier que vous avez cloné en plus des chemins de vos librairies normaux.
-Par exemple, si vos librairies Python sont installées dans `~/anaconda3/envs/main/lib/python3.7/site-packages/`, Python cherchera aussi dans le dossier où vous avez cloné : `~/transformers/`.
+Ces commandes créent des liens entre le dossier où le projet a été cloné et les chemins de vos librairies Python. Python regardera maintenant dans le dossier que vous avez cloné en plus des dossiers où sont installées vos autres librairies. Par exemple, si vos librairies Python sont installées dans `~/anaconda3/envs/main/lib/python3.7/site-packages/`, Python cherchera aussi dans le dossier où vous avez cloné : `~/transformers/`.
 
 <Tip warning={true}>
 
@@ -156,7 +149,7 @@ Votre environnement Python utilisera la version de la branche `main` lors de la 
 
 ## Installation avec conda
 
-Installation avec la chaîne `huggingface` de conda :
+Installation via le canal `huggingface` de conda :
 
 ```bash
 conda install -c huggingface transformers
@@ -186,20 +179,20 @@ Ajoutez [🤗 Datasets](https://huggingface.co/docs/datasets/) à votre processu
 
 </Tip>
 
-Par example, vous exécuteriez généralement un programme sur un réseau normal cloisonné des instances externes avec la commande suivante :
-
-```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-Exécutez ce même programme dans une instance hors ligne avec :
-
 ```bash
 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
 python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
-Le script devrait maintenant s'exécuter sans rester en attente ou attendre une expiration, car il sait qu'il ne doit rechercher que des fichiers locaux.
+Le script devrait maintenant s'exécuter sans rester en attente ou attendre une expiration, car il n'essaiera pas de télécharger des modèle sur le Hub.
+
+Vous pouvez aussi éviter de télécharger un modèle à chaque appel de la fonction [~PreTrainedModel.from_pretrained] en utilisant le paramètre [local_files_only]. Seuls les fichiers locaux sont chargés lorsque ce paramètre est activé (c.-à-d. `local_files_only=True`) :
+
+```py
+from transformers import T5Model
+
+model = T5Model.from_pretrained("./path/to/local/directory", local_files_only=True)
+```
 
 ### Récupérer des modèles et des tokenizers pour une utilisation hors ligne
 
