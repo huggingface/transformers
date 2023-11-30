@@ -70,7 +70,7 @@ pip install 'transformers[tf-cpu]'
 
 <Tip warning={true}>
 
-Utilisateurs avec M1 / ARM
+Pour le architectures mac M1 / ARM
 
 Vous devez installer les outils suivants avant d'installer TensorFLow 2.0
 
