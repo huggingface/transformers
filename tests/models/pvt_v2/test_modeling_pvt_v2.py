@@ -37,7 +37,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MODEL_MAPPING, PvtV2ForImageClassification, PvtV2ImageProcessor, PvtV2Model
+    from transformers import MODEL_MAPPING, AutoImageProcessor, PvtV2ForImageClassification, PvtV2Model
     from transformers.models.pvt_v2.modeling_pvt_v2 import PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -52,7 +52,7 @@ class PvtV2ConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "num_encoder_blocks"))
 
 
-class PvtV2ModelTester:
+class PvtV2ModelTester(ModelTesterMixin):
     def __init__(
         self,
         parent,
@@ -77,7 +77,7 @@ class PvtV2ModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.image_size = {"height": 64, "width": 64} if image_size is None else image_size
+        self.image_size = 64 if image_size is None else image_size
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
         self.sr_ratios = sr_ratios
@@ -107,7 +107,7 @@ class PvtV2ModelTester:
 
     def get_config(self):
         return PvtV2Config(
-            image_size={"height": self.image_size, "width": self.image_size},
+            image_size=self.image_size,
             num_channels=self.num_channels,
             num_encoder_blocks=self.num_encoder_blocks,
             depths=self.depths,
@@ -222,6 +222,17 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    @unittest.skip(reason="This architecture does not work with using reentrant.")
+    def test_training_gradient_checkpointing(self):
+        # Scenario - 1 default behaviour
+        self.check_training_gradient_checkpointing()
+
+    @unittest.skip(reason="This architecture does not work with using reentrant.")
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        # Scenario - 2 with `use_reentrant=True` - this is the default value that is used in pytorch's
+        # torch.utils.checkpoint.checkpoint
+        self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -310,7 +321,7 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification(self):
         # only resize + normalize
-        image_processor = PvtV2ImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
+        image_processor = AutoImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
         model = PvtV2ForImageClassification.from_pretrained("FoamoftheSea/pvt_v2_b0").to(torch_device).eval()
 
         image = prepare_img()
@@ -331,7 +342,7 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
     def test_inference_model(self):
         model = PvtV2Model.from_pretrained("FoamoftheSea/pvt_v2_b0").to(torch_device).eval()
 
-        image_processor = PvtV2ImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
+        image_processor = AutoImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
@@ -359,7 +370,7 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
         """
         model = PvtV2ForImageClassification.from_pretrained("FoamoftheSea/pvt_v2_b0", torch_dtype=torch.float16)
         model.to(torch_device)
-        image_processor = PvtV2ImageProcessor(size={"height": 224, "width": 224})
+        image_processor = AutoImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")

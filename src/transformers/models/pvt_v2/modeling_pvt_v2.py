@@ -476,7 +476,7 @@ PVT_V2_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`PvtV2ImageProcessor.__call__`] for details.
+            [`PvtImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -496,6 +496,7 @@ class PvtV2Model(PvtV2PreTrainedModel):
     def __init__(self, config: PvtV2Config):
         super().__init__(config)
         self.config = config
+        # self.channels = [config.hidden_sizes[i] for i in config.out_indices]
 
         # hierarchical Transformer encoder
         self.encoder = PvtV2Encoder(config)

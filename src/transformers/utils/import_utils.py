@@ -652,7 +652,7 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
-def is_accelerate_available(min_version: str = None):
+def is_accelerate_available(min_version: str = "0.21.0"):
     if min_version is not None:
         return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
     return _accelerate_available
