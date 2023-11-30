@@ -152,7 +152,7 @@ cd ~/transformers/
 git pull
 ```
 
-Votre environnement Python trouvera la version de la branche `main` lors de la prochaine exécution.
+Votre environnement Python utilisera la version de la branche `main` lors de la prochaine exécution.
 
 ## Installation avec conda
 
