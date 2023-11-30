@@ -618,6 +618,8 @@
         title: Pop2Piano
       - local: model_doc/seamless_m4t
         title: Seamless-M4T
+      - local: model_doc/seamless_m4t_v2
+        title: SeamlessM4T-v2
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d

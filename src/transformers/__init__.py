@@ -547,6 +547,10 @@ _import_structure = {
         "SeamlessM4TFeatureExtractor",
         "SeamlessM4TProcessor",
     ],
+    "models.seamless_m4t_v2": [
+        "SEAMLESS_M4T_V2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SeamlessM4Tv2Config",
+    ],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
@@ -2778,6 +2782,17 @@ else:
             "SeamlessM4TTextToUnitModel",
         ]
     )
+    _import_structure["models.seamless_m4t_v2"].extend(
+        [
+            "SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SeamlessM4Tv2ForSpeechToSpeech",
+            "SeamlessM4Tv2ForSpeechToText",
+            "SeamlessM4Tv2ForTextToSpeech",
+            "SeamlessM4Tv2ForTextToText",
+            "SeamlessM4Tv2Model",
+            "SeamlessM4Tv2PreTrainedModel",
+        ]
+    )
     _import_structure["models.segformer"].extend(
         [
             "SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4794,6 +4809,10 @@ if TYPE_CHECKING:
         SeamlessM4TFeatureExtractor,
         SeamlessM4TProcessor,
     )
+    from .models.seamless_m4t_v2 import (
+        SEAMLESS_M4T_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SeamlessM4Tv2Config,
+    )
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
@@ -6677,6 +6696,15 @@ if TYPE_CHECKING:
             SeamlessM4TPreTrainedModel,
             SeamlessM4TTextToUnitForConditionalGeneration,
             SeamlessM4TTextToUnitModel,
+        )
+        from .models.seamless_m4t_v2 import (
+            SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SeamlessM4Tv2ForSpeechToSpeech,
+            SeamlessM4Tv2ForSpeechToText,
+            SeamlessM4Tv2ForTextToSpeech,
+            SeamlessM4Tv2ForTextToText,
+            SeamlessM4Tv2Model,
+            SeamlessM4Tv2PreTrainedModel,
         )
         from .models.segformer import (
             SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
