@@ -1,5 +1,6 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation.grammar_utils import IncrementalGrammarConstraint
+from transformers.generation.logits_process import GrammarConstrainedLogitsProcessor
 
 MODEL_IDS = [
     "hf-internal-testing/tiny-random-GPTJForCausalLM",
@@ -23,6 +24,7 @@ def test_grammar_constrained_decoding_greedy_w_number_grammar():
         tokenizer.pad_token = tokenizer.eos_token
 
         grammar = IncrementalGrammarConstraint(grammar_str, start_rule_name="root", tokenizer=tokenizer)
+        grammar_processor = GrammarConstrainedLogitsProcessor(grammar)
 
         prefix = "This is a valid number:"
 
@@ -37,7 +39,7 @@ def test_grammar_constrained_decoding_greedy_w_number_grammar():
             max_new_tokens=40,
             top_p=0.92,
             top_k=5,
-            grammar=grammar,
+            logits_processor=[grammar_processor],
             repetition_penalty=100.,
             early_stopping=True,
         )
@@ -61,6 +63,7 @@ def test_grammar_constrained_decoding_greedy_w_balanced_parenthesis_grammar():
         tokenizer.pad_token = tokenizer.eos_token
 
         grammar = IncrementalGrammarConstraint(grammar_str, start_rule_name="root", tokenizer=tokenizer)
+        grammar_processor = GrammarConstrainedLogitsProcessor(grammar)
 
         prefix = "This is a valid json:"
 
@@ -69,14 +72,14 @@ def test_grammar_constrained_decoding_greedy_w_balanced_parenthesis_grammar():
 
         output = model.generate(
             input_ids,
-            do_sample=False,
+            do_sample=True,
             pad_token_id=tokenizer.eos_token_id,
             eos_token_id=tokenizer.eos_token_id,
             num_beams=1,
             max_new_tokens=40,
             top_p=0.92,
             top_k=5,
-            grammar=grammar,
+            logits_processor=[grammar_processor],
             repetition_penalty=100.,
             early_stopping=True,
         )
