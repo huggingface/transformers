@@ -377,3 +377,11 @@ The following auto classes are available for the following multimodal tasks.
 ### FlaxAutoModelForVision2Seq
 
 [[autodoc]] FlaxAutoModelForVision2Seq
+
+## TimeSeries
+
+The following auto classes are available for the following time series tasks.
+
+### AutoModelForTimeSeriesPrediction
+
+[[autodoc]] AutoModelForTimeSeriesPrediction
