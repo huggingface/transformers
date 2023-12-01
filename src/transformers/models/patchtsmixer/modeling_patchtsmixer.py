@@ -643,11 +643,7 @@ class PatchTSMixerForPredictionHead(nn.Module):
         config (`PatchTSMixerConfig`, *required*): Configuration.
     """
 
-    def __init__(
-        self,
-        config: PatchTSMixerConfig,
-        distribution_output=None,
-    ):
+    def __init__(self, config: PatchTSMixerConfig, distribution_output=None):
         super().__init__()
 
         self.prediction_channel_indices = config.prediction_channel_indices
@@ -703,11 +699,7 @@ class PatchTSMixerLinearHead(nn.Module):
 
     """
 
-    def __init__(
-        self,
-        config: PatchTSMixerConfig,
-        distribution_output=None,
-    ):
+    def __init__(self, config: PatchTSMixerConfig, distribution_output=None):
         super().__init__()
 
         self.head_aggregation = config.head_aggregation
