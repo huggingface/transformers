@@ -1223,6 +1223,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.author, self.user)
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
+    @unittest.skip("Cannot handle gated repos right now")
     def test_safetensors_on_the_fly_conversion_gated(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -1286,6 +1287,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.author, self.user)
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
+    @unittest.skip("Cannot handle gated repos right now")
     def test_safetensors_on_the_fly_sharded_conversion_gated(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
