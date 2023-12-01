@@ -493,14 +493,15 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
 
     def test_prediction_generation(self):
-        model = PatchTSMixerForPrediction.from_pretrained("ibm/patchtsmixer-etth1-generate").to("cpu")
+        torch_device = "cpu"
+        model = PatchTSMixerForPrediction.from_pretrained("ibm/patchtsmixer-etth1-generate").to(torch_device)
         batch = prepare_batch(file="forecast_batch.pt")
         print(batch["past_values"])
 
         model.eval()
         torch.manual_seed(0)
         with torch.no_grad():
-            outputs = model.generate(past_values=batch["past_values"].to("cpu"))
+            outputs = model.generate(past_values=batch["past_values"].to(torch_device))
         expected_shape = torch.Size((32, 1, model.config.prediction_length, model.config.num_input_channels))
 
         self.assertEqual(outputs.sequences.shape, expected_shape)
