@@ -1435,9 +1435,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
         self.model = PatchTSMixerModel(config, mask_input=True)
-        self.head = PatchTSMixerPretrainHead(
-            config=config,
-        )
+        self.head = PatchTSMixerPretrainHead(config=config)
         self.masked_loss = config.masked_loss
         self.use_return_dict = config.use_return_dict
 
