@@ -29,8 +29,7 @@ rendered properly in your Markdown viewer.
 
 ## 生成输出
 
-`~generation.GenerationMixin.generate` 的输出是 `~utils.ModelOutput` 的一个子类的实例。这个输出是一种包含 `~generation.GenerationMixin.generate` 返回的所有信息数据结构，但也可以作为元组或字典使用。
-
+[`~generation.GenerationMixin.generate`] 的输出是 [`~utils.ModelOutput`] 的一个子类的实例。这个输出是一种包含 [`~generation.GenerationMixin.generate`] 返回的所有信息数据结构，但也可以作为元组或字典使用。
 这里是一个例子：
 
 
@@ -44,7 +43,7 @@ inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
 generation_output = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
 ```
 
-`generation_output` 的对象是 `~generation.GreedySearchDecoderOnlyOutput` 的一个实例，从该类的文档中我们可以看到，这意味着它具有以下属性：
+`generation_output` 的对象是 [`~generation.GreedySearchDecoderOnlyOutput`] 的一个实例，从该类的文档中我们可以看到，这意味着它具有以下属性：
 
 - `sequences`: 生成的tokens序列
 - `scores`（可选）: 每个生成步骤的语言建模头的预测分数
@@ -311,7 +310,7 @@ generation_output[:2]
 
 ## StoppingCriteria
 
-可以使用[“StoppingCriteria”]来更改停止生成的时间（除了EOS token以外的方法）。请注意，这仅适用于我们的PyTorch实现。
+可以使用[`StoppingCriteria`]来更改停止生成的时间（除了EOS token以外的方法）。请注意，这仅适用于我们的PyTorch实现。
 
 
 [[autodoc]] StoppingCriteria
@@ -328,8 +327,7 @@ generation_output[:2]
 
 ## Constraints
 
-可以使用[“Constraint”]来强制生成结果包含输出中的特定tokens或序列。请注意，这仅适用于我们的PyTorch实现。
-
+可以使用[`Constraint`]来强制生成结果包含输出中的特定tokens或序列。请注意，这仅适用于我们的PyTorch实现。
 
 [[autodoc]] Constraint
 

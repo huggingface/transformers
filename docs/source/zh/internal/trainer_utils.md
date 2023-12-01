@@ -41,7 +41,7 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] trainer_pt_utils.DistributedTensorGatherer
 
-## 分布式评估
+## Trainer参数解析
 
 [[autodoc]] HfArgumentParser
 
