@@ -6077,13 +6077,6 @@ class OwlViTVisionModel(metaclass=DummyObject):
 PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class PatchTSMixerForTimeSeriesClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class PatchTSMixerForPrediction(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -6099,6 +6092,13 @@ class PatchTSMixerForPretraining(metaclass=DummyObject):
 
 
 class PatchTSMixerForRegression(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PatchTSMixerForTimeSeriesClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
