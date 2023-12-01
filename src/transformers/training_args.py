@@ -1879,7 +1879,7 @@ class TrainingArguments:
         elif self.distributed_state.distributed_type == DistributedType.MULTI_XPU:
             if "ACCELERATE_USE_XPU" not in os.environ:
                 os.environ["ACCELERATE_USE_XPU"] = "true"
-            self._n_gpu = torch.xpu.device_count()
+            self._n_gpu = 1
             device = torch.device("xpu:0")
             torch.xpu.set_device(device)
         elif self.distributed_state.distributed_type == DistributedType.NO:
