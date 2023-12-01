@@ -2022,10 +2022,14 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             output_hidden_states=False,
         )
 
-        # get distribution
-        distribution = self.distribution_output.distribution(outputs.regression_outputs)
-        # get samples: list of [bs x num_targets]
-        samples = [distribution.sample() for _ in range(num_parallel_samples)]
-        # samples: [bs x num_samples x num_targets]
-        samples = torch.stack(samples, dim=1)
+        if self.distribution_output:
+            # get distribution
+            distribution = self.distribution_output.distribution(outputs.regression_outputs)
+            # get samples: list of [bs x num_targets]
+            samples = [distribution.sample() for _ in range(num_parallel_samples)]
+            # samples: [bs x num_samples x num_targets]
+            samples = torch.stack(samples, dim=1)
+        else:
+            samples = outputs.regression_outputs.unsqueeze(1)
+
         return SamplePatchTSTOutput(sequences=samples)

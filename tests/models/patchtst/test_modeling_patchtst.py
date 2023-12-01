@@ -370,16 +370,19 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         model = PatchTSTForRegression.from_pretrained("namctin/patchtst_etth1_regression").to(torch_device)
         batch = prepare_batch(file="test-batch.pt")
 
+        past_values = batch["past_values"][..., : model.config.num_input_channels]
+        if model.distribution_output:
+            num_parallel_samples = model.config.num_parallel_samples
+        else:
+            num_parallel_samples = 1
+
         torch.manual_seed(0)
         with torch.no_grad():
-            outputs = model.generate(past_values=batch["past_values"].to(torch_device))
-        expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.num_targets))
+            outputs = model.generate(past_values=past_values.to(torch_device))
+        expected_shape = torch.Size((64, num_parallel_samples, model.config.num_targets))
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [[0.3228, 0.4320, 0.4591, 0.4066, -0.3461, 0.3094, -0.8426]],
-            device=torch_device,
-        )
+        expected_slice = torch.tensor([-0.7600], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)
 
-        self.assertTrue(torch.allclose(mean_prediction[0, -1:], expected_slice, rtol=TOLERANCE))
+        self.assertTrue(torch.allclose(mean_prediction[0], expected_slice, rtol=TOLERANCE))
