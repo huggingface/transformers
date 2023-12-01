@@ -230,10 +230,10 @@ class TvpModelIntegrationTests(unittest.TestCase):
 
         image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt")
         input_ids = torch.tensor([[1, 2]])
         attention_mask = torch.tensor([[1, 1]])
-        encoding.update({"input_ids": input_ids, "attention_mask": attention_mask})
+        encoding.update({"input_ids": input_ids, "attention_mask": attention_mask}).to(torch_device)
 
         with torch.no_grad():
             outputs = model(**encoding)
@@ -250,10 +250,10 @@ class TvpModelIntegrationTests(unittest.TestCase):
 
         image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt")
         input_ids = torch.tensor([[1, 2]])
         attention_mask = torch.tensor([[1, 1]])
-        encoding.update({"input_ids": input_ids, "attention_mask": attention_mask})
+        encoding.update({"input_ids": input_ids, "attention_mask": attention_mask}).to(torch_device)
 
         with torch.no_grad():
             outputs = model(**encoding)
