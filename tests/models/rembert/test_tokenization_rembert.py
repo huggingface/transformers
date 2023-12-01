@@ -45,13 +45,13 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = RemBertTokenizer(SAMPLE_VOCAB)
         tokenizer.save_pretrained(self.tmpdirname)
 
-    # Copied from ReformerTokenizationTest.test_sequence_builders
+    # Copied from ReformerTokenizationTest.get_input_output_texts
     def get_input_output_texts(self, tokenizer):
         input_text = "this is a test"
         output_text = "this is a test"
         return input_text, output_text
 
-    # Copied from ReformerTokenizationTest.test_sequence_builders
+   
     def test_get_vocab(self):
         vocab_keys = list(self.get_tokenizer().get_vocab().keys())
         self.assertEqual(vocab_keys[0], "<unk>")
@@ -63,7 +63,7 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 1_000)
 
-    # Copied from ReformerTokenizationTest.test_sequence_builders
+    # Copied from ReformerTokenizationTest.test_full_tokenizer
     def test_full_tokenizer(self):
         tokenizer = RemBertTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
