@@ -29,6 +29,7 @@ def spawn_conversion(token: str, private: bool, model_id: str):
     sse_url = f"{safetensors_convert_space_url}/queue/join"
     sse_data_url = f"{safetensors_convert_space_url}/queue/data"
 
+    # The `fn_index` is necessary to indicate to gradio that we will use the `run` method of the Space.
     hash_data = {"fn_index": 1, "session_hash": str(uuid.uuid4())}
 
     def start(_sse_connection, payload):
@@ -60,16 +61,19 @@ def spawn_conversion(token: str, private: bool, model_id: str):
             logger.warning(f"Error during conversion: {repr(e)}")
 
 
-def get_sha(api: HfApi, model_id: str, **kwargs):
+def get_conversion_pr_reference(api: HfApi, model_id: str, **kwargs):
     private = api.model_info(model_id).private
 
     logger.info("Attempting to create safetensors variant")
     pr_title = "Adding `safetensors` variant of this model"
     token = kwargs.get("token")
 
+    # This looks into the current repo's open PRs to see if a PR for safetensors was already open. If so, it
+    # returns it. It checks that the PR was opened by the bot and not by another user so as to prevent
+    # security breaches.
     pr = previous_pr(api, model_id, pr_title, token=token)
 
-    if pr is None:
+    if pr is None or (not private and pr.author != "SFConvertBot"):
         spawn_conversion(token, private, model_id)
         pr = previous_pr(api, model_id, pr_title, token=token)
     else:
@@ -82,7 +86,7 @@ def get_sha(api: HfApi, model_id: str, **kwargs):
 
 def auto_conversion(pretrained_model_name_or_path: str, **cached_file_kwargs):
     api = HfApi(token=cached_file_kwargs.get("token"))
-    sha = get_sha(api, pretrained_model_name_or_path, **cached_file_kwargs)
+    sha = get_conversion_pr_reference(api, pretrained_model_name_or_path, **cached_file_kwargs)
 
     if sha is None:
         return None, None
