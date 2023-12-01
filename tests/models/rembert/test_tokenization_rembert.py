@@ -169,8 +169,6 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # Copied from tests.test_tokenization_common.TokenizerTesterMixin.test_added_tokens_serialization
     def test_added_tokens_serialization(self):
-        # As the slow token in the hub is stored with lstrip=False (different from Fast token) which resulted into failing the following test case when comparing fast->slow token
-        # Therefore, to solve the problem we override the following test case by making mask_token to have lstrip= True .
         # Utility to test the added vocab
         def _test_added_vocab_and_eos(expected, tokenizer_class, expected_eos, temp_dir):
             tokenizer = tokenizer_class.from_pretrained(temp_dir)
@@ -181,13 +179,10 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             return tokenizer
 
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False, special=True)
-        new_mask_token = AddedToken("[MASK]", lstrip=True, rstrip=False, normalized=False)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
-                tokenizer = self.tokenizer_class.from_pretrained(
-                    pretrained_name, eos_token=new_eos, mask_token=new_mask_token
-                )
+                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
                 EXPECTED_ADDED_TOKENS_DECODER = tokenizer.added_tokens_decoder
                 with self.subTest("Hub -> Slow: Test loading a slow tokenizer from the hub)"):
                     self.assertEqual(tokenizer._eos_token, new_eos)
