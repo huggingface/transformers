@@ -179,10 +179,13 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             return tokenizer
 
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False, special=True)
+        new_masked_token = AddedToken("[MASK]", lstrip=True, rstrip=False, normalized=False)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
-                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
+                tokenizer = self.tokenizer_class.from_pretrained(
+                    pretrained_name, eos_token=new_eos, mask_token=new_masked_token
+                )
                 EXPECTED_ADDED_TOKENS_DECODER = tokenizer.added_tokens_decoder
                 with self.subTest("Hub -> Slow: Test loading a slow tokenizer from the hub)"):
                     self.assertEqual(tokenizer._eos_token, new_eos)
