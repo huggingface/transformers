@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # RoFormer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=roformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-roformer-blueviolet">
+</div>
+
 ## Overview
 
 The RoFormer model was proposed in [RoFormer: Enhanced Transformer with Rotary Position Embedding](https://arxiv.org/pdf/2104.09864v1.pdf) by Jianlin Su and Yu Lu and Shengfeng Pan and Bo Wen and Yunfeng Liu.

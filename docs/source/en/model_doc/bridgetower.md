@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # BridgeTower
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=bridgetower">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-bridgetower-blueviolet">
+</div>
+
 ## Overview
 
 The BridgeTower model was proposed in [BridgeTower: Building Bridges Between Encoders in Vision-Language Representative Learning](https://arxiv.org/abs/2206.08657) by Xiao Xu, Chenfei Wu, Shachar Rosenman, Vasudev Lal, Wanxiang Che, Nan Duan. The goal of this model is to build a

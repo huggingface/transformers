@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # BLOOM
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=bloom">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-bloom-blueviolet">
+</div>
+
 ## Overview
 
 The BLOOM model has been proposed with its various versions through the [BigScience Workshop](https://bigscience.huggingface.co/). BigScience is inspired by other open science initiatives where researchers have pooled their time and resources to collectively achieve a higher impact.

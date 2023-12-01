@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # ESM
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=esm">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-esm-blueviolet">
+</div>
+
 ## Overview
 
 This page provides code and pre-trained weights for Transformer protein language models from Meta AI's Fundamental 

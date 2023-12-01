@@ -25,6 +25,11 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 </Tip>
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=van">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-van-blueviolet">
+</div>
+
 ## Overview
 
 The VAN model was proposed in [Visual Attention Network](https://arxiv.org/abs/2202.09741) by Meng-Hao Guo, Cheng-Ze Lu, Zheng-Ning Liu, Ming-Ming Cheng, Shi-Min Hu.

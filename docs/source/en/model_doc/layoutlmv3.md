@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # LayoutLMv3
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=layoutlmv3">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-layoutlmv3-blueviolet">
+</div>
+
 ## Overview
 
 The LayoutLMv3 model was proposed in [LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking](https://arxiv.org/abs/2204.08387) by Yupan Huang, Tengchao Lv, Lei Cui, Yutong Lu, Furu Wei.

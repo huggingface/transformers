@@ -12,6 +12,11 @@ specific language governing permissions and limitations under the License.
 
 # Pyramid Vision Transformer (PVT)
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=pvt">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-pvt-blueviolet">
+</div>
+
 ## Overview
 
 The PVT model was proposed in

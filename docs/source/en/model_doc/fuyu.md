@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Fuyu
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=fuyu">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-fuyu-blueviolet">
+</div>
+
 ## Overview
 
 The Fuyu model was created by [ADEPT](https://www.adept.ai/blog/fuyu-8b), and authored by Rohan Bavishi, Erich Elsen, Curtis Hawthorne, Maxwell Nye, Augustus Odena, Arushi Somani, Sağnak Taşırlar. 

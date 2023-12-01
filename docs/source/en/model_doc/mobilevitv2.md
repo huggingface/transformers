@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MobileViTV2
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=mobilevitv2">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mobilevitv2-blueviolet">
+</div>
+
 ## Overview
 
 The MobileViTV2 model was proposed in [Separable Self-attention for Mobile Vision Transformers](https://arxiv.org/abs/2206.02680) by Sachin Mehta and Mohammad Rastegari.

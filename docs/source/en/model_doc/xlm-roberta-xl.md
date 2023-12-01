@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # XLM-RoBERTa-XL
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=xlm-roberta-xl">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlm-roberta-xl-blueviolet">
+</div>
+
 ## Overview
 
 The XLM-RoBERTa-XL model was proposed in [Larger-Scale Transformers for Multilingual Masked Language Modeling](https://arxiv.org/abs/2105.00572) by Naman Goyal, Jingfei Du, Myle Ott, Giri Anantharaman, Alexis Conneau. 

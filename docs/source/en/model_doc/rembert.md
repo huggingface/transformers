@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # RemBERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=rembert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-rembert-blueviolet">
+</div>
+
 ## Overview
 
 The RemBERT model was proposed in [Rethinking Embedding Coupling in Pre-trained Language Models](https://arxiv.org/abs/2010.12821) by Hyung Won Chung, Thibault Févry, Henry Tsai, Melvin Johnson, Sebastian Ruder.

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # BertGeneration
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=bert-generation">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-bert-generation-blueviolet">
+</div>
+
 ## Overview
 
 The BertGeneration model is a BERT model that can be leveraged for sequence-to-sequence tasks using

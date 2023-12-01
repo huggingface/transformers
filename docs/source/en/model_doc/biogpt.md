@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # BioGPT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=biogpt">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-biogpt-blueviolet">
+</div>
+
 ## Overview
 
 The BioGPT model was proposed in [BioGPT: generative pre-trained transformer for biomedical text generation and mining

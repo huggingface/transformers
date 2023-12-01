@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # YOLOS
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=yolos">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-yolos-blueviolet">
+</div>
+
 ## Overview
 
 The YOLOS model was proposed in [You Only Look at One Sequence: Rethinking Transformer in Vision through Object Detection](https://arxiv.org/abs/2106.00666) by Yuxin Fang, Bencheng Liao, Xinggang Wang, Jiemin Fang, Jiyang Qi, Rui Wu, Jianwei Niu, Wenyu Liu.

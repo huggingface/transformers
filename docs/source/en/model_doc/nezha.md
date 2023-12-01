@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Nezha
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=nezha">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-nezha-blueviolet">
+</div>
+
 ## Overview
 
 The Nezha model was proposed in [NEZHA: Neural Contextualized Representation for Chinese Language Understanding](https://arxiv.org/abs/1909.00204) by Junqiu Wei et al.

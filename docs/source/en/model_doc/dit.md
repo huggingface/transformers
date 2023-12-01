@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # DiT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=dit">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-dit-blueviolet">
+</div>
+
 ## Overview
 
 DiT was proposed in [DiT: Self-supervised Pre-training for Document Image Transformer](https://arxiv.org/abs/2203.02378) by Junlong Li, Yiheng Xu, Tengchao Lv, Lei Cui, Cha Zhang, Furu Wei.

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # PatchTST
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=patchtst">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-patchtst-blueviolet">
+</div>
+
 ## Overview
 
 The PatchTST model was proposed in [A Time Series is Worth 64 Words: Long-term Forecasting with Transformers](https://arxiv.org/abs/2211.14730) by Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong and Jayant Kalagnanam.

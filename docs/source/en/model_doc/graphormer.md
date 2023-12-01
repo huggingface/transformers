@@ -14,6 +14,11 @@ rendered properly in your Markdown viewer.
 
 # Graphormer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=graphormer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-graphormer-blueviolet">
+</div>
+
 ## Overview
 
 The Graphormer model was proposed in [Do Transformers Really Perform Bad for Graph Representation?](https://arxiv.org/abs/2106.05234)  by 

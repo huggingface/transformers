@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # YOSO
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=yoso">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-yoso-blueviolet">
+</div>
+
 ## Overview
 
 The YOSO model was proposed in [You Only Sample (Almost) Once: Linear Cost Self-Attention Via Bernoulli Sampling](https://arxiv.org/abs/2111.09714)  

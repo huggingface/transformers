@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # SEW-D
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=sew-d">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-sew-d-blueviolet">
+</div>
+
 ## Overview
 
 SEW-D (Squeezed and Efficient Wav2Vec with Disentangled attention) was proposed in [Performance-Efficiency Trade-offs

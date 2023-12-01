@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # CPMAnt
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=cpmant">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-cpmant-blueviolet">
+</div>
+
 ## Overview
 
 CPM-Ant is an open-source Chinese pre-trained language model (PLM) with 10B parameters. It is also the first milestone of the live training process of CPM-Live. The training process is cost-effective and environment-friendly. CPM-Ant also achieves promising results with delta tuning on the CUGE benchmark. Besides the full model, we also provide various compressed versions to meet the requirements of different hardware configurations. [See more](https://github.com/OpenBMB/CPM-Live/tree/cpm-ant/cpm-live)

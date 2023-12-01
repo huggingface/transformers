@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # I-BERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=ibert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-ibert-blueviolet">
+</div>
+
 ## Overview
 
 The I-BERT model was proposed in [I-BERT: Integer-only BERT Quantization](https://arxiv.org/abs/2101.01321) by

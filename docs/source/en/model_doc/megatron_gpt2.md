@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MegatronGPT2
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=megatron_gpt2">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-megatron_gpt2-blueviolet">
+</div>
+
 ## Overview
 
 The MegatronGPT2 model was proposed in [Megatron-LM: Training Multi-Billion Parameter Language Models Using Model

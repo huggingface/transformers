@@ -15,6 +15,11 @@ specific language governing permissions and limitations under the License. -->
 
 # Nougat
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=nougat">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-nougat-blueviolet">
+</div>
+
 ## Overview
 
 The Nougat model was proposed in [Nougat: Neural Optical Understanding for Academic Documents](https://arxiv.org/abs/2308.13418) by

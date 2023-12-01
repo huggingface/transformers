@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # QDQBERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=qdqbert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-qdqbert-blueviolet">
+</div>
+
 ## Overview
 
 The QDQBERT model can be referenced in [Integer Quantization for Deep Learning Inference: Principles and Empirical

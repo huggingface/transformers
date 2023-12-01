@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # ErnieM
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=ernie_m">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-ernie_m-blueviolet">
+</div>
+
 ## Overview
 
 The ErnieM model was proposed in [ERNIE-M: Enhanced Multilingual Representation by Aligning

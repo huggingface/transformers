@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # EfficientNet
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=efficientnet">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-efficientnet-blueviolet">
+</div>
+
 ## Overview
 
 The EfficientNet model was proposed in [EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks](https://arxiv.org/abs/1905.11946) 

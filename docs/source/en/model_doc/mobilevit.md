@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MobileViT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=mobilevit">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mobilevit-blueviolet">
+</div>
+
 ## Overview
 
 The MobileViT model was proposed in [MobileViT: Light-weight, General-purpose, and Mobile-friendly Vision Transformer](https://arxiv.org/abs/2110.02178) by Sachin Mehta and Mohammad Rastegari. MobileViT introduces a new layer that replaces local processing in convolutions with global processing using transformers.

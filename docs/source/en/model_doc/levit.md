@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # LeViT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=levit">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-levit-blueviolet">
+</div>
+
 ## Overview
 
 The LeViT model was proposed in [LeViT: Introducing Convolutions to Vision Transformers](https://arxiv.org/abs/2104.01136) by Ben Graham, Alaaeldin El-Nouby, Hugo Touvron, Pierre Stock, Armand Joulin, Hervé Jégou, Matthijs Douze. LeViT improves the [Vision Transformer (ViT)](vit) in performance and efficiency by a few architectural differences such as activation maps with decreasing resolutions in Transformers and the introduction of an attention bias to integrate positional information.

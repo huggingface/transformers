@@ -12,6 +12,11 @@ specific language governing permissions and limitations under the License.
 
 # InstructBLIP
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=instructblip">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-instructblip-blueviolet">
+</div>
+
 ## Overview
 
 The InstructBLIP model was proposed in [InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning](https://arxiv.org/abs/2305.06500) by Wenliang Dai, Junnan Li, Dongxu Li, Anthony Meng Huat Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pascale Fung, Steven Hoi.

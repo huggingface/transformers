@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Whisper
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=whisper">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-whisper-blueviolet">
+</div>
+
 ## Overview
 
 The Whisper model was proposed in [Robust Speech Recognition via Large-Scale Weak Supervision](https://cdn.openai.com/papers/whisper.pdf) by Alec Radford, Jong Wook Kim, Tao Xu, Greg Brockman, Christine McLeavey, Ilya Sutskever.

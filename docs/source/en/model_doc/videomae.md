@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # VideoMAE
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=videomae">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-videomae-blueviolet">
+</div>
+
 ## Overview
 
 The VideoMAE model was proposed in [VideoMAE: Masked Autoencoders are Data-Efficient Learners for Self-Supervised Video Pre-Training](https://arxiv.org/abs/2203.12602) by Zhan Tong, Yibing Song, Jue Wang, Limin Wang.

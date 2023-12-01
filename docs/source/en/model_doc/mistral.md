@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Mistral
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=mistral">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mistral-blueviolet">
+</div>
+
 ## Overview
 
 Mistral-7B-v0.1 is Mistral AI's first Large Language Model (LLM). 

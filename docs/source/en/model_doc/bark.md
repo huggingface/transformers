@@ -12,6 +12,11 @@ specific language governing permissions and limitations under the License.
 
 # Bark
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=bark">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-bark-blueviolet">
+</div>
+
 ## Overview
 
 Bark is a transformer-based text-to-speech model proposed by Suno AI in [suno-ai/bark](https://github.com/suno-ai/bark).

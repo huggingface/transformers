@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MVP
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=mvp">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mvp-blueviolet">
+</div>
+
 ## Overview
 
 The MVP model was proposed in [MVP: Multi-task Supervised Pre-training for Natural Language Generation](https://arxiv.org/abs/2206.12131) by Tianyi Tang, Junyi Li, Wayne Xin Zhao and Ji-Rong Wen.

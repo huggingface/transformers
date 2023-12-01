@@ -23,6 +23,11 @@ breaking changes to fix it in the future. If you see something strange, file a [
 
 </Tip>
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=maskformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-maskformer-blueviolet">
+</div>
+
 ## Overview
 
 The MaskFormer model was proposed in [Per-Pixel Classification is Not All You Need for Semantic Segmentation](https://arxiv.org/abs/2107.06278) by Bowen Cheng, Alexander G. Schwing, Alexander Kirillov. MaskFormer addresses semantic segmentation with a mask classification paradigm instead of performing classic pixel-level classification.

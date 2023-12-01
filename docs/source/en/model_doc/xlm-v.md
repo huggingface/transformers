@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # XLM-V
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=xlm-v">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlm-v-blueviolet">
+</div>
+
 ## Overview
 
 XLM-V is multilingual language model with a one million token vocabulary trained on 2.5TB of data from Common Crawl (same as XLM-R).

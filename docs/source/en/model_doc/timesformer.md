@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # TimeSformer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=timesformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-timesformer-blueviolet">
+</div>
+
 ## Overview
 
 The TimeSformer model was proposed in [TimeSformer: Is Space-Time Attention All You Need for Video Understanding?](https://arxiv.org/abs/2102.05095) by Facebook Research.

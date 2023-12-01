@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # XLSR-Wav2Vec2
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=xlsr_wav2vec2">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlsr_wav2vec2-blueviolet">
+</div>
+
 ## Overview
 
 The XLSR-Wav2Vec2 model was proposed in [Unsupervised Cross-Lingual Representation Learning For Speech Recognition](https://arxiv.org/abs/2006.13979) by Alexis Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael

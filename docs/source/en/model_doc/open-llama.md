@@ -31,6 +31,11 @@ This model differs from the [OpenLLaMA models](https://huggingface.co/models?sea
 
 </Tip>
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=open-llama">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-open-llama-blueviolet">
+</div>
+
 ## Overview
 
 The Open-Llama model was proposed in the open source Open-Llama project by community developer s-JoL.

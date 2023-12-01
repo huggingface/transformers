@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # KOSMOS-2
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=kosmos-2">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-kosmos-2-blueviolet">
+</div>
+
 ## Overview
 
 The KOSMOS-2 model was proposed in [Kosmos-2: Grounding Multimodal Large Language Models to the World](https://arxiv.org/abs/2306.14824) by Zhiliang Peng, Wenhui Wang, Li Dong, Yaru Hao, Shaohan Huang, Shuming Ma, Furu Wei.

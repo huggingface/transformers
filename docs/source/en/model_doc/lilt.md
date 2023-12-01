@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # LiLT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=lilt">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-lilt-blueviolet">
+</div>
+
 ## Overview
 
 The LiLT model was proposed in [LiLT: A Simple yet Effective Language-Independent Layout Transformer for Structured Document Understanding](https://arxiv.org/abs/2202.13669) by Jiapeng Wang, Lianwen Jin, Kai Ding.

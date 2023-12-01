@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # DPT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=dpt">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-dpt-blueviolet">
+</div>
+
 ## Overview
 
 The DPT model was proposed in [Vision Transformers for Dense Prediction](https://arxiv.org/abs/2103.13413) by René Ranftl, Alexey Bochkovskiy, Vladlen Koltun.

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # FLAN-T5
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=flan-t5">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-flan-t5-blueviolet">
+</div>
+
 ## Overview
 
 FLAN-T5 was released in the paper [Scaling Instruction-Finetuned Language Models](https://arxiv.org/pdf/2210.11416.pdf) - it is an enhanced version of T5 that has been finetuned in a mixture of tasks.

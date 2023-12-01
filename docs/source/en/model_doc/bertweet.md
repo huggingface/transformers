@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # BERTweet
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=bertweet">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-bertweet-blueviolet">
+</div>
+
 ## Overview
 
 The BERTweet model was proposed in [BERTweet: A pre-trained language model for English Tweets](https://www.aclweb.org/anthology/2020.emnlp-demos.2.pdf) by Dat Quoc Nguyen, Thanh Vu, Anh Tuan Nguyen.

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # GPT-Sw3
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=gpt-sw3">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-gpt-sw3-blueviolet">
+</div>
+
 ## Overview
 
 The GPT-Sw3 model was first proposed in

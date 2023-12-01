@@ -25,6 +25,11 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 </Tip>
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=retribert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-retribert-blueviolet">
+</div>
+
 ## Overview
 
 The RetriBERT model was proposed in the blog post [Explain Anything Like I'm Five: A Model for Open Domain Long Form

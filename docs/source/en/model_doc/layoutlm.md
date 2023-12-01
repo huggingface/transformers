@@ -18,6 +18,11 @@ rendered properly in your Markdown viewer.
 
 <a id='Overview'></a>
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=layoutlm">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-layoutlm-blueviolet">
+</div>
+
 ## Overview
 
 The LayoutLM model was proposed in the paper [LayoutLM: Pre-training of Text and Layout for Document Image

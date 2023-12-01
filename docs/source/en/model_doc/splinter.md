@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Splinter
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=splinter">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-splinter-blueviolet">
+</div>
+
 ## Overview
 
 The Splinter model was proposed in [Few-Shot Question Answering by Pretraining Span Selection](https://arxiv.org/abs/2101.00438) by Ori Ram, Yuval Kirstain, Jonathan Berant, Amir Globerson, Omer Levy. Splinter

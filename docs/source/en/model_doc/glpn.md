@@ -23,6 +23,11 @@ breaking changes to fix it in the future. If you see something strange, file a [
 
 </Tip>
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=glpn">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-glpn-blueviolet">
+</div>
+
 ## Overview
 
 The GLPN model was proposed in [Global-Local Path Networks for Monocular Depth Estimation with Vertical CutDepth](https://arxiv.org/abs/2201.07436)  by Doyeon Kim, Woonghyun Ga, Pyungwhan Ahn, Donggyu Joo, Sehwan Chun, Junmo Kim.

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # X-CLIP
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=xclip">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xclip-blueviolet">
+</div>
+
 ## Overview
 
 The X-CLIP model was proposed in [Expanding Language-Image Pretrained Models for General Video Recognition](https://arxiv.org/abs/2208.02816) by Bolin Ni, Houwen Peng, Minghao Chen, Songyang Zhang, Gaofeng Meng, Jianlong Fu, Shiming Xiang, Haibin Ling.

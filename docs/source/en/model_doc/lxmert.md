@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # LXMERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=lxmert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-lxmert-blueviolet">
+</div>
+
 ## Overview
 
 The LXMERT model was proposed in [LXMERT: Learning Cross-Modality Encoder Representations from Transformers](https://arxiv.org/abs/1908.07490) by Hao Tan & Mohit Bansal. It is a series of bidirectional transformer encoders

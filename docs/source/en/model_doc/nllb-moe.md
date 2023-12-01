@@ -17,6 +17,11 @@ rendered properly in your Markdown viewer.
 # NLLB-MOE
 
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=nllb-moe">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-nllb-moe-blueviolet">
+</div>
+
 ## Overview
 
 The NLLB model was presented in [No Language Left Behind: Scaling Human-Centered Machine Translation](https://arxiv.org/abs/2207.04672) by Marta R. Costa-jussà, James Cross, Onur Çelebi,

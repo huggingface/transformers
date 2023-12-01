@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # SwiftFormer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=swiftformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-swiftformer-blueviolet">
+</div>
+
 ## Overview
 
 The SwiftFormer model was proposed in [SwiftFormer: Efficient Additive Attention for Transformer-based Real-time Mobile Vision Applications](https://arxiv.org/abs/2303.15446) by Abdelrahman Shaker, Muhammad Maaz, Hanoona Rasheed, Salman Khan, Ming-Hsuan Yang, Fahad Shahbaz Khan.

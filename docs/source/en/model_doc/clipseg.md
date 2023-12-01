@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # CLIPSeg
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=clipseg">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-clipseg-blueviolet">
+</div>
+
 ## Overview
 
 The CLIPSeg model was proposed in [Image Segmentation Using Text and Image Prompts](https://arxiv.org/abs/2112.10003) by Timo Lüddecke

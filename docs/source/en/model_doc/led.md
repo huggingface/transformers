@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # LED
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=led">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-led-blueviolet">
+</div>
+
 ## Overview
 
 The LED model was proposed in [Longformer: The Long-Document Transformer](https://arxiv.org/abs/2004.05150) by Iz

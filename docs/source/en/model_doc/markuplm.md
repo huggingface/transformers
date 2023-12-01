@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MarkupLM
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=markuplm">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-markuplm-blueviolet">
+</div>
+
 ## Overview
 
 The MarkupLM model was proposed in [MarkupLM: Pre-training of Text and Markup Language for Visually-rich Document

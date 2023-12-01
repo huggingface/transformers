@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # CLAP
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=clap">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-clap-blueviolet">
+</div>
+
 ## Overview
 
 The CLAP model was proposed in [Large Scale Contrastive Language-Audio pretraining with

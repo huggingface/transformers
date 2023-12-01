@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # LongT5
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=longt5">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-longt5-blueviolet">
+</div>
+
 ## Overview
 
 The LongT5 model was proposed in [LongT5: Efficient Text-To-Text Transformer for Long Sequences](https://arxiv.org/abs/2112.07916)

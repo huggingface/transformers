@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Swin Transformer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=swin">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-swin-blueviolet">
+</div>
+
 ## Overview
 
 The Swin Transformer was proposed in [Swin Transformer: Hierarchical Vision Transformer using Shifted Windows](https://arxiv.org/abs/2103.14030)

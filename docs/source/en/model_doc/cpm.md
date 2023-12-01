@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # CPM
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=cpm">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-cpm-blueviolet">
+</div>
+
 ## Overview
 
 The CPM model was proposed in [CPM: A Large-scale Generative Chinese Pre-trained Language Model](https://arxiv.org/abs/2012.00413) by Zhengyan Zhang, Xu Han, Hao Zhou, Pei Ke, Yuxian Gu, Deming Ye, Yujia Qin,

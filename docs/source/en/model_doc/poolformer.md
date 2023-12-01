@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # PoolFormer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=poolformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-poolformer-blueviolet">
+</div>
+
 ## Overview
 
 The PoolFormer model was proposed in [MetaFormer is Actually What You Need for Vision](https://arxiv.org/abs/2111.11418)  by Sea AI Labs. Instead of designing complicated token mixer to achieve SOTA performance, the target of this work is to demonstrate the competence of transformer models largely stem from the general architecture MetaFormer.

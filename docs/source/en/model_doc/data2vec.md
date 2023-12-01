@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Data2Vec
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=data2vec">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-data2vec-blueviolet">
+</div>
+
 ## Overview
 
 The Data2Vec model was proposed in [data2vec: A General Framework for Self-supervised Learning in Speech, Vision and Language](https://arxiv.org/pdf/2202.03555) by Alexei Baevski, Wei-Ning Hsu, Qiantong Xu, Arun Babu, Jiatao Gu and Michael Auli.

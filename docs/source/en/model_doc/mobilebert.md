@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MobileBERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=mobilebert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mobilebert-blueviolet">
+</div>
+
 ## Overview
 
 The MobileBERT model was proposed in [MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited Devices](https://arxiv.org/abs/2004.02984) by Zhiqing Sun, Hongkun Yu, Xiaodan Song, Renjie Liu, Yiming Yang, and Denny

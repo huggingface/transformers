@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Speech2Text2
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=speech_to_text_2">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-speech_to_text_2-blueviolet">
+</div>
+
 ## Overview
 
 The Speech2Text2 model is used together with [Wav2Vec2](wav2vec2) for Speech Translation models proposed in

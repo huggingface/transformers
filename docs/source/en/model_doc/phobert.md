@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # PhoBERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=phobert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-phobert-blueviolet">
+</div>
+
 ## Overview
 
 The PhoBERT model was proposed in [PhoBERT: Pre-trained language models for Vietnamese](https://www.aclweb.org/anthology/2020.findings-emnlp.92.pdf) by Dat Quoc Nguyen, Anh Tuan Nguyen.

@@ -12,6 +12,11 @@ specific language governing permissions and limitations under the License.
 
 # TVP
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=tvp">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-tvp-blueviolet">
+</div>
+
 ## Overview
 
 The text-visual prompting (TVP) framework was proposed in the paper [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://arxiv.org/abs/2303.04995) by Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding.

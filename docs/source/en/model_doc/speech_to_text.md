@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Speech2Text
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=speech_to_text">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-speech_to_text-blueviolet">
+</div>
+
 ## Overview
 
 The Speech2Text model was proposed in [fairseq S2T: Fast Speech-to-Text Modeling with fairseq](https://arxiv.org/abs/2010.05171) by Changhan Wang, Yun Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino. It's a

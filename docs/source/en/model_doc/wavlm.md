@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # WavLM
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=wavlm">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-wavlm-blueviolet">
+</div>
+
 ## Overview
 
 The WavLM model was proposed in [WavLM: Large-Scale Self-Supervised Pre-Training for Full Stack Speech Processing](https://arxiv.org/abs/2110.13900) by Sanyuan Chen, Chengyi Wang, Zhengyang Chen, Yu Wu, Shujie Liu, Zhuo Chen,

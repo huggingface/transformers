@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # ConvNeXt V2
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=convnextv2">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-convnextv2-blueviolet">
+</div>
+
 ## Overview
 
 The ConvNeXt V2 model was proposed in [ConvNeXt V2: Co-designing and Scaling ConvNets with Masked Autoencoders](https://arxiv.org/abs/2301.00808) by Sanghyun Woo, Shoubhik Debnath, Ronghang Hu, Xinlei Chen, Zhuang Liu, In So Kweon, Saining Xie.

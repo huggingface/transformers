@@ -32,6 +32,11 @@ will create a model that is an instance of [`BertModel`].
 
 There is one class of `AutoModel` for each task, and for each backend (PyTorch, TensorFlow, or Flax).
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=auto">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-auto-blueviolet">
+</div>
+
 ## Extending the Auto Classes
 
 Each of the auto classes has a method to be extended with your custom classes. For instance, if you have defined a

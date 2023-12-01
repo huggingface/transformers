@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # DialoGPT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=dialogpt">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-dialogpt-blueviolet">
+</div>
+
 ## Overview
 
 DialoGPT was proposed in [DialoGPT: Large-Scale Generative Pre-training for Conversational Response Generation](https://arxiv.org/abs/1911.00536) by Yizhe Zhang, Siqi Sun, Michel Galley, Yen-Chun Chen, Chris Brockett, Xiang Gao,

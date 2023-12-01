@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # UL2
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=ul2">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-ul2-blueviolet">
+</div>
+
 ## Overview
 
 The T5 model was presented in [Unifying Language Learning Paradigms](https://arxiv.org/pdf/2205.05131v1.pdf) by Yi Tay, Mostafa Dehghani, Vinh Q. Tran, Xavier Garcia, Dara Bahri, Tal Schuster, Huaixiu Steven Zheng, Neil Houlsby, Donald Metzler.

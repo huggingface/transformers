@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # SqueezeBERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=squeezebert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-squeezebert-blueviolet">
+</div>
+
 ## Overview
 
 The SqueezeBERT model was proposed in [SqueezeBERT: What can computer vision teach NLP about efficient neural networks?](https://arxiv.org/abs/2006.11316) by Forrest N. Iandola, Albert E. Shaw, Ravi Krishna, Kurt W. Keutzer. It's a

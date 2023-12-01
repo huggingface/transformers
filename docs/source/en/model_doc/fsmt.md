@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # FSMT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=fsmt">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-fsmt-blueviolet">
+</div>
+
 ## Overview
 
 FSMT (FairSeq MachineTranslation) models were introduced in [Facebook FAIR's WMT19 News Translation Task Submission](https://arxiv.org/abs/1907.06616) by Nathan Ng, Kyra Yee, Alexei Baevski, Myle Ott, Michael Auli, Sergey Edunov.

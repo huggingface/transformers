@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # EnCodec
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=encodec">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-encodec-blueviolet">
+</div>
+
 ## Overview
 
 The EnCodec neural codec model was proposed in [High Fidelity Neural Audio Compression](https://arxiv.org/abs/2210.13438) by Alexandre Défossez, Jade Copet, Gabriel Synnaeve, Yossi Adi.

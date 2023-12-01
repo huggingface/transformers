@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Phi
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=phi">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-phi-blueviolet">
+</div>
+
 ## Overview
 
 The Phi-1 model was proposed in [Textbooks Are All You Need](https://arxiv.org/abs/2306.11644) by Suriya Gunasekar, Yi Zhang, Jyoti Aneja, Caio César Teodoro Mendes, Allie Del Giorno, Sivakanth Gopi, Mojan Javaheripi, Piero Kauffmann, Gustavo de Rosa, Olli Saarikivi, Adil Salim, Shital Shah, Harkirat Singh Behl, Xin Wang, Sébastien Bubeck, Ronen Eldan, Adam Tauman Kalai, Yin Tat Lee and Yuanzhi Li.

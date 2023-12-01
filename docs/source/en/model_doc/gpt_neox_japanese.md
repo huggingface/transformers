@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # GPT-NeoX-Japanese
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=gpt_neox_japanese">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-gpt_neox_japanese-blueviolet">
+</div>
+
 ## Overview
 
 We introduce GPT-NeoX-Japanese, which is an autoregressive language model for Japanese, trained on top of [https://github.com/EleutherAI/gpt-neox](https://github.com/EleutherAI/gpt-neox).

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # GPT Neo
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=gpt_neo">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-gpt_neo-blueviolet">
+</div>
+
 ## Overview
 
 The GPTNeo model was released in the [EleutherAI/gpt-neo](https://github.com/EleutherAI/gpt-neo) repository by Sid

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # REALM
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=realm">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-realm-blueviolet">
+</div>
+
 ## Overview
 
 The REALM model was proposed in [REALM: Retrieval-Augmented Language Model Pre-Training](https://arxiv.org/abs/2002.08909) by Kelvin Guu, Kenton Lee, Zora Tung, Panupong Pasupat and Ming-Wei Chang. It's a

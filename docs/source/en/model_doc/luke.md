@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # LUKE
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=luke">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-luke-blueviolet">
+</div>
+
 ## Overview
 
 The LUKE model was proposed in [LUKE: Deep Contextualized Entity Representations with Entity-aware Self-attention](https://arxiv.org/abs/2010.01057) by Ikuya Yamada, Akari Asai, Hiroyuki Shindo, Hideaki Takeda and Yuji Matsumoto.

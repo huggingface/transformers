@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # GPT-J
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=gptj">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-gptj-blueviolet">
+</div>
+
 ## Overview
 
 The GPT-J model was released in the [kingoflolz/mesh-transformer-jax](https://github.com/kingoflolz/mesh-transformer-jax) repository by Ben Wang and Aran Komatsuzaki. It is a GPT-2-like

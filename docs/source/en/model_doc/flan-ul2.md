@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # FLAN-UL2
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=flan-ul2">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-flan-ul2-blueviolet">
+</div>
+
 ## Overview
 
 Flan-UL2 is an encoder decoder model based on the T5 architecture. It uses the same configuration as the [UL2](ul2) model released earlier last year. 

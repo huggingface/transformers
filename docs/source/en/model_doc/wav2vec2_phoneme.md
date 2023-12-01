@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Wav2Vec2Phoneme
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=wav2vec2_phoneme">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-wav2vec2_phoneme-blueviolet">
+</div>
+
 ## Overview
 
 The Wav2Vec2Phoneme model was proposed in [Simple and Effective Zero-shot Cross-lingual Phoneme Recognition (Xu et al.,

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # ALIGN
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=align">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-align-blueviolet">
+</div>
+
 ## Overview
 
 The ALIGN model was proposed in [Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision](https://arxiv.org/abs/2102.05918) by Chao Jia, Yinfei Yang, Ye Xia, Yi-Ting Chen, Zarana Parekh, Hieu Pham, Quoc V. Le, Yunhsuan Sung, Zhen Li, Tom Duerig. ALIGN is a multi-modal vision and language model. It can be used for image-text similarity and for zero-shot image classification. ALIGN features a dual-encoder architecture with [EfficientNet](efficientnet) as its vision encoder and [BERT](bert) as its text encoder, and learns to align visual and text representations with contrastive learning. Unlike previous work, ALIGN leverages a massive noisy dataset and shows that the scale of the corpus can be used to achieve SOTA representations with a simple recipe.

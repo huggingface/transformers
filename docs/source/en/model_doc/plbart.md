@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # PLBart
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=plbart">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-plbart-blueviolet">
+</div>
+
 ## Overview
 
 The PLBART model was proposed in [Unified Pre-training for Program Understanding and Generation](https://arxiv.org/abs/2103.06333) by Wasi Uddin Ahmad, Saikat Chakraborty, Baishakhi Ray, Kai-Wei Chang.

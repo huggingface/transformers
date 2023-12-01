@@ -12,6 +12,11 @@ specific language governing permissions and limitations under the License.
 
 # BROS
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=bros">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-bros-blueviolet">
+</div>
+
 ## Overview
 
 The BROS model was proposed in [BROS: A Pre-trained Language Model Focusing on Text and Layout for Better Key Information Extraction from Documents](https://arxiv.org/abs/2108.04539) by Teakgyu Hong, Donghyun Kim, Mingi Ji, Wonseok Hwang, Daehyun Nam, Sungrae Park.

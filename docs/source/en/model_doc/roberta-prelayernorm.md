@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # RoBERTa-PreLayerNorm
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=roberta-prelayernorm">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-roberta-prelayernorm-blueviolet">
+</div>
+
 ## Overview
 
 The RoBERTa-PreLayerNorm model was proposed in [fairseq: A Fast, Extensible Toolkit for Sequence Modeling](https://arxiv.org/abs/1904.01038) by Myle Ott, Sergey Edunov, Alexei Baevski, Angela Fan, Sam Gross, Nathan Ng, David Grangier, Michael Auli.

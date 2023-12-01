@@ -26,6 +26,11 @@ Alexis Conneau.
 
 An example of how to use a [`SpeechEncoderDecoderModel`] for inference can be seen in [Speech2Text2](speech_to_text_2).
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=speech-encoder-decoder">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-speech-encoder-decoder-blueviolet">
+</div>
+
 ## Randomly initializing `SpeechEncoderDecoderModel` from model configurations.
 
 [`SpeechEncoderDecoderModel`] can be randomly initialized from an encoder and a decoder config. In the following example, we show how to do this using the default [`Wav2Vec2Model`] configuration for the encoder

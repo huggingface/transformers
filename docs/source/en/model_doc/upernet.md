@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # UPerNet
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=upernet">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-upernet-blueviolet">
+</div>
+
 ## Overview
 
 The UPerNet model was proposed in [Unified Perceptual Parsing for Scene Understanding](https://arxiv.org/abs/1807.10221)

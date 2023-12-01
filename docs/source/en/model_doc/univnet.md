@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # UnivNet
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=univnet">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-univnet-blueviolet">
+</div>
+
 ## Overview
 
 The UnivNet model was proposed in [UnivNet: A Neural Vocoder with Multi-Resolution Spectrogram Discriminators for High-Fidelity Waveform Generation](https://arxiv.org/abs/2106.07889) by Won Jang, Dan Lim, Jaesam Yoon, Bongwan Kin, and Juntae Kim.

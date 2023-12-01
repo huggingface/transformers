@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # SegFormer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=segformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-segformer-blueviolet">
+</div>
+
 ## Overview
 
 The SegFormer model was proposed in [SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers](https://arxiv.org/abs/2105.15203) by Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping

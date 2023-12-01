@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # ERNIE
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=ernie">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-ernie-blueviolet">
+</div>
+
 ## Overview
 ERNIE is a series of powerful models proposed by baidu, especially in Chinese tasks,
 including [ERNIE1.0](https://arxiv.org/abs/1904.09223), [ERNIE2.0](https://ojs.aaai.org/index.php/AAAI/article/view/6428),

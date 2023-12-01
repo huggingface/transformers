@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # OWLv2
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=owlv2">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-owlv2-blueviolet">
+</div>
+
 ## Overview
 
 OWLv2 was proposed in [Scaling Open-Vocabulary Object Detection](https://arxiv.org/abs/2306.09683) by Matthias Minderer, Alexey Gritsenko, Neil Houlsby. OWLv2 scales up [OWL-ViT](owlvit) using self-training, which uses an existing detector to generate pseudo-box annotations on image-text pairs. This results in large gains over the previous state-of-the-art for zero-shot object detection.

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # BigBird
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=big_bird">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-big_bird-blueviolet">
+</div>
+
 ## Overview
 
 The BigBird model was proposed in [Big Bird: Transformers for Longer Sequences](https://arxiv.org/abs/2007.14062) by

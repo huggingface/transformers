@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Decision Transformer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=decision_transformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-decision_transformer-blueviolet">
+</div>
+
 ## Overview
 
 The Decision Transformer model was proposed in [Decision Transformer: Reinforcement Learning via Sequence Modeling](https://arxiv.org/abs/2106.01345)  

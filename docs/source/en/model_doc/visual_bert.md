@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # VisualBERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=visual_bert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-visual_bert-blueviolet">
+</div>
+
 ## Overview
 
 The VisualBERT model was proposed in [VisualBERT: A Simple and Performant Baseline for Vision and Language](https://arxiv.org/pdf/1908.03557) by Liunian Harold Li, Mark Yatskar, Da Yin, Cho-Jui Hsieh, Kai-Wei Chang.

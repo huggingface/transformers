@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Encoder Decoder Models
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=encoder-decoder">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-encoder-decoder-blueviolet">
+</div>
+
 ## Overview
 
 The [`EncoderDecoderModel`] can be used to initialize a sequence-to-sequence model with any

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # GPT-NeoX
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=gpt_neox">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-gpt_neox-blueviolet">
+</div>
+
 ## Overview
 
 We introduce GPT-NeoX-20B, a 20 billion parameter autoregressive language model trained on the Pile, whose weights will

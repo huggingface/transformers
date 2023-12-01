@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # X-MOD
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=xmod">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xmod-blueviolet">
+</div>
+
 ## Overview
 
 The X-MOD model was proposed in [Lifting the Curse of Multilinguality by Pre-training Modular Transformers](http://dx.doi.org/10.18653/v1/2022.naacl-main.255) by Jonas Pfeiffer, Naman Goyal, Xi Lin, Xian Li, James Cross, Sebastian Riedel, and Mikel Artetxe.

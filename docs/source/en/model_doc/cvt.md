@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Convolutional Vision Transformer (CvT)
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=cvt">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-cvt-blueviolet">
+</div>
+
 ## Overview
 
 The CvT model was proposed in [CvT: Introducing Convolutions to Vision Transformers](https://arxiv.org/abs/2103.15808) by Haiping Wu, Bin Xiao, Noel Codella, Mengchen Liu, Xiyang Dai, Lu Yuan and Lei Zhang. The Convolutional vision Transformer (CvT) improves the [Vision Transformer (ViT)](vit) in performance and efficiency by introducing convolutions into ViT to yield the best of both designs.

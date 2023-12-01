@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MRA
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=mra">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mra-blueviolet">
+</div>
+
 ## Overview
 
 The MRA model was proposed in [Multi Resolution Analysis (MRA) for Approximate Self-Attention](https://arxiv.org/abs/2207.10284) by Zhanpeng Zeng, Sourav Pal, Jeffery Kline, Glenn M Fung, and Vikas Singh.

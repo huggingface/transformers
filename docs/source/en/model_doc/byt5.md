@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # ByT5
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=byt5">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-byt5-blueviolet">
+</div>
+
 ## Overview
 
 The ByT5 model was presented in [ByT5: Towards a token-free future with pre-trained byte-to-byte models](https://arxiv.org/abs/2105.13626) by Linting Xue, Aditya Barua, Noah Constant, Rami Al-Rfou, Sharan Narang, Mihir

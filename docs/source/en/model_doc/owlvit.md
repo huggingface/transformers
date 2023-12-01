@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # OWL-ViT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=owlvit">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-owlvit-blueviolet">
+</div>
+
 ## Overview
 
 The OWL-ViT (short for Vision Transformer for Open-World Localization) was proposed in [Simple Open-Vocabulary Object Detection with Vision Transformers](https://arxiv.org/abs/2205.06230) by Matthias Minderer, Alexey Gritsenko, Austin Stone, Maxim Neumann, Dirk Weissenborn, Alexey Dosovitskiy, Aravindh Mahendran, Anurag Arnab, Mostafa Dehghani, Zhuoran Shen, Xiao Wang, Xiaohua Zhai, Thomas Kipf, and Neil Houlsby. OWL-ViT is an open-vocabulary object detection network trained on a variety of (image, text) pairs. It can be used to query an image with one or multiple text queries to search for and detect target objects described in text.

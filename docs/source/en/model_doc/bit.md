@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Big Transfer (BiT)
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=bit">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-bit-blueviolet">
+</div>
+
 ## Overview
 
 The BiT model was proposed in [Big Transfer (BiT): General Visual Representation Learning](https://arxiv.org/abs/1912.11370) by Alexander Kolesnikov, Lucas Beyer, Xiaohua Zhai, Joan Puigcerver, Jessica Yung, Sylvain Gelly, Neil Houlsby.

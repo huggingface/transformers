@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # XGLM
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=xglm">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xglm-blueviolet">
+</div>
+
 ## Overview
 
 The XGLM model was proposed in [Few-shot Learning with Multilingual Language Models](https://arxiv.org/abs/2112.10668)

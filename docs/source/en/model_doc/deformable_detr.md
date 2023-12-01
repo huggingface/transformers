@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Deformable DETR
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=deformable_detr">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-deformable_detr-blueviolet">
+</div>
+
 ## Overview
 
 The Deformable DETR model was proposed in [Deformable DETR: Deformable Transformers for End-to-End Object Detection](https://arxiv.org/abs/2010.04159) by Xizhou Zhu, Weijie Su, Lewei Lu, Bin Li, Xiaogang Wang, Jifeng Dai.

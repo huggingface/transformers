@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # GIT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=git">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-git-blueviolet">
+</div>
+
 ## Overview
 
 The GIT model was proposed in [GIT: A Generative Image-to-text Transformer for Vision and Language](https://arxiv.org/abs/2205.14100) by

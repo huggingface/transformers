@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Table Transformer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=table-transformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-table-transformer-blueviolet">
+</div>
+
 ## Overview
 
 The Table Transformer model was proposed in [PubTables-1M: Towards comprehensive table extraction from unstructured documents](https://arxiv.org/abs/2110.00061) by

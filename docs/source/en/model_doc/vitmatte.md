@@ -12,6 +12,11 @@ specific language governing permissions and limitations under the License.
 
 # ViTMatte
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=vitmatte">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-vitmatte-blueviolet">
+</div>
+
 ## Overview
 
 The ViTMatte model was proposed in [Boosting Image Matting with Pretrained Plain Vision Transformers](https://arxiv.org/abs/2305.15272) by Jingfeng Yao, Xinggang Wang, Shusheng Yang, Baoyuan Wang.

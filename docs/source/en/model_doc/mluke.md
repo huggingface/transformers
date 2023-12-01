@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # mLUKE
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=mluke">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mluke-blueviolet">
+</div>
+
 ## Overview
 
 The mLUKE model was proposed in [mLUKE: The Power of Entity Representations in Multilingual Pretrained Language Models](https://arxiv.org/abs/2110.08151) by Ryokan Ri, Ikuya Yamada, and Yoshimasa Tsuruoka. It's a multilingual extension

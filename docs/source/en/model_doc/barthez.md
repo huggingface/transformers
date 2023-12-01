@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # BARThez
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=barthez">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-barthez-blueviolet">
+</div>
+
 ## Overview
 
 The BARThez model was proposed in [BARThez: a Skilled Pretrained French Sequence-to-Sequence Model](https://arxiv.org/abs/2010.12321) by Moussa Kamal Eddine, Antoine J.-P. Tixier, Michalis Vazirgiannis on 23 Oct,

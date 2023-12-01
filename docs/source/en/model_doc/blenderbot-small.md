@@ -22,6 +22,11 @@ Note that [`BlenderbotSmallModel`] and
 instead be used with [`BlenderbotModel`] and
 [`BlenderbotForConditionalGeneration`]
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=blenderbot-small">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-blenderbot-small-blueviolet">
+</div>
+
 ## Overview
 
 The Blender chatbot model was proposed in [Recipes for building an open-domain chatbot](https://arxiv.org/pdf/2004.13637.pdf) Stephen Roller, Emily Dinan, Naman Goyal, Da Ju, Mary Williamson, Yinhan Liu,

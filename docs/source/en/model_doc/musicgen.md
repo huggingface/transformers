@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MusicGen
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=musicgen">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-musicgen-blueviolet">
+</div>
+
 ## Overview
 
 The MusicGen model was proposed in the paper [Simple and Controllable Music Generation](https://arxiv.org/abs/2306.05284)

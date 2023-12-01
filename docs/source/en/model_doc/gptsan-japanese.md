@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # GPTSAN-japanese
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=gptsan-japanese">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-gptsan-japanese-blueviolet">
+</div>
+
 ## Overview
 
 The GPTSAN-japanese model was released in the repository by Toshiyuki Sakamoto (tanreinama).

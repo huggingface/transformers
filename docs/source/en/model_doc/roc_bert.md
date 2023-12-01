@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # RoCBert
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=roc_bert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-roc_bert-blueviolet">
+</div>
+
 ## Overview
 
 The RoCBert model was proposed in [RoCBert: Robust Chinese Bert with Multimodal Contrastive Pretraining](https://aclanthology.org/2022.acl-long.65.pdf)  by HuiSu, WeiweiShi, XiaoyuShen, XiaoZhou, TuoJi, JiaruiFang, JieZhou.

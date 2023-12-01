@@ -15,6 +15,11 @@ specific language governing permissions and limitations under the License. -->
 
 # TrOCR
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=trocr">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-trocr-blueviolet">
+</div>
+
 ## Overview
 
 The TrOCR model was proposed in [TrOCR: Transformer-based Optical Character Recognition with Pre-trained

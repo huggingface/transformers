@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # BEiT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=beit">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-beit-blueviolet">
+</div>
+
 ## Overview
 
 The BEiT model was proposed in [BEiT: BERT Pre-Training of Image Transformers](https://arxiv.org/abs/2106.08254) by

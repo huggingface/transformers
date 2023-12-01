@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # DETA
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=deta">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-deta-blueviolet">
+</div>
+
 ## Overview
 
 The DETA model was proposed in [NMS Strikes Back](https://arxiv.org/abs/2212.06137) by Jeffrey Ouyang-Zhang, Jang Hyun Cho, Xingyi Zhou, Philipp Krähenbühl.

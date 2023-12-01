@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # CodeLlama
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=code_llama">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-code_llama-blueviolet">
+</div>
+
 ## Overview
 
 The Code Llama model was proposed in [Code Llama: Open Foundation Models for Code](https://ai.meta.com/research/publications/code-llama-open-foundation-models-for-code/) by Baptiste Rozière, Jonas Gehring, Fabian Gloeckle, Sten Sootla, Itai Gat, Xiaoqing Ellen Tan, Yossi Adi, Jingyu Liu, Tal Remez, Jérémy Rapin, Artyom Kozhevnikov, Ivan Evtimov, Joanna Bitton, Manish Bhatt, Cristian Canton Ferrer, Aaron Grattafiori, Wenhan Xiong, Alexandre Défossez, Jade Copet, Faisal Azhar, Hugo Touvron, Louis Martin, Nicolas Usunier, Thomas Scialom, Gabriel Synnaeve.

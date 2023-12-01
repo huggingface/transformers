@@ -15,6 +15,11 @@ specific language governing permissions and limitations under the License. -->
 
 # ImageGPT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=imagegpt">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-imagegpt-blueviolet">
+</div>
+
 ## Overview
 
 The ImageGPT model was proposed in [Generative Pretraining from Pixels](https://openai.com/blog/image-gpt) by Mark

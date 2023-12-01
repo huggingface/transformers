@@ -12,6 +12,11 @@ specific language governing permissions and limitations under the License.
 
 # DINOv2
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=dinov2">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-dinov2-blueviolet">
+</div>
+
 ## Overview
 
 The DINOv2 model was proposed in [DINOv2: Learning Robust Visual Features without Supervision](https://arxiv.org/abs/2304.07193) by

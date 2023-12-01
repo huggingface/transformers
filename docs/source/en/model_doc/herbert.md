@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # HerBERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=herbert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-herbert-blueviolet">
+</div>
+
 ## Overview
 
 The HerBERT model was proposed in [KLEJ: Comprehensive Benchmark for Polish Language Understanding](https://www.aclweb.org/anthology/2020.acl-main.111.pdf) by Piotr Rybak, Robert Mroczkowski, Janusz Tracz, and

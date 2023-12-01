@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # SEW
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=sew">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-sew-blueviolet">
+</div>
+
 ## Overview
 
 SEW (Squeezed and Efficient Wav2Vec) was proposed in [Performance-Efficiency Trade-offs in Unsupervised Pre-training

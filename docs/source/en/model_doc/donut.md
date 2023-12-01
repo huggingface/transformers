@@ -15,6 +15,11 @@ specific language governing permissions and limitations under the License. -->
 
 # Donut
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=donut">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-donut-blueviolet">
+</div>
+
 ## Overview
 
 The Donut model was proposed in [OCR-free Document Understanding Transformer](https://arxiv.org/abs/2111.15664) by

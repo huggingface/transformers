@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # DePlot
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=deplot">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-deplot-blueviolet">
+</div>
+
 ## Overview 
 
 DePlot was proposed in the paper [DePlot: One-shot visual language reasoning by plot-to-table translation](https://arxiv.org/abs/2212.10505) from Fangyu Liu, Julian Martin Eisenschlos, Francesco Piccinno, Syrine Krichene, Chenxi Pang, Kenton Lee, Mandar Joshi, Wenhu Chen, Nigel Collier, Yasemin Altun.

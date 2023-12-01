@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Perceiver
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=perceiver">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-perceiver-blueviolet">
+</div>
+
 ## Overview
 
 The Perceiver IO model was proposed in [Perceiver IO: A General Architecture for Structured Inputs &

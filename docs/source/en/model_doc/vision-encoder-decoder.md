@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Vision Encoder Decoder Models
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=vision-encoder-decoder">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-vision-encoder-decoder-blueviolet">
+</div>
+
 ## Overview
 
 The [`VisionEncoderDecoderModel`] can be used to initialize an image-to-text model with any

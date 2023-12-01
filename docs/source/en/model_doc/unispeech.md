@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # UniSpeech
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=unispeech">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-unispeech-blueviolet">
+</div>
+
 ## Overview
 
 The UniSpeech model was proposed in [UniSpeech: Unified Speech Representation Learning with Labeled and Unlabeled Data](https://arxiv.org/abs/2101.07597) by Chengyi Wang, Yu Wu, Yao Qian, Kenichi Kumatani, Shujie Liu, Furu Wei, Michael

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # CLIP
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=clip">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-clip-blueviolet">
+</div>
+
 ## Overview
 
 The CLIP model was proposed in [Learning Transferable Visual Models From Natural Language Supervision](https://arxiv.org/abs/2103.00020) by Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh,

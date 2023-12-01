@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # BLIP-2
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=blip-2">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-blip-2-blueviolet">
+</div>
+
 ## Overview
 
 The BLIP-2 model was proposed in [BLIP-2: Bootstrapping Language-Image Pre-training with Frozen Image Encoders and Large Language Models](https://arxiv.org/abs/2301.12597) by

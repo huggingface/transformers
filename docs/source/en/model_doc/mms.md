@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MMS
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=mms">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mms-blueviolet">
+</div>
+
 ## Overview
 
 The MMS model was proposed in [Scaling Speech Technology to 1,000+ Languages](https://arxiv.org/abs/2305.13516) 

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # DETR
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=detr">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-detr-blueviolet">
+</div>
+
 ## Overview
 
 The DETR model was proposed in [End-to-End Object Detection with Transformers](https://arxiv.org/abs/2005.12872) by

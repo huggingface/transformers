@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Hubert
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=hubert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-hubert-blueviolet">
+</div>
+
 ## Overview
 
 Hubert was proposed in [HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units](https://arxiv.org/abs/2106.07447) by Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia, Ruslan

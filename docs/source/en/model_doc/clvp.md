@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # CLVP
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=clvp">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-clvp-blueviolet">
+</div>
+
 ## Overview
 
 The CLVP (Contrastive Language-Voice Pretrained Transformer) model was proposed in [Better speech synthesis through scaling](https://arxiv.org/abs/2305.07243) by James Betker.

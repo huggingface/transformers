@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # TVLT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=tvlt">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-tvlt-blueviolet">
+</div>
+
 ## Overview
 
 The TVLT model was proposed in [TVLT: Textless Vision-Language Transformer](https://arxiv.org/abs/2209.14156)

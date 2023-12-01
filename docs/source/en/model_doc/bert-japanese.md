@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # BertJapanese
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=bert-japanese">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-bert-japanese-blueviolet">
+</div>
+
 ## Overview
 
 The BERT models trained on Japanese text.

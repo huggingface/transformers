@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # CamemBERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=camembert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-camembert-blueviolet">
+</div>
+
 ## Overview
 
 The CamemBERT model was proposed in [CamemBERT: a Tasty French Language Model](https://arxiv.org/abs/1911.03894) by

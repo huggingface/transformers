@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # GroupViT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=groupvit">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-groupvit-blueviolet">
+</div>
+
 ## Overview
 
 The GroupViT model was proposed in [GroupViT: Semantic Segmentation Emerges from Text Supervision](https://arxiv.org/abs/2202.11094) by Jiarui Xu, Shalini De Mello, Sifei Liu, Wonmin Byeon, Thomas Breuel, Jan Kautz, Xiaolong Wang.

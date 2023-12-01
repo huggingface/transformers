@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # LLaMA
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=llama">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-llama-blueviolet">
+</div>
+
 ## Overview
 
 The LLaMA model was proposed in [LLaMA: Open and Efficient Foundation Language Models](https://arxiv.org/abs/2302.13971) by Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timothée Lacroix, Baptiste Rozière, Naman Goyal, Eric Hambro, Faisal Azhar, Aurelien Rodriguez, Armand Joulin, Edouard Grave, Guillaume Lample. It is a collection of foundation language models ranging from 7B to 65B parameters.

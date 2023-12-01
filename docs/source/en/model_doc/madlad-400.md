@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MADLAD-400
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=madlad-400">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-madlad-400-blueviolet">
+</div>
+
 ## Overview
 
 MADLAD-400 models were released in the paper [MADLAD-400: A Multilingual And Document-Level Large Audited Dataset](MADLAD-400: A Multilingual And Document-Level Large Audited Dataset). 

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # NLLB
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=nllb">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-nllb-blueviolet">
+</div>
+
 ## Updated tokenizer behavior 
 
 **DISCLAIMER:** The default behaviour for the tokenizer was fixed and thus changed in April 2023.

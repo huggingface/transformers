@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Audio Spectrogram Transformer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=audio-spectrogram-transformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-audio-spectrogram-transformer-blueviolet">
+</div>
+
 ## Overview
 
 The Audio Spectrogram Transformer model was proposed in [AST: Audio Spectrogram Transformer](https://arxiv.org/abs/2104.01778) by Yuan Gong, Yu-An Chung, James Glass.

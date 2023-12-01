@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # FLAVA
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=flava">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-flava-blueviolet">
+</div>
+
 ## Overview
 
 The FLAVA model was proposed in [FLAVA: A Foundational Language And Vision Alignment Model](https://arxiv.org/abs/2112.04482) by Amanpreet Singh, Ronghang Hu, Vedanuj Goswami, Guillaume Couairon, Wojciech Galuba, Marcus Rohrbach, and Douwe Kiela and is accepted at CVPR 2022.

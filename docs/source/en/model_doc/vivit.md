@@ -12,6 +12,11 @@ specific language governing permissions and limitations under the License.
 
 # Video Vision Transformer (ViViT)
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=vivit">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-vivit-blueviolet">
+</div>
+
 ## Overview
 
 The Vivit model was proposed in [ViViT: A Video Vision Transformer](https://arxiv.org/abs/2103.15691) by Anurag Arnab, Mostafa Dehghani, Georg Heigold, Chen Sun, Mario Lučić, Cordelia Schmid.

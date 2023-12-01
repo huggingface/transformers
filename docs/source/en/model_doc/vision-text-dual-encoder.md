@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # VisionTextDualEncoder
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=vision-text-dual-encoder">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-vision-text-dual-encoder-blueviolet">
+</div>
+
 ## Overview
 
 The [`VisionTextDualEncoderModel`] can be used to initialize a vision-text dual encoder model with

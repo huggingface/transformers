@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # FNet
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=fnet">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-fnet-blueviolet">
+</div>
+
 ## Overview
 
 The FNet model was proposed in [FNet: Mixing Tokens with Fourier Transforms](https://arxiv.org/abs/2105.03824) by

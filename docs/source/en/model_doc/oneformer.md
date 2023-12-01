@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # OneFormer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=oneformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-oneformer-blueviolet">
+</div>
+
 ## Overview
 
 The OneFormer model was proposed in [OneFormer: One Transformer to Rule Universal Image Segmentation](https://arxiv.org/abs/2211.06220) by Jitesh Jain, Jiachen Li, MangTik Chiu, Ali Hassani, Nikita Orlov, Humphrey Shi. OneFormer is a universal image segmentation framework that can be trained on a single panoptic dataset to perform semantic, instance, and panoptic segmentation tasks. OneFormer uses a task token to condition the model on the task in focus, making the architecture task-guided for training, and task-dynamic for inference.

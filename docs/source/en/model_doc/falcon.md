@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Falcon
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=falcon">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-falcon-blueviolet">
+</div>
+
 ## Overview
 
 Falcon is a class of causal decoder-only models built by [TII](https://www.tii.ae/). The largest Falcon checkpoints

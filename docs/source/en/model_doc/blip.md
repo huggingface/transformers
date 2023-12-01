@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # BLIP
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=blip">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-blip-blueviolet">
+</div>
+
 ## Overview
 
 The BLIP model was proposed in [BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation](https://arxiv.org/abs/2201.12086) by Junnan Li, Dongxu Li, Caiming Xiong, Steven Hoi.

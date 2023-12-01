@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Pix2Struct
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=pix2struct">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-pix2struct-blueviolet">
+</div>
+
 ## Overview
 
 The Pix2Struct model was proposed in [Pix2Struct: Screenshot Parsing as Pretraining for Visual Language Understanding](https://arxiv.org/abs/2210.03347) by Kenton Lee, Mandar Joshi, Iulia Turc, Hexiang Hu, Fangyu Liu, Julian Eisenschlos, Urvashi Khandelwal, Peter Shaw, Ming-Wei Chang, Kristina Toutanova.

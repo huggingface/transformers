@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Informer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=informer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-informer-blueviolet">
+</div>
+
 ## Overview
 
 The Informer model was proposed in [Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting ](https://arxiv.org/abs/2012.07436) by Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, and Wancai Zhang.

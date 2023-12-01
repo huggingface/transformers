@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # EfficientFormer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=efficientformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-efficientformer-blueviolet">
+</div>
+
 ## Overview
 
 The EfficientFormer model was proposed in [EfficientFormer: Vision Transformers at MobileNet Speed](https://arxiv.org/abs/2206.01191) 

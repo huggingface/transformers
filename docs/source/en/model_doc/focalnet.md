@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # FocalNet
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=focalnet">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-focalnet-blueviolet">
+</div>
+
 ## Overview
 
 The FocalNet model was proposed in [Focal Modulation Networks](https://arxiv.org/abs/2203.11926) by Jianwei Yang, Chunyuan Li, Xiyang Dai, Lu Yuan, Jianfeng Gao.

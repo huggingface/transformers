@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # RWKV
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=rwkv">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-rwkv-blueviolet">
+</div>
+
 ## Overview
 
 The RWKV model was proposed in [this repo](https://github.com/BlinkDL/RWKV-LM)

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MegatronBERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=megatron-bert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-megatron-bert-blueviolet">
+</div>
+
 ## Overview
 
 The MegatronBERT model was proposed in [Megatron-LM: Training Multi-Billion Parameter Language Models Using Model

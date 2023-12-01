@@ -15,6 +15,11 @@ rendered properly in your Markdown viewer.
 -->
 # Jukebox
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=jukebox">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-jukebox-blueviolet">
+</div>
+
 ## Overview
 
 The Jukebox model was proposed in [Jukebox: A generative model for music](https://arxiv.org/pdf/2005.00341.pdf)

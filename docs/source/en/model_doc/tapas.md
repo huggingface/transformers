@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # TAPAS
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=tapas">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-tapas-blueviolet">
+</div>
+
 ## Overview
 
 The TAPAS model was proposed in [TAPAS: Weakly Supervised Table Parsing via Pre-training](https://www.aclweb.org/anthology/2020.acl-main.398)

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # ResNet
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=resnet">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-resnet-blueviolet">
+</div>
+
 ## Overview
 
 The ResNet model was proposed in [Deep Residual Learning for Image Recognition](https://arxiv.org/abs/1512.03385) by Kaiming He, Xiangyu Zhang, Shaoqing Ren and Jian Sun. Our implementation follows the small changes made by [Nvidia](https://catalog.ngc.nvidia.com/orgs/nvidia/resources/resnet_50_v1_5_for_pytorch), we apply the `stride=2` for downsampling in bottleneck's `3x3` conv and not in the first `1x1`. This is generally known as "ResNet v1.5".

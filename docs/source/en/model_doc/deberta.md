@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # DeBERTa
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=deberta">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-deberta-blueviolet">
+</div>
+
 ## Overview
 
 The DeBERTa model was proposed in [DeBERTa: Decoding-enhanced BERT with Disentangled Attention](https://arxiv.org/abs/2006.03654) by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen It is based on Google's

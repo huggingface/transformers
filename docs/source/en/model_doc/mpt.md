@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MPT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=mpt">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mpt-blueviolet">
+</div>
+
 ## Overview
 
 The MPT model was proposed by the [MosaicML](https://www.mosaicml.com/) team and released with multiple sizes and finetuned variants. The MPT models is a series of open source and commercially usable LLMs pre-trained on 1T tokens. 

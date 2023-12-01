@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Neighborhood Attention Transformer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=nat">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-nat-blueviolet">
+</div>
+
 ## Overview
 
 NAT was proposed in [Neighborhood Attention Transformer](https://arxiv.org/abs/2204.07143)

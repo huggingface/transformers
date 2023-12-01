@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # AltCLIP
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=altclip">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-altclip-blueviolet">
+</div>
+
 ## Overview
 
 The AltCLIP model was proposed in [AltCLIP: Altering the Language Encoder in CLIP for Extended Language Capabilities](https://arxiv.org/abs/2211.06679v2) by Zhongzhi Chen, Guang Liu, Bo-Wen Zhang, Fulong Ye, Qinghong Yang, Ledell Wu. AltCLIP

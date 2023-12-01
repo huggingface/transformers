@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MPNet
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=mpnet">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mpnet-blueviolet">
+</div>
+
 ## Overview
 
 The MPNet model was proposed in [MPNet: Masked and Permuted Pre-training for Language Understanding](https://arxiv.org/abs/2004.09297) by Kaitao Song, Xu Tan, Tao Qin, Jianfeng Lu, Tie-Yan Liu.

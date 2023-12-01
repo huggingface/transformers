@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MEGA
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=mega">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mega-blueviolet">
+</div>
+
 ## Overview
 
 The MEGA model was proposed in [Mega: Moving Average Equipped Gated Attention](https://arxiv.org/abs/2209.10655) by Xuezhe Ma, Chunting Zhou, Xiang Kong, Junxian He, Liangke Gui, Graham Neubig, Jonathan May, and Luke Zettlemoyer.

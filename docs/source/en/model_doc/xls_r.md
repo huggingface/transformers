@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # XLS-R
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=xls_r">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xls_r-blueviolet">
+</div>
+
 ## Overview
 
 The XLS-R model was proposed in [XLS-R: Self-supervised Cross-lingual Speech Representation Learning at Scale](https://arxiv.org/abs/2111.09296) by Arun Babu, Changhan Wang, Andros Tjandra, Kushal Lakhotia, Qiantong Xu, Naman

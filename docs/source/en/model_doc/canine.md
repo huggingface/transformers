@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # CANINE
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=canine">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-canine-blueviolet">
+</div>
+
 ## Overview
 
 The CANINE model was proposed in [CANINE: Pre-training an Efficient Tokenization-Free Encoder for Language

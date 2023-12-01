@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # DeiT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=deit">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-deit-blueviolet">
+</div>
+
 ## Overview
 
 The DeiT model was proposed in [Training data-efficient image transformers & distillation through attention](https://arxiv.org/abs/2012.12877) by Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre

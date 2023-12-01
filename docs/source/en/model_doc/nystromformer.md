@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Nyströmformer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=nystromformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-nystromformer-blueviolet">
+</div>
+
 ## Overview
 
 The Nyströmformer model was proposed in [*Nyströmformer: A Nyström-Based Algorithm for Approximating Self-Attention*](https://arxiv.org/abs/2102.03902) by Yunyang Xiong, Zhanpeng Zeng, Rudrasis Chakraborty, Mingxing Tan, Glenn

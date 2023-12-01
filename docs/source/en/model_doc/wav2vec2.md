@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Wav2Vec2
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=wav2vec2">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-wav2vec2-blueviolet">
+</div>
+
 ## Overview
 
 The Wav2Vec2 model was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli.

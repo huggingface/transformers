@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # ViLT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=vilt">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-vilt-blueviolet">
+</div>
+
 ## Overview
 
 The ViLT model was proposed in [ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision](https://arxiv.org/abs/2102.03334)

@@ -12,6 +12,11 @@ specific language governing permissions and limitations under the License.
 
 # ViTDet
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=vitdet">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-vitdet-blueviolet">
+</div>
+
 ## Overview
 
 The ViTDet model was proposed in [Exploring Plain Vision Transformer Backbones for Object Detection](https://arxiv.org/abs/2203.16527) by Yanghao Li, Hanzi Mao, Ross Girshick, Kaiming He.

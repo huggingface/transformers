@@ -25,6 +25,11 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 </Tip>
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=tapex">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-tapex-blueviolet">
+</div>
+
 ## Overview
 
 The TAPEX model was proposed in [TAPEX: Table Pre-training via Learning a Neural SQL Executor](https://arxiv.org/abs/2107.07653) by Qian Liu,

@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Dilated Neighborhood Attention Transformer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=dinat">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-dinat-blueviolet">
+</div>
+
 ## Overview
 
 DiNAT was proposed in [Dilated Neighborhood Attention Transformer](https://arxiv.org/abs/2209.15001)

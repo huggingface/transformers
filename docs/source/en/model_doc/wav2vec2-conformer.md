@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Wav2Vec2-Conformer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=wav2vec2-conformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-wav2vec2-conformer-blueviolet">
+</div>
+
 ## Overview
 
 The Wav2Vec2-Conformer was added to an updated version of [fairseq S2T: Fast Speech-to-Text Modeling with fairseq](https://arxiv.org/abs/2010.05171) by Changhan Wang, Yun Tang, Xutai Ma, Anne Wu, Sravya Popuri, Dmytro Okhonko, Juan Pino.

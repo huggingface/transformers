@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # ConvNeXT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=convnext">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-convnext-blueviolet">
+</div>
+
 ## Overview
 
 The ConvNeXT model was proposed in [A ConvNet for the 2020s](https://arxiv.org/abs/2201.03545) by Zhuang Liu, Hanzi Mao, Chao-Yuan Wu, Christoph Feichtenhofer, Trevor Darrell, Saining Xie.

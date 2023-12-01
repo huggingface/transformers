@@ -12,6 +12,11 @@ specific language governing permissions and limitations under the License.
 
 # VITS
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=vits">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-vits-blueviolet">
+</div>
+
 ## Overview
 
 The VITS model was proposed in [Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech](https://arxiv.org/abs/2106.06103) by Jaehyeon Kim, Jungil Kong, Juhee Son.

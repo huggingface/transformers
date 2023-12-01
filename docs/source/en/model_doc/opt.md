@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # OPT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=opt">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-opt-blueviolet">
+</div>
+
 ## Overview
 
 The OPT model was proposed in [Open Pre-trained Transformer Language Models](https://arxiv.org/pdf/2205.01068) by Meta AI.

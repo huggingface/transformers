@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Time Series Transformer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=time_series_transformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-time_series_transformer-blueviolet">
+</div>
+
 ## Overview
 
 The Time Series Transformer model is a vanilla encoder-decoder Transformer for time series forecasting.

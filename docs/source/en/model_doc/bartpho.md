@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # BARTpho
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=bartpho">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-bartpho-blueviolet">
+</div>
+
 ## Overview
 
 The BARTpho model was proposed in [BARTpho: Pre-trained Sequence-to-Sequence Models for Vietnamese](https://arxiv.org/abs/2109.09701) by Nguyen Luong Tran, Duong Minh Le and Dat Quoc Nguyen.

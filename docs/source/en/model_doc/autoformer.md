@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Autoformer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=autoformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-autoformer-blueviolet">
+</div>
+
 ## Overview
 
 The Autoformer model was proposed in [Autoformer: Decomposition Transformers with Auto-Correlation for Long-Term Series Forecasting](https://arxiv.org/abs/2106.13008) by Haixu Wu, Jiehui Xu, Jianmin Wang, Mingsheng Long.

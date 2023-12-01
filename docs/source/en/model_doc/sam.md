@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # SAM
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=sam">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-sam-blueviolet">
+</div>
+
 ## Overview
 
 SAM (Segment Anything Model) was proposed in [Segment Anything](https://arxiv.org/pdf/2304.02643v1.pdf) by Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alex Berg, Wan-Yen Lo, Piotr Dollar, Ross Girshick.

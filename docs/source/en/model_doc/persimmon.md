@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Persimmon
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=persimmon">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-persimmon-blueviolet">
+</div>
+
 ## Overview
 
 The Persimmon model was created by [ADEPT](https://www.adept.ai/blog/persimmon-8b), and authored by Erich Elsen, Augustus Odena, Maxwell Nye, Sağnak Taşırlar, Tri Dao, Curtis Hawthorne, Deepak Moparthi, Arushi Somani.

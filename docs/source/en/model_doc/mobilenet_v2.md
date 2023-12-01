@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # MobileNet V2
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=mobilenet_v2">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mobilenet_v2-blueviolet">
+</div>
+
 ## Overview
 
 The MobileNet model was proposed in [MobileNetV2: Inverted Residuals and Linear Bottlenecks](https://arxiv.org/abs/1801.04381) by Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, Liang-Chieh Chen.

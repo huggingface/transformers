@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Vision Transformer (ViT)
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=vit">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-vit-blueviolet">
+</div>
+
 ## Overview
 
 The Vision Transformer (ViT) model was proposed in [An Image is Worth 16x16 Words: Transformers for Image Recognition

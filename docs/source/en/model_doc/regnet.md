@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # RegNet
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=regnet">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-regnet-blueviolet">
+</div>
+
 ## Overview
 
 The RegNet model was proposed in [Designing Network Design Spaces](https://arxiv.org/abs/2003.13678) by Ilija Radosavovic, Raj Prateek Kosaraju, Ross Girshick, Kaiming He, Piotr Dollár.

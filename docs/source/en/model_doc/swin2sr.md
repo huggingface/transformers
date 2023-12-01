@@ -16,6 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Swin2SR
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=swin2sr">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-swin2sr-blueviolet">
+</div>
+
 ## Overview
 
 The Swin2SR model was proposed in [Swin2SR: SwinV2 Transformer for Compressed Image Super-Resolution and Restoration](https://arxiv.org/abs/2209.11345) by Marcos V. Conde, Ui-Jin Choi, Maxime Burchi, Radu Timofte.
