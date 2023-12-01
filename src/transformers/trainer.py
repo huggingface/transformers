@@ -3492,9 +3492,8 @@ class Trainer:
         model_card_filepath = os.path.join(self.args.output_dir, "README.md")
         is_peft_library = False
         if os.path.exists(model_card_filepath):
-            library_name = ModelCard.load(model_card_filepath).data["library_name"]
-            if library_name is not None and library_name == "peft":
-                is_peft_library = True
+            library_name = ModelCard.load(model_card_filepath).data.get("library_name")
+            is_peft_library = library_name == "peft"
 
         training_summary = TrainingSummary.from_trainer(
             self,
