@@ -34,6 +34,9 @@ This model was contributed by [ajati](https://huggingface.co/ajati), [vijaye12](
 [gsinthong](https://huggingface.co/gsinthong), [namctin](https://huggingface.co/namctin),
 [wmgifford](https://huggingface.co/wmgifford), [kashif](https://huggingface.co/kashif).
 
+## Usage tips
+
+The model can also be used for time series classification and time series regression. See the respective [`PatchTSMixerForClassification`] and [`PatchTSMixerForRegression`] classes.
 
 ## PatchTSMixerConfig
 
