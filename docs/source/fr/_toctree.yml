@@ -3,7 +3,7 @@
     title: 🤗 Transformers
   - local: quicktour
     title: Visite rapide
-  - local: in_translation
+  - local: installation
     title: Installation
   title: Démarrer
 - sections:
