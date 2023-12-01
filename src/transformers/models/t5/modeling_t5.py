@@ -702,7 +702,7 @@ class T5Attention(nn.Module):
         # get query states
         query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
 
-        print(f'debug query_states sum={query_states.sum()},  part={query_states[0,6:8,20:24, 20:22]}')
+        #print(f'debug query_states sum={query_states.sum()},  part={query_states[0,6:8,20:24, 20:22]}')
         
 
         # get key/value states
@@ -713,8 +713,8 @@ class T5Attention(nn.Module):
             hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
         )
 
-        print(f'debug key_states sum={key_states.sum()},  part={key_states[0,6:8,20:24, 20:22]}')
-        print(f'debug value_states sum={value_states.sum()},  part={value_states[0,6:8,20:24, 20:22]}')
+        #print(f'debug key_states sum={key_states.sum()},  part={key_states[0,6:8,20:24, 20:22]}')
+        #print(f'debug value_states sum={value_states.sum()},  part={value_states[0,6:8,20:24, 20:22]}')
 
         def _compress_to_single_unpadded_sample(tens:torch.Tensor, sizes:List[int]):
             separated = [tens[i,:,:curr_len] for (i,curr_len) in enumerate(sizes)]
@@ -864,8 +864,8 @@ class T5Attention(nn.Module):
         
         attn_output = self.o(attn_output)
 
-        print(f'debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
-        print('------------\n')
+        #print(f'debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
+        #print('------------\n')
 
         present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
 
@@ -1354,7 +1354,7 @@ class T5Stack(T5PreTrainedModel):
 
         if position_ids_dict is None:
             position_ids_dict = {}
-
+        print('TODO: remember to TURN OFF the RNG SEED I changed in bmfm workbench!!!')
         positional_indices_for_pos_emb_injection_in_attention = []
 
         for position_ids, position_embedding_names in position_ids_dict.values():
