@@ -103,6 +103,39 @@ def _traceable(cls):
     return _Function
 
 
+@torch.jit.script
+def _get_float_min_value(
+    tensor,
+    f16_min=torch.tensor(torch.finfo(torch.float16).min),
+    f32_min=torch.tensor(torch.finfo(torch.float32).min),
+    f64_min=torch.tensor(torch.finfo(torch.float64).min)
+    ):
+    if tensor.dtype == torch.float16:
+        return f16_min
+    elif tensor.dtype == torch.float32:
+        return f32_min
+    else:
+        return f64_min
+    
+
+def get_min_for_tensor(tensor):
+    """
+    Returns the minimum value supported by the tensor's datatype
+    if the tensor is of float type. For other datatypes returns
+    the minimum value of the traced datatype.
+
+    Args:
+        tensor (`torch.tensor`): The tensor from which to infer the datatype.
+
+    Return:
+        `torch.LongTensor`: The minimum value possible for the input tensor datatye.
+    """
+    if tensor.dtype in [torch.float16, torch.float32, torch.float64]:
+        # Will not be baked in during tracing
+        return _get_float_min_value(tensor)
+    # Will be baked in during tracing
+    return torch.tensor(torch.finfo(tensor.dtype).min)
+
 @_traceable
 class XSoftmax(torch.autograd.Function):
     """
@@ -136,8 +169,8 @@ class XSoftmax(torch.autograd.Function):
     def forward(self, input, mask, dim):
         self.dim = dim
         rmask = ~(mask.to(torch.bool))
-
-        output = input.masked_fill(rmask, torch.tensor(torch.finfo(input.dtype).min))
+        ## Future reference: replace with masked tensor when the API goes stable
+        output = input.masked_fill(rmask, get_min_for_tensor(input))
         output = torch.softmax(output, self.dim)
         output.masked_fill_(rmask, 0)
         self.save_for_backward(output)
@@ -577,6 +610,32 @@ def get_token_type_ids_on_device(device_discriminator, using_ids: bool):
     return torch.zeros(input_shape, dtype=torch.long, device=device_discriminator.device)
 
 
+@torch.jit.script
+def scaled_size_sqrt(query_layer, scale_factor:int):
+    return torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+
+
+@torch.jit.script
+def build_rpos(query_layer, key_layer, relative_pos):
+    if query_layer.size(-2) != key_layer.size(-2):
+        return build_relative_position(key_layer, key_layer)
+    else:
+        return relative_pos
+    
+@torch.jit.script
+def compute_attention_span(query_layer, key_layer, max_relative_positions:int):
+    return torch.tensor(
+        min(max(query_layer.size(-2), key_layer.size(-2)), max_relative_positions)
+    )
+
+@torch.jit.script
+def uneven_size_corrected(p2c_att, query_layer, key_layer, relative_pos):
+    if query_layer.size(-2) != key_layer.size(-2):
+        pos_index = relative_pos[:, :, :, 0].unsqueeze(-1)
+        return torch.gather(p2c_att, dim=2, index=pos_dynamic_expand(pos_index, p2c_att, key_layer))
+    else:
+        return p2c_att
+
 class DisentangledSelfAttention(nn.Module):
     """
     Disentangled self-attention module
@@ -691,7 +750,7 @@ class DisentangledSelfAttention(nn.Module):
         rel_att = None
         # Take the dot product between "query" and "key" to get the raw attention scores.
         scale_factor = 1 + len(self.pos_att_type)
-        scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+        scale = scaled_size_sqrt(query_layer, scale_factor)
         query_layer = query_layer / scale.to(dtype=query_layer.dtype)
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         if self.relative_attention:
@@ -730,7 +789,7 @@ class DisentangledSelfAttention(nn.Module):
         elif relative_pos.dim() != 4:
             raise ValueError(f"Relative position ids must be of dim 2 or 3 or 4. {relative_pos.dim()}")
 
-        att_span = min(max(query_layer.size(-2), key_layer.size(-2)), self.max_relative_positions)
+        att_span = compute_attention_span(query_layer, key_layer, self.max_relative_positions)
         relative_pos = relative_pos.long()
         rel_embeddings = rel_embeddings[
             self.max_relative_positions - att_span : self.max_relative_positions + att_span, :
@@ -751,20 +810,17 @@ class DisentangledSelfAttention(nn.Module):
         if "p2c" in self.pos_att_type:
             pos_query_layer = self.pos_q_proj(rel_embeddings)
             pos_query_layer = self.transpose_for_scores(pos_query_layer)
-            pos_query_layer /= torch.sqrt(torch.tensor(pos_query_layer.size(-1), dtype=torch.float) * scale_factor)
-            if query_layer.size(-2) != key_layer.size(-2):
-                r_pos = build_relative_position(key_layer, key_layer)
-            else:
-                r_pos = relative_pos
+            pos_query_layer /= scaled_size_sqrt(pos_query_layer, scale_factor)
+
+            r_pos = build_rpos(query_layer, key_layer, relative_pos)
             p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
             p2c_att = torch.matmul(key_layer, pos_query_layer.transpose(-1, -2).to(dtype=key_layer.dtype))
             p2c_att = torch.gather(
                 p2c_att, dim=-1, index=p2c_dynamic_expand(p2c_pos, query_layer, key_layer)
             ).transpose(-1, -2)
 
-            if query_layer.size(-2) != key_layer.size(-2):
-                pos_index = relative_pos[:, :, :, 0].unsqueeze(-1)
-                p2c_att = torch.gather(p2c_att, dim=-2, index=pos_dynamic_expand(pos_index, p2c_att, key_layer))
+            p2c_att = uneven_size_corrected(p2c_att, query_layer, key_layer, relative_pos)
+
             score += p2c_att
 
         return score
