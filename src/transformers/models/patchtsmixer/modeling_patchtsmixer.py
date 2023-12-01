@@ -1692,7 +1692,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
             model_output = PatchTSMixerModelOutput(*model_output)
 
         # tensor [batch_size x prediction_length x num_input_channels]
-        y_hat = self.head(model_output.last_hidden_state)  
+        y_hat = self.head(model_output.last_hidden_state)
 
         loss_val = None
         if self.prediction_channel_indices is not None:
