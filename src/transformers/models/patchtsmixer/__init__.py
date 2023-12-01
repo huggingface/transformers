@@ -36,7 +36,7 @@ else:
         "PatchTSMixerModel",
         "PatchTSMixerForPretraining",
         "PatchTSMixerForPrediction",
-        "PatchTSMixerForClassification",
+        "PatchTSMixerForTimeSeriesClassification",
         "PatchTSMixerForRegression",
     ]
 
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_patchtsmixer import (
             PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PatchTSMixerForClassification,
+            PatchTSMixerForTimeSeriesClassification,
             PatchTSMixerForPrediction,
             PatchTSMixerForPretraining,
             PatchTSMixerForRegression,
@@ -66,4 +66,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

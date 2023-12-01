@@ -1807,9 +1807,9 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
 
 
 @dataclass
-class PatchTSMixerForClassificationOutput(ModelOutput):
+class PatchTSMixerForTimeSeriesClassificationOutput(ModelOutput):
     """
-    Output type of [`PatchTSMixerForClassificationOutput`].
+    Output type of [`PatchTSMixerForTimeSeriesClassificationOutput`].
 
     Args:
         prediction_outputs (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
@@ -1828,7 +1828,7 @@ class PatchTSMixerForClassificationOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
+class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
     r"""
     `PatchTSMixer` for classification application.
 
@@ -1858,7 +1858,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
             self.post_init()
 
     @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=PatchTSMixerForClassificationOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=PatchTSMixerForTimeSeriesClassificationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1866,7 +1866,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
         return_dict: Optional[bool] = None,
-    ) -> PatchTSMixerForClassificationOutput:
+    ) -> PatchTSMixerForTimeSeriesClassificationOutput:
         r"""
             future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
                 `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
@@ -1926,7 +1926,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
                 ]
             )
 
-        return PatchTSMixerForClassificationOutput(
+        return PatchTSMixerForTimeSeriesClassificationOutput(
             loss=loss_val,
             prediction_outputs=y_hat,  # tensor [batch_size x n_labels]
             last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x d_model]

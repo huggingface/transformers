@@ -53,7 +53,7 @@ results = trainer.evaluate(test_dataset)
 
 ## Usage tips
 
-The model can also be used for time series classification and time series regression. See the respective [`PatchTSMixerForClassification`] and [`PatchTSMixerForRegression`] classes.
+The model can also be used for time series classification and time series regression. See the respective [`PatchTSMixerForTimeSeriesClassification`] and [`PatchTSMixerForRegression`] classes.
 
 ## PatchTSMixerConfig
 
@@ -72,9 +72,9 @@ The model can also be used for time series classification and time series regres
     - forward
 
 
-## PatchTSMixerForClassification
+## PatchTSMixerForTimeSeriesClassification
 
-[[autodoc]] PatchTSMixerForClassification
+[[autodoc]] PatchTSMixerForTimeSeriesClassification
     - forward
 
 
