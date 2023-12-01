@@ -51,7 +51,6 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         output_text = "this is a test"
         return input_text, output_text
 
-   
     def test_get_vocab(self):
         vocab_keys = list(self.get_tokenizer().get_vocab().keys())
         self.assertEqual(vocab_keys[0], "<unk>")
