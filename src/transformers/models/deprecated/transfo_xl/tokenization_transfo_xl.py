@@ -212,13 +212,13 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             vocab_dict = None
             if pretrained_vocab_file is not None:
                 # Priority on pickle files (support PyTorch and TF)
-                if not os.getenv("ALLOW_ACCESS_TO_POTENTIAL_INSECURE_CODE", False):
+                if not os.getenv("TRUST_REMOTE_CODE", False):
                     raise ValueError(
                         "This part uses `pickle.load` which is insecure and will execute arbitrary code that is "
                         "potentially malicious. It's recommended to never unpickle data that could have come from an "
                         "untrusted source, or that could have been tampered with. If you already verified the pickle "
                         "data and decided to use it, you can set the environment variable "
-                        "`ALLOW_ACCESS_TO_POTENTIAL_INSECURE_CODE` to `True` to allow it."
+                        "`TRUST_REMOTE_CODE` to `True` to allow it."
                     )
                 with open(pretrained_vocab_file, "rb") as f:
                     vocab_dict = pickle.load(f)
@@ -798,12 +798,12 @@ def get_lm_corpus(datadir, dataset):
         corpus = torch.load(fn_pickle)
     elif os.path.exists(fn):
         logger.info("Loading cached dataset from pickle...")
-        if not os.getenv("ALLOW_ACCESS_TO_POTENTIAL_INSECURE_CODE", False):
+        if not os.getenv("TRUST_REMOTE_CODE", False):
             raise ValueError(
                 "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
                 "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
                 "that could have been tampered with. If you already verified the pickle data and decided to use it, "
-                "you can set the environment variable `ALLOW_ACCESS_TO_POTENTIAL_INSECURE_CODE` to `True` to allow it."
+                "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
             )
         with open(fn, "rb") as fp:
             corpus = pickle.load(fp)
