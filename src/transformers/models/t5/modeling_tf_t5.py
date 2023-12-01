@@ -82,10 +82,13 @@ class TFT5LayerNorm(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.variance_epsilon = epsilon
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         """Build shared word embedding layer"""
         self.weight = self.add_weight("weight", shape=(input_shape[-1],), initializer="ones")
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
 
     def call(self, hidden_states):
         variance = tf.math.reduce_mean(tf.math.square(hidden_states), axis=-1, keepdims=True)
@@ -110,6 +113,7 @@ class TFT5DenseActDense(tf.keras.layers.Layer):
         )  # Update init weights as in flax
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
         self.act = get_tf_activation(config.dense_act_fn)
+        self.config = config
 
     def call(self, hidden_states, training=False):
         hidden_states = self.wi(hidden_states)
@@ -117,6 +121,17 @@ class TFT5DenseActDense(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = self.wo(hidden_states)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "wi", None) is not None:
+            with tf.name_scope(self.wi.name):
+                self.wi.build(self.config.d_model)
+        if getattr(self, "wo", None) is not None:
+            with tf.name_scope(self.wo.name):
+                self.wo.build(self.config.d_ff)
 
 
 class TFT5DenseGatedActDense(tf.keras.layers.Layer):
@@ -139,6 +154,7 @@ class TFT5DenseGatedActDense(tf.keras.layers.Layer):
         )  # Update init weights as in flax
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
         self.act = get_tf_activation(config.dense_act_fn)
+        self.config = config
 
     def call(self, hidden_states, training=False):
         hidden_gelu = self.act(self.wi_0(hidden_states))
@@ -147,6 +163,20 @@ class TFT5DenseGatedActDense(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = self.wo(hidden_states)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "wi_0", None) is not None:
+            with tf.name_scope(self.wi_0.name):
+                self.wi_0.build(self.config.d_model)
+        if getattr(self, "wi_1", None) is not None:
+            with tf.name_scope(self.wi_1.name):
+                self.wi_1.build(self.config.d_model)
+        if getattr(self, "wo", None) is not None:
+            with tf.name_scope(self.wo.name):
+                self.wo.build(self.config.d_ff)
 
 
 class TFT5LayerFF(tf.keras.layers.Layer):
@@ -165,6 +195,14 @@ class TFT5LayerFF(tf.keras.layers.Layer):
         dense_output = self.DenseReluDense(normed_hidden_states, training=training)
         hidden_states = hidden_states + self.dropout(dense_output, training=training)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build(None)
 
 
 class TFT5Attention(tf.keras.layers.Layer):
@@ -218,7 +256,7 @@ class TFT5Attention(tf.keras.layers.Layer):
 
         self.pruned_heads = set()
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         if self.has_relative_attention_bias:
             with tf.name_scope("relative_attention_bias"):
                 self.relative_attention_bias = self.add_weight(
@@ -227,7 +265,22 @@ class TFT5Attention(tf.keras.layers.Layer):
                     initializer=self.relative_attention_bias_initializer,  # Add initializer
                 )
 
-        return super().build(input_shape)
+        return
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "q", None) is not None:
+            with tf.name_scope(self.q.name):
+                self.q.build(self.d_model)
+        if getattr(self, "k", None) is not None:
+            with tf.name_scope(self.k.name):
+                self.k.build(self.d_model)
+        if getattr(self, "v", None) is not None:
+            with tf.name_scope(self.v.name):
+                self.v.build(self.d_model)
+        if getattr(self, "o", None) is not None:
+            with tf.name_scope(self.o.name):
+                self.o.build(self.inner_dim)
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -468,6 +521,17 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "SelfAttention", None) is not None:
+            with tf.name_scope(self.SelfAttention.name):
+                self.SelfAttention.build(None)
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build(None)
+
 
 class TFT5LayerCrossAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -509,6 +573,17 @@ class TFT5LayerCrossAttention(tf.keras.layers.Layer):
         hidden_states = hidden_states + self.dropout(attention_output[0], training=training)
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "EncDecAttention", None) is not None:
+            with tf.name_scope(self.EncDecAttention.name):
+                self.EncDecAttention.build(None)
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build(None)
 
 
 class TFT5Block(tf.keras.layers.Layer):
@@ -612,6 +687,11 @@ class TFT5Block(tf.keras.layers.Layer):
         # Add attentions if we output them
         outputs = outputs + (present_key_value_state,) + attention_outputs
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
 
 
 ####################################################
@@ -845,6 +925,18 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                 hidden_states=all_hidden_states,
                 attentions=all_attentions,
             )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "block", None) is not None:
+            for layer in self.block:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build(None)  # TODO Matt might be wrong
 
 
 ####################################################
@@ -1221,6 +1313,20 @@ class TFT5Model(TFT5PreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "shared", None) is not None:
+            with tf.name_scope(self.shared.name):
+                self.shared.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(None)
+
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)
 class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModelingLoss):
@@ -1471,6 +1577,20 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
         return self._shift_right(labels)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "shared", None) is not None:
+            with tf.name_scope(self.shared.name):
+                self.shared.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(None)
+
 
 @add_start_docstrings(
     "The bare T5 Model transformer outputting encoder's raw hidden-stateswithout any specific head on top.",
@@ -1549,3 +1669,14 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "shared", None) is not None:
+            with tf.name_scope(self.shared.name):
+                self.shared.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)

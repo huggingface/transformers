@@ -720,6 +720,11 @@ class TFRagModel(TFRagPreTrainedModel):
             generator_dec_attentions=gen_outputs.decoder_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+
 
 @add_start_docstrings_to_model_forward(
     """
@@ -1292,6 +1297,14 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
         return loss
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "rag", None) is not None:
+            with tf.name_scope(self.rag.name):
+                self.rag.build(None)
+
 
 @add_start_docstrings_to_model_forward(
     """
@@ -1743,3 +1756,11 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
 
         output = tf.convert_to_tensor(output)
         return tf.cast(output, tensors[0][0][0].dtype)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "rag", None) is not None:
+            with tf.name_scope(self.rag.name):
+                self.rag.build(None)
