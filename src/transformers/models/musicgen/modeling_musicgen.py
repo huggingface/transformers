@@ -1869,7 +1869,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                     "disabled by setting `chunk_length=None` in the audio encoder."
                 )
 
-            if self.config.audio_channels == 2 and audio_codes.shape[2] == self.decoder.num_codebooks // 2:
+            if self.config.decoder.audio_channels == 2 and audio_codes.shape[2] == self.decoder.num_codebooks // 2:
                 # mono input through encodec that we convert to stereo
                 audio_codes = audio_codes.repeat_interleave(2, dim=2)
 
