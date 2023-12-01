@@ -652,6 +652,9 @@ class T5Attention(nn.Module):
 
         real_seq_length = seq_length
 
+        #self.dropout = 0
+        #print('DEBUG DEBUG DEBUG - REMOVE THIS! DO NOT COMMIT !!! DISABLED DROPOUT FOR EASIER DEBUGGING!')
+
         if past_key_value is not None:
             if len(past_key_value) != 2:
                 raise ValueError(
@@ -699,13 +702,19 @@ class T5Attention(nn.Module):
         # get query states
         query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
 
+        print(f'debug query_states sum={query_states.sum()},  part={query_states[0,6:8,20:24, 20:22]}')
+        
+
         # get key/value states
         key_states = project(
             hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
         )
         value_states = project(
             hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
-        )               
+        )
+
+        print(f'debug key_states sum={key_states.sum()},  part={key_states[0,6:8,20:24, 20:22]}')
+        print(f'debug value_states sum={value_states.sum()},  part={value_states[0,6:8,20:24, 20:22]}')
 
         def _compress_to_single_unpadded_sample(tens:torch.Tensor, sizes:List[int]):
             separated = [tens[i,:,:curr_len] for (i,curr_len) in enumerate(sizes)]
@@ -854,6 +863,9 @@ class T5Attention(nn.Module):
        
         
         attn_output = self.o(attn_output)
+
+        print(f'debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
+        print('------------\n')
 
         present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
 
@@ -1306,7 +1318,7 @@ class T5Stack(T5PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        position_ids_dict='default',
+        position_ids_dict='default', #None here means the user wants NO pos embedding of any kind.  'default' has the default T5 behavior
     ):
         if position_ids_dict == 'default':
             position_ids_dict = {'placeholder': (None, [POSITION_EMBEDDING_T5_DEFAULT_RELATIVE,'placeholder'])}
