@@ -1734,6 +1734,9 @@ class TrainingArguments:
             self.deepspeed_plugin.set_mixed_precision(mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
 
+        if self.use_cpu:
+            self.dataloader_pin_memory = False
+
         if self.push_to_hub_token is not None:
             warnings.warn(
                 "`--push_to_hub_token` is deprecated and will be removed in version 5 of 🤗 Transformers. Use "

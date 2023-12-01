@@ -26,7 +26,7 @@ If you're looking to fine-tune a language model like Llama-2 or Mistral on a tex
 
 Before instantiating your [`Trainer`], create a [`TrainingArguments`] to access all the points of customization during training.
 
-The API supports distributed training on multiple GPUs/TPUs, mixed precision through [NVIDIA Apex](https://github.com/NVIDIA/apex) and Native AMP for PyTorch.
+The API supports distributed training on multiple GPUs/TPUs, mixed precision through [NVIDIA Apex] for NVIDIA GPUs, [ROCm APEX](https://github.com/ROCmSoftwarePlatform/apex) for AMD GPUs, and Native AMP for PyTorch.
 
 The [`Trainer`] contains the basic training loop which supports the above features. To inject custom behavior you can subclass them and override the following methods:
 
@@ -206,7 +206,7 @@ Let's discuss how you can tell your program which GPUs are to be used and in wha
 When using [`DistributedDataParallel`](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) to use only a subset of your GPUs, you simply specify the number of GPUs to use. For example, if you have 4 GPUs, but you wish to use the first 2 you can do:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=2  trainer-program.py ...
+torchrun --nproc_per_node=2  trainer-program.py ...
 ```
 
 if you have either [`accelerate`](https://github.com/huggingface/accelerate) or [`deepspeed`](https://github.com/microsoft/DeepSpeed) installed you can also accomplish the same by using one of:
@@ -233,7 +233,7 @@ If you have multiple GPUs and you'd like to use only 1 or a few of those GPUs, s
 For example, let's say you have 4 GPUs: 0, 1, 2 and 3. To run only on the physical GPUs 0 and 2, you can do:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,2 python -m torch.distributed.launch trainer-program.py ...
+CUDA_VISIBLE_DEVICES=0,2 torchrun trainer-program.py ...
 ```
 
 So now pytorch will see only 2 GPUs, where your physical GPUs 0 and 2 are mapped to `cuda:0` and `cuda:1` correspondingly.
@@ -241,7 +241,7 @@ So now pytorch will see only 2 GPUs, where your physical GPUs 0 and 2 are mapped
 You can even change their order:
 
 ```bash
-CUDA_VISIBLE_DEVICES=2,0 python -m torch.distributed.launch trainer-program.py ...
+CUDA_VISIBLE_DEVICES=2,0 torchrun trainer-program.py ...
 ```
 
 Here your physical GPUs 0 and 2 are mapped to `cuda:1` and `cuda:0` correspondingly.
@@ -263,7 +263,7 @@ As with any environment variable you can, of course, export those instead of add
 
 ```bash
 export CUDA_VISIBLE_DEVICES=0,2
-python -m torch.distributed.launch trainer-program.py ...
+torchrun trainer-program.py ...
 ```
 
 but this approach can be confusing since you may forget you set up the environment variable earlier and not understand why the wrong GPUs are used. Therefore, it's a common practice to set the environment variable just for a specific run on the same command line as it's shown in most examples of this section.
@@ -272,7 +272,7 @@ but this approach can be confusing since you may forget you set up the environme
 
 There is an additional environment variable `CUDA_DEVICE_ORDER` that controls how the physical devices are ordered. The two choices are:
 
-1. ordered by PCIe bus IDs (matches `nvidia-smi`'s order) - this is the default.
+1. ordered by PCIe bus IDs (matches `nvidia-smi` and `rocm-smi`'s order) - this is the default.
 
 ```bash
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
@@ -284,7 +284,7 @@ export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export CUDA_DEVICE_ORDER=FASTEST_FIRST
 ```
 
-Most of the time you don't need to care about this environment variable, but it's very helpful if you have a lopsided setup where you have an old and a new GPUs physically inserted in such a way so that the slow older card appears to be first. One way to fix that is to swap the cards. But if you can't swap the cards (e.g., if the cooling of the devices gets impacted) then setting `CUDA_DEVICE_ORDER=FASTEST_FIRST` will always put the newer faster card first. It'll be somewhat confusing though since `nvidia-smi` will still report them in the PCIe order.
+Most of the time you don't need to care about this environment variable, but it's very helpful if you have a lopsided setup where you have an old and a new GPUs physically inserted in such a way so that the slow older card appears to be first. One way to fix that is to swap the cards. But if you can't swap the cards (e.g., if the cooling of the devices gets impacted) then setting `CUDA_DEVICE_ORDER=FASTEST_FIRST` will always put the newer faster card first. It'll be somewhat confusing though since `nvidia-smi` (or `rocm-smi`) will still report them in the PCIe order.
 
 The other solution to swapping the order is to use:
 
