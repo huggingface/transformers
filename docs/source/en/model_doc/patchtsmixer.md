@@ -34,6 +34,23 @@ This model was contributed by [ajati](https://huggingface.co/ajati), [vijaye12](
 [gsinthong](https://huggingface.co/gsinthong), [namctin](https://huggingface.co/namctin),
 [wmgifford](https://huggingface.co/wmgifford), [kashif](https://huggingface.co/kashif).
 
+
+## Sample usage 
+```python
+
+from transformers import PatchTSMixerConfig, PatchTSMixerForPrediction
+from transformers import Trainer, TrainingArguments,
+
+
+config = PatchTSMixerConfig(context_length = 512, prediction_length = 96)
+model = PatchTSMixerForPrediction(config)
+trainer = Trainer(model=model, args=training_args, 
+            train_dataset=train_dataset,
+            eval_dataset=valid_dataset)
+trainer.train()
+results = trainer.evaluate(test_dataset)
+```
+
 ## Usage tips
 
 The model can also be used for time series classification and time series regression. See the respective [`PatchTSMixerForClassification`] and [`PatchTSMixerForRegression`] classes.
