@@ -489,10 +489,6 @@ class PvtPreTrainedModel(PreTrainedModel):
                     std=self.config.initializer_range,
                 )
 
-    def _set_gradient_checkpointing(self, module: PvtEncoder, value: bool = False):
-        if isinstance(module, PvtEncoder):
-            module.gradient_checkpointing = value
-
 
 PVT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use

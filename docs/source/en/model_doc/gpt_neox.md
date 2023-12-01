@@ -38,7 +38,7 @@ model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b").half().cud
 GPT-NeoX-20B also has a different tokenizer from the one used in GPT-J-6B and GPT-Neo. The new tokenizer allocates
 additional tokens to whitespace characters, making the model more suitable for certain tasks like code generation.
 
-### Generation
+## Usage example
 
 The `generate()` method can be used to generate text using GPT Neo model.
 
@@ -61,7 +61,7 @@ The `generate()` method can be used to generate text using GPT Neo model.
 >>> gen_text = tokenizer.batch_decode(gen_tokens)[0]
 ```
 
-## Documentation resources
+## Resources
 
 - [Causal language modeling task guide](../tasks/language_modeling)
 

@@ -555,7 +555,7 @@ class TFT5Block(tf.keras.layers.Layer):
             if len(past_key_value) != expected_num_past_key_values:
                 raise ValueError(
                     f"There should be {expected_num_past_key_values} past states. "
-                    f"{'2 (past / key) for cross attention' if expected_num_past_key_values == 4 else ''}."
+                    f"{'2 (past / key) for cross attention' if expected_num_past_key_values == 4 else ''}. "
                     f"Got {len(past_key_value)} past key / value states"
                 )
 

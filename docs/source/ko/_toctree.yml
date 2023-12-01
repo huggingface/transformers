@@ -58,8 +58,8 @@
   - sections:
       - local: tasks/image_classification
         title: 이미지 분류
-      - local: in_translation
-        title: (번역중) Semantic segmentation
+      - local: tasks/semantic_segmentation
+        title: 의미적 분할(Semantic segmentation)
       - local: tasks/video_classification
         title: 영상 분류
       - local: tasks/object_detection
@@ -70,7 +70,7 @@
         title: 제로샷(zero-shot) 이미지 분류
       - local: tasks/monocular_depth_estimation
         title: 단일 영상 기반 깊이 추정
-    title: (번역중) 컴퓨터 비전
+    title: 컴퓨터 비전
     isExpanded: false
   - sections:
       - local: tasks/image_captioning
@@ -139,8 +139,8 @@
       title: (번역중) Inference on Specialized Hardware
     - local: perf_hardware
       title: 훈련용 사용자 맞춤형 하드웨어
-    - local: in_translation
-      title: (번역중) Instantiating a big model
+    - local: big_models
+      title: 대형 모델을 인스턴스화
     - local: debugging
       title: 디버깅
     - local: hpo_train
@@ -174,8 +174,8 @@
     title: 🤗 Transformers로 작업을 해결하는 방법
   - local: model_summary
     title: Transformer 모델군
-  - local: in_translation
-    title: (번역중) Summary of the tokenizers
+  - local: tokenizer_summary
+    title: 토크나이저 요약
   - local: attention
     title: 어텐션 매커니즘
   - local: pad_truncation

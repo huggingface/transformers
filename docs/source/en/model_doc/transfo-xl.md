@@ -16,6 +16,29 @@ rendered properly in your Markdown viewer.
 
 # Transformer XL
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, so we won't accept any new PRs changing its code. This model was deprecated due to security issues linked to `pickle.load`.
+
+We recommend switching to more recent models for improved security.
+
+In case you would still like to use `TransfoXL` in your experiments, we recommend using the [Hub checkpoint](https://huggingface.co/transfo-xl-wt103) with a specific revision to ensure you are downloading safe files from the Hub:
+
+```
+from transformers import TransfoXLTokenizer, TransfoXLLMHeadModel
+
+checkpoint = 'transfo-xl-wt103'
+revision = '40a186da79458c9f9de846edfaea79c412137f97'
+
+tokenizer = TransfoXLTokenizer.from_pretrained(checkpoint, revision=revision)
+model = TransfoXLLMHeadModel.from_pretrained(checkpoint, revision=revision)
+```
+
+If you run into any issues running this model, please reinstall the last version that supported this model: v4.35.0.
+You can do so by running the following command: `pip install -U transformers==4.35.0`.
+
+</Tip>
+
 <div class="flex flex-wrap space-x-1">
 <a href="https://huggingface.co/models?filter=transfo-xl">
 <img alt="Models" src="https://img.shields.io/badge/All_model_pages-transfo--xl-blueviolet">
@@ -45,7 +68,9 @@ bpc/perplexity to 0.99 on enwiki8, 1.08 on text8, 18.3 on WikiText-103, 21.8 on 
 Treebank (without finetuning). When trained only on WikiText-103, Transformer-XL manages to generate reasonably
 coherent, novel text articles with thousands of tokens.*
 
-Tips:
+This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/kimiyoung/transformer-xl).
+
+## Usage tips
 
 - Transformer-XL uses relative sinusoidal positional embeddings. Padding can be done on the left or on the right. The
   original implementation trains on SQuAD with padding on the left, therefore the padding defaults are set to left.
@@ -54,7 +79,6 @@ Tips:
 - Basically, the hidden states of the previous segment are concatenated to the current input to compute the attention scores. This allows the model to pay attention to information that was in the previous segment as well as the current one. By stacking multiple attention layers, the receptive field can be increased to multiple previous segments.
 - This changes the positional embeddings to positional relative embeddings (as the regular positional embeddings would give the same results in the current input and the current hidden state at a given position) and needs to make some adjustments in the way attention scores are computed.
 
-This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/kimiyoung/transformer-xl).
 
 <Tip warning={true}>
 
@@ -62,7 +86,7 @@ TransformerXL does **not** work with *torch.nn.DataParallel* due to a bug in PyT
 
 </Tip>
 
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Causal language modeling task guide](../tasks/language_modeling)
@@ -78,13 +102,16 @@ TransformerXL does **not** work with *torch.nn.DataParallel* due to a bug in PyT
 
 ## TransfoXL specific outputs
 
-[[autodoc]] models.transfo_xl.modeling_transfo_xl.TransfoXLModelOutput
+[[autodoc]] models.deprecated.transfo_xl.modeling_transfo_xl.TransfoXLModelOutput
 
-[[autodoc]] models.transfo_xl.modeling_transfo_xl.TransfoXLLMHeadModelOutput
+[[autodoc]] models.deprecated.transfo_xl.modeling_transfo_xl.TransfoXLLMHeadModelOutput
 
-[[autodoc]] models.transfo_xl.modeling_tf_transfo_xl.TFTransfoXLModelOutput
+[[autodoc]] models.deprecated.transfo_xl.modeling_tf_transfo_xl.TFTransfoXLModelOutput
 
-[[autodoc]] models.transfo_xl.modeling_tf_transfo_xl.TFTransfoXLLMHeadModelOutput
+[[autodoc]] models.deprecated.transfo_xl.modeling_tf_transfo_xl.TFTransfoXLLMHeadModelOutput
+
+<frameworkcontent>
+<pt>
 
 ## TransfoXLModel
 
@@ -101,6 +128,9 @@ TransformerXL does **not** work with *torch.nn.DataParallel* due to a bug in PyT
 [[autodoc]] TransfoXLForSequenceClassification
     - forward
 
+</pt>
+<tf>
+
 ## TFTransfoXLModel
 
 [[autodoc]] TFTransfoXLModel
@@ -115,6 +145,9 @@ TransformerXL does **not** work with *torch.nn.DataParallel* due to a bug in PyT
 
 [[autodoc]] TFTransfoXLForSequenceClassification
     - call
+
+</tf>
+</frameworkcontent>
 
 ## Internal Layers
 

@@ -387,9 +387,10 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
         # check inputs
         # assert shape_list(lengths)[0] == bs
-        tf.debugging.assert_equal(
-            shape_list(lengths)[0], bs
-        ), f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched"
+        (
+            tf.debugging.assert_equal(shape_list(lengths)[0], bs),
+            f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched",
+        )
         # assert lengths.max().item() <= slen
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
         # assert (src_enc is None) == (src_len is None)
@@ -408,17 +409,19 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             position_ids = tf.tile(position_ids, (bs, 1))
 
         # assert shape_list(position_ids) == [bs, slen]  # (slen, bs)
-        tf.debugging.assert_equal(
-            shape_list(position_ids), [bs, slen]
-        ), f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched"
+        (
+            tf.debugging.assert_equal(shape_list(position_ids), [bs, slen]),
+            f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched",
+        )
         # position_ids = position_ids.transpose(0, 1)
 
         # langs
         if langs is not None:
             # assert shape_list(langs) == [bs, slen]  # (slen, bs)
-            tf.debugging.assert_equal(
-                shape_list(langs), [bs, slen]
-            ), f"Lang shape {shape_list(langs)} and input shape {[bs, slen]} mismatched"
+            (
+                tf.debugging.assert_equal(shape_list(langs), [bs, slen]),
+                f"Lang shape {shape_list(langs)} and input shape {[bs, slen]} mismatched",
+            )
             # langs = langs.transpose(0, 1)
 
         # Prepare head mask if needed

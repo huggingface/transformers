@@ -132,6 +132,47 @@ def _center_text(text: str, width: int) -> str:
     return " " * left_indent + text + " " * right_indent
 
 
+SPECIAL_MODEL_NAME_LINK_MAPPING = {
+    "Data2VecAudio": "[Data2VecAudio](model_doc/data2vec)",
+    "Data2VecText": "[Data2VecText](model_doc/data2vec)",
+    "Data2VecVision": "[Data2VecVision](model_doc/data2vec)",
+    "DonutSwin": "[DonutSwin](model_doc/donut)",
+}
+
+MODEL_NAMES_WITH_SAME_CONFIG = {
+    "BARThez": "BART",
+    "BARTpho": "BART",
+    "BertJapanese": "BERT",
+    "BERTweet": "BERT",
+    "BORT": "BERT",
+    "ByT5": "T5",
+    "CPM": "OpenAI GPT-2",
+    "DePlot": "Pix2Struct",
+    "DialoGPT": "OpenAI GPT-2",
+    "DiT": "BEiT",
+    "FLAN-T5": "T5",
+    "FLAN-UL2": "T5",
+    "HerBERT": "BERT",
+    "LayoutXLM": "LayoutLMv2",
+    "Llama2": "LLaMA",
+    "MADLAD-400": "T5",
+    "MatCha": "Pix2Struct",
+    "mBART-50": "mBART",
+    "Megatron-GPT2": "OpenAI GPT-2",
+    "mLUKE": "LUKE",
+    "MMS": "Wav2Vec2",
+    "NLLB": "M2M100",
+    "PhoBERT": "BERT",
+    "T5v1.1": "T5",
+    "TAPEX": "BART",
+    "UL2": "T5",
+    "Wav2Vec2Phoneme": "Wav2Vec2",
+    "XLM-V": "XLM-RoBERTa",
+    "XLS-R": "Wav2Vec2",
+    "XLSR-Wav2Vec2": "Wav2Vec2",
+}
+
+
 def get_model_table_from_auto_modules() -> str:
     """
     Generates an up-to-date model table from the content of the auto modules.
@@ -172,17 +213,27 @@ def get_model_table_from_auto_modules() -> str:
                 attr_name = "".join(camel_case_split(attr_name)[:-1])
 
     # Let's build that table!
-    model_names = list(model_name_to_config.keys())
+    model_names = list(model_name_to_config.keys()) + list(MODEL_NAMES_WITH_SAME_CONFIG.keys())
+
+    # model name to doc link mapping
+    model_names_mapping = transformers_module.models.auto.configuration_auto.MODEL_NAMES_MAPPING
+    model_name_to_link_mapping = {value: f"[{value}](model_doc/{key})" for key, value in model_names_mapping.items()}
+    # update mapping with special model names
+    model_name_to_link_mapping = {
+        k: SPECIAL_MODEL_NAME_LINK_MAPPING[k] if k in SPECIAL_MODEL_NAME_LINK_MAPPING else v
+        for k, v in model_name_to_link_mapping.items()
+    }
 
     # MaskFormerSwin and TimmBackbone are backbones and so not meant to be loaded and used on their own. Instead, they define architectures which can be loaded using the AutoBackbone API.
-    names_to_exclude = ["MaskFormerSwin", "TimmBackbone"]
+    names_to_exclude = ["MaskFormerSwin", "TimmBackbone", "Speech2Text2"]
     model_names = [name for name in model_names if name not in names_to_exclude]
     model_names.sort(key=str.lower)
 
     columns = ["Model", "PyTorch support", "TensorFlow support", "Flax Support"]
     # We'll need widths to properly display everything in the center (+2 is to leave one extra space on each side).
+
     widths = [len(c) + 2 for c in columns]
-    widths[0] = max([len(name) for name in model_names]) + 2
+    widths[0] = max([len(doc_link) for doc_link in model_name_to_link_mapping.values()]) + 2
 
     # Build the table per se
     table = "|" + "|".join([_center_text(c, w) for c, w in zip(columns, widths)]) + "|\n"
@@ -190,10 +241,14 @@ def get_model_table_from_auto_modules() -> str:
     table += "|" + "|".join([":" + "-" * (w - 2) + ":" for w in widths]) + "|\n"
 
     check = {True: "✅", False: "❌"}
+
     for name in model_names:
-        prefix = model_name_to_prefix[name]
+        if name in MODEL_NAMES_WITH_SAME_CONFIG.keys():
+            prefix = model_name_to_prefix[MODEL_NAMES_WITH_SAME_CONFIG[name]]
+        else:
+            prefix = model_name_to_prefix[name]
         line = [
-            name,
+            model_name_to_link_mapping[name],
             check[pt_models[prefix]],
             check[tf_models[prefix]],
             check[flax_models[prefix]],

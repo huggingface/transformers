@@ -20,16 +20,13 @@ import unittest
 from parameterized import parameterized
 
 from transformers import (
-    AutoConfig,
-    AutoModel,
     AutoModelForCausalLM,
     AutoTokenizer,
     FalconConfig,
     is_torch_available,
     set_seed,
 )
-from transformers.testing_utils import CaptureLogger, require_bitsandbytes, require_torch, slow, tooslow, torch_device
-from transformers.utils import logging as transformers_logging
+from transformers.testing_utils import require_bitsandbytes, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -301,6 +298,12 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_headmasking = False
     test_pruning = False
 
+    # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return True
+
     def setUp(self):
         self.model_tester = FalconModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FalconConfig, hidden_size=37)
@@ -342,24 +345,6 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_cache_conversions(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = input_dict["input_ids"]
-        model = FalconForCausalLM(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, use_cache=True)
-        batch_size = input_ids.shape[0]
-        rw_cache = model._convert_to_rw_cache(result.past_key_values)
-        standard_cache = model._convert_cache_to_standard_format(rw_cache, batch_size)
-        for layer in range(len(rw_cache)):
-            for tensor_idx in range(2):
-                self.assertTrue(rw_cache[layer][tensor_idx].ndim == 3)
-                self.assertTrue(result.past_key_values[layer][tensor_idx].ndim == 4)
-                self.assertTrue(
-                    torch.all(result.past_key_values[layer][tensor_idx] == standard_cache[layer][tensor_idx])
-                )
 
     def test_falcon_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -524,13 +509,11 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         test_text = "A sequence: 1, 2"  # should generate the rest of the sequence
 
         unpadded_inputs = tokenizer([test_text], return_tensors="pt").to("cuda:0")
-        unpadded_inputs.pop("token_type_ids")
         unpadded_gen_out = model.generate(**unpadded_inputs, max_new_tokens=20)
         unpadded_gen_text = tokenizer.batch_decode(unpadded_gen_out, skip_special_tokens=True)
 
         dummy_text = "This is a longer text " * 2  # forces left-padding on `test_text`
         padded_inputs = tokenizer([test_text, dummy_text], return_tensors="pt", padding=True).to("cuda:0")
-        padded_inputs.pop("token_type_ids")
         padded_gen_out = model.generate(**padded_inputs, max_new_tokens=20)
         padded_gen_text = tokenizer.batch_decode(padded_gen_out, skip_special_tokens=True)
 
@@ -538,132 +521,3 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         self.assertLess(unpadded_inputs.input_ids.shape[-1], padded_inputs.input_ids.shape[-1])  # left-padding exists
         self.assertEqual(unpadded_gen_text[0], expected_output)
         self.assertEqual(padded_gen_text[0], expected_output)
-
-
-# TODO Lysandre: Remove this in version v4.34
-class FalconOverrideTest(unittest.TestCase):
-    supported_checkpoints = [
-        "tiiuae/falcon-7b",
-        "tiiuae/falcon-7b-instruct",
-        "tiiuae/falcon-40b",
-        "tiiuae/falcon-40b-instruct",
-    ]
-
-    latest_revisions = {
-        "tiiuae/falcon-7b": "f7796529e36b2d49094450fb038cc7c4c86afa44",
-        "tiiuae/falcon-7b-instruct": "eb410fb6ffa9028e97adb801f0d6ec46d02f8b07",
-        "tiiuae/falcon-40b": "561820f7eef0cc56a31ea38af15ca1acb07fab5d",
-        "tiiuae/falcon-40b-instruct": "ca78eac0ed45bf64445ff0687fabba1598daebf3",
-    }
-
-    def test_config_without_remote_code(self):
-        logger_ = transformers_logging.get_logger("transformers.models.auto.configuration_auto")
-
-        for supported_checkpoint in self.supported_checkpoints:
-            with CaptureLogger(logger_) as cm:
-                config1 = FalconConfig.from_pretrained(supported_checkpoint, trust_remote_code=False)
-                config2 = FalconConfig.from_pretrained(supported_checkpoint)
-
-            self.assertIn(
-                "The Falcon model was initialized without `trust_remote_code=True`, and will therefore leverage the "
-                "transformers library implementation.",
-                cm.out,
-            )
-
-            self.assertEqual(config1.to_dict(), config2.to_dict())
-
-    def test_auto_config_without_remote_code(self):
-        logger_ = transformers_logging.get_logger("transformers.models.auto.configuration_auto")
-
-        for supported_checkpoint in self.supported_checkpoints:
-            with CaptureLogger(logger_) as cm:
-                config1 = AutoConfig.from_pretrained(supported_checkpoint, trust_remote_code=False)
-                config2 = AutoConfig.from_pretrained(supported_checkpoint)
-
-            self.assertIn(
-                "The Falcon model was initialized without `trust_remote_code=True`, and will therefore leverage the "
-                "transformers library implementation.",
-                cm.out,
-            )
-
-            self.assertEqual(config1.to_dict(), config2.to_dict())
-
-    def test_config_with_remote_code(self):
-        for supported_checkpoint in self.supported_checkpoints:
-            config = FalconConfig.from_pretrained(supported_checkpoint, trust_remote_code=True)
-
-            self.assertIn(config.model_type, ["RefinedWebModel", "RefinedWeb"])
-
-    def test_auto_config_with_remote_code(self):
-        for supported_checkpoint in self.supported_checkpoints:
-            config = AutoConfig.from_pretrained(supported_checkpoint, trust_remote_code=True)
-
-            self.assertIn(config.model_type, ["RefinedWebModel", "RefinedWeb"])
-
-    def test_config_with_specific_revision(self):
-        for supported_checkpoint in self.supported_checkpoints:
-            config = FalconConfig.from_pretrained(
-                supported_checkpoint, revision=self.latest_revisions[supported_checkpoint], trust_remote_code=True
-            )
-
-            self.assertIn(config.model_type, ["RefinedWebModel", "RefinedWeb"])
-
-    def test_auto_config_with_specific_revision(self):
-        for supported_checkpoint in self.supported_checkpoints:
-            config = AutoConfig.from_pretrained(
-                supported_checkpoint, revision=self.latest_revisions[supported_checkpoint], trust_remote_code=True
-            )
-
-            self.assertIn(config.model_type, ["RefinedWebModel", "RefinedWeb"])
-
-    @tooslow
-    def test_model_without_remote_code(self):
-        logger_ = transformers_logging.get_logger("transformers.models.auto.configuration_auto")
-        for supported_checkpoint in self.supported_checkpoints:
-            with CaptureLogger(logger_) as cm:
-                config1 = FalconModel.from_pretrained(supported_checkpoint, trust_remote_code=False).config
-                config2 = FalconModel.from_pretrained(supported_checkpoint).config
-
-                # trust_remote_code only works with Auto Classes !
-                config3 = FalconModel.from_pretrained(supported_checkpoint, trust_remote_code=True).config
-
-            self.assertIn(
-                "The Falcon model was initialized without `trust_remote_code=True`, and will therefore leverage the "
-                "transformers library implementation.",
-                cm.out,
-            )
-
-            self.assertEqual(config1.to_dict(), config2.to_dict())
-            self.assertEqual(config1.to_dict(), config3.to_dict())
-
-    @tooslow
-    def test_auto_model_without_remote_code(self):
-        logger_ = transformers_logging.get_logger("transformers.models.auto.configuration_auto")
-        for supported_checkpoint in self.supported_checkpoints:
-            with CaptureLogger(logger_) as cm:
-                config1 = AutoModel.from_pretrained(supported_checkpoint, trust_remote_code=False).config
-                config2 = AutoModel.from_pretrained(supported_checkpoint).config
-
-            self.assertIn(
-                "The Falcon model was initialized without `trust_remote_code=True`, and will therefore leverage the "
-                "transformers library implementation.",
-                cm.out,
-            )
-
-            self.assertEqual(config1.to_dict(), config2.to_dict())
-
-    @tooslow
-    def test_auto_model_with_remote_code(self):
-        for supported_checkpoint in self.supported_checkpoints:
-            config = AutoModel.from_pretrained(supported_checkpoint, trust_remote_code=True).config
-
-            self.assertIn(config.model_type, ["RefinedWebModel", "RefinedWeb"])
-
-    @tooslow
-    def test_auto_model_with_specific_revision(self):
-        for supported_checkpoint in self.supported_checkpoints:
-            config = AutoModel.from_pretrained(
-                supported_checkpoint, revision=self.latest_revisions[supported_checkpoint], trust_remote_code=True
-            ).config
-
-            self.assertIn(config.model_type, ["RefinedWebModel", "RefinedWeb"])

@@ -124,6 +124,7 @@ This checks that:
 - The translations of the READMEs and the index of the doc have the same model list as the main README (performed by `utils/check_copies.py`)
 - The auto-generated tables in the documentation are up to date (performed by `utils/check_table.py`)
 - The library has all objects available even if not all optional dependencies are installed (performed by `utils/check_dummies.py`)
+- All docstrings properly document the arguments in the signature of the object (performed by `utils/check_docstrings.py`)
 
 Should this check fail, the first two items require manual fixing, the last four can be fixed automatically for you by running the command
 

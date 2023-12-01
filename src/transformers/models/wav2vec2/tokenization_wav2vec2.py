@@ -206,14 +206,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         # make sure that tokens made of several
         # characters are not split at tokenization
-
-        # TODO @ArthurZ add them or just update the trie?
-        unique_no_split_tokens = []
         for token in self.encoder.keys():
             if len(token) > 1:
-                unique_no_split_tokens.append(AddedToken(token, rstrip=True, lstrip=True, normalized=False))
-
-        self.add_tokens(unique_no_split_tokens)
+                self.add_tokens(AddedToken(token, rstrip=True, lstrip=True, normalized=False))
 
     def set_target_lang(self, target_lang: str):
         """
@@ -234,7 +229,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         # characters are not split at tokenization
         for token in self.encoder.keys():
             if len(token) > 1:
-                self.unique_no_split_tokens.append(token)
+                self.add_tokens(AddedToken(token, rstrip=True, lstrip=True, normalized=False))
 
     @property
     def word_delimiter_token(self) -> str:
@@ -608,7 +603,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
 
         >>> # load first sample of English common_voice
-        >>> dataset = load_dataset("common_voice", "en", split="train", streaming=True)
+        >>> dataset = load_dataset("mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True)
         >>> dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
         >>> dataset_iter = iter(dataset)
         >>> sample = next(dataset_iter)
@@ -631,10 +626,10 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         ...     }
         ...     for d in outputs.word_offsets
         ... ]
-        >>> # compare word offsets with audio `common_voice_en_100038.mp3` online on the dataset viewer:
-        >>> # https://huggingface.co/datasets/common_voice/viewer/en/train
+        >>> # compare word offsets with audio `en_train_0/common_voice_en_19121553.mp3` online on the dataset viewer:
+        >>> # https://huggingface.co/datasets/mozilla-foundation/common_voice_11_0/viewer/en
         >>> word_offsets[:3]
-        [{'word': 'WHY', 'start_time': 1.42, 'end_time': 1.54}, {'word': 'DOES', 'start_time': 1.64, 'end_time': 1.9}, {'word': 'MILISANDRA', 'start_time': 2.26, 'end_time': 2.9}]
+        [{'word': 'THE', 'start_time': 0.7, 'end_time': 0.78}, {'word': 'TRICK', 'start_time': 0.88, 'end_time': 1.08}, {'word': 'APPEARS', 'start_time': 1.2, 'end_time': 1.64}]
         ```"""
         # Convert inputs to python lists
         token_ids = to_py_obj(token_ids)

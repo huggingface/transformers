@@ -31,9 +31,10 @@ class BrosProcessor(ProcessorMixin):
     [`~BrosProcessor.__call__`] and [`~BrosProcessor.decode`] for more information.
 
     Args:
-        tokenizer (`BertTokenizerFast`):
+        tokenizer (`BertTokenizerFast`, *optional*):
             An instance of ['BertTokenizerFast`]. The tokenizer is a required input.
     """
+
     attributes = ["tokenizer"]
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 

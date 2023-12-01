@@ -54,7 +54,7 @@ class CTRLConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         embd_pdrop (`int`, *optional*, defaults to 0.1):
             The dropout ratio for the embeddings.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-6):
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-06):
             The epsilon to use in the layer normalization layers
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.

@@ -56,7 +56,7 @@ class LevitImageProcessor(BaseImageProcessor):
             edge value `c` is rescaled to `int(c * (256/224))`. The smaller edge of the image will be matched to this
             value i.e, if height > width, then image will be rescaled to `(size["shortest_egde"] * height / width,
             size["shortest_egde"])`. Can be overridden by the `size` parameter in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `True`):
@@ -74,10 +74,10 @@ class LevitImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
             `preprocess` method.
-        image_mean (`List[int]`, defaults to `[0.229, 0.224, 0.225]`):
+        image_mean (`List[int]`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`List[int]`, defaults to `[0.485, 0.456, 0.406]`):
+        image_std (`List[int]`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """

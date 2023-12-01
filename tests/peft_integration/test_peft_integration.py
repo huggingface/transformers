@@ -98,17 +98,18 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
 
-                    self.assertTrue("adapter_model.bin" in os.listdir(tmpdirname))
+                    self.assertTrue("adapter_model.safetensors" in os.listdir(tmpdirname))
                     self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
 
                     self.assertTrue("config.json" not in os.listdir(tmpdirname))
                     self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
+                    self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
 
                     peft_model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
                     self.assertTrue(self._check_lora_correctly_converted(peft_model))
 
-                    peft_model.save_pretrained(tmpdirname, safe_serialization=True)
-                    self.assertTrue("adapter_model.safetensors" in os.listdir(tmpdirname))
+                    peft_model.save_pretrained(tmpdirname, safe_serialization=False)
+                    self.assertTrue("adapter_model.bin" in os.listdir(tmpdirname))
                     self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
 
                     peft_model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
@@ -180,6 +181,44 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     model.save_pretrained(tmpdirname)
                     model_from_pretrained = transformers_class.from_pretrained(tmpdirname).to(torch_device)
                     self.assertTrue(self._check_lora_correctly_converted(model_from_pretrained))
+
+    def test_peft_add_adapter_modules_to_save(self):
+        """
+        Simple test that tests if `add_adapter` works as expected when training with
+        modules to save.
+        """
+        from peft import LoraConfig
+        from peft.utils import ModulesToSaveWrapper
+
+        for model_id in self.transformers_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                dummy_input = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device)
+
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_config = LoraConfig(init_lora_weights=False, modules_to_save=["lm_head"])
+                model.add_adapter(peft_config)
+                self._check_lora_correctly_converted(model)
+
+                _has_modules_to_save_wrapper = False
+                for name, module in model.named_modules():
+                    if isinstance(module, ModulesToSaveWrapper):
+                        _has_modules_to_save_wrapper = True
+                        self.assertTrue(module.modules_to_save.default.weight.requires_grad)
+                        self.assertTrue("lm_head" in name)
+                        break
+
+                self.assertTrue(_has_modules_to_save_wrapper)
+                state_dict = model.get_adapter_state_dict()
+
+                self.assertTrue("lm_head.weight" in state_dict.keys())
+
+                logits = model(dummy_input).logits
+                loss = logits.mean()
+                loss.backward()
+
+                for _, param in model.named_parameters():
+                    if param.requires_grad:
+                        self.assertTrue(param.grad is not None)
 
     def test_peft_add_adapter_training_gradient_checkpointing(self):
         """
@@ -312,6 +351,83 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # dummy generation
                 _ = peft_model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
 
+    @require_torch_gpu
+    def test_peft_save_quantized(self):
+        """
+        Simple test that tests the basic usage of PEFT model save_pretrained with quantized base models
+        """
+        # 4bit
+        for model_id in self.peft_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                peft_model = transformers_class.from_pretrained(model_id, load_in_4bit=True, device_map="auto")
+
+                module = peft_model.model.decoder.layers[0].self_attn.v_proj
+                self.assertTrue(module.__class__.__name__ == "Linear4bit")
+                self.assertTrue(peft_model.hf_device_map is not None)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    peft_model.save_pretrained(tmpdirname)
+                    self.assertTrue("adapter_model.safetensors" in os.listdir(tmpdirname))
+                    self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
+                    self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
+                    self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
+
+        # 8-bit
+        for model_id in self.peft_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                peft_model = transformers_class.from_pretrained(model_id, load_in_8bit=True, device_map="auto")
+
+                module = peft_model.model.decoder.layers[0].self_attn.v_proj
+                self.assertTrue(module.__class__.__name__ == "Linear8bitLt")
+                self.assertTrue(peft_model.hf_device_map is not None)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    peft_model.save_pretrained(tmpdirname)
+
+                    self.assertTrue("adapter_model.safetensors" in os.listdir(tmpdirname))
+                    self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
+                    self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
+                    self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
+
+    @require_torch_gpu
+    def test_peft_save_quantized_regression(self):
+        """
+        Simple test that tests the basic usage of PEFT model save_pretrained with quantized base models
+        Regression test to make sure everything works as expected before the safetensors integration.
+        """
+        # 4bit
+        for model_id in self.peft_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                peft_model = transformers_class.from_pretrained(model_id, load_in_4bit=True, device_map="auto")
+
+                module = peft_model.model.decoder.layers[0].self_attn.v_proj
+                self.assertTrue(module.__class__.__name__ == "Linear4bit")
+                self.assertTrue(peft_model.hf_device_map is not None)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    peft_model.save_pretrained(tmpdirname, safe_serialization=False)
+                    self.assertTrue("adapter_model.bin" in os.listdir(tmpdirname))
+                    self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
+                    self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
+                    self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
+
+        # 8-bit
+        for model_id in self.peft_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                peft_model = transformers_class.from_pretrained(model_id, load_in_8bit=True, device_map="auto")
+
+                module = peft_model.model.decoder.layers[0].self_attn.v_proj
+                self.assertTrue(module.__class__.__name__ == "Linear8bitLt")
+                self.assertTrue(peft_model.hf_device_map is not None)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    peft_model.save_pretrained(tmpdirname, safe_serialization=False)
+
+                    self.assertTrue("adapter_model.bin" in os.listdir(tmpdirname))
+                    self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
+                    self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
+                    self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
+
     def test_peft_pipeline(self):
         """
         Simple test that tests the basic usage of PEFT model + pipeline
@@ -351,3 +467,30 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 # dummy generation
                 _ = model.generate(input_ids=dummy_input)
+
+    def test_peft_from_pretrained_hub_kwargs(self):
+        """
+        Tests different combinations of PEFT model + from_pretrained + hub kwargs
+        """
+        peft_model_id = "peft-internal-testing/tiny-opt-lora-revision"
+
+        # This should not work
+        with self.assertRaises(OSError):
+            _ = AutoModelForCausalLM.from_pretrained(peft_model_id)
+
+        adapter_kwargs = {"revision": "test"}
+
+        # This should work
+        model = AutoModelForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
+        self.assertTrue(self._check_lora_correctly_converted(model))
+
+        model = OPTForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
+        self.assertTrue(self._check_lora_correctly_converted(model))
+
+        adapter_kwargs = {"revision": "main", "subfolder": "test_subfolder"}
+
+        model = AutoModelForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
+        self.assertTrue(self._check_lora_correctly_converted(model))
+
+        model = OPTForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
+        self.assertTrue(self._check_lora_correctly_converted(model))

@@ -39,7 +39,7 @@ def find_adapter_config_file(
     _commit_hash: Optional[str] = None,
 ) -> Optional[str]:
     r"""
-    Simply checks if the model stored on the Hub or locally is an adapter model or not, return the path the the adapter
+    Simply checks if the model stored on the Hub or locally is an adapter model or not, return the path of the adapter
     config file if it is, None otherwise.
 
     Args:

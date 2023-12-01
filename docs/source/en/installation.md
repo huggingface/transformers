@@ -169,28 +169,28 @@ Pretrained models are downloaded and locally cached at: `~/.cache/huggingface/hu
 
 ## Offline mode
 
-🤗 Transformers is able to run in a firewalled or offline environment by only using local files. Set the environment variable `TRANSFORMERS_OFFLINE=1` to enable this behavior.
+Run 🤗 Transformers in a firewalled or offline environment with locally cached files by setting the environment variable `TRANSFORMERS_OFFLINE=1`.
 
 <Tip>
 
-Add [🤗 Datasets](https://huggingface.co/docs/datasets/) to your offline training workflow by setting the environment variable `HF_DATASETS_OFFLINE=1`.
+Add [🤗 Datasets](https://huggingface.co/docs/datasets/) to your offline training workflow with the environment variable `HF_DATASETS_OFFLINE=1`.
 
 </Tip>
-
-For example, you would typically run a program on a normal network firewalled to external instances with the following command:
-
-```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-Run this same program in an offline instance with:
 
 ```bash
 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
 python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
-The script should now run without hanging or waiting to timeout because it knows it should only look for local files.
+This script should run without hanging or waiting to timeout because it won't attempt to download the model from the Hub.
+
+You can also bypass loading a model from the Hub from each [`~PreTrainedModel.from_pretrained`] call with the [`local_files_only`] parameter. When set to `True`, only local files are loaded:
+
+```py
+from transformers import T5Model
+
+model = T5Model.from_pretrained("./path/to/local/directory", local_files_only=True)
+```
 
 ### Fetch models and tokenizers to use offline
 

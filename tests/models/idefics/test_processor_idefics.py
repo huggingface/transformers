@@ -148,10 +148,9 @@ class IdeficsProcessorTest(TestCasePlus):
         processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         predicted_tokens = [
-            "<s>Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk>",
-            "<s>Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>",
+            "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk>",
+            "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>",
         ]
-
         prompts = [[prompt] for prompt in self.prepare_prompts()[2]]
         max_length = processor(prompts, padding="max_length", truncation=True, max_length=20)
         longest = processor(prompts, padding="longest", truncation=True, max_length=30)

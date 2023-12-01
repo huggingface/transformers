@@ -312,8 +312,12 @@ class PipelineTesterMixin:
                     yield copy.deepcopy(random.choice(examples))
 
             out = []
-            for item in pipeline(data(10), batch_size=4):
-                out.append(item)
+            if task == "conversational":
+                for item in pipeline(data(10), batch_size=4, max_new_tokens=5):
+                    out.append(item)
+            else:
+                for item in pipeline(data(10), batch_size=4):
+                    out.append(item)
             self.assertEqual(len(out), 10)
 
         run_batch_test(pipeline, examples)
@@ -502,8 +506,12 @@ def validate_test_components(test_case, task, model, tokenizer, processor):
     if tokenizer is not None:
         config_vocab_size = getattr(model.config, "vocab_size", None)
         # For CLIP-like models
-        if config_vocab_size is None and hasattr(model.config, "text_config"):
-            config_vocab_size = getattr(model.config.text_config, "vocab_size", None)
+        if config_vocab_size is None:
+            if hasattr(model.config, "text_config"):
+                config_vocab_size = getattr(model.config.text_config, "vocab_size", None)
+            elif hasattr(model.config, "text_encoder"):
+                config_vocab_size = getattr(model.config.text_encoder, "vocab_size", None)
+
         if config_vocab_size is None and model.config.__class__.__name__ not in CONFIG_WITHOUT_VOCAB_SIZE:
             raise ValueError(
                 "Could not determine `vocab_size` from model configuration while `tokenizer` is not `None`."

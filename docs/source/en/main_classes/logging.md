@@ -71,6 +71,23 @@ verbose to the most verbose), those levels (with their corresponding int values 
 
 By default, `tqdm` progress bars will be displayed during model download. [`logging.disable_progress_bar`] and [`logging.enable_progress_bar`] can be used to suppress or unsuppress this behavior.
 
+## `logging` vs `warnings`
+
+Python has two logging systems that are often used in conjunction: `logging`, which is explained above, and `warnings`,
+which allows further classification of warnings in specific buckets, e.g., `FutureWarning` for a feature or path
+that has already been deprecated and `DeprecationWarning` to indicate an upcoming deprecation.
+
+We use both in the `transformers` library. We leverage and adapt `logging`'s `captureWarning` method to allow
+management of these warning messages by the verbosity setters above.
+
+What does that mean for developers of the library? We should respect the following heuristic:
+- `warnings` should be favored for developers of the library and libraries dependent on `transformers`
+- `logging` should be used for end-users of the library using it in every-day projects
+
+See reference of the `captureWarnings` method below.
+
+[[autodoc]] logging.captureWarnings
+
 ## Base setters
 
 [[autodoc]] logging.set_verbosity_error

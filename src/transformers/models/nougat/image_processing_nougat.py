@@ -66,7 +66,7 @@ class NougatImageProcessor(BaseImageProcessor):
             `do_resize` in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 896, "width": 672}`):
             Size of the image after resizing. Can be overridden by `size` in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_thumbnail (`bool`, *optional*, defaults to `True`):
             Whether to resize the image using thumbnail method.

@@ -139,7 +139,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
             The token used for unknown charactor
         pad_token (`str`, *optional*, defaults to `"<|separator|>"`):
             The token used for padding
-        bos_token (`str`, *optional*, defaults to `"<|startoftext|>""`):
+        bos_token (`str`, *optional*, defaults to `"<|startoftext|>"`):
             The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
@@ -261,6 +261,12 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         A simple chat template that adds standard BOS, SEP and EOS tokens between messages while discarding role
         information.
         """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
         return (
             "{% for message in messages %}"
             "{% if not loop.first %}{{ bos_token}}{% endif %}"
@@ -369,7 +375,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
     ) -> BatchEncoding:
         # This tokenizer converts input text pairs into Prefix input and subsequent input
-        if type(batch_text_or_text_pairs[0]) is tuple or type(batch_text_or_text_pairs[0]) is list:
+        if isinstance(batch_text_or_text_pairs[0], tuple) or isinstance(tuple(batch_text_or_text_pairs[0]), list):
             # As a single text with an explicit un-prefix position
             batch_prefix_texts = []
             for pref, txt in batch_text_or_text_pairs:
