@@ -14,24 +14,20 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Perplexity of fixed-length models
+# Perplejidad de modelos de longitud fija
 
 [[open-in-colab]]
 
-Perplexity (PPL) is one of the most common metrics for evaluating language models. Before diving in, we should note
-that the metric applies specifically to classical language models (sometimes called autoregressive or causal language
-models) and is not well defined for masked language models like BERT (see [summary of the models](model_summary)).
+La perplejidad, perplexity en inglés (PPL), es una de las métricas más comunes para evaluar modelos de lenguaje. Antes de sumergirnos, debemos tener en cuenta que esta métrica se aplica específicamente a modelos de lenguaje clásicos (a veces llamados modelos autorregresivos o causales) y no está bien definida para modelos de lenguaje enmascarados como BERT (ver [resumen del modelo](model_summary)).
 
-Perplexity is defined as the exponentiated average negative log-likelihood of a sequence. If we have a tokenized
-sequence \\(X = (x_0, x_1, \dots, x_t)\\), then the perplexity of \\(X\\) is,
+La perplejidad se define como el logaritmo exponenciado del promedio de la log-verosimilitud negativa de una secuencia. Si tenemos una secuencia tokenizada \(X = (x_0, x_1, \dots, x_t)\), entonces la perplejidad de \(X\) es,
 
 $$\text{PPL}(X) = \exp \left\{ {-\frac{1}{t}\sum_i^t \log p_\theta (x_i|x_{<i}) } \right\}$$
 
-where \\(\log p_\theta (x_i|x_{<i})\\) is the log-likelihood of the ith token conditioned on the preceding tokens \\(x_{<i}\\) according to our model. Intuitively, it can be thought of as an evaluation of the model's ability to predict uniformly among the set of specified tokens in a corpus. Importantly, this means that the tokenization procedure has a direct impact on a model's perplexity which should always be taken into consideration when comparing different models.
+donde \\(\log p_\theta (x_i|x_{<i})\\) es el logaritmo de la verosimilitud del token i-ésimo condicionado a los tokens precedentes \\(x_{<i}\\) según nuestro modelo. De manera intuitiva, se puede pensar en esto como una evaluación de la capacidad del modelo para predecir de manera uniforme entre el conjunto de tokens especificados en un corpus. Es importante destacar que el procedimiento de tokenización tiene un impacto directo en la perplejidad de un modelo, lo cual siempre debe tenerse en cuenta al comparar diferentes modelos.
 
-This is also equivalent to the exponentiation of the cross-entropy between the data and model predictions. For more
-intuition about perplexity and its relationship to Bits Per Character (BPC) and data compression, check out this
-[fantastic blog post on The Gradient](https://thegradient.pub/understanding-evaluation-metrics-for-language-models/).
+Esto también es equivalente a la exponenciación de la entropía cruzada entre los datos y las predicciones del modelo. Para obtener más
+intuición sobre la perplejidad y su relación con los Bits Por Carácter (BPC) y la compresión de datos, echa un vistazo a esta [fantástica publicación en el blog de "The Gradient"](https://thegradient.pub/understanding-evaluation-metrics-for-language-models/).
 
 ## Calculating PPL with fixed-length models
 
