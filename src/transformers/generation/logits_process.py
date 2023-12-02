@@ -1536,6 +1536,8 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
             len(generate_config.forced_decoder_ids) + 1 if generate_config.forced_decoder_ids is not None else 1
         )
         self.max_initial_timestamp_index = getattr(generate_config, "max_initial_timestamp_index", None)
+        # TODO(Patrick, remove hardcoded setting)
+        self.max_initial_timestamp_index = 50
 
     def set_begin_index(self, begin_index):
         self.begin_index = begin_index
