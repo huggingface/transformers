@@ -49,9 +49,9 @@ En cambio, la PPL de modelos de longitud fija debería evaluarse con una estrate
 Esta es una aproximación más cercana a la verdadera descomposición de la probabilidad de la secuencia y generalmente dará como resultado una puntuación más favorable. La desventaja es que requiere un pase hacia adelante separado para cada token en el corpus. Un buen compromiso práctico es emplear una ventana deslizante estratificada, moviendo el contexto con pasos más grandes en lugar de deslizarse de 1 token a la vez. Esto permite que la computación avance mucho más rápido, mientras le da al modelo un contexto amplio para hacer
 predicciones en cada paso.
 
-## Example: Calculating perplexity with GPT-2 in 🤗 Transformers
+## Ejemplo: Cálculo de la perplejidad con GPT-2 en 🤗 Transformers
 
-Let's demonstrate this process with GPT-2.
+Demostremos este proceso con GPT-2.
 
 ```python
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast
@@ -62,9 +62,7 @@ model = GPT2LMHeadModel.from_pretrained(model_id).to(device)
 tokenizer = GPT2TokenizerFast.from_pretrained(model_id)
 ```
 
-We'll load in the WikiText-2 dataset and evaluate the perplexity using a few different sliding-window strategies. Since
-this dataset is small and we're just doing one forward pass over the set, we can just load and encode the entire
-dataset in memory.
+Carguemos el conjunto de datos WikiText-2 y evaluemos la perplejidad utilizando algunas estrategias de ventana deslizante diferentes. Dado que este conjunto de datos es pequeño y solo estamos realizando un pase hacia adelante sobre el conjunto, podemos cargar y codificar todo el conjunto de datos en la memoria.
 
 ```python
 from datasets import load_dataset
@@ -73,13 +71,7 @@ test = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
 encodings = tokenizer("\n\n".join(test["text"]), return_tensors="pt")
 ```
 
-With 🤗 Transformers, we can simply pass the `input_ids` as the `labels` to our model, and the average negative
-log-likelihood for each token is returned as the loss. With our sliding window approach, however, there is overlap in
-the tokens we pass to the model at each iteration. We don't want the log-likelihood for the tokens we're just treating
-as context to be included in our loss, so we can set these targets to `-100` so that they are ignored. The following
-is an example of how we could do this with a stride of `512`. This means that the model will have at least 512 tokens
-for context when calculating the conditional likelihood of any one token (provided there are 512 preceding tokens
-available to condition on).
+Con 🤗 Transformers, simplemente podemos pasar los `input_ids` como las `labels` a nuestro modelo, y el promedio del logaritmo de la verosimilitud negativa para cada token se devuelve como la pérdida. Sin embargo, con nuestro enfoque de ventana deslizante, hay superposición en los tokens que pasamos al modelo en cada iteración. No queremos que el logaritmo de la verosimilitud de los tokens que estamos tratando solo como contexto se incluya en nuestra pérdida, por lo que podemos establecer estos objetivos en `-100` para que se ignoren. El siguiente es un ejemplo de cómo podríamos hacer esto con un paso de `512`. Esto significa que el modelo tendrá al menos `512` tokens como contexto al calcular la verosimilitud condicional de cualquier token (siempre que haya `512` tokens precedentes disponibles para condicionar).
 
 ```python
 import torch
@@ -93,7 +85,7 @@ nlls = []
 prev_end_loc = 0
 for begin_loc in tqdm(range(0, seq_len, stride)):
     end_loc = min(begin_loc + max_length, seq_len)
-    trg_len = end_loc - prev_end_loc  # may be different from stride on last loop
+    trg_len = end_loc - prev_end_loc  # puede ser diferente del paso en el último bucle
     input_ids = encodings.input_ids[:, begin_loc:end_loc].to(device)
     target_ids = input_ids.clone()
     target_ids[:, :-trg_len] = -100
@@ -101,9 +93,9 @@ for begin_loc in tqdm(range(0, seq_len, stride)):
     with torch.no_grad():
         outputs = model(input_ids, labels=target_ids)
 
-        # loss is calculated using CrossEntropyLoss which averages over valid labels
-        # N.B. the model only calculates loss over trg_len - 1 labels, because it internally shifts the labels
-        # to the left by 1.
+        # la pérdida se calcula utilizando CrossEntropyLoss, que promedia las etiquetas válidas
+        # N.B. el modelo solo calcula la pérdida sobre trg_len - 1 etiquetas, porque desplaza las etiqueta internamente
+        # a la izquierda por 1.
         neg_log_likelihood = outputs.loss
 
     nlls.append(neg_log_likelihood)
@@ -115,11 +107,10 @@ for begin_loc in tqdm(range(0, seq_len, stride)):
 ppl = torch.exp(torch.stack(nlls).mean())
 ```
 
-Running this with the stride length equal to the max input length is equivalent to the suboptimal, non-sliding-window
-strategy we discussed above. The smaller the stride, the more context the model will have in making each prediction,
-and the better the reported perplexity will typically be.
+Ejecuta esto con la longitud de paso igual a la longitud máxima de entrada es equivalente a la estrategia sub óptima,
+sin ventana deslizante, que discutimos anteriormente. Cuanto menor sea el paso, más contexto tendrá el modelo para
+realizar cada predicción y, por lo general, mejor será la perplejidad informada.
 
-When we run the above with `stride = 1024`, i.e. no overlap, the resulting PPL is `19.44`, which is about the same
-as the `19.93` reported in the GPT-2 paper. By using `stride = 512` and thereby employing our striding window
-strategy, this jumps down to `16.45`. This is not only a more favorable score, but is calculated in a way that is
-closer to the true autoregressive decomposition of a sequence likelihood.
+Cuando ejecutamos lo anterior con `stride = 1024`, es decir, sin superposición, la PPL resultante es `19.44`, que es
+aproximadamente la misma que la `19.93` informada en el artículo de GPT-2. Al utilizar `stride = 512` y, por lo tanto,
+emplear nuestra estrategia de ventana deslizante, esto disminuye a `16.45`. Esto no solo es una puntuación más favorable, sino que se calcula de una manera más cercana a la verdadera descomposición autorregresiva de la probabilidad de una secuencia.
