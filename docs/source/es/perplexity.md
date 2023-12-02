@@ -26,42 +26,28 @@ $$\text{PPL}(X) = \exp \left\{ {-\frac{1}{t}\sum_i^t \log p_\theta (x_i|x_{<i}) 
 
 donde \\(\log p_\theta (x_i|x_{<i})\\) es el logaritmo de la verosimilitud del token i-ésimo condicionado a los tokens precedentes \\(x_{<i}\\) según nuestro modelo. De manera intuitiva, se puede pensar en esto como una evaluación de la capacidad del modelo para predecir de manera uniforme entre el conjunto de tokens especificados en un corpus. Es importante destacar que el procedimiento de tokenización tiene un impacto directo en la perplejidad de un modelo, lo cual siempre debe tenerse en cuenta al comparar diferentes modelos.
 
-Esto también es equivalente a la exponenciación de la entropía cruzada entre los datos y las predicciones del modelo. Para obtener más
-intuición sobre la perplejidad y su relación con los Bits Por Carácter (BPC) y la compresión de datos, echa un vistazo a esta [fantástica publicación en el blog de "The Gradient"](https://thegradient.pub/understanding-evaluation-metrics-for-language-models/).
+Esto también es equivalente a la exponenciación de la entropía cruzada entre los datos y las predicciones del modelo. Para obtener más intuición sobre la perplejidad y su relación con los Bits Por Carácter (BPC) y la compresión de datos, echa un vistazo a esta [fantástica publicación en el blog de "The Gradient"](https://thegradient.pub/understanding-evaluation-metrics-for-language-models/).
 
-## Calculating PPL with fixed-length models
+## Cálculo de PPL con modelos de longitud fija
 
-If we weren't limited by a model's context size, we would evaluate the model's perplexity by autoregressively
-factorizing a sequence and conditioning on the entire preceding subsequence at each step, as shown below.
+Si no estuviéramos limitados por el tamaño del contexto de un modelo, evaluaríamos la perplejidad (PPL) del modelo auto regresivamente factorizando una secuencia y condicionándonos en toda la subsecuencia precedente en cada paso, como se muestra a continuación.
 
 <img width="600" alt="Full decomposition of a sequence with unlimited context length" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/ppl_full.gif"/>
 
-When working with approximate models, however, we typically have a constraint on the number of tokens the model can
-process. The largest version of [GPT-2](model_doc/gpt2), for example, has a fixed length of 1024 tokens, so we
-cannot calculate \\(p_\theta(x_t|x_{<t})\\) directly when \\(t\\) is greater than 1024.
+Sin embargo, al trabajar con modelos aproximados, generalmente tenemos una restricción en la cantidad de tokens que el modelo puede procesar. La versión más grande de [GPT-2](model_doc/gpt2), por ejemplo, tiene una longitud fija de 1024 tokens, por lo que no podemos calcular \\(p_\theta(x_t|x_{<t})\\) directamente cuando \\(t\\) es mayor que 1024.
 
-Instead, the sequence is typically broken into subsequences equal to the model's maximum input size. If a model's max
-input size is \\(k\\), we then approximate the likelihood of a token \\(x_t\\) by conditioning only on the
-\\(k-1\\) tokens that precede it rather than the entire context. When evaluating the model's perplexity of a
-sequence, a tempting but suboptimal approach is to break the sequence into disjoint chunks and add up the decomposed
-log-likelihoods of each segment independently.
+En cambio, la secuencia se divide típicamente en subsecuencias iguales al tamaño máximo de entrada del modelo. Si el tamaño máximo de entrada, de un modelo es \\(k\\), entonces aproximamos la probabilidad de un token \\(x_t\\) condicionándonos solo en los \\(k-1\\) tokens que lo preceden en lugar de todo el contexto. Al evaluar la perplejidad del modelo en una secuencia, un enfoque tentador pero sub óptimo es dividir la secuencia en fragmentos independientes y sumar los logaritmos de la verosimilitud descompuestas de cada segmento de manera independiente.
 
 <img width="600" alt="Suboptimal PPL not taking advantage of full available context" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/ppl_chunked.gif"/>
 
-This is quick to compute since the perplexity of each segment can be computed in one forward pass, but serves as a poor
-approximation of the fully-factorized perplexity and will typically yield a higher (worse) PPL because the model will
-have less context at most of the prediction steps.
+Esto es rápido de calcular, ya que la perplejidad de cada segmento se puede calcular en un solo pase hacia adelante, pero sirve como una aproximación pobre de la perplejidad completamente factorizada y generalmente dará como resultado una PPL más alta (peor) porque el modelo tendrá menos contexto en la mayoría de los pasos de predicción.
 
-Instead, the PPL of fixed-length models should be evaluated with a sliding-window strategy. This involves repeatedly
-sliding the context window so that the model has more context when making each prediction.
+En cambio, la PPL de modelos de longitud fija debería evaluarse con una estrategia de ventana deslizante. Esto implica deslizar repetidamente la ventana de contexto para que el modelo tenga más contexto al hacer cada predicción.
 
 <img width="600" alt="Sliding window PPL taking advantage of all available context" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/ppl_sliding.gif"/>
 
-This is a closer approximation to the true decomposition of the sequence probability and will typically yield a more
-favorable score. The downside is that it requires a separate forward pass for each token in the corpus. A good
-practical compromise is to employ a strided sliding window, moving the context by larger strides rather than sliding by
-1 token a time. This allows computation to proceed much faster while still giving the model a large context to make
-predictions at each step.
+Esta es una aproximación más cercana a la verdadera descomposición de la probabilidad de la secuencia y generalmente dará como resultado una puntuación más favorable. La desventaja es que requiere un pase hacia adelante separado para cada token en el corpus. Un buen compromiso práctico es emplear una ventana deslizante estratificada, moviendo el contexto con pasos más grandes en lugar de deslizarse de 1 token a la vez. Esto permite que la computación avance mucho más rápido, mientras le da al modelo un contexto amplio para hacer
+predicciones en cada paso.
 
 ## Example: Calculating perplexity with GPT-2 in 🤗 Transformers
 
