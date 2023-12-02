@@ -34,7 +34,8 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
-
+from torch.nn import CrossEntropyLoss
+from .processing_clip import CLIPProcessor
 
 logger = logging.get_logger(__name__)
 
