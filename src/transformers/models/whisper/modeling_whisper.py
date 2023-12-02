@@ -1740,7 +1740,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         task=None,
         language=None,
         is_multilingual=None,
-        condition_on_previous_tokens: Optional[bool] = None,
+        condition_on_prev_tokens: Optional[bool] = None,
         prompt_ids: Optional[torch.Tensor] = None,
         num_segment_frames: Optional[int] = None,
         return_token_timestamps: Optional[bool] = None,
@@ -2144,10 +2144,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             return outputs
 
-        condition_on_previous_tokens = (
-            condition_on_previous_tokens
-            if condition_on_previous_tokens is not None
-            else getattr(self.generation_config, "condition_on_previous_tokens", False)
+        condition_on_prev_tokens = (
+            condition_on_prev_tokens
+            if condition_on_prev_tokens is not None
+            else getattr(self.generation_config, "condition_on_prev_tokens", False)
         )
 
         # 6. Else we're in longform mode which is more complex. We need to chunk the audio input depending on when the model generated
@@ -2235,7 +2235,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             one_tensor = torch.ones((cur_bsz, 1), device=segment_input.device, dtype=torch.long)
             decoder_input_ids = torch.cat([t * one_tensor for t in init_tokens], dim=-1)
 
-            if condition_on_previous_tokens and len(current_segments[0]) > 0:
+            if condition_on_prev_tokens and len(current_segments[0]) > 0:
                 # according to https://github.com/openai/whisper/blob/e58f28804528831904c3b6f2c0e473f346223433/whisper/decoding.py#L609
                 cut_off_length = self.config.max_target_positions // 2 - 1
                 active_segments = [current_segments[i] for i in new_cur_to_prev_index_map]
@@ -2348,7 +2348,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 current_segments[prev_i] += segments
                 seek[prev_i] += segment_offset
 
-            print(seek)
+            # print(seek)
 
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
@@ -2425,14 +2425,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             if single_timestamp_ending:
                 # single timestamp at the end means no speech after the last timestamp.
                 segment_offset = seek_num_frames[prev_idx]
-                print("single timestamp")
+                # print("single timestamp")
             else:
                 # otherwise, ignore the unfinished segment and seek to the last timestamp
                 # here we throw away all predictions after the last predicted "end of segment"
                 # since we are cutting right in the middle of an audio
                 last_timestamp_pos = seek_sequence[last_slice].item() - timestamp_begin
                 segment_offset = last_timestamp_pos * input_stride
-                print("cut")
+                # print("cut")
         else:
             # If whisper does not predict any "end of segment" token, then
             # the whole decoding is considered a segment and we add it to the list of segments
@@ -2451,7 +2451,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 }
             ]
             segment_offset = seek_num_frames[prev_idx]
-            print("all")
+            # print("all")
 
         return segments, segment_offset
 

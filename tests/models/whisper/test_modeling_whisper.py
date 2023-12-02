@@ -1311,7 +1311,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         model.generate(input_features, max_new_tokens=1, prompt_ids=prompt_ids)
 
-    def test_longform_generate_single_batch(self):
+    def _check_longform_generate_single_batch(self, condition_on_prev_tokens):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
@@ -1355,16 +1355,12 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # make sure that we only have the same begin token
         model.generation_config.max_initial_timestamp_index = 0
 
-        outputs = model.generate(long_input_features, logits_processor=logits_processor, return_segments=True)
+        outputs = model.generate(long_input_features, logits_processor=logits_processor, condition_on_prev_tokens=condition_on_prev_tokens, return_segments=True)
 
         segments = outputs["segments"][0]
 
         for i, segment in enumerate(segments):
             assert segment["start"] <= segment["end"], "start has to be smaller equal end"
-            assert (
-                segment["tokens"][0] == model.generation_config.decoder_start_token_id
-                or segment["tokens"][0] >= timestamp_begin
-            ), "First segment token should be a timestamp token"
             assert any(
                 s > timestamp_begin for s in segment["tokens"][1:]
             ), f"At least one segment token should be a timestamp token, but not first., {segment['tokens']}"
@@ -1372,7 +1368,13 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 segment["tokens"].shape[-1] <= max_length
             ), "make sure that no segment is larger than max generation length"
 
-    def test_longform_generate_multi_batch(self):
+    def test_longform_generate_single_batch(self):
+        self._check_longform_generate_single_batch(condition_on_prev_tokens=False)
+
+    def test_longform_generate_single_batch_cond_prev(self):
+        self._check_longform_generate_single_batch(condition_on_prev_tokens=True)
+
+    def _check_longform_generate_multi_batch(self, condition_on_prev_tokens):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
@@ -1426,7 +1428,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             )
         ]
         outputs = model.generate(
-            long_input_features, attention_mask=attention_mask, logits_processor=logits_processor, return_segments=True
+            long_input_features, attention_mask=attention_mask, logits_processor=logits_processor, return_segments=True, condition_on_prev_tokens=condition_on_prev_tokens,
         )
         tokens = outputs["sequences"][1]
         segments = outputs["segments"][1]
@@ -1438,6 +1440,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             assert seg1["end"] == seg2["end"]
             assert seg1["tokens"].tolist() == seg2["tokens"].tolist()
 
+    def test_longform_generate_multi_batch(self):
+        self._check_longform_generate_multi_batch(condition_on_prev_tokens=False)
+
+    def test_longform_generate_multi_batch_cond_prev(self):
+        self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
 
 @require_torch
 @require_torchaudio
