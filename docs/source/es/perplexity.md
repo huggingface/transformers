@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Perplejidad de modelos de longitud fija
+# Perplejidad de los modelos de longitud fija
 
 [[open-in-colab]]
 
