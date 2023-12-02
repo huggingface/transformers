@@ -90,7 +90,10 @@ if is_torch_neuroncore_available(check_device=False):
             import torch_xla.distributed.xla_backend as xbn
 
             if not isinstance(dist.group.WORLD, xbn.ProcessGroupXla):
-                dist.init_process_group(backend="xla")
+                if version.parse(torch.__version__) >= version.parse("2.1"):
+                    dist.init_process_group(backend="xla", init_method="xla://")
+                else:
+                    dist.init_process_group(backend="xla")
                 if not isinstance(dist.group.WORLD, xbn.ProcessGroupXla):
                     raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
 
