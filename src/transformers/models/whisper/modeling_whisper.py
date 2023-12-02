@@ -2313,8 +2313,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             else:
                 seek_sequences = seek_outputs
 
-            if decoder_input_ids is not None:
-                seek_sequences = seek_sequences[:, decoder_input_ids.shape[-1] :]
+            if condition_on_prev_tokens is not None:
+                # remove all previously passed decoder input ids except start token
+                seek_sequences = seek_sequences[:, decoder_input_ids.shape[-1] - 1:]
 
             # print("hf tokens", seek_sequences)
             # import ipdb; ipdb.set_trace()
