@@ -22,7 +22,7 @@ class SuperPointConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        conv_layers_sizes (`List[int]`, *optional*, defaults to `[64, 64, 128, 128, 256]`):
+        hidden_sizes (`List[int]`, *optional*, defaults to `[64, 64, 128, 128, 256]`):
             The number of channels in each convolutional layer.
         descriptor_dim (`int`, *optional*, defaults to 256):
             The dimension of the descriptor.
@@ -52,7 +52,7 @@ class SuperPointConfig(PretrainedConfig):
 
     def __init__(
         self,
-        conv_layers_sizes: List[int] = [64, 64, 128, 128, 256],
+        hidden_sizes: List[int] = [64, 64, 128, 128, 256],
         descriptor_dim: int = 256,
         keypoint_threshold: float = 0.005,
         max_keypoints: int = -1,
@@ -61,7 +61,7 @@ class SuperPointConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        self.conv_layers_sizes = conv_layers_sizes
+        self.hidden_sizes = hidden_sizes
         self.descriptor_dim = descriptor_dim
         self.keypoint_threshold = keypoint_threshold
         self.max_keypoints = max_keypoints

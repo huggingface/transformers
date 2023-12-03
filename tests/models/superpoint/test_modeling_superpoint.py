@@ -33,7 +33,7 @@ class SuperPointModelTester:
         batch_size=3,
         image_width=640,
         image_height=480,
-        conv_layers_sizes: List[int] = [64, 64, 128, 128, 256],
+        hidden_sizes: List[int] = [64, 64, 128, 128, 256],
         descriptor_dim: int = 256,
         keypoint_threshold: float = 0.005,
         max_keypoints: int = -1,
@@ -44,7 +44,7 @@ class SuperPointModelTester:
         self.batch_size = batch_size
         self.image_width = image_width
         self.image_height = image_height
-        self.conv_layers_sizes = conv_layers_sizes
+        self.hidden_sizes = hidden_sizes
         self.descriptor_dim = descriptor_dim
         self.keypoint_threshold = keypoint_threshold
         self.max_keypoints = max_keypoints
@@ -59,7 +59,7 @@ class SuperPointModelTester:
 
     def get_config(self):
         return SuperPointConfig(
-            conv_layers_sizes=self.conv_layers_sizes,
+            hidden_sizes=self.hidden_sizes,
             descriptor_dim=self.descriptor_dim,
             keypoint_threshold=self.keypoint_threshold,
             max_keypoints=self.max_keypoints,

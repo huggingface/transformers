@@ -10,7 +10,7 @@ from transformers import SuperPointConfig, SuperPointImageProcessor, SuperPointM
 
 def get_superpoint_config():
     config = SuperPointConfig(
-        conv_layers_sizes=[64, 64, 128, 128, 256],
+        hidden_sizes=[64, 64, 128, 128, 256],
         descriptor_dim=256,
         keypoint_threshold=0.005,
         max_keypoints=-1,
