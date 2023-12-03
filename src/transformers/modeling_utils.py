@@ -2101,7 +2101,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 state_dict = {}
                 placeholders = []
                 module_map = {}
-                for name, module in model.named_modules():
+                for name, module in model_to_save.named_modules():
                     if name == "":
                         continue
                     module_state_dict = module.state_dict()
