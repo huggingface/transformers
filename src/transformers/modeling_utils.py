@@ -2138,7 +2138,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ptrs[id(tensor)].append(name)
 
             # These are all the pointers of shared tensors.
-            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1 and ptr[0].device.type != 'meta'}
+            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1 and ptr[0] != torch.device("meta")}
             print (shared_ptrs)
             warn_names = set()
             for names in shared_ptrs.values():
