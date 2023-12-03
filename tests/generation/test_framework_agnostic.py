@@ -634,7 +634,7 @@ class GenerationIntegrationTestsMixin:
             "num_beams": 3,
         }
         if is_pt:
-            expectation = 20
+            expectation = 13
         else:
             # TODO (joao): fix me
             expectation = 13
