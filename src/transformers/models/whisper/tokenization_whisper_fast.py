@@ -17,9 +17,11 @@ import json
 import os
 import re
 from functools import lru_cache
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
+import tensorflow as tf
+import torch
 from tokenizers import AddedToken, pre_tokenizers, processors
 
 from ...tokenization_utils_base import BatchEncoding
@@ -608,9 +610,20 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
     @staticmethod
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._strip_prompt
-    def _strip_prompt(token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
-        has_prompt = isinstance(token_ids, list) and token_ids and token_ids[0] == prompt_token_id
+    def _strip_prompt(
+        self,
+        token_ids: Union[List[int], np.ndarray, torch.Tensor, tf.Tensor],
+        prompt_token_id: int,
+        decoder_start_token_id: int,
+    ):
+        has_prompt = (
+            isinstance(token_ids, (List[int], np.ndarray, torch.Tensor, tf.Tensor))
+            and token_ids
+            and token_ids[0] == prompt_token_id
+        )
         if has_prompt:
+            if not isinstance(token_ids, list):
+                token_ids = self._convert_to_list(token_ids)
             if decoder_start_token_id in token_ids:
                 return token_ids[token_ids.index(decoder_start_token_id) :]
             else:
