@@ -50,7 +50,7 @@ class LlavaProcessor(ProcessorMixin):
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
-        tokenizer.add_tokens(AddedToken("<image>", special = True, normalized = False))
+        tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False))
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
 
@@ -58,7 +58,10 @@ class LlavaProcessor(ProcessorMixin):
         self,
         text=None,
         images=None,
+        padding=None,
+        truncation=None,
         transform: Callable = None,
+        max_length=None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchEncoding:
         """This method takes batched or non-batched text made of text and images and converts them into text that
@@ -85,14 +88,6 @@ class LlavaProcessor(ProcessorMixin):
                 A custom transform function that accepts a single image can be passed for training. For example,
                 `torchvision.Compose` can be used to compose multiple functions. If `None` a preset inference-specific
                 set of transforms will be applied to the images
-            add_eos_token (`bool`, *optional*, defaults to `False`):
-                Adds `eos_token` at the end of the final prompt if True`
-            add_end_of_utterance_token (`bool`, *optional*)
-                Whether to automatically add `<end_of_utterance>` after each prompt's text input (unless followed by an
-                image). If `None` the tokenizer will be checked instead and if this token is found in
-                `additional_special_tokens` then the value will be `True`.
-            debug (`bool`, *optional*, defaults to `False`):
-                `True` value will help debug prompt generation by dumping useful information
             return_tensors (`str` or `TensorType`, *optional*, defaults to `TensorType.PYTORCH`):
                 The type of tensors to return. Can be one of:
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
@@ -115,7 +110,7 @@ class LlavaProcessor(ProcessorMixin):
             pixel_values = None
 
         # Attention mask have to be created later on? Or not?
-        text_inputs = self.tokenizer(text, return_tensors=return_tensors)
+        text_inputs = self.tokenizer(text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length)
 
         return BatchFeature(data={**text_inputs,"pixel_values": pixel_values})
 

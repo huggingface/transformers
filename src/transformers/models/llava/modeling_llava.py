@@ -283,16 +283,27 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         # 1. Create a mask to know where image tokens are
         image_token_mask = (input_ids == self.config.image_token_index)
         num_image_tokens = torch.sum(image_token_mask, dim = -1)
-        max_embed_dim = num_image_tokens.max()
-        
-        # 2. Create the full embedding
-        final_embedding = torch.zeros(input_ids.shape[0], self.config.text_config.max_position_embeddings, input_embeds.shape[-1])
-        nb_text_tokens_per_images = image_features.shape[1]-1
-        
+        nb_text_tokens_per_images = image_features.shape[1]
+
+        # 2. Compute the positions where text should be written
+        text_to_overwrite = torch.cumsum(image_token_mask*nb_text_tokens_per_images + 1, -1)-1
+
+        # 3. Create the full embedding, already padded to the maximum position
+        max_embed_dim = text_to_overwrite.max()
+        final_embedding = torch.zeros(input_ids.shape[0], max_embed_dim+1, input_embeds.shape[-1])
+
         # 3. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"] 
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
-        final_embedding[:, torch.cumsum(image_token_mask*nb_text_tokens_per_images + 1, -1)] = input_embeds
-        final_embedding[:, torch.range(0, image_features.shape[1], dtype=torch.long) * num_image_tokens] = image_features.split(num_image_tokens)[0]
+        final_embedding.scatter_(-2, text_to_overwrite.unsqueeze(2).expand_as(input_embeds), input_embeds)
+
+        # equivalent to
+        # batch_indices = torch.arange(final_embedding.size(0)).view(-1, 1).expand_as(text_to_overwrite)
+        # final_embedding[batch_indices,text_to_overwrite] = input_embeds # we also right on the start image token
+
+        # 4. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling (apart from the padding)
+        image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
+        image_to_overwrite &= image_to_overwrite.cumsum(-1)  <= (num_image_tokens * nb_text_tokens_per_images)[:, None]
+        final_embedding[image_to_overwrite] = image_features
         # We can have multiple images in a single batch, hence we use different
         # indexes for image and text.
         return input_embeds, attention_mask, position_ids
