@@ -2216,9 +2216,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             state_dict[root + f".{m_key}"] = params
                     module._hf_hook.post_forward(module, torch.tensor([]))
 
-            # transform shard state dict to shard
+            # transform shard's state dict back to single shard
             shard, index = shard_checkpoint(state_dict)
-            #save shard
+            name = shard.keys()[0] # will have one name
+            shard = shard[name]
 
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
