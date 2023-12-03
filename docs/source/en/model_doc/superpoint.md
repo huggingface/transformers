@@ -20,7 +20,12 @@ rendered properly in your Markdown viewer.
 The SuperPoint model was proposed
 in [SuperPoint: Self-Supervised Interest Point Detection and Description](https://arxiv.org/abs/1712.07629) by Daniel
 DeTone, Tomasz Malisiewicz and Andrew Rabinovich.
-<INSERT SHORT SUMMARY HERE>
+
+This model is the result of a self-supervised training of a fully-convolutional network for interest point detection and
+description. The model is able to detect interest points that are repeatable under homographic transformations and
+provide a descriptor for each point. The use of the model in its own is limited, but it can be used as a feature
+extractor for other tasks such as homography estimation, image matching, etc.
+
 
 The abstract from the paper is the following:
 
@@ -33,6 +38,29 @@ synthetic-to-real). Our model, when trained on the MS-COCO generic image dataset
 to repeatedly detect a much richer set of interest points than the initial pre-adapted deep model and any other
 traditional corner detector. The final system gives rise to state-of-the-art homography estimation results on HPatches
 when compared to LIFT, SIFT and ORB.*
+
+## How to use
+
+Here is a quick example of using the model to detect interest points in an image:
+
+```python
+>>> from transformers import AutoImageProcessor, AutoModel
+>>> import torch
+>>> from PIL import Image
+>>> import requests
+
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/superpoint")
+>>> model = AutoModel.from_pretrained("stevenbucaille/superpoint")
+
+>>> inputs = processor(image, return_tensors="pt")
+>>> outputs = model(**inputs)
+```
+
+The outputs are a 
+
 
 Tips:
 

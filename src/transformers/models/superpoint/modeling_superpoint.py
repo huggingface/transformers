@@ -39,58 +39,58 @@ class SuperPointEncoder(nn.Module):
 
     def __init__(self, config: SuperPointConfig) -> None:
         super().__init__()
-        self.conv_layers_sizes = config.conv_layers_sizes
+        self.hidden_sizes = config.hidden_sizes
         self.descriptor_dim = config.descriptor_dim
 
         self.relu = nn.ReLU(inplace=True)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
-        self.conv1a = nn.Conv2d(1, self.conv_layers_sizes[0], kernel_size=3, stride=1, padding=1)
+        self.conv1a = nn.Conv2d(1, self.hidden_sizes[0], kernel_size=3, stride=1, padding=1)
         self.conv1b = nn.Conv2d(
-            self.conv_layers_sizes[0],
-            self.conv_layers_sizes[0],
+            self.hidden_sizes[0],
+            self.hidden_sizes[0],
             kernel_size=3,
             stride=1,
             padding=1,
         )
         self.conv2a = nn.Conv2d(
-            self.conv_layers_sizes[0],
-            self.conv_layers_sizes[1],
+            self.hidden_sizes[0],
+            self.hidden_sizes[1],
             kernel_size=3,
             stride=1,
             padding=1,
         )
         self.conv2b = nn.Conv2d(
-            self.conv_layers_sizes[1],
-            self.conv_layers_sizes[1],
+            self.hidden_sizes[1],
+            self.hidden_sizes[1],
             kernel_size=3,
             stride=1,
             padding=1,
         )
         self.conv3a = nn.Conv2d(
-            self.conv_layers_sizes[1],
-            self.conv_layers_sizes[2],
+            self.hidden_sizes[1],
+            self.hidden_sizes[2],
             kernel_size=3,
             stride=1,
             padding=1,
         )
         self.conv3b = nn.Conv2d(
-            self.conv_layers_sizes[2],
-            self.conv_layers_sizes[2],
+            self.hidden_sizes[2],
+            self.hidden_sizes[2],
             kernel_size=3,
             stride=1,
             padding=1,
         )
         self.conv4a = nn.Conv2d(
-            self.conv_layers_sizes[2],
-            self.conv_layers_sizes[3],
+            self.hidden_sizes[2],
+            self.hidden_sizes[3],
             kernel_size=3,
             stride=1,
             padding=1,
         )
         self.conv4b = nn.Conv2d(
-            self.conv_layers_sizes[3],
-            self.conv_layers_sizes[3],
+            self.hidden_sizes[3],
+            self.hidden_sizes[3],
             kernel_size=3,
             stride=1,
             padding=1,
