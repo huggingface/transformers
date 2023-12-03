@@ -2091,6 +2091,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 current_peft_config = self.peft_config[active_adapter]
                 current_peft_config.save_pretrained(save_directory)
 
+        # for offloaded modules
+        module_map = {}
+        
         # Save the model
         if state_dict is None:
             # if model parameters are offloaded, onload and send state dicts to CPU
@@ -2099,8 +2102,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 and isinstance(model_to_save._hf_hook, AlignDevicesHook)
             ):
                 state_dict = {}
-                placeholders = []
-                module_map = {}
                 for name, module in model_to_save.named_modules():
                     if name == "":
                         continue
@@ -2139,7 +2140,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # These are all the pointers of shared tensors.
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1 and ptr[0] != torch.device("meta")}
-            print (shared_ptrs)
             warn_names = set()
             for names in shared_ptrs.values():
                 # Removing the keys which are declared as known duplicates on
@@ -2206,7 +2206,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             state_dict = {name:'' for name in shard}
             # extract data for shard state dict
             for key in state_dict.keys():
-                if hasattr(module_map[key], "_hf_hook") and isinstance(module_map[key]._hf_hook, AlignDevicesHook):
+                if module_map and hasattr(module_map[key], "_hf_hook") and isinstance(module_map[key]._hf_hook, AlignDevicesHook):
                     original_values[key] = state_dict[key]
                     module = (module_map[key])
                     root = key[:key.rfind('.')]
