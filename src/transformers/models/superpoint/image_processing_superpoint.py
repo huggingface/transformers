@@ -63,14 +63,16 @@ def convert_to_grayscale(
     Args:
         image (Image):
             The image to convert.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format for the input image.
     """
     requires_backends(convert_to_grayscale, ["vision"])
 
     if isinstance(image, np.ndarray):
-        if input_data_format == ChannelDimension.FIRST or input_data_format == "channels_first":
+        if input_data_format == ChannelDimension.FIRST:
             gray_image = image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
             gray_image = np.stack([gray_image] * 3, axis=0)
-        elif input_data_format == ChannelDimension.LAST or input_data_format == "channels_last":
+        elif input_data_format == ChannelDimension.LAST:
             gray_image = image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
             gray_image = np.stack([gray_image] * 3, axis=-1)
         return gray_image
