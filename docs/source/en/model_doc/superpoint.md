@@ -47,7 +47,8 @@ The original code can be found [here](https://github.com/magicleap/SuperPointPre
 
 ## SuperPointImageProcessor
 
-[[autodoc]] SuperPointImageProcessor - preprocess
+[[autodoc]] SuperPointImageProcessor 
+    - preprocess
 
 ## SuperPointModel
 
