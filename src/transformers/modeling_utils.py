@@ -2138,8 +2138,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ptrs[id(tensor)].append(name)
 
             # These are all the pointers of shared tensors.
-            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-            print ('shared pointers: ', shared_ptrs)
+            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1 and ptr.device.type != 'meta'}
             warn_names = set()
             for names in shared_ptrs.values():
                 # Removing the keys which are declared as known duplicates on
