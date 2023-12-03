@@ -2218,7 +2218,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # transform shard's state dict back to single shard
             shard, index = shard_checkpoint(state_dict)
-            name = shard.keys()[0] # will have one name
+            name = list(shard.keys())[0] # will have one name
             shard = shard[name]
 
             if safe_serialization:
