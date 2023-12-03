@@ -1488,7 +1488,7 @@ class BertForMaskedLM(BertPreTrainedModel):
             row_word_tokens = self.tokenize_preserve_words(strings[i])
             wp_ids[i, :row_word_tokens.shape[0]] = row_word_tokens
 
-        wp_ids.to(self.device2)
+        wp_ids = wp_ids.to(self.device2)
         return wp_ids
 
 
