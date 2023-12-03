@@ -118,10 +118,7 @@ def convert_superpoint_checkpoint(checkpoint_url, pytorch_dump_folder_path, save
     if test_mode:
         torch.count_nonzero(outputs.mask[0])
         expected_keypoints_shape = (2, 830, 2)
-        expected_scores_shape = (
-            2,
-            830,
-        )
+        expected_scores_shape = (2, 830)
         expected_descriptors_shape = (2, 830, 256)
 
         expected_keypoints_values = torch.tensor([[480.0, 9.0], [494.0, 9.0], [489.0, 16.0]])
