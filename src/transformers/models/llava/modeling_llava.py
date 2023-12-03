@@ -302,10 +302,8 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
 
         # 4. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling (apart from the padding)
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
-        image_to_overwrite &= image_to_overwrite.cumsum(-1)  <= (num_image_tokens * nb_text_tokens_per_images)[:, None]
-        final_embedding[image_to_overwrite] = image_features
-        # We can have multiple images in a single batch, hence we use different
-        # indexes for image and text.
+        image_to_overwrite &= image_to_overwrite.cumsum(-1) <= (num_image_tokens * nb_text_tokens_per_images)[:, None]
+        final_embedding[image_to_overwrite] = image_features.reshape(-1, 4096)
         return input_embeds, attention_mask, position_ids
                     
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
