@@ -62,7 +62,6 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 1_000)
 
-    # Copied from ReformerTokenizationTest.test_full_tokenizer
     def test_full_tokenizer(self):
         tokenizer = RemBertTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
@@ -152,7 +151,6 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         decode_text = tokenizer.convert_tokens_to_string(tokens)
         self.assertEqual("Extra spaces and line breaks should be handled.", decode_text)
 
-    # Copied from AlbertTokenizationTest.test_sequence_builders
     def test_sequence_builders(self):
         tokenizer = RemBertTokenizer(SAMPLE_VOCAB)
 
@@ -167,7 +165,6 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.sep_token_id
         ]
 
-    # Copied from tests.test_tokenization_common.TokenizerTesterMixin.test_added_tokens_serialization
     def test_added_tokens_serialization(self):
         # Utility to test the added vocab
         def _test_added_vocab_and_eos(expected, tokenizer_class, expected_eos, temp_dir):
