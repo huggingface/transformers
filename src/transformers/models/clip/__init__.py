@@ -67,6 +67,7 @@ else:
         "CLIPTextModelWithProjection",
         "CLIPVisionModel",
         "CLIPVisionModelWithProjection",
+        "CLIPForImageClassification",
     ]
 
 try:
@@ -142,6 +143,7 @@ if TYPE_CHECKING:
             CLIPTextModelWithProjection,
             CLIPVisionModel,
             CLIPVisionModelWithProjection,
+            CLIPForImageClassification,
         )
 
     try:
