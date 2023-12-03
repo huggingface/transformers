@@ -2217,7 +2217,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     module._hf_hook.post_forward(module, torch.tensor([]))
 
             # transform shard's state dict back to single shard
-            shard, index = shard_checkpoint(state_dict)
+            shard, index = shard_checkpoint(state_dict) # will be {name: tensor}, None
+            print ('Shard remade: ', list(shards.keys()))
+            print ('Shard file: ', shard_file)
             name = list(shard.keys())[0] # will have one name
             shard = shard[name]
 
