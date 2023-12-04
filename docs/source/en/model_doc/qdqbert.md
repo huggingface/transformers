@@ -32,21 +32,17 @@ by processors with high-throughput integer math pipelines. We also present a wor
 able to maintain accuracy within 1% of the floating-point baseline on all networks studied, including models that are
 more difficult to quantize, such as MobileNets and BERT-large.*
 
-Tips:
+This model was contributed by [shangz](https://huggingface.co/shangz).
+
+## Usage tips
 
 - QDQBERT model adds fake quantization operations (pair of QuantizeLinear/DequantizeLinear ops) to (i) linear layer
   inputs and weights, (ii) matmul inputs, (iii) residual add inputs, in BERT model.
-
 - QDQBERT requires the dependency of [Pytorch Quantization Toolkit](https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization). To install `pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
-
 - QDQBERT model can be loaded from any checkpoint of HuggingFace BERT model (for example *bert-base-uncased*), and
   perform Quantization Aware Training/Post Training Quantization.
-
 - A complete example of using QDQBERT model to perform Quatization Aware Training and Post Training Quantization for
   SQUAD task can be found at [transformers/examples/research_projects/quantization-qdqbert/](examples/research_projects/quantization-qdqbert/).
-
-This model was contributed by [shangz](https://huggingface.co/shangz).
-
 
 ### Set default quantizers
 
@@ -118,7 +114,7 @@ the instructions in [torch.onnx](https://pytorch.org/docs/stable/onnx.html). Exa
 >>> torch.onnx.export(...)
 ```
 
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)

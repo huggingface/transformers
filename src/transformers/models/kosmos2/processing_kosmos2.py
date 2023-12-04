@@ -211,7 +211,9 @@ class Kosmos2Processor(ProcessorMixin):
                 image_embeds_position_mask.append(mask)
 
             if isinstance(text, list):
-                sorted_length = sorted([(idx, len(x)) for idx, x in enumerate(text_encoding.input_ids)])
+                sorted_length = sorted(
+                    [(idx, len(x)) for idx, x in enumerate(text_encoding.input_ids)], key=lambda x: x[-1]
+                )
                 _, min_len_not_padded = sorted_length[0]
                 idx, _ = sorted_length[-1]
 

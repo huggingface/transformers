@@ -18,6 +18,6 @@ line-length = 119
 lines-after-imports = 2
 known-first-party = ["transformers"]
 
-# This is ignored, maybe because of the header? If someone finds a fix, we can uncomment and remove setup.cfg
-# [tool.pytest]
-# doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"
+[tool.pytest.ini_options]
+doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"
+doctest_glob="**/*.md"

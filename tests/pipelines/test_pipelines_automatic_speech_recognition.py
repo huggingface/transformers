@@ -854,6 +854,44 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
+    def test_whisper_language(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny.en",
+            framework="pt",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        filename = ds[0]["file"]
+
+        # 1. English-only model compatible with no language argument
+        output = speech_recognizer(filename)
+        self.assertEqual(
+            output,
+            {"text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."},
+        )
+
+        # 2. English-only Whisper does not accept the language argument
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot specify `task` or `langauge` for an English-only model. If the model is intended to be multilingual, "
+            "pass `is_multilingual=True` to generate, or update the generation config.",
+        ):
+            _ = speech_recognizer(filename, generate_kwargs={"language": "en"})
+
+        # 3. Multilingual model accepts language argument
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            framework="pt",
+        )
+        output = speech_recognizer(filename, generate_kwargs={"language": "en"})
+        self.assertEqual(
+            output,
+            {"text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."},
+        )
+
+    @slow
+    @require_torch
     @require_torchaudio
     def test_xls_r_to_en(self):
         speech_recognizer = pipeline(

@@ -112,17 +112,9 @@ class BatchFeature(UserDict):
     def items(self):
         return self.data.items()
 
-    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
-        """
-        Convert the inner content to tensors.
-
-        Args:
-            tensor_type (`str` or [`~utils.TensorType`], *optional*):
-                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
-                `None`, no modification is done.
-        """
+    def _get_is_as_tensor_fns(self, tensor_type: Optional[Union[str, TensorType]] = None):
         if tensor_type is None:
-            return self
+            return None, None
 
         # Convert to TensorType
         if not isinstance(tensor_type, TensorType):
@@ -167,6 +159,21 @@ class BatchFeature(UserDict):
                 return np.asarray(value, dtype=dtype)
 
             is_tensor = is_numpy_array
+        return is_tensor, as_tensor
+
+    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
+        """
+        Convert the inner content to tensors.
+
+        Args:
+            tensor_type (`str` or [`~utils.TensorType`], *optional*):
+                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
+                `None`, no modification is done.
+        """
+        if tensor_type is None:
+            return self
+
+        is_tensor, as_tensor = self._get_is_as_tensor_fns(tensor_type)
 
         # Do the tensor conversion in batch
         for key, value in self.items():
@@ -577,14 +584,15 @@ class FeatureExtractionMixin(PushToHubMixin):
 
     def to_dict(self) -> Dict[str, Any]:
         """
-        Serializes this instance to a Python dictionary.
-
-        Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this feature extractor instance.
+        Serializes this instance to a Python dictionary. Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)
         output["feature_extractor_type"] = self.__class__.__name__
-
+        if "mel_filters" in output:
+            del output["mel_filters"]
+        if "window" in output:
+            del output["window"]
         return output
 
     @classmethod

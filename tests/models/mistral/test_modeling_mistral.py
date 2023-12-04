@@ -19,7 +19,7 @@ import gc
 import tempfile
 import unittest
 
-from pytest import mark
+import pytest
 
 from transformers import AutoTokenizer, MistralConfig, is_torch_available
 from transformers.testing_utils import (
@@ -369,7 +369,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @require_flash_attn
     @require_torch_gpu
-    @mark.flash_attn_test
+    @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_generate_padding_right(self):
         import torch
@@ -403,7 +403,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @require_flash_attn
     @require_torch_gpu
-    @mark.flash_attn_test
+    @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_padding_right(self):
         import torch

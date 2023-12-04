@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Feature extractor class for Pop2Piano"""
 
-import copy
 import warnings
 from typing import List, Optional, Union
 
@@ -447,17 +446,4 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             return_tensors=return_tensors,
         )
 
-        return output
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary.
-
-        Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["feature_extractor_type"] = self.__class__.__name__
-        if "mel_filters" in output:
-            del output["mel_filters"]
         return output

@@ -27,7 +27,7 @@ This can be more efficient than a regular Transformer and can deal with sentence
 This model was contributed by [sgugger](https://huggingface.co/sgugger).
 The original code can be found [here](https://github.com/BlinkDL/RWKV-LM).
 
-Example of use as an RNN:
+## Usage example
 
 ```py
 import torch

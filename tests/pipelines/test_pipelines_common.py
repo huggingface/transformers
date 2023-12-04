@@ -763,9 +763,9 @@ class CustomPipelineTest(unittest.TestCase):
         _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
         with RequestCounter() as counter:
             _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
-            self.assertEqual(counter.get_request_count, 0)
-            self.assertEqual(counter.head_request_count, 1)
-            self.assertEqual(counter.other_request_count, 0)
+        self.assertEqual(counter["GET"], 0)
+        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter.total_calls, 1)
 
     @require_torch
     def test_chunk_pipeline_batching_single_file(self):

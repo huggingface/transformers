@@ -1755,6 +1755,11 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         self.encoder.word_embeddings = self.word_embeddings
         self.decoder.word_embeddings = self.word_embeddings
 
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.encoder.word_embeddings, self.word_embeddings)
+            self._tie_or_clone_weights(self.decoder.word_embeddings, self.word_embeddings)
+
     def get_encoder(self):
         return self.encoder
 
@@ -1875,6 +1880,10 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.prophetnet.word_embeddings, self.lm_head)
 
     def get_input_embeddings(self):
         return self.prophetnet.word_embeddings
@@ -2070,7 +2079,11 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = [
+        "prophetnet.word_embeddings.weight",
+        "prophetnet.decoder.word_embeddings.weight",
+        "lm_head.weight",
+    ]
 
     def __init__(self, config: ProphetNetConfig):
         # set config for CLM
@@ -2099,6 +2112,10 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.prophetnet.decoder.word_embeddings, self.lm_head)
 
     def set_decoder(self, decoder):
         self.prophetnet.decoder = decoder
@@ -2311,7 +2328,15 @@ class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
 
     def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
-        self.decoder = ProphetNetDecoder(config)
+
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.decoder = ProphetNetDecoder(config, word_embeddings=self.word_embeddings)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def _tie_weights(self):
+        self._tie_or_clone_weights(self.word_embeddings, self.decoder.get_input_embeddings())
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)

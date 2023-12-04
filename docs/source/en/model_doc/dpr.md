@@ -43,7 +43,8 @@ benchmarks.*
 
 This model was contributed by [lhoestq](https://huggingface.co/lhoestq). The original code can be found [here](https://github.com/facebookresearch/DPR).
 
-Tips:
+## Usage tips
+
 - DPR consists in three models:
 
     * Question encoder: encode questions as vectors
@@ -86,6 +87,9 @@ Tips:
 
 [[autodoc]] models.dpr.modeling_dpr.DPRReaderOutput
 
+<frameworkcontent>
+<pt>
+
 ## DPRContextEncoder
 
 [[autodoc]] DPRContextEncoder
@@ -101,6 +105,9 @@ Tips:
 [[autodoc]] DPRReader
     - forward
 
+</pt>
+<tf>
+
 ## TFDPRContextEncoder
 
 [[autodoc]] TFDPRContextEncoder
@@ -115,3 +122,7 @@ Tips:
 
 [[autodoc]] TFDPRReader
     - call
+
+</tf>
+</frameworkcontent>
+

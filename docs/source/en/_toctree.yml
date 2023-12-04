@@ -424,6 +424,8 @@
         title: PEGASUS-X
       - local: model_doc/persimmon
         title: Persimmon
+      - local: model_doc/phi
+        title: Phi
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart
@@ -665,6 +667,8 @@
         title: CLIP
       - local: model_doc/clipseg
         title: CLIPSeg
+      - local: model_doc/clvp
+        title: CLVP
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deplot

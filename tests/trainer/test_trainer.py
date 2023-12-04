@@ -1944,18 +1944,18 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         metrics = trainer.train().metrics
         check_func("init_mem_cpu_alloc_delta", metrics)
         check_func("train_mem_cpu_alloc_delta", metrics)
-        if torch.cuda.device_count() > 0:
+        if backend_device_count(torch_device) > 0:
             check_func("init_mem_gpu_alloc_delta", metrics)
             check_func("train_mem_gpu_alloc_delta", metrics)
 
         metrics = trainer.evaluate()
         check_func("eval_mem_cpu_alloc_delta", metrics)
-        if torch.cuda.device_count() > 0:
+        if backend_device_count(torch_device) > 0:
             check_func("eval_mem_gpu_alloc_delta", metrics)
 
         metrics = trainer.predict(RegressionDataset()).metrics
         check_func("test_mem_cpu_alloc_delta", metrics)
-        if torch.cuda.device_count() > 0:
+        if backend_device_count(torch_device) > 0:
             check_func("test_mem_gpu_alloc_delta", metrics)
 
     def test_mem_metrics(self):

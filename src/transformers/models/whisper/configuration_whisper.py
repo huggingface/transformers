@@ -77,13 +77,13 @@ class WhisperConfig(PretrainedConfig):
         num_mel_bins (`int`, *optional*, defaults to 80):
             Number of mel features used per input features. Should correspond to the value used in the
             `WhisperProcessor` class.
-        encoder_layers (`int`, *optional*, defaults to 6):
+        encoder_layers (`int`, *optional*, defaults to 4):
             Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 6):
+        decoder_layers (`int`, *optional*, defaults to 4):
             Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 4):
+        encoder_attention_heads (`int`, *optional*, defaults to 6):
             Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 4):
+        decoder_attention_heads (`int`, *optional*, defaults to 6):
             Number of attention heads for each attention layer in the Transformer decoder.
         encoder_ffn_dim (`int`, *optional*, defaults to 1536):
             Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
@@ -106,7 +106,7 @@ class WhisperConfig(PretrainedConfig):
         activation_function (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        d_model (`int`, *optional*, defaults to 256):
+        d_model (`int`, *optional*, defaults to 384):
             Dimensionality of the layers.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
@@ -197,10 +197,10 @@ class WhisperConfig(PretrainedConfig):
         self,
         vocab_size=51865,
         num_mel_bins=80,
-        encoder_layers=6,
-        encoder_attention_heads=4,
-        decoder_layers=6,
-        decoder_attention_heads=4,
+        encoder_layers=4,
+        encoder_attention_heads=6,
+        decoder_layers=4,
+        decoder_attention_heads=6,
         decoder_ffn_dim=1536,
         encoder_ffn_dim=1536,
         encoder_layerdrop=0.0,
@@ -209,7 +209,7 @@ class WhisperConfig(PretrainedConfig):
         use_cache=True,
         is_encoder_decoder=True,
         activation_function="gelu",
-        d_model=256,
+        d_model=384,
         dropout=0.0,
         attention_dropout=0.0,
         activation_dropout=0.0,

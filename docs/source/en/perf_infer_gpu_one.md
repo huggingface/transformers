@@ -36,7 +36,7 @@ FlashAttention-2 is experimental and may change considerably in future versions.
 1. additionally parallelizing the attention computation over sequence length
 2. partitioning the work between GPU threads to reduce communication and shared memory reads/writes between them
 
-FlashAttention-2 supports inference with Llama, Mistral, and Falcon models. You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
+FlashAttention-2 supports inference with Llama, Mistral, Falcon and Bark models. You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
 
 Before you begin, make sure you have FlashAttention-2 installed (see the [installation](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features) guide for more details about prerequisites):
 

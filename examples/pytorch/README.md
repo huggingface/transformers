@@ -201,6 +201,7 @@ You can easily log and monitor your runs code. The following are currently suppo
 * [Comet ML](https://www.comet.ml/docs/python-sdk/huggingface/)
 * [Neptune](https://docs.neptune.ai/integrations-and-supported-tools/model-training/hugging-face)
 * [ClearML](https://clear.ml/docs/latest/docs/getting_started/ds/ds_first_steps)
+* [DVCLive](https://dvc.org/doc/dvclive/ml-frameworks/huggingface)
 
 ### Weights & Biases
 

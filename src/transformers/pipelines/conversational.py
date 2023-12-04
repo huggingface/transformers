@@ -208,17 +208,19 @@ class ConversationalPipeline(Pipeline):
 
     ```python
     >>> from transformers import pipeline, Conversation
+    # Any model with a chat template can be used in a ConversationalPipeline.
 
-    >>> chatbot = pipeline(model="microsoft/DialoGPT-medium")
-    >>> conversation = Conversation("Going to the movies tonight - any suggestions?")
+    >>> chatbot = pipeline(model="facebook/blenderbot-400M-distill")
+    >>> # Conversation objects initialized with a string will treat it as a user message
+    >>> conversation = Conversation("I'm looking for a movie - what's your favourite one?")
     >>> conversation = chatbot(conversation)
-    >>> conversation.generated_responses[-1]
-    'The Big Lebowski'
+    >>> conversation.messages[-1]["content"]
+    ' I don't really have a favorite movie, but I do like action movies. What about you?'
 
-    >>> conversation.add_user_input("Is it an action movie?")
+    >>> conversation.add_message({"role": "user", "content": "That's interesting, why do you like action movies?"})
     >>> conversation = chatbot(conversation)
-    >>> conversation.generated_responses[-1]
-    "It's a comedy."
+    >>> conversation.messages[-1]["content"]
+    ' I think it's just because they're so fast-paced and action-fantastic.'
     ```
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
@@ -226,10 +228,8 @@ class ConversationalPipeline(Pipeline):
     This conversational pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"conversational"`.
 
-    The models that this pipeline can use are models that have been fine-tuned on a multi-turn conversational task,
-    currently: *'microsoft/DialoGPT-small'*, *'microsoft/DialoGPT-medium'*, *'microsoft/DialoGPT-large'*. See the
-    up-to-date list of available models on
-    [huggingface.co/models](https://huggingface.co/models?filter=conversational).
+    This pipeline can be used with any model that has a [chat
+    template](https://huggingface.co/docs/transformers/chat_templating) set.
     """
 
     def __init__(self, *args, **kwargs):

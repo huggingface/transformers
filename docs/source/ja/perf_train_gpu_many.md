@@ -242,7 +242,7 @@ ZeROがモデルの重みを分割する方法に注意を払うと、これは�
 
 Implementations:
 
-- [DeepSpeed](https://www.deepspeed.ai/features/#the-zero-redundancy-optimizer) ZeRO-DP stages 1+2+3
+- [DeepSpeed](https://www.deepspeed.ai/tutorials/zero/) ZeRO-DP stages 1+2+3
 - [`transformers` integration](main_classes/trainer#trainer-integrations)
 
 
@@ -360,7 +360,7 @@ by [@anton-l](https://github.com/anton-l)。
 SageMakerは、より効率的な処理のためにTPとDPを組み合わせて使用します。
 
 代替名：
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed)はこれを「テンソルスライシング」と呼びます。詳細は[DeepSpeedの特徴](https://www.deepspeed.ai/features/#model-parallelism)をご覧ください。
+- [DeepSpeed](https://github.com/microsoft/DeepSpeed)はこれを「テンソルスライシング」と呼びます。詳細は[DeepSpeedの特徴](https://www.deepspeed.ai/training/#model-parallelism)をご覧ください。
 
 実装例:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)には、モデル固有の内部実装があります。

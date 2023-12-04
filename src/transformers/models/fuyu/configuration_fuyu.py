@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "adept/fuyu-8b-base": "https://huggingface.co/adept/fuyu-8b-base/resolve/main/config.json",
+    "adept/fuyu-8b": "https://huggingface.co/adept/fuyu-8b/resolve/main/config.json",
 }
 
 
@@ -31,7 +31,7 @@ class FuyuConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`FuyuForCausalLM`]. It is used to instantiate an
     Fuyu model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
-    [adept/fuyu-8b-base](https://huggingface.co/adept/fuyu-8b-base).
+    [adept/fuyu-8b](https://huggingface.co/adept/fuyu-8b).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

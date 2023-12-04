@@ -47,6 +47,13 @@ class AwqConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             AwqConfig(bits=4, backend="")
 
+        # These should work fine
+        _ = AwqConfig(bits=4, version="GEMM")
+        _ = AwqConfig(bits=4, version="gemm")
+
+        with self.assertRaises(ValueError):
+            AwqConfig(bits=4, backend="unexisting-backend")
+
         # LLMAWQ does not work on a T4
         with self.assertRaises(ValueError):
             AwqConfig(bits=4, backend="llm-awq")

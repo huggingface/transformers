@@ -20,7 +20,7 @@ env:
 
 jobs:
   run_doctests:
-    runs-on: [single-gpu, nvidia-gpu, t4, doctest-ci]
+    runs-on: [single-gpu, nvidia-gpu, t4, ci]
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
