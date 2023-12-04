@@ -2962,7 +2962,7 @@ class GenerationMixin:
 
     def _temporary_reorder_cache(self, past_key_values, beam_idx):
         """
-        Temporary function to handle the different types of cache reordering processes.
+        Temporary function to handle the different types of cache reordering processes while we roll out `Cache`.
 
         TODO: standardize cache formats and make all models compatible with `Cache`. It would remove the need
         for this function, with `Cache.reorder_cache` being the sole remaining code path
@@ -3258,10 +3258,10 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
-
-            breakpoint()
             if model_kwargs["past_key_values"] is not None:
-                self._temporary_reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
+                    model_kwargs["past_key_values"], beam_idx
+                )
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -3596,7 +3596,9 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
-                self._temporary_reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
+                    model_kwargs["past_key_values"], beam_idx
+                )
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -3981,7 +3983,9 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
-                self._temporary_reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
+                    model_kwargs["past_key_values"], beam_idx
+                )
 
             # increase cur_len
             cur_len = cur_len + 1
@@ -4321,7 +4325,9 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
-                self._temporary_reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
+                    model_kwargs["past_key_values"], beam_idx
+                )
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))

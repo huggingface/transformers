@@ -15,7 +15,8 @@
 
 import unittest
 
-from transformers.testing_utils import require_torch, is_torch_available
+from transformers.testing_utils import is_torch_available, require_torch
+
 
 if is_torch_available():
     import torch
@@ -26,7 +27,7 @@ if is_torch_available():
 @require_torch
 class CacheTest(unittest.TestCase):
     def test_cache_equivalence(self):
-        """ Tests that we can convert back and forth between the legacy cache format and DynamicCache"""
+        """Tests that we can convert back and forth between the legacy cache format and DynamicCache"""
         legacy_cache = ()
         new_cache = DynamicCache()
 
@@ -74,7 +75,7 @@ class CacheTest(unittest.TestCase):
                 )
 
     def test_reorder_cache_retrocompatibility(self):
-        """ Tests that Cache.reorder_cache is retrocompatible with the legacy code path """
+        """Tests that Cache.reorder_cache is retrocompatible with the legacy code path"""
         legacy_reorder_fn = LlamaForCausalLM._reorder_cache  # An example of a legacy `_reorder_cache` function
 
         legacy_cache = ()
