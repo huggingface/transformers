@@ -31,7 +31,7 @@ usage of `pickle.load()`:
 import os
 from transformers import TransfoXLTokenizer, TransfoXLLMHeadModel
 
-os.environ["TRUST_REMOTE_CODE"] = True
+os.environ["TRUST_REMOTE_CODE"] = "True"
 
 checkpoint = 'transfo-xl-wt103'
 revision = '40a186da79458c9f9de846edfaea79c412137f97'
