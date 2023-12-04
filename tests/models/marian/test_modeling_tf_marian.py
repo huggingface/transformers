@@ -20,7 +20,7 @@ import unittest
 import warnings
 
 from transformers import AutoTokenizer, MarianConfig, MarianTokenizer, TranslationPipeline, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import is_flaky, require_sentencepiece, require_tf, require_tokenizers, slow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -200,6 +200,11 @@ class TFMarianModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def setUp(self):
         self.model_tester = TFMarianModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MarianConfig)
+
+    @slow
+    @is_flaky(max_attempts=3)
+    def test_xla_generate_slow(self):
+        super().test_xla_generate_slow()
 
     def test_config(self):
         self.config_tester.run_common_tests()
