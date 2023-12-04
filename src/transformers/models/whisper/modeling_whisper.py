@@ -1742,7 +1742,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         is_multilingual=None,
         condition_on_prev_tokens: Optional[bool] = None,
         temperature: Union[float, Tuple[float, ...]] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
-        compression_ratio_threshold: Optional[float] = 2.4,
+        compression_ratio_threshold: Optional[float] = 2.0,
         logprob_threshold: Optional[float] = -1.0,
         prompt_ids: Optional[torch.Tensor] = None,
         num_segment_frames: Optional[int] = None,
@@ -1905,10 +1905,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         ```
 
         """
-        temperature = 0.0
-        compression_ratio_threshold = None
-        logprob_threshold = None
-
         if "inputs" in kwargs:
             input_features = kwargs.pop("inputs")
             warnings.warn(
@@ -2187,8 +2183,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         cur_bsz = prev_bsz = batch_size
 
         temperatures = [temperature] if not isinstance(temperature, (list, tuple)) else temperature
-        return_scores = compression_ratio_threshold is not None or logprob_threshold is not None
-        return_dict_in_generate = return_dict_in_generate or return_scores
+        temperature = temperatures[0]
+
+        output_scores = logprob_threshold is not None
+        return_dict_in_generate = return_dict_in_generate or output_scores
 
         init_tokens = [self.generation_config.decoder_start_token_id]
         if forced_decoder_ids is not None and forced_decoder_ids[0][0] == 1:
@@ -2245,7 +2243,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             one_tensor = torch.ones((cur_bsz, 1), device=segment_input.device, dtype=torch.long)
             decoder_input_ids = torch.cat([t * one_tensor for t in init_tokens], dim=-1)
 
-            if condition_on_prev_tokens and len(current_segments[0]) > 0:
+            if condition_on_prev_tokens and len(current_segments[0]) > 0 and temperature < 0.5:
                 # according to https://github.com/openai/whisper/blob/e58f28804528831904c3b6f2c0e473f346223433/whisper/decoding.py#L609
                 cut_off_length = self.config.max_target_positions // 2 - 1
                 active_segments = [current_segments[i] for i in new_cur_to_prev_index_map]
@@ -2268,14 +2266,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                 # Make sure we don't get larger than `max_length`
                 if passed_max_length is not None and passed_max_new_tokens is None:
-                    kwargs["max_length"] = max(
+                    kwargs["max_length"] = min(
                         kwargs["max_length"] + cut_off_length + 1, self.config.max_target_positions
                     )
                     logger.info(
                         f"Increase max_length from {passed_max_length} to {kwargs['max_length']} since input is conditioned on previous segment."
                     )
                 elif max_length_config is not None and passed_max_new_tokens is None and max_new_tokens_config is None:
-                    kwargs["max_length"] = max(
+                    kwargs["max_length"] = min(
                         self.generation_config.max_length + cut_off_length + 1, self.config.max_target_positions
                     )
                     logger.info(
@@ -2308,40 +2306,59 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     synced_gpus,
                     temperature=temperature,
                     do_sample=do_sample,
-                    return_scores=return_scores,
+                    output_scores=output_scores,
                     return_dict_in_generate=return_dict_in_generate,
                     decoder_input_ids=decoder_input_ids,
                     **kwargs,
                 )
 
-            if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
-                num_frames = getattr(generation_config, "num_frames", None)
-                seek_outputs["token_timestamps"] = self._extract_token_timestamps(
-                    seek_outputs, generation_config.alignment_heads, num_frames=num_frames
-                )
+                if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
+                    num_frames = getattr(generation_config, "num_frames", None)
+                    seek_outputs["token_timestamps"] = self._extract_token_timestamps(
+                        seek_outputs, generation_config.alignment_heads, num_frames=num_frames
+                    )
 
-            if return_dict_in_generate:
-                seek_sequences = seek_outputs["sequences"]
-                seek_outputs = [
-                    {k: v[i] for k, v in seek_outputs.items()}
-                    for i in range(next(iter(seek_outputs.values())).size(0))
-                ]
-            else:
-                seek_sequences = seek_outputs
+                if return_dict_in_generate:
+                    def split_by_batch_index(values, key, batch_idx):
+                        if key == "scores":
+                            return list(v[batch_idx] for v in values)
+                        return values[batch_idx]
 
-            if compression_ratio_threshold is not None:
-                pass
+                    seek_sequences = seek_outputs["sequences"]
+                    seek_outputs = [{k: split_by_batch_index(v, k, i) for k, v in seek_outputs.items()} for i in range(cur_bsz)]
+                else:
+                    seek_sequences = seek_outputs
 
-            if condition_on_prev_tokens is not None:
-                # remove all previously passed decoder input ids except start token
-                seek_sequences = seek_sequences[:, decoder_input_ids.shape[-1] - 1:]
+                if condition_on_prev_tokens is not None:
+                    # remove all previously passed decoder input ids except start token
+                    seek_sequences = seek_sequences[:, decoder_input_ids.shape[-1] - 1:]
 
-            if return_scores:
-                scores = seek_outputs["scores"] if return_scores else None
-                logprops = self._retrieve_logprobs(scores, seek_sequences)
+                needs_fallback = False
+                if compression_ratio_threshold is not None:
+                    compression_ratio = [seek_sequence.shape[0] / torch.unique(seek_sequence).shape[0] for seek_sequence in seek_sequences]
 
-            # print("hf tokens", seek_sequences)
-            # import ipdb; ipdb.set_trace()
+                    #if seek.item() > 420000:
+                    #    import ipdb; ipdb.set_trace()
+
+                    # TODO(PVP) only works for batch size = 1 currently
+                    if compression_ratio[0] > compression_ratio_threshold:
+                        print("fallback compression")
+                        print("current temp", temperature)
+                        
+                        needs_fallback = True
+
+                if logprob_threshold is not None:
+                    scores = [s["scores"] for s in seek_outputs] if output_scores else None
+                    logprobs = self._retrieve_avg_logprobs(scores, seek_sequences, self.config.eos_token_id)
+
+                    # TODO(PVP) only works for batch size = 1 currently
+                    if logprobs[0] < logprob_threshold:
+                        print("fallback logprob")
+                        print("current temp", temperature)
+                        needs_fallback = True
+
+                if not needs_fallback:
+                    break
 
             # 6.7 Loop over each decoded audio individually as each decoding can be of a different length
             for i, seek_sequence in enumerate(seek_sequences):
@@ -2403,6 +2420,26 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         sequences = torch.stack(sequences, dim=0)
         return sequences
+
+    @staticmethod
+    def _retrieve_avg_logprobs(scores, tokens, eos_token_id):
+        scores = torch.stack([torch.stack(score) for score in scores])
+        logprobs = F.log_softmax(scores.float(), dim=-1).to(scores.dtype)
+        tokens = tokens[:, -scores.shape[1]:]
+
+        def get_log_prob(logprob, token):
+            token_logprob = logprob.gather(-1, token) * (token[:, -1] != eos_token_id)
+            return token_logprob
+
+        sum_logprobs = sum(get_log_prob(logprobs[:, i], tokens[:, i: i+1]) for i in range(logprobs.shape[1]))
+
+        lengths = (tokens != eos_token_id).sum(-1)
+
+        avg_logprobs = torch.div(sum_logprobs, lengths)
+        return avg_logprobs
+
+
+        # print("hf tokens", seek_sequences)
 
     @staticmethod
     def _retrieve_segment(
