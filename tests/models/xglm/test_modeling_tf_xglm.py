@@ -177,9 +177,7 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
         model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M")
         input_ids = tf.convert_to_tensor([[2, 268, 9865]], dtype=tf.int32)  # The dog
         # </s> The dog is a very friendly dog. He is very affectionate and loves to play with other
-        # fmt: off
-        expected_output_ids = [2, 268, 9865, 67, 11, 1988, 57252, 9865, 5, 984, 67, 1988, 213838, 1658, 53, 70446, 33, 6657, 278, 1581]
-        # fmt: on
+        expected_output_ids = [2, 268, 9865, 67, 11, 1988, 57252, 9865, 5, 984, 67, 1988, 213838, 1658, 53, 70446, 33, 6657, 278, 1581]  # fmt: skip
         output_ids = model.generate(input_ids, do_sample=False, num_beams=1)
         if verify_outputs:
             self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)

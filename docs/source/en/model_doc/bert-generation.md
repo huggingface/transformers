@@ -33,10 +33,13 @@ GPT-2 and RoBERTa checkpoints and conducted an extensive empirical study on the 
 encoder and decoder, with these checkpoints. Our models result in new state-of-the-art results on Machine Translation,
 Text Summarization, Sentence Splitting, and Sentence Fusion.*
 
-Usage:
+This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The original code can be
+found [here](https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder).
 
-- The model can be used in combination with the [`EncoderDecoderModel`] to leverage two pretrained
-  BERT checkpoints for subsequent fine-tuning.
+## Usage examples and tips
+
+The model can be used in combination with the [`EncoderDecoderModel`] to leverage two pretrained BERT checkpoints for 
+subsequent fine-tuning:
 
 ```python
 >>> # leverage checkpoints for Bert2Bert model...
@@ -61,8 +64,7 @@ Usage:
 >>> loss.backward()
 ```
 
-- Pretrained [`EncoderDecoderModel`] are also directly available in the model hub, e.g.,
-
+Pretrained [`EncoderDecoderModel`] are also directly available in the model hub, e.g.:
 
 ```python
 >>> # instantiate sentence fusion model
@@ -84,9 +86,6 @@ Tips:
   combination with [`EncoderDecoder`].
 - For summarization, sentence splitting, sentence fusion and translation, no special tokens are required for the input.
   Therefore, no EOS token should be added to the end of the input.
-
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The original code can be
-found [here](https://tfhub.dev/s?module-type=text-generation&subtype=module,placeholder).
 
 ## BertGenerationConfig
 

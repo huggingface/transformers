@@ -453,7 +453,7 @@ class SEWDFeatureEncoder(nn.Module):
 
         for conv_layer in self.conv_layers:
             if self._requires_grad and self.gradient_checkpointing and self.training:
-                hidden_states = self.gradient_checkpointing_func(
+                hidden_states = self._gradient_checkpointing_func(
                     conv_layer.__call__,
                     hidden_states,
                 )
@@ -847,15 +847,11 @@ class DisentangledSelfAttention(nn.Module):
             if "c2p" in self.pos_att_type:
                 pos_key_layer = self.transpose_for_scores(
                     self.pos_key_proj(rel_embeddings), self.num_attention_heads
-                ).repeat(
-                    query_layer.size(0) // self.num_attention_heads, 1, 1
-                )  # .split(self.all_head_size, dim=-1)
+                ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)  # .split(self.all_head_size, dim=-1)
             if "p2c" in self.pos_att_type:
                 pos_query_layer = self.transpose_for_scores(
                     self.pos_query_proj(rel_embeddings), self.num_attention_heads
-                ).repeat(
-                    query_layer.size(0) // self.num_attention_heads, 1, 1
-                )  # .split(self.all_head_size, dim=-1)
+                ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)  # .split(self.all_head_size, dim=-1)
 
         score = 0
         # content->position
@@ -1127,7 +1123,7 @@ class SEWDTransformerEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (output_states,)
 
             if self.gradient_checkpointing and self.training:
-                output_states = self.gradient_checkpointing_func(
+                output_states = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     next_kv,
                     attention_mask,
@@ -1308,11 +1304,6 @@ class SEWDPreTrainedModel(PreTrainedModel):
         attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
-
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (SEWDEncoder, SEWDFeatureEncoder, SEWDTransformerEncoder)):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
 
 
 SEWD_START_DOCSTRING = r"""

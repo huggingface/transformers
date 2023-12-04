@@ -23,6 +23,7 @@ import torch
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -152,8 +153,8 @@ class ConditionalDetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~ConditionalDetrImageProcessor.post_process_object_detection`] to retrieve
-            the unnormalized bounding boxes.
+            possible padding). You can use [`~ConditionalDetrImageProcessor.post_process_object_detection`] to retrieve the
+            unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
@@ -216,14 +217,14 @@ class ConditionalDetrSegmentationOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~ConditionalDetrImageProcessor.post_process_object_detection`] to retrieve
-            the unnormalized bounding boxes.
+            possible padding). You can use [`~ConditionalDetrImageProcessor.post_process_object_detection`] to retrieve the
+            unnormalized bounding boxes.
         pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/4, width/4)`):
             Segmentation masks logits for all queries. See also
             [`~ConditionalDetrImageProcessor.post_process_semantic_segmentation`] or
             [`~ConditionalDetrImageProcessor.post_process_instance_segmentation`]
-            [`~ConditionalDetrImageProcessor.post_process_panoptic_segmentation`] to evaluate semantic, instance and
-            panoptic segmentation masks respectively.
+            [`~ConditionalDetrImageProcessor.post_process_panoptic_segmentation`] to evaluate semantic, instance and panoptic
+            segmentation masks respectively.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
@@ -416,22 +417,6 @@ class ConditionalDetrConvModel(nn.Module):
         return out, pos
 
 
-# Copied from transformers.models.detr.modeling_detr._expand_mask with Detr->ConditionalDetr
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, target_seq_len, source_seq_len]`.
-    """
-    batch_size, source_len = mask.size()
-    target_len = target_len if target_len is not None else source_len
-
-    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, target_len, source_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
-
-
-# Copied from transformers.models.detr.modeling_detr.DetrSinePositionEmbedding with Detr->ConditionalDetr
 class ConditionalDetrSinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -1171,11 +1156,6 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, ConditionalDetrDecoder):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
 
 CONDITIONAL_DETR_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -1324,7 +1304,7 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
         # expand attention_mask
         if attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1473,19 +1453,11 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
             hidden_states = inputs_embeds
             input_shape = inputs_embeds.size()[:-1]
 
-        combined_attention_mask = None
-
-        if attention_mask is not None and combined_attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            combined_attention_mask = combined_attention_mask + _expand_mask(
-                attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
-            )
-
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            encoder_attention_mask = _expand_mask(
-                encoder_attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
+            encoder_attention_mask = _prepare_4d_attention_mask(
+                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
             )
 
         # optional intermediate hidden states
@@ -1519,10 +1491,10 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
             # apply transformation
             query_sine_embed = query_sine_embed_before_transformation * pos_transformation
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self.gradient_checkpointing_func(
+                layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    combined_attention_mask,
+                    None,
                     object_queries,
                     query_position_embeddings,
                     query_sine_embed,
@@ -1534,7 +1506,7 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=combined_attention_mask,
+                    attention_mask=None,
                     object_queries=object_queries,
                     query_position_embeddings=query_position_embeddings,
                     query_sine_embed=query_sine_embed,

@@ -21,7 +21,6 @@ from typing import List, Optional, Tuple, Union
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -556,11 +555,6 @@ class UMT5PreTrainedModel(PreTrainedModel):
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
-    def _set_gradient_checkpointing(self, module, gradient_checkpointing_func=None):
-        if isinstance(module, (UMT5Attention, UMT5Stack)):
-            module.gradient_checkpointing_func = gradient_checkpointing_func
-            module.gradient_checkpointing = gradient_checkpointing_func is not None
-
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
@@ -710,7 +704,7 @@ class UMT5Stack(UMT5PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = checkpoint(
+                layer_outputs = self._gradient_checkpointing_func(
                     layer_module.forward,
                     hidden_states,
                     extended_attention_mask,
@@ -946,6 +940,7 @@ class UMT5Model(UMT5PreTrainedModel):
     >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=labels["input_ids"])
     >>> hidden_states = outputs.last_hidden_state
     ```"""
+
     model_type = "uumt5"
     config_class = UMT5Config
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
@@ -978,6 +973,12 @@ class UMT5Model(UMT5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
+
+    # Copied from transformers.models.t5.modeling_t5.T5Model._tie_weights
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
 
     # Copied from transformers.models.t5.modeling_t5.T5Model.get_encoder
     def get_encoder(self):
@@ -1147,6 +1148,12 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
+
+    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration._tie_weights
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
 
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
@@ -1386,6 +1393,11 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel._tie_weights
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.get_encoder
     def get_encoder(self):
         return self.encoder
@@ -1620,6 +1632,12 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
+
+    # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering._tie_weights
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
 
     # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering.get_encoder
     def get_encoder(self):

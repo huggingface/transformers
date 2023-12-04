@@ -53,7 +53,7 @@ class TFBlenderbotSmallModelTester:
         intermediate_size=37,
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=50,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -198,6 +198,11 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
     test_pruning = False
     test_onnx = False
 
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return pipeline_test_casse_name in ("TextGenerationPipelineTests", "ConversationalPipelineTests")
+
     def setUp(self):
         self.model_tester = TFBlenderbotSmallModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BlenderbotSmallConfig)
@@ -208,15 +213,6 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
     def test_decoder_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    # TODO: Fix the failed tests when this model gets more usage
-    def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
-    ):
-        # TODO @Rocketnight1 to fix
-        if pipeline_test_casse_name == "ConversationalPipelineTests":
-            return True
-        return False
 
 
 @require_tokenizers

@@ -79,8 +79,6 @@ OBJECTS_TO_IGNORE = [
     "AlbertTokenizerFast",
     "AlignTextModel",
     "AlignVisionConfig",
-    "AltCLIPTextConfig",
-    "AltCLIPVisionConfig",
     "AudioClassificationPipeline",
     "AutoformerConfig",
     "AutomaticSpeechRecognitionPipeline",
@@ -465,6 +463,7 @@ OBJECTS_TO_IGNORE = [
     "SamConfig",
     "SamPromptEncoderConfig",
     "SeamlessM4TConfig",  # use of unconventional markdown
+    "SeamlessM4Tv2Config",  # use of unconventional markdown
     "Seq2SeqTrainingArguments",
     "SpecialTokensMixin",
     "Speech2Text2Config",
@@ -535,6 +534,8 @@ OBJECTS_TO_IGNORE = [
     "TFConvBertModel",
     "TFConvNextForImageClassification",
     "TFConvNextModel",
+    "TFConvNextV2Model",  # Parsing issue. Equivalent to PT ConvNextV2Model, see PR #25558
+    "TFConvNextV2ForImageClassification",
     "TFCvtForImageClassification",
     "TFCvtModel",
     "TFDPRReader",
@@ -738,7 +739,6 @@ OBJECTS_TO_IGNORE = [
     "TrainerState",
     "TrainingArguments",
     "TrajectoryTransformerConfig",
-    "TransfoXLConfig",
     "TranslationPipeline",
     "TvltImageProcessor",
     "UMT5Config",

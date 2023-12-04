@@ -16,13 +16,12 @@
 
 
 import gc
-import inspect
 import unittest
 
 import requests
 
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig, pipeline
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -338,18 +337,6 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -421,6 +408,18 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     @unittest.skip(reason="SamModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
@@ -466,7 +465,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_inference_mask_generation_no_point(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -716,9 +715,7 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         raw_image = prepare_image()
 
-        # fmt: off
-        input_points = torch.Tensor([[[400, 650]], [[220, 470]]]).cpu()
-        # fmt: on
+        input_points = torch.Tensor([[[400, 650]], [[220, 470]]]).cpu()  # fmt: skip
 
         input_points = input_points.unsqueeze(0)
 
@@ -760,9 +757,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_allclose(iou_scores, EXPECTED_IOU, atol=1e-4, rtol=1e-4)
 
     def test_dummy_pipeline_generation(self):
-        generator = pipeline(
-            "mask-generation", model="facebook/sam-vit-base", device=0 if torch.cuda.is_available() else -1
-        )
+        generator = pipeline("mask-generation", model="facebook/sam-vit-base", device=torch_device)
         raw_image = prepare_image()
 
         _ = generator(raw_image, points_per_batch=64)

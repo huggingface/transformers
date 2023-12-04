@@ -440,13 +440,13 @@ class OpenAiAgent(Agent):
             return self._completion_generate([prompt], stop)[0]
 
     def _chat_generate(self, prompt, stop):
-        result = openai.ChatCompletion.create(
+        result = openai.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             stop=stop,
         )
-        return result["choices"][0]["message"]["content"]
+        return result.choices[0].message.content
 
     def _completion_generate(self, prompts, stop):
         result = openai.Completion.create(

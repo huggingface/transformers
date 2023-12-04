@@ -57,7 +57,8 @@ raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 input_points = [[[450, 600]]]  # 2D location of a window in the image
 
 inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(device)
-outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 
 masks = processor.image_processor.post_process_masks(
     outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu()

@@ -74,6 +74,12 @@ To follow this guide you will need a GPU. If you're working in a notebook, run t
 !nvidia-smi
 ```
 
+or alternatively for AMD GPUs:
+
+```bash
+!rocm-smi
+```
+
 </Tip>
 
 We encourage you to log in to your Hugging Face account to upload and share your model with the community. When prompted, enter your token to log in:

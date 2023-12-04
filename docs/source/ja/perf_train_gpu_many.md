@@ -143,7 +143,7 @@ python examples/pytorch/language-modeling/run_clm.py \
 
 # DDP w/ NVlink
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
-python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
+torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 --model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
 --do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
@@ -151,7 +151,7 @@ python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-
 
 # DDP w/o NVlink
 rm -r /tmp/test-clm; NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 \
-python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
+torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 --model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
 --do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
@@ -242,7 +242,7 @@ ZeROがモデルの重みを分割する方法に注意を払うと、これは�
 
 Implementations:
 
-- [DeepSpeed](https://www.deepspeed.ai/features/#the-zero-redundancy-optimizer) ZeRO-DP stages 1+2+3
+- [DeepSpeed](https://www.deepspeed.ai/tutorials/zero/) ZeRO-DP stages 1+2+3
 - [`transformers` integration](main_classes/trainer#trainer-integrations)
 
 
@@ -360,7 +360,7 @@ by [@anton-l](https://github.com/anton-l)。
 SageMakerは、より効率的な処理のためにTPとDPを組み合わせて使用します。
 
 代替名：
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed)はこれを「テンソルスライシング」と呼びます。詳細は[DeepSpeedの特徴](https://www.deepspeed.ai/features/#model-parallelism)をご覧ください。
+- [DeepSpeed](https://github.com/microsoft/DeepSpeed)はこれを「テンソルスライシング」と呼びます。詳細は[DeepSpeedの特徴](https://www.deepspeed.ai/training/#model-parallelism)をご覧ください。
 
 実装例:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)には、モデル固有の内部実装があります。

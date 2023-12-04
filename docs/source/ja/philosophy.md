@@ -56,7 +56,7 @@ rendered properly in your Markdown viewer.
 
 このライブラリは、各モデルについて次の3つのタイプのクラスを中心に構築されています：
 
-- **モデルクラス**は、ライブラリで提供される事前トレーニング済みの重みと互換性のあるPyTorchモデル（[torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)）、Kerasモデル（[tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)）またはJAX/Flaxモデル（[flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html)）を使用できます。
+- **モデルクラス**は、ライブラリで提供される事前トレーニング済みの重みと互換性のあるPyTorchモデル（[torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)）、Kerasモデル（[tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)）またはJAX/Flaxモデル（[flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html)）を使用できます。
 - **構成クラス**は、モデルを構築するために必要なハイパーパラメータを格納します（層の数や隠れ層のサイズなど）。これらを自分でインスタンス化する必要はありません。特に、変更を加えずに事前トレーニング済みモデルを使用している場合、モデルを作成すると自動的に構成がインスタンス化されるようになります（これはモデルの一部です）。
 - **前処理クラス**は、生データをモデルが受け入れる形式に変換します。[トークナイザ](main_classes/tokenizer)は各モデルの語彙を保存し、文字列をトークン埋め込みのインデックスのリストにエンコードおよびデコードするためのメソッドを提供します。[イメージプロセッサ](main_classes/image_processor)はビジョン入力を前処理し、[特徴抽出器](main_classes/feature_extractor)はオーディオ入力を前処理し、[プロセッサ](main_classes/processors)はマルチモーダル入力を処理します。
 

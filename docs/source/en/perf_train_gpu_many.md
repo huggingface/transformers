@@ -153,7 +153,7 @@ python examples/pytorch/language-modeling/run_clm.py \
 
 ```
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
-python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
+torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 --model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
 --do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
@@ -164,7 +164,7 @@ python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-
 
 ```
 rm -r /tmp/test-clm; NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 \
-python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
+torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 --model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
 --do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
@@ -270,7 +270,7 @@ which is discussed next.
 
 Implementations:
 
-- [DeepSpeed](https://www.deepspeed.ai/features/#the-zero-redundancy-optimizer) ZeRO-DP stages 1+2+3
+- [DeepSpeed](https://www.deepspeed.ai/tutorials/zero/) ZeRO-DP stages 1+2+3
 - [`Accelerate` integration](https://huggingface.co/docs/accelerate/en/usage_guides/deepspeed) 
 - [`transformers` integration](main_classes/trainer#trainer-integrations)
 
@@ -434,7 +434,7 @@ This section is based on the original much more [detailed TP overview](https://g
 by [@anton-l](https://github.com/anton-l).
 
 Alternative names:
-- DeepSpeed calls it [tensor slicing](https://www.deepspeed.ai/features/#model-parallelism)
+- DeepSpeed calls it [tensor slicing](https://www.deepspeed.ai/training/#model-parallelism)
 
 Implementations:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation, as it's very model-specific
