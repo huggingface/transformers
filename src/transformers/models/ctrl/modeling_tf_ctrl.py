@@ -141,6 +141,22 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
             outputs = outputs + (attn,)
 
         return outputs
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "Wq", None) is not None:
+            with tf.name_scope(self.Wq.name):
+                self.Wq.build(self.d_model_size)
+        if getattr(self, "Wk", None) is not None:
+            with tf.name_scope(self.Wk.name):
+                self.Wk.build(self.d_model_size)
+        if getattr(self, "Wv", None) is not None:
+            with tf.name_scope(self.Wv.name):
+                self.Wv.build(self.d_model_size)
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build(self.d_model_size)
 
 
 class TFPointWiseFeedForwardLayer(tf.keras.layers.Layer):
@@ -175,6 +191,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
 
         self.dropout1 = tf.keras.layers.Dropout(rate)
         self.dropout2 = tf.keras.layers.Dropout(rate)
+        self.d_model_size = d_model_size
 
     def call(self, x, mask, layer_past, attention_mask, head_mask, use_cache, output_attentions, training=False):
         normed = self.layernorm1(x)
@@ -201,6 +218,22 @@ class TFEncoderLayer(tf.keras.layers.Layer):
 
         outputs = (out2,) + attn_outputs[1:]
         return outputs
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "multi_head_attention", None) is not None:
+            with tf.name_scope(self.multi_head_attention.name):
+                self.multi_head_attention.build(None)
+        if getattr(self, "ffn", None) is not None:
+            with tf.name_scope(self.ffn.name):
+                self.ffn.build(None)
+        if getattr(self, "layernorm1", None) is not None:
+            with tf.name_scope(self.layernorm1.name):
+                self.layernorm1.build([None, None, self.d_model_size])
+        if getattr(self, "layernorm2", None) is not None:
+            with tf.name_scope(self.layernorm2.name):
+                self.layernorm2.build([None, None, self.d_model_size])
 
 
 @keras_serializable
@@ -395,6 +428,20 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "w", None) is not None:
+            with tf.name_scope(self.w.name):
+                self.w.build(None)
+        if getattr(self, "layernorm", None) is not None:
+            with tf.name_scope(self.layernorm.name):
+                self.layernorm.build([None, None, self.config.n_embd])
+        if getattr(self, "h", None) is not None:
+            for layer in self.h:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFCTRLPreTrainedModel(TFPreTrainedModel):
@@ -562,6 +609,13 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
             training=training,
         )
         return outputs
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
 
 
 class TFCTRLBiasLayer(tf.keras.layers.Layer):
@@ -709,6 +763,16 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "bias_layer", None) is not None:
+            with tf.name_scope(self.bias_layer.name):
+                self.bias_layer.build(None)
 
 
 @add_start_docstrings(
@@ -737,6 +801,7 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
             use_bias=False,
         )
         self.transformer = TFCTRLMainLayer(config, name="transformer")
+        self.config = config
 
     def get_output_embeddings(self):
         # Remove after transformers v4.32. Fix this model's `test_model_common_attributes` test too.
@@ -836,3 +901,13 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build(self.config.n_embd)
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)

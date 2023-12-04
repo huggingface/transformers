@@ -1291,6 +1291,13 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         loss = (1.0 - smooth_epsilon) * nll_loss + eps_i * smooth_loss
 
         return loss
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "rag", None) is not None:
+            with tf.name_scope(self.rag.name):
+                self.rag.build(None)
 
 
 @add_start_docstrings_to_model_forward(
@@ -1743,3 +1750,10 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
 
         output = tf.convert_to_tensor(output)
         return tf.cast(output, tensors[0][0][0].dtype)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "rag", None) is not None:
+            with tf.name_scope(self.rag.name):
+                self.rag.build(None)

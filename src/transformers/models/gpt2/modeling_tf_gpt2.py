@@ -509,6 +509,23 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,
         )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "wte", None) is not None:
+            with tf.name_scope(self.wte.name):
+                self.wte.build(None)
+        if getattr(self, "wpe", None) is not None:
+            with tf.name_scope(self.wpe.name):
+                self.wpe.build(None)
+        if getattr(self, "ln_f", None) is not None:
+            with tf.name_scope(self.ln_f.name):
+                self.ln_f.build([None, None, self.embed_dim])
+        if getattr(self, "h", None) is not None:
+            for layer in self.h:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFGPT2PreTrainedModel(TFPreTrainedModel):
@@ -751,6 +768,13 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         )
 
         return outputs
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
 
 
 @add_start_docstrings(
@@ -883,6 +907,13 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             attentions=transformer_outputs.attentions,
             cross_attentions=transformer_outputs.cross_attentions,
         )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
 
 
 @add_start_docstrings(
@@ -1012,6 +1043,16 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
             "mc_token_ids": tf.TensorSpec((None, None), tf.int32, name="mc_token_ids"),
         }
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "multiple_choice_head", None) is not None:
+            with tf.name_scope(self.multiple_choice_head.name):
+                self.multiple_choice_head.build(None)
 
 
 @add_start_docstrings(
@@ -1040,6 +1081,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
             use_bias=False,
         )
         self.transformer = TFGPT2MainLayer(config, name="transformer")
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
@@ -1128,3 +1170,13 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "score", None) is not None:
+            with tf.name_scope(self.score.name):
+                self.score.build(self.config.n_embd)
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)

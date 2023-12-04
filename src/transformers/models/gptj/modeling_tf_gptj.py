@@ -266,6 +266,22 @@ class TFGPTJAttention(tf.keras.layers.Layer):
             outputs += (attn_weights,)
 
         return outputs  # a, present, (attentions)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build(self.embed_dim)
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build(self.embed_dim)
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build(self.embed_dim)
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build(self.embed_dim)
 
 
 class TFGPTJMLP(tf.keras.layers.Layer):
@@ -283,6 +299,7 @@ class TFGPTJMLP(tf.keras.layers.Layer):
         self.act = get_tf_activation(config.activation_function)
         self.dropout = tf.keras.layers.Dropout(config.embd_pdrop)
         self.embed_dim = config.n_embd
+        self.intermediate_size = intermediate_size
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.fc_in(hidden_states)
@@ -290,6 +307,16 @@ class TFGPTJMLP(tf.keras.layers.Layer):
         hidden_states = self.fc_out(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "fc_in", None) is not None:
+            with tf.name_scope(self.fc_in.name):
+                self.fc_in.build(self.embed_dim)
+        if getattr(self, "fc_out", None) is not None:
+            with tf.name_scope(self.fc_out.name):
+                self.fc_out.build(self.intermediate_size)
 
 
 class TFGPTJBlock(tf.keras.layers.Layer):
@@ -299,6 +326,7 @@ class TFGPTJBlock(tf.keras.layers.Layer):
         self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
         self.attn = TFGPTJAttention(config, name="attn")
         self.mlp = TFGPTJMLP(inner_dim, config, name="mlp")
+        self.config = config
 
     def call(
         self,
@@ -332,6 +360,19 @@ class TFGPTJBlock(tf.keras.layers.Layer):
         else:
             outputs = (hidden_states,) + outputs[1:]
         return outputs  # hidden_states, present, (attentions)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "ln_1", None) is not None:
+            with tf.name_scope(self.ln_1.name):
+                self.ln_1.build([None, None, self.config.n_embd])
+        if getattr(self, "attn", None) is not None:
+            with tf.name_scope(self.attn.name):
+                self.attn.build(None)
+        if getattr(self, "mlp", None) is not None:
+            with tf.name_scope(self.mlp.name):
+                self.mlp.build(None)
 
 
 @keras_serializable
@@ -501,6 +542,20 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "wte", None) is not None:
+            with tf.name_scope(self.wte.name):
+                self.wte.build(None)
+        if getattr(self, "ln_f", None) is not None:
+            with tf.name_scope(self.ln_f.name):
+                self.ln_f.build([None, None, self.embed_dim])
+        if getattr(self, "h", None) is not None:
+            for layer in self.h:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFGPTJPreTrainedModel(TFPreTrainedModel):
@@ -673,6 +728,13 @@ class TFGPTJModel(TFGPTJPreTrainedModel):
         )
 
         return outputs
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
 
 
 @add_start_docstrings(
@@ -688,6 +750,7 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
         self.lm_head = tf.keras.layers.Dense(
             config.vocab_size, kernel_initializer=get_initializer(config.initializer_range), name="lm_head"
         )
+        self.config = config
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -785,6 +848,16 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "lm_head", None) is not None:
+            with tf.name_scope(self.lm_head.name):
+                self.lm_head.build(self.config.n_embd)
 
 
 @add_start_docstrings(
@@ -815,6 +888,7 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
             kernel_initializer=get_initializer(config.initializer_range),
             name="score",
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -907,6 +981,16 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "score", None) is not None:
+            with tf.name_scope(self.score.name):
+                self.score.build(self.config.n_embd)
 
 
 @add_start_docstrings(
@@ -926,6 +1010,7 @@ class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss)
         self.qa_outputs = tf.keras.layers.Dense(
             self.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -998,3 +1083,13 @@ class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss)
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build(self.config.hidden_size)
